@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite"
 
-import { betterAuth } from "better-auth/minimal"
+import { betterAuth } from "better-auth"
 
 import type { LocalAuthConfig } from "../config.js"
 
@@ -10,11 +10,15 @@ export function createLocalAuth(config: LocalAuthConfig) {
     secret: config.secret,
     baseURL: config.baseUrl,
     database: new DatabaseSync(config.databasePath),
-    socialProviders: {
-      google: {
-        clientId: config.googleClientId,
-        clientSecret: config.googleClientSecret,
-      },
-    },
+    ...(config.googleClientId && config.googleClientSecret
+      ? {
+          socialProviders: {
+            google: {
+              clientId: config.googleClientId,
+              clientSecret: config.googleClientSecret,
+            },
+          },
+        }
+      : {}),
   })
 }

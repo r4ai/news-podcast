@@ -1,6 +1,7 @@
 import type { JobStatus } from "@news-podcast/domain"
 
 export interface RssSourceItem {
+  readonly sourceName: string
   readonly title: string
   readonly url: URL
   readonly publishedAt?: Date

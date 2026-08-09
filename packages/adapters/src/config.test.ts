@@ -38,8 +38,6 @@ describe("runtime configuration", () => {
       expect(error).toBeInstanceOf(ConfigurationError)
       expect((error as ConfigurationError).missingKeys).toEqual([
         "BETTER_AUTH_URL",
-        "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET",
         "DATABASE_PATH",
       ])
     }

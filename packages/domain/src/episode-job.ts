@@ -1,6 +1,7 @@
 export const JOB_STATUSES = [
   "queued",
   "running",
+  "retrying",
   "succeeded",
   "failed",
   "canceled",
@@ -10,7 +11,8 @@ export type JobStatus = (typeof JOB_STATUSES)[number]
 
 const allowedTargets: Readonly<Record<JobStatus, ReadonlySet<JobStatus>>> = {
   queued: new Set(["running", "canceled"]),
-  running: new Set(["succeeded", "failed", "canceled"]),
+  running: new Set(["retrying", "succeeded", "failed", "canceled"]),
+  retrying: new Set(["running", "canceled"]),
   succeeded: new Set(),
   failed: new Set(),
   canceled: new Set(),

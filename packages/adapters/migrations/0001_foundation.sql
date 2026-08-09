@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS episode_jobs (
   idempotency_route TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
   request_hash TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'canceled')),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'retrying', 'succeeded', 'failed', 'canceled')),
   receipt_json TEXT NOT NULL,
   available_at TEXT NOT NULL,
   created_at TEXT NOT NULL,

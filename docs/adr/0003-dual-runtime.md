@@ -46,7 +46,7 @@ API/Workerのcomposition rootをlocalとcloudで分ける。localはSQLite job t
 | --- | --- | --- | --- |
 | 設計書 | topology表 | Done | `docs/design.md` |
 | ドメイン/ユースケース | N/A — runtime非依存 | Done | package dependencies |
-| OpenAPI/外部契約 | N/A — 同一契約 | Done | OpenAPI YAML |
+| OpenAPI/外部契約 | N/A — 同一契約 | Done | OpenAPI JSON（ADR-0008） |
 | コード/ポート | runtime別composition | Done | `apps/api`, `apps/worker` |
 | データ/ストレージ | 共通schema/outbox | Done | migration 0001 |
 | 実行/配備 | Compose/Wrangler | Done | `infra`, wrangler files |

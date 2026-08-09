@@ -13,7 +13,11 @@
     "test": "turbo test",
     "contract:lint": "pnpm --filter @news-podcast/contracts lint",
     "contract:generate": "pnpm --filter @news-podcast/contracts generate",
-    "storybook:build": "pnpm --filter web build-storybook"
+    "contract:check": "pnpm --filter @news-podcast/contracts check",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "test:visual": "pnpm --filter web test:visual",
+    "storybook:build": "pnpm --filter web build-storybook",
+    "setup:env": "node scripts/setup-env.mjs"
   },
   "devDependencies": {
     "oxfmt": "0.62.0",
@@ -23,7 +27,7 @@
     "vitest": "4.1.10"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "packageManager": "pnpm@11.16.0"
 }

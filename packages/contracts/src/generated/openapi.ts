@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Returns process liveness without requiring credentials. */
+        /** @description Return process liveness without credentials. */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -28,7 +28,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Lists the curated RSS feed catalog available for subscription. */
+        /** @description Search the configured RSS feed catalog. */
         get: operations["listFeeds"];
         put?: never;
         post?: never;
@@ -45,33 +45,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Lists feed subscriptions owned by the current session user. */
-        get: operations["listMyFeedSubscriptions"];
+        /** @description List the authenticated owner's feed subscriptions. */
+        get: operations["listSubscriptions"];
         put?: never;
-        /** @description Subscribes the current session user to one catalog feed. */
-        post: operations["createMyFeedSubscription"];
+        /** @description Subscribe the authenticated owner to a catalog feed. */
+        post: operations["createSubscription"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/v1/me/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Returns the current user's daily episode generation schedule. */
-        get: operations["getMySettings"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** @description Replaces the daily generation schedule fields supplied in the patch. */
-        patch: operations["patchMySettings"];
         trace?: never;
     };
     "/v1/me/feed-subscriptions/{subscriptionId}": {
@@ -84,12 +66,30 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Removes one subscription owned by the current session user. */
-        delete: operations["deleteMyFeedSubscription"];
+        /** @description Delete one owner-scoped subscription. */
+        delete: operations["deleteSubscription"];
         options?: never;
         head?: never;
-        /** @description Enables or disables one subscription owned by the current session user. */
-        patch: operations["patchMyFeedSubscription"];
+        /** @description Enable or pause one owner-scoped subscription. */
+        patch: operations["updateSubscription"];
+        trace?: never;
+    };
+    "/v1/me/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return the authenticated owner's generation schedule. */
+        get: operations["getSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Update the authenticated owner's generation schedule. */
+        patch: operations["updateSettings"];
         trace?: never;
     };
     "/v1/episode-jobs": {
@@ -99,10 +99,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Returns only jobs owned by the authenticated user. */
-        get: operations["listMyEpisodeJobs"];
+        /** @description List recent generation jobs for the authenticated owner. */
+        get: operations["listEpisodeJobs"];
         put?: never;
-        /** @description Creates an asynchronous manual job from a snapshot of all enabled subscriptions. The scheduler invokes the same application command with trigger=scheduled internally. */
+        /** @description Create an idempotent asynchronous episode generation job. */
         post: operations["createEpisodeJob"];
         delete?: never;
         options?: never;
@@ -117,8 +117,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description A foreign owner's identifier is indistinguishable from a missing identifier and returns 404. */
-        get: operations["getMyEpisodeJob"];
+        /** @description Return progress and retry state for one generation job. */
+        get: operations["getEpisodeJob"];
         put?: never;
         post?: never;
         delete?: never;
@@ -134,8 +134,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Returns only episodes owned by the authenticated user. */
-        get: operations["listMyEpisodes"];
+        /** @description List completed episodes for the authenticated owner. */
+        get: operations["listEpisodes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -151,8 +151,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description A foreign owner's identifier is indistinguishable from a missing identifier and returns 404. */
-        get: operations["getMyEpisode"];
+        /** @description Return one completed episode with its sources. */
+        get: operations["getEpisode"];
         put?: never;
         post?: never;
         delete?: never;
@@ -170,8 +170,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Issues a short-lived bearer-capability URL for one owned episode. */
-        post: operations["createMyEpisodeAudioAccess"];
+        /** @description Issue a short-lived owner-scoped audio URL. */
+        post: operations["createAudioAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audio/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Stream WAV audio using a short-lived signed token and Range. */
+        get: operations["getEpisodeAudio"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -182,38 +199,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Format: uuid */
-        Id: string;
-        /** @enum {string} */
-        JobStatus: "queued" | "running" | "succeeded" | "failed" | "canceled";
-        CreateEpisodeJobRequest: {
-            /**
-             * @description Scheduled jobs are created by the trusted scheduler, not this public operation.
-             * @constant
-             */
-            trigger: "manual";
-        };
-        GenerationSchedule: {
-            enabled: boolean;
-            /** @example 07:30 */
-            localTime: string;
-            /**
-             * @description IANA time zone identifier.
-             * @example Asia/Tokyo
-             */
-            timeZone: string;
-        };
-        UserSettings: {
-            generationSchedule: components["schemas"]["GenerationSchedule"];
-        };
-        UserSettingsPatch: {
-            /** @description Null disables and resets the schedule to application defaults. */
-            generationSchedule?: components["schemas"]["GenerationSchedule"] | null;
-        };
-        PageInfo: {
-            nextCursor?: string;
-            hasMore: boolean;
-        };
         Feed: {
             id: components["schemas"]["Id"];
             name: string;
@@ -222,6 +207,15 @@ export interface components {
             /** Format: uri */
             feedUrl: string;
         };
+        /** Format: uuid */
+        Id: string;
+        Problem: {
+            type: string;
+            title: string;
+            status: number;
+            code: string;
+            detail?: string;
+        };
         FeedSubscription: {
             id: components["schemas"]["Id"];
             feedId: components["schemas"]["Id"];
@@ -229,32 +223,45 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
-        EpisodeJobReceipt: {
+        UserSettings: {
+            generationSchedule: components["schemas"]["GenerationSchedule"];
+        };
+        GenerationSchedule: {
+            enabled: boolean;
+            localTime: string;
+            timeZone: string;
+        };
+        EpisodeJob: {
             id: components["schemas"]["Id"];
             status: components["schemas"]["JobStatus"];
             /** Format: date-time */
             createdAt: string;
+            attempt: number;
+            stage?: components["schemas"]["JobStage"];
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: date-time */
+            nextAttemptAt?: string;
+            episodeId?: components["schemas"]["Id"];
+            failure?: components["schemas"]["JobFailure"];
         };
+        /** @enum {string} */
+        JobStatus: "queued" | "running" | "retrying" | "succeeded" | "failed" | "canceled";
+        /** @enum {string} */
+        JobStage: "fetching_sources" | "generating_script" | "synthesizing_audio" | "storing_episode";
         JobFailure: {
             code: string;
             message: string;
             retryable: boolean;
         };
-        /** @description succeeded has episodeId; failed has failure; terminal states never transition. */
-        EpisodeJob: components["schemas"]["EpisodeJobReceipt"] & {
+        EpisodeJobReceipt: {
+            id: components["schemas"]["Id"];
+            status: components["schemas"]["JobStatus"];
             /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            finishedAt?: string;
-            episodeId?: components["schemas"]["Id"];
-            failure?: components["schemas"]["JobFailure"];
-        };
-        EpisodeSource: {
-            /** Format: uri */
-            url: string;
-            title: string;
-            /** Format: date-time */
-            publishedAt?: string;
+            createdAt: string;
+            attempt: number;
         };
         Episode: {
             id: components["schemas"]["Id"];
@@ -264,142 +271,18 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
-        AudioAccess: {
+        EpisodeSource: {
             /** Format: uri */
             url: string;
-            /** Format: date-time */
-            expiresAt: string;
-        };
-        Problem: {
-            /** Format: uri-reference */
-            type: string;
             title: string;
-            status: number;
-            detail?: string;
-            /** Format: uri-reference */
-            instance?: string;
-            code: string;
-            traceId?: string;
-            errors?: {
-                pointer: string;
-                code: string;
-                message: string;
-            }[];
-        } & {
-            [key: string]: unknown;
-        };
-        FeedPage: components["schemas"]["PagedFeeds"];
-        PagedFeeds: {
-            items: components["schemas"]["Feed"][];
-            page: components["schemas"]["PageInfo"];
-        };
-        FeedSubscriptionPage: {
-            items: components["schemas"]["FeedSubscription"][];
-            page: components["schemas"]["PageInfo"];
-        };
-        EpisodeJobPage: {
-            items: components["schemas"]["EpisodeJob"][];
-            page: components["schemas"]["PageInfo"];
-        };
-        EpisodePage: {
-            items: components["schemas"]["Episode"][];
-            page: components["schemas"]["PageInfo"];
+            /** Format: date-time */
+            publishedAt?: string;
         };
     };
-    responses: {
-        /** @description Invalid request or cursor. */
-        BadRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-        /** @description Missing, expired, or revoked session. */
-        Unauthorized: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-        /** @description Authenticated principal lacks permission. */
-        Forbidden: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-        /** @description Resource is missing or owned by another principal. */
-        NotFound: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-        /** @description Resource conflicts with an existing record. */
-        Conflict: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-        /** @description The key was already used with a different canonical request hash. */
-        IdempotencyConflict: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-        /** @description Rate limit exceeded. */
-        TooManyRequests: {
-            headers: {
-                "Retry-After": components["headers"]["RetryAfter"];
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-        /** @description A required dependency is unavailable. */
-        ServiceUnavailable: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
-    };
-    parameters: {
-        Limit: number;
-        /** @description Opaque cursor bound to the endpoint's filters and stable sort. */
-        Cursor: string;
-        /** @description Non-empty ASCII value scoped to owner, method, and canonical route; retained for at least 24 hours. */
-        IdempotencyKey: string;
-        JobId: components["schemas"]["Id"];
-        EpisodeId: components["schemas"]["Id"];
-        SubscriptionId: components["schemas"]["Id"];
-    };
+    responses: never;
+    parameters: never;
     requestBodies: never;
-    headers: {
-        /** @description Canonical URL of the created resource. */
-        Location: string;
-        /** @description Echo of the accepted Idempotency-Key. */
-        IdempotencyKey: string;
-        /** @description Suggested seconds before polling. */
-        RetryAfter: number;
-    };
+    headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -413,14 +296,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Process is alive. */
+            /** @description Alive */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        /** @constant */
+                        /** @enum {string} */
                         status: "ok";
                     };
                 };
@@ -430,9 +313,6 @@ export interface operations {
     listFeeds: {
         parameters: {
             query?: {
-                limit?: components["parameters"]["Limit"];
-                /** @description Opaque cursor bound to the endpoint's filters and stable sort. */
-                cursor?: components["parameters"]["Cursor"];
                 q?: string;
             };
             header?: never;
@@ -441,50 +321,86 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Feed catalog page. */
+            /** @description Feed catalog */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FeedPage"];
+                    "application/json": {
+                        items: components["schemas"]["Feed"][];
+                        page: {
+                            /** @enum {boolean} */
+                            hasMore: false;
+                        };
+                    };
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    listMyFeedSubscriptions: {
+    listSubscriptions: {
         parameters: {
-            query?: {
-                limit?: components["parameters"]["Limit"];
-                /** @description Opaque cursor bound to the endpoint's filters and stable sort. */
-                cursor?: components["parameters"]["Cursor"];
-                enabled?: boolean;
-                feedId?: components["schemas"]["Id"];
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Current user's subscriptions. */
+            /** @description Subscriptions */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FeedSubscriptionPage"];
+                    "application/json": {
+                        items: components["schemas"]["FeedSubscription"][];
+                        page: {
+                            /** @enum {boolean} */
+                            hasMore: false;
+                        };
+                    };
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    createMyFeedSubscription: {
+    createSubscription: {
         parameters: {
             query?: never;
             header?: never;
@@ -499,114 +415,109 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Subscription created. */
+            /** @description Created */
             201: {
                 headers: {
-                    Location: components["headers"]["Location"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["FeedSubscription"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getMySettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current user settings. */
-            200: {
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserSettings"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    patchMySettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/merge-patch+json": components["schemas"]["UserSettingsPatch"];
-            };
-        };
-        responses: {
-            /** @description Updated user settings. */
-            200: {
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserSettings"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            503: components["responses"]["ServiceUnavailable"];
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    deleteMyFeedSubscription: {
+    deleteSubscription: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                subscriptionId: components["parameters"]["SubscriptionId"];
+                subscriptionId: components["schemas"]["Id"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Subscription removed. */
+            /** @description Deleted */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    patchMyFeedSubscription: {
+    updateSubscription: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                subscriptionId: components["parameters"]["SubscriptionId"];
+                subscriptionId: components["schemas"]["Id"];
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/merge-patch+json": {
+                "application/json": {
                     enabled: boolean;
                 };
             };
         };
         responses: {
-            /** @description Updated subscription. */
+            /** @description Updated */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -615,88 +526,247 @@ export interface operations {
                     "application/json": components["schemas"]["FeedSubscription"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    listMyEpisodeJobs: {
+    getSettings: {
         parameters: {
-            query?: {
-                limit?: components["parameters"]["Limit"];
-                /** @description Opaque cursor bound to the endpoint's filters and stable sort. */
-                cursor?: components["parameters"]["Cursor"];
-                status?: components["schemas"]["JobStatus"];
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Owner-scoped job page, ordered by createdAt then id descending. */
+            /** @description Settings */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EpisodeJobPage"];
+                    "application/json": components["schemas"]["UserSettings"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    generationSchedule: components["schemas"]["GenerationSchedule"];
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSettings"];
+                };
+            };
+            /** @description Invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listEpisodeJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Jobs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["EpisodeJob"][];
+                        page: {
+                            /** @enum {boolean} */
+                            hasMore: false;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     createEpisodeJob: {
         parameters: {
             query?: never;
             header: {
-                /** @description Non-empty ASCII value scoped to owner, method, and canonical route; retained for at least 24 hours. */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "Idempotency-Key": string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateEpisodeJobRequest"];
+                "application/json": {
+                    /** @enum {string} */
+                    trigger: "manual";
+                };
             };
         };
         responses: {
-            /** @description Job accepted. Replays with the same owner, key, route, and request hash return the same receipt. */
+            /** @description Accepted */
             202: {
                 headers: {
-                    Location: components["headers"]["Location"];
-                    "Idempotency-Key": components["headers"]["IdempotencyKey"];
-                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["EpisodeJobReceipt"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["IdempotencyConflict"];
-            429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
+            /** @description Invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    getMyEpisodeJob: {
+    getEpisodeJob: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                jobId: components["parameters"]["JobId"];
+                jobId: components["schemas"]["Id"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Owner-scoped episode job. */
+            /** @description Job */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -705,52 +775,91 @@ export interface operations {
                     "application/json": components["schemas"]["EpisodeJob"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    listMyEpisodes: {
+    listEpisodes: {
         parameters: {
-            query?: {
-                limit?: components["parameters"]["Limit"];
-                /** @description Opaque cursor bound to the endpoint's filters and stable sort. */
-                cursor?: components["parameters"]["Cursor"];
-                publishedFrom?: string;
-                publishedTo?: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Owner-scoped episode page. */
+            /** @description Episodes */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EpisodePage"];
+                    "application/json": {
+                        items: components["schemas"]["Episode"][];
+                        page: {
+                            /** @enum {boolean} */
+                            hasMore: false;
+                        };
+                    };
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    getMyEpisode: {
+    getEpisode: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                episodeId: components["parameters"]["EpisodeId"];
+                episodeId: components["schemas"]["Id"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Owner-scoped episode without a persistent signed audio URL. */
+            /** @description Episode */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -759,37 +868,136 @@ export interface operations {
                     "application/json": components["schemas"]["Episode"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    createMyEpisodeAudioAccess: {
+    createAudioAccess: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                episodeId: components["parameters"]["EpisodeId"];
+                episodeId: components["schemas"]["Id"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Short-lived audio access. */
+            /** @description Short-lived audio access */
             200: {
                 headers: {
-                    /** @description Signed URLs must not be cached by shared or private caches. */
-                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AudioAccess"];
+                    "application/json": {
+                        /** Format: uri */
+                        url: string;
+                        /** Format: date-time */
+                        expiresAt: string;
+                    };
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            503: components["responses"]["ServiceUnavailable"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getEpisodeAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WAV audio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                };
+            };
+            /** @description Partial WAV audio */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
 }

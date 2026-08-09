@@ -11,10 +11,12 @@ describe("API foundation", () => {
 
   it("returns 202 and resource headers from the episode job seam", async () => {
     const response = await createApp({
+      resolveOwner: async () => "00000000-0000-4000-8000-000000000100",
       createEpisodeJob: async () => ({
         id: "00000000-0000-4000-8000-000000000001",
         status: "queued",
         createdAt: "2026-08-09T00:00:00.000Z",
+        attempt: 0,
       }),
     }).request("/v1/episode-jobs", {
       method: "POST",

@@ -12,8 +12,11 @@
   },
   "dependencies": {
     "@hono/node-server": "1.19.17",
+    "@hono/zod-openapi": "1.5.2",
     "@news-podcast/adapters": "workspace:*",
-    "hono": "4.13.1"
+    "@news-podcast/application": "workspace:*",
+    "hono": "4.13.1",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260809.1",

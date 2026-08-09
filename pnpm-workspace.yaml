@@ -12,12 +12,18 @@ minimumReleaseAgeExclude:
   # explicitly pinned version required by this repository.
   - "@cloudflare/workers-types@5.20260809.1"
 trustPolicy: no-downgrade
+trustPolicyExclude:
+  # Audited transitive releases required by Spectral/Storybook. Keep these
+  # exceptions version-scoped so newer releases are verified normally.
+  - "rollup@2.80.0"
+  - "semver@6.3.1"
 blockExoticSubdeps: true
 
-# Dependency lifecycle scripts are denied unless listed here. These two are
-# required by the checked-in toolchain and are intentionally reviewed.
+# Dependency lifecycle scripts are denied unless listed here. Native build
+# helpers are allowed; Scarf telemetry is explicitly denied.
 strictDepBuilds: true
 allowBuilds:
+  "@scarf/scarf": false
   esbuild: true
   workerd: true
 

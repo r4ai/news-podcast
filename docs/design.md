@@ -2,7 +2,8 @@
 
 - 状態: 初期ユースケース Accepted、追加機能 Confirmation required
 - 更新日: 2026-08-09
-- 契約の正本: `packages/contracts/openapi/openapi.yaml`
+- 契約の正本: `apps/api/src/app.ts` のHono/Zod route schema
+- 生成契約: `packages/contracts/openapi/openapi.json`
 - 判断記録: `docs/adr/`
 
 ## 1. 目的と今回の停止位置
@@ -21,7 +22,7 @@ RSSからニュース項目を取得し、出典を追跡できる事実ベー�
 - TTS: 外部VOICEVOX Engine。既定キャラクター名は「ずんだもん」。数値style IDは起動中Engineの `/speakers` から解決し、固定しない。
 - オンプレ: Docker Compose、SQLiteジョブ表、ポーリングWorker、ローカル音声保存。
 - Cloudflare: Workers、D1、R2、Queues。VOICEVOXはCloudflare外部に配置する。
-- 非同期生成: `POST /v1/episode-jobs`、`202 Accepted`、`Location`、`Idempotency-Key`、状態 `queued/running/succeeded/failed/canceled`。
+- 非同期生成: `POST /v1/episode-jobs`、`202 Accepted`、`Location`、`Idempotency-Key`、状態 `queued/running/retrying/succeeded/failed/canceled`。
 
 ## 3. モジュールと依存方向
 
@@ -111,7 +112,7 @@ SQLiteとD1で共有できるSQL制約はmigrationに置くが、ランタイム
 | 生成時刻                 | 右カラム     | 主内容の後半        | 日次local timeとtime zone                |
 | 購読フィード             | 右カラム     | 主内容の後半        | 現在ユーザーの購読一覧と管理導線         |
 
-初期Web基盤はAPIから独立した表示fixtureで`ready`、`running`、`succeeded`をStorybookに再現する。fixtureは情報設計と状態表示の契約であり、API接続済みを意味しない。音声実データ、認証、購読変更、生成依頼は対応するapplication/API統合時に接続する。
+実アプリは生成OpenAPI型とTanStack Query/RouterでAPIへ接続する。StorybookのfixtureはUIの独立確認専用で、実アプリのデータ源には使用しない。
 
 ## 8. 実装DAGと順序
 

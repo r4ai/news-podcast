@@ -45,7 +45,7 @@ LLM要約には誤りの可能性があり、RSS項目との対応を追跡で�
 | --- | --- | --- | --- |
 | 設計書 | provenance方針 | Done | `docs/design.md` |
 | ドメイン/ユースケース | source item/draft types | Done | application ports |
-| OpenAPI/外部契約 | EpisodeSource | Done | OpenAPI YAML |
+| OpenAPI/外部契約 | EpisodeSource | Done | OpenAPI JSON（ADR-0008） |
 | コード/ポート | SummaryGenerator result | Done | application/adapters |
 | データ/ストレージ | episode_sources | Done | migration 0001 |
 | 実行/配備 | N/A — 共通規則 | Done | N/A |

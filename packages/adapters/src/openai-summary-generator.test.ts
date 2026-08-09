@@ -6,6 +6,7 @@ import {
 } from "./openai-summary-generator.js"
 
 const item = {
+  sourceName: "Example Feed",
   title: "Example",
   url: new URL("https://example.com/article"),
   description: "RSS description",

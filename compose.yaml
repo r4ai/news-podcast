@@ -1,0 +1,69 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+    command: ["pnpm", "--filter", "web", "dev", "--host", "0.0.0.0"]
+    environment:
+      VITE_API_PROXY_TARGET: http://api:3000
+    ports:
+      - "4173:4173"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+    command: ["pnpm", "--filter", "@news-podcast/api", "dev"]
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    ports:
+      - "3000:3000"
+    volumes:
+      - app-data:/app/data
+      - audio-data:/app/audio:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+    command: ["pnpm", "--filter", "@news-podcast/worker", "start"]
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    volumes:
+      - app-data:/app/data
+      - audio-data:/app/audio
+    depends_on:
+      voicevox:
+        condition: service_healthy
+
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-latest
+    ports:
+      - "127.0.0.1:50021:50021"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:50021/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  app-data:
+  audio-data:

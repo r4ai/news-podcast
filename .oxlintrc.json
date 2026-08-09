@@ -11,6 +11,7 @@
     "**/coverage/**",
     "**/storybook-static/**",
     "**/test-results/**",
-    "packages/contracts/src/generated/**"
+    "packages/contracts/src/generated/**",
+    "**/routeTree.gen.ts"
   ]
 }

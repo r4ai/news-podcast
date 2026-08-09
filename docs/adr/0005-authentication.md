@@ -45,7 +45,7 @@ Better Authがアプリセッションを発行し、`/v1` はsession cookieを�
 | --- | --- | --- | --- |
 | 設計書 | session/OIDC分離 | Done | `docs/design.md` |
 | ドメイン/ユースケース | owner identity | Done | application types |
-| OpenAPI/外部契約 | SessionCookie/401/403/404 | Done | OpenAPI YAML |
+| OpenAPI/外部契約 | SessionCookie/401/403/404 | Done | OpenAPI JSON（ADR-0008） |
 | コード/ポート | Better Auth handler seam | Done | API app/adapters |
 | データ/ストレージ | auth schema | Pending | Better Auth migration生成時 |
 | 実行/配備 | local env/cloud secrets | Partial | env example/wrangler |

@@ -9,30 +9,44 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test:visual": "playwright test"
+    "test:visual": "playwright test tests/visual",
+    "test": "vitest run src",
+    "test:e2e": "playwright test --config playwright.e2e.config.ts"
   },
   "dependencies": {
+    "@news-podcast/contracts": "workspace:*",
+    "@tanstack/react-query": "5.101.4",
+    "@tanstack/react-router": "1.170.23",
     "@workspace/ui": "workspace:*",
+    "better-auth": "1.6.26",
     "lucide-react": "1.30.0",
+    "openapi-fetch": "0.17.0",
+    "openapi-react-query": "0.5.4",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@hono/node-server": "1.19.17",
+    "@news-podcast/adapters": "workspace:*",
+    "@news-podcast/application": "workspace:*",
     "@playwright/test": "1.62.1",
     "@storybook/addon-a11y": "10.5.7",
     "@storybook/addon-vitest": "10.5.7",
     "@storybook/react-vite": "10.5.7",
     "@tailwindcss/vite": "4.3.0",
+    "@tanstack/router-plugin": "1.168.27",
     "@types/node": "24.12.4",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "storybook": "10.5.7",
+    "tsx": "4.23.11",
     "typescript": "5.9.3",
-    "vite": "8.0.16"
+    "vite": "8.0.16",
+    "vitest": "4.1.10"
   }
 }

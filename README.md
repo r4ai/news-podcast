@@ -25,15 +25,28 @@ RSSから選んだニュースを、出典付きの短い音声番組として�
 
 ### ローカルでの実行
 
-Node.js 20以上とpnpmを用意します。
+Node.js 24とpnpm 11.16.0、Dockerを用意します。
 
 ```bash
-pnpm install
-pnpm lint
-pnpm format:check
-pnpm dev
+pnpm setup:env
+docker compose up --build
 ```
 
-環境変数は`.env.example`を参照してください。
+`http://localhost:4173` を開き、`pnpm setup:env` が生成した `.env` の `DEV_AUTH_PASSWORD` でログインします。既定の `PROVIDER_MODE=fake` は契約準拠E2E用です。実通信では `OPENAI_API_KEY` を設定し `PROVIDER_MODE=live` に変更します。`setup:env` は既存 `.env` を上書きしません。
+
+主な品質ゲートは次の通りです。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm contract:check
+pnpm test
+pnpm build
+pnpm storybook:build
+pnpm test:e2e
+docker compose config
+```
 
 設計と判断の記録は[設計書](docs/design.md)と[ADR](docs/adr/)にあります。

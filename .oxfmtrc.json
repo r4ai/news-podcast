@@ -18,6 +18,7 @@
     "infra/**",
     "packages/contracts/openapi/**",
     "packages/contracts/src/generated/**",
+    "**/routeTree.gen.ts",
     "pnpm-lock.yaml"
   ]
 }

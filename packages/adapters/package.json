@@ -8,7 +8,10 @@
     "./openai": "./src/openai-summary-generator.ts",
     "./voicevox": "./src/voicevox-speech-synthesizer.ts",
     "./auth/local": "./src/auth/local-auth.ts",
-    "./jobs/sqlite": "./src/jobs/sqlite-job-lease-store.ts"
+    "./jobs/sqlite": "./src/jobs/sqlite-job-lease-store.ts",
+    "./db/local": "./src/db/local-store.ts",
+    "./rss": "./src/rss/rss-feed-reader.ts",
+    "./audio/local": "./src/audio/local-audio-store.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -18,7 +21,10 @@
   },
   "dependencies": {
     "@news-podcast/application": "workspace:*",
-    "better-auth": "1.6.26"
+    "@news-podcast/domain": "workspace:*",
+    "better-auth": "1.6.26",
+    "fast-xml-parser": "5.10.1",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "24.12.4",

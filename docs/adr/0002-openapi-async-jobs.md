@@ -4,8 +4,8 @@
 - Date: 2026-08-09
 - Decision owners: Product owner / API
 - Supersedes: N/A
-- Superseded by: N/A
-- Related: `packages/contracts/openapi/openapi.yaml`
+- Superseded by: ADR-0008（契約正本のみ）
+- Related: `packages/contracts/openapi/openapi.json`
 
 ## コンテキストと変更契機
 
@@ -46,7 +46,7 @@ YAML OpenAPIをHTTP契約の正本とする。生成開始は `POST /v1/episode-
 | --- | --- | --- | --- |
 | 設計書 | 状態と冪等性 | Done | `docs/design.md` 4-5章 |
 | ドメイン/ユースケース | 状態機械 | Done | `packages/domain/src/episode-job.ts` |
-| OpenAPI/外部契約 | 202/Location/headers/errors | Done | OpenAPI YAML |
+| OpenAPI/外部契約 | 202/Location/headers/errors | Done | OpenAPI JSON（ADR-0008） |
 | コード/ポート | routeは入力確認まで保留 | Pending | 確認ゲート |
 | データ/ストレージ | unique idempotency + outbox | Done | migration 0001 |
 | 実行/配備 | Worker分離 | Done | `apps/worker` |

@@ -54,8 +54,8 @@ export function readVoicevoxConfig(
 export interface LocalAuthConfig {
   readonly secret: string
   readonly baseUrl: string
-  readonly googleClientId: string
-  readonly googleClientSecret: string
+  readonly googleClientId?: string
+  readonly googleClientSecret?: string
   readonly databasePath: string
 }
 
@@ -65,8 +65,6 @@ export function readLocalAuthConfig(
   const keys = [
     "BETTER_AUTH_SECRET",
     "BETTER_AUTH_URL",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
     "DATABASE_PATH",
   ] as const
   const missing = keys.filter((key) => !env[key]?.trim())
@@ -74,11 +72,19 @@ export function readLocalAuthConfig(
     throw new ConfigurationError(missing)
   }
 
+  const googleClientId = env.GOOGLE_CLIENT_ID?.trim()
+  const googleClientSecret = env.GOOGLE_CLIENT_SECRET?.trim()
+  if (Boolean(googleClientId) !== Boolean(googleClientSecret)) {
+    throw new ConfigurationError([
+      googleClientId ? "GOOGLE_CLIENT_SECRET" : "GOOGLE_CLIENT_ID",
+    ])
+  }
   return {
     secret: env.BETTER_AUTH_SECRET!.trim(),
     baseUrl: env.BETTER_AUTH_URL!.trim(),
-    googleClientId: env.GOOGLE_CLIENT_ID!.trim(),
-    googleClientSecret: env.GOOGLE_CLIENT_SECRET!.trim(),
     databasePath: env.DATABASE_PATH!.trim(),
+    ...(googleClientId && googleClientSecret
+      ? { googleClientId, googleClientSecret }
+      : {}),
   }
 }

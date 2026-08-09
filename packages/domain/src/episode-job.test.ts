@@ -11,9 +11,12 @@ import {
 const allowed: ReadonlyArray<readonly [JobStatus, JobStatus]> = [
   ["queued", "running"],
   ["queued", "canceled"],
+  ["running", "retrying"],
   ["running", "succeeded"],
   ["running", "failed"],
   ["running", "canceled"],
+  ["retrying", "running"],
+  ["retrying", "canceled"],
 ]
 
 describe("episode job state", () => {
@@ -38,6 +41,7 @@ describe("episode job state", () => {
   it.each([
     ["queued", false],
     ["running", false],
+    ["retrying", false],
     ["succeeded", true],
     ["failed", true],
     ["canceled", true],
