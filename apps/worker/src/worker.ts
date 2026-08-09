@@ -9,7 +9,7 @@ export interface EpisodeJobProcessor {
 
 export function createPollingWorker(
   leases: JobLeaseStore,
-  processor: EpisodeJobProcessor,
+  processor: EpisodeJobProcessor
 ) {
   return {
     async runOnce(now = new Date()): Promise<"idle" | "processed"> {

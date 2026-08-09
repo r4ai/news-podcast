@@ -14,7 +14,7 @@ describe("CreateEpisodeJob", () => {
     const useCase = new CreateEpisodeJob(
       { listEnabledFeedIds: vi.fn().mockResolvedValue(["feed-a", "feed-b"]) },
       { create },
-      { dispatch },
+      { dispatch }
     )
 
     await useCase.execute({
@@ -33,7 +33,10 @@ describe("CreateEpisodeJob", () => {
       trigger: "manual",
       feedIds: ["feed-a", "feed-b"],
     })
-    expect(dispatch).toHaveBeenCalledWith({ ownerId: "owner-1", jobId: "job-1" })
+    expect(dispatch).toHaveBeenCalledWith({
+      ownerId: "owner-1",
+      jobId: "job-1",
+    })
   })
 
   it("does not dispatch an idempotent replay", async () => {
@@ -48,7 +51,7 @@ describe("CreateEpisodeJob", () => {
           created: false,
         }),
       },
-      { dispatch },
+      { dispatch }
     )
 
     await useCase.execute({

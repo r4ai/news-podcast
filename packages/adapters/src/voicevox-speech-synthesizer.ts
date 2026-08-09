@@ -25,20 +25,22 @@ export class VoicevoxProviderError extends Error {
 export class VoicevoxSpeechSynthesizer implements SpeechSynthesizer {
   constructor(
     private readonly config: VoicevoxConfig,
-    private readonly fetcher: typeof fetch = fetch,
+    private readonly fetcher: typeof fetch = fetch
   ) {}
 
   async synthesize(request: SpeechRequest): Promise<Uint8Array> {
     const styleId = await this.resolveStyleId(
       request.characterName || this.config.characterName,
-      request.styleName ?? this.config.styleName,
+      request.styleName ?? this.config.styleName
     )
     const queryUrl = new URL("audio_query", this.config.baseUrl)
     queryUrl.searchParams.set("speaker", String(styleId))
     queryUrl.searchParams.set("text", request.text)
     const queryResponse = await this.fetcher(queryUrl, { method: "POST" })
     if (!queryResponse.ok) {
-      throw new VoicevoxProviderError(`VOICEVOX audio_query failed with ${queryResponse.status}`)
+      throw new VoicevoxProviderError(
+        `VOICEVOX audio_query failed with ${queryResponse.status}`
+      )
     }
 
     const synthesisUrl = new URL("synthesis", this.config.baseUrl)
@@ -49,26 +51,37 @@ export class VoicevoxSpeechSynthesizer implements SpeechSynthesizer {
       body: await queryResponse.text(),
     })
     if (!synthesisResponse.ok) {
-      throw new VoicevoxProviderError(`VOICEVOX synthesis failed with ${synthesisResponse.status}`)
+      throw new VoicevoxProviderError(
+        `VOICEVOX synthesis failed with ${synthesisResponse.status}`
+      )
     }
 
     return new Uint8Array(await synthesisResponse.arrayBuffer())
   }
 
-  private async resolveStyleId(characterName: string, styleName?: string): Promise<number> {
-    const response = await this.fetcher(new URL("speakers", this.config.baseUrl))
+  private async resolveStyleId(
+    characterName: string,
+    styleName?: string
+  ): Promise<number> {
+    const response = await this.fetcher(
+      new URL("speakers", this.config.baseUrl)
+    )
     if (!response.ok) {
-      throw new VoicevoxProviderError(`VOICEVOX speakers failed with ${response.status}`)
+      throw new VoicevoxProviderError(
+        `VOICEVOX speakers failed with ${response.status}`
+      )
     }
 
     const speakers = (await response.json()) as readonly VoicevoxSpeaker[]
-    const speaker = speakers.find((candidate) => candidate.name === characterName)
+    const speaker = speakers.find(
+      (candidate) => candidate.name === characterName
+    )
     const style = styleName
       ? speaker?.styles.find((candidate) => candidate.name === styleName)
       : speaker?.styles[0]
     if (!style) {
       throw new VoicevoxProviderError(
-        `VOICEVOX style was not found for ${characterName}${styleName ? `/${styleName}` : ""}`,
+        `VOICEVOX style was not found for ${characterName}${styleName ? `/${styleName}` : ""}`
       )
     }
 

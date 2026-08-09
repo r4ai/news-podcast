@@ -19,7 +19,10 @@ export interface VoicevoxConfig {
   readonly styleName?: string
 }
 
-function required(env: Readonly<Record<string, string | undefined>>, key: string): string {
+function required(
+  env: Readonly<Record<string, string | undefined>>,
+  key: string
+): string {
   const value = env[key]?.trim()
   if (!value) {
     throw new ConfigurationError([key])
@@ -28,7 +31,7 @@ function required(env: Readonly<Record<string, string | undefined>>, key: string
 }
 
 export function readOpenAiConfig(
-  env: Readonly<Record<string, string | undefined>>,
+  env: Readonly<Record<string, string | undefined>>
 ): OpenAiConfig {
   return {
     apiKey: required(env, "OPENAI_API_KEY"),
@@ -37,7 +40,7 @@ export function readOpenAiConfig(
 }
 
 export function readVoicevoxConfig(
-  env: Readonly<Record<string, string | undefined>>,
+  env: Readonly<Record<string, string | undefined>>
 ): VoicevoxConfig {
   const styleName = env.VOICEVOX_STYLE_NAME?.trim()
   return {
@@ -57,7 +60,7 @@ export interface LocalAuthConfig {
 }
 
 export function readLocalAuthConfig(
-  env: Readonly<Record<string, string | undefined>>,
+  env: Readonly<Record<string, string | undefined>>
 ): LocalAuthConfig {
   const keys = [
     "BETTER_AUTH_SECRET",

@@ -5,8 +5,10 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
-    "lint": "turbo lint",
-    "format": "turbo format",
+    "lint": "oxlint && pnpm contract:lint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "contract:lint": "pnpm --filter @news-podcast/contracts lint",
@@ -14,14 +16,14 @@
     "storybook:build": "pnpm --filter web build-storybook"
   },
   "devDependencies": {
-    "prettier": "^3.8.3",
-    "prettier-plugin-tailwindcss": "^0.8.0",
-    "turbo": "^2.9.18",
+    "oxfmt": "0.62.0",
+    "oxlint": "1.77.0",
+    "turbo": "2.10.9",
     "typescript": "5.9.3",
-    "vitest": "^4.1.10"
+    "vitest": "4.1.10"
   },
-  "packageManager": "pnpm@11.16.0",
   "engines": {
     "node": ">=20"
-  }
+  },
+  "packageManager": "pnpm@11.16.0"
 }

@@ -7,7 +7,7 @@ describe("polling worker foundation", () => {
     const process = vi.fn()
     const worker = createPollingWorker(
       { leaseNext: vi.fn().mockResolvedValue(null) },
-      { process },
+      { process }
     )
 
     await expect(worker.runOnce(new Date(0))).resolves.toBe("idle")
@@ -25,7 +25,7 @@ describe("polling worker foundation", () => {
           leaseToken: "lease-1",
         }),
       },
-      { process },
+      { process }
     )
 
     await expect(worker.runOnce(new Date(0))).resolves.toBe("processed")

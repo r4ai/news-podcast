@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { DatabaseSync } from "node:sqlite"
 
-import type {
-  JobLeaseStore,
-  LeasedEpisodeJob,
-} from "@news-podcast/application"
+import type { JobLeaseStore, LeasedEpisodeJob } from "@news-podcast/application"
 
 interface JobRow {
   readonly id: string
@@ -16,7 +13,9 @@ export class SqliteJobLeaseStore implements JobLeaseStore {
 
   leaseNext(now: Date, leaseSeconds: number): Promise<LeasedEpisodeJob | null> {
     const leaseToken = randomUUID()
-    const leaseExpiresAt = new Date(now.getTime() + leaseSeconds * 1000).toISOString()
+    const leaseExpiresAt = new Date(
+      now.getTime() + leaseSeconds * 1000
+    ).toISOString()
     this.database.exec("BEGIN IMMEDIATE")
     try {
       const row = this.database
@@ -26,7 +25,7 @@ export class SqliteJobLeaseStore implements JobLeaseStore {
              AND available_at <= ?
              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
            ORDER BY created_at, id
-           LIMIT 1`,
+           LIMIT 1`
         )
         .get(now.toISOString(), now.toISOString()) as JobRow | undefined
 
@@ -40,7 +39,7 @@ export class SqliteJobLeaseStore implements JobLeaseStore {
           `UPDATE episode_jobs
            SET status = 'running', started_at = COALESCE(started_at, ?),
                lease_token = ?, lease_expires_at = ?
-           WHERE id = ? AND status = 'queued'`,
+           WHERE id = ? AND status = 'queued'`
         )
         .run(now.toISOString(), leaseToken, leaseExpiresAt, row.id)
       this.database.exec("COMMIT")

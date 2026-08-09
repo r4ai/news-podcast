@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { OpenAiSummaryGenerator, SummaryProviderError } from "./openai-summary-generator.js"
+import {
+  OpenAiSummaryGenerator,
+  SummaryProviderError,
+} from "./openai-summary-generator.js"
 
 const item = {
   title: "Example",
@@ -19,12 +22,12 @@ describe("OpenAiSummaryGenerator", () => {
             source_urls: [item.url.href],
           }),
         }),
-        { status: 200 },
-      ),
+        { status: 200 }
+      )
     )
     const generator = new OpenAiSummaryGenerator(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
-      fetcher,
+      fetcher
     )
 
     await expect(generator.generate([item])).resolves.toEqual({
@@ -45,15 +48,15 @@ describe("OpenAiSummaryGenerator", () => {
             source_urls: ["https://invented.example/news"],
           }),
         }),
-        { status: 200 },
-      ),
+        { status: 200 }
+      )
     )
 
     await expect(
       new OpenAiSummaryGenerator(
         { apiKey: "test-key", model: "gpt-5.6-luna" },
-        fetcher,
-      ).generate([item]),
+        fetcher
+      ).generate([item])
     ).rejects.toThrow(SummaryProviderError)
   })
 })

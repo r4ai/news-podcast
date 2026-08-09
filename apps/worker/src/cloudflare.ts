@@ -8,7 +8,7 @@ interface CloudflareBindings {
 export default {
   async queue(
     batch: MessageBatch<EpisodeJobMessage>,
-    _env: CloudflareBindings,
+    _env: CloudflareBindings
   ): Promise<void> {
     // The functional processor is intentionally gated. Retry messages rather
     // than acknowledging work that has not been durably processed.

@@ -8,4 +8,5 @@ interface CloudflareBindings {
 
 // Better Auth D1 wiring is intentionally deferred until its generated schema is
 // checked into the first authenticated vertical slice. No protected route is enabled.
-export default createApp().fetch as ExportedHandlerFetchHandler<CloudflareBindings>
+export default createApp()
+  .fetch as ExportedHandlerFetchHandler<CloudflareBindings>

@@ -23,7 +23,7 @@ describe("runtime configuration", () => {
 
   it("resolves the VOICEVOX character by name and leaves style unresolved", () => {
     expect(
-      readVoicevoxConfig({ VOICEVOX_BASE_URL: "http://voicevox:50021" }),
+      readVoicevoxConfig({ VOICEVOX_BASE_URL: "http://voicevox:50021" })
     ).toEqual({
       baseUrl: new URL("http://voicevox:50021"),
       characterName: DEFAULT_VOICEVOX_CHARACTER,

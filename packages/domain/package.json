@@ -3,16 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage.enabled --coverage.provider=v8 --coverage.thresholds.lines=100 --coverage.thresholds.functions=100 --coverage.thresholds.branches=100 --coverage.thresholds.statements=100"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "4.1.10",
     "typescript": "5.9.3",
-    "vitest": "^4.1.10"
-  },
-  "exports": { ".": "./src/index.ts" }
+    "vitest": "4.1.10"
+  }
 }

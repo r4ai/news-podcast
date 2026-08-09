@@ -2,11 +2,25 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Supply-chain policy: use only releases that have had time for community
+# scrutiny, keep the existing lockfile trusted, and disallow non-registry
+# transitive sources.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeExclude:
+  # Cloudflare publishes this generated type package daily; retain the
+  # explicitly pinned version required by this repository.
+  - "@cloudflare/workers-types@5.20260809.1"
+trustPolicy: no-downgrade
+blockExoticSubdeps: true
+
+# Dependency lifecycle scripts are denied unless listed here. These two are
+# required by the checked-in toolchain and are intentionally reviewed.
+strictDepBuilds: true
 allowBuilds:
-  '@scarf/scarf': false
   esbuild: true
-  msw: false
   workerd: true
 
-minimumReleaseAgeExclude:
-  - '@cloudflare/workers-types@5.20260809.1'
+# `pnpm add` writes exact versions; committed manifests and the lockfile remain
+# the source of truth for upgrades.
+saveExact: true

@@ -26,12 +26,12 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   if (dependencies.authHandler) {
     app.on(["GET", "POST"], "/api/auth/*", (context) =>
-      dependencies.authHandler!(context.req.raw),
+      dependencies.authHandler!(context.req.raw)
     )
   }
 
   app.on(["GET", "PATCH"], "/v1/me/settings", (context) =>
-    context.json(unavailableProblem, 503),
+    context.json(unavailableProblem, 503)
   )
   app.post("/v1/episode-jobs", async (context) => {
     if (!dependencies.createEpisodeJob) {
@@ -47,7 +47,7 @@ export function createApp(dependencies: AppDependencies = {}) {
           status: 400,
           code: "missing-idempotency-key",
         },
-        400,
+        400
       )
     }
 

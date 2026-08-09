@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "endOfLine": "lf",
+  "semi": false,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/.turbo/**",
+    "**/coverage/**",
+    "**/storybook-static/**",
+    "**/test-results/**",
+    ".codex/**",
+    "docs/**",
+    "infra/**",
+    "packages/contracts/openapi/**",
+    "packages/contracts/src/generated/**",
+    "pnpm-lock.yaml"
+  ]
+}

@@ -26,7 +26,7 @@ export class SummaryProviderError extends Error {
 export class OpenAiSummaryGenerator implements SummaryGenerator {
   constructor(
     private readonly config: OpenAiConfig,
-    private readonly fetcher: typeof fetch = fetch,
+    private readonly fetcher: typeof fetch = fetch
   ) {}
 
   async generate(items: readonly RssSourceItem[]): Promise<EpisodeScriptDraft> {
@@ -74,12 +74,16 @@ export class OpenAiSummaryGenerator implements SummaryGenerator {
     })
 
     if (!response.ok) {
-      throw new SummaryProviderError(`OpenAI request failed with ${response.status}`)
+      throw new SummaryProviderError(
+        `OpenAI request failed with ${response.status}`
+      )
     }
 
     const providerResponse = (await response.json()) as OpenAiResponse
     if (typeof providerResponse.output_text !== "string") {
-      throw new SummaryProviderError("OpenAI response did not contain output_text")
+      throw new SummaryProviderError(
+        "OpenAI response did not contain output_text"
+      )
     }
 
     return parseScriptPayload(providerResponse.output_text, items)
@@ -88,7 +92,7 @@ export class OpenAiSummaryGenerator implements SummaryGenerator {
 
 function parseScriptPayload(
   outputText: string,
-  inputs: readonly RssSourceItem[],
+  inputs: readonly RssSourceItem[]
 ): EpisodeScriptDraft {
   let payload: ScriptPayload
   try {
@@ -103,13 +107,19 @@ function parseScriptPayload(
     !Array.isArray(payload.source_urls) ||
     !payload.source_urls.every((value) => typeof value === "string")
   ) {
-    throw new SummaryProviderError("OpenAI response did not match the script schema")
+    throw new SummaryProviderError(
+      "OpenAI response did not match the script schema"
+    )
   }
 
   const allowed = new Set(inputs.map((item) => item.url.href))
-  const sourceUrls = payload.source_urls.map((value) => new URL(value as string))
+  const sourceUrls = payload.source_urls.map(
+    (value) => new URL(value as string)
+  )
   if (sourceUrls.some((url) => !allowed.has(url.href))) {
-    throw new SummaryProviderError("OpenAI response referenced an unknown source URL")
+    throw new SummaryProviderError(
+      "OpenAI response referenced an unknown source URL"
+    )
   }
 
   return { title: payload.title, script: payload.script, sourceUrls }

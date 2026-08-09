@@ -17,7 +17,7 @@ export class CreateEpisodeJob {
   constructor(
     private readonly subscriptions: EnabledSubscriptionReader,
     private readonly jobs: EpisodeJobRepository,
-    private readonly dispatcher: JobDispatcher,
+    private readonly dispatcher: JobDispatcher
   ) {}
 
   async execute(command: CreateEpisodeJobCommand): Promise<EpisodeJobRecord> {

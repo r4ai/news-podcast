@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "build": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -14,7 +17,6 @@
   },
   "devDependencies": {
     "typescript": "5.9.3",
-    "vitest": "^4.1.10"
-  },
-  "exports": { ".": "./src/index.ts" }
+    "vitest": "4.1.10"
+  }
 }

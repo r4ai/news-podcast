@@ -14,8 +14,8 @@ describe("Idempotency-Key", () => {
     "rejects %j",
     (value) => {
       expect(() => validateIdempotencyKey(value)).toThrow(
-        InvalidIdempotencyKeyError,
+        InvalidIdempotencyKeyError
       )
-    },
+    }
   )
 })

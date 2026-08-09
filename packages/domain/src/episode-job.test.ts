@@ -27,7 +27,9 @@ describe("episode job state", () => {
     for (const from of JOB_STATUSES) {
       for (const to of JOB_STATUSES) {
         if (!allowedKeys.has(`${from}:${to}`)) {
-          expect(() => transitionJob(from, to)).toThrow(InvalidJobTransitionError)
+          expect(() => transitionJob(from, to)).toThrow(
+            InvalidJobTransitionError
+          )
         }
       }
     }

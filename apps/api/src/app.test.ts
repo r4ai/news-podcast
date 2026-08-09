@@ -26,7 +26,7 @@ describe("API foundation", () => {
     })
     expect(response.status).toBe(202)
     expect(response.headers.get("Location")).toBe(
-      "/v1/episode-jobs/00000000-0000-4000-8000-000000000001",
+      "/v1/episode-jobs/00000000-0000-4000-8000-000000000001"
     )
     expect(response.headers.get("Idempotency-Key")).toBe("test")
     await expect(response.json()).resolves.toMatchObject({

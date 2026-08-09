@@ -33,8 +33,16 @@ export interface StoredAudio {
 }
 
 export interface AudioStore {
-  put(ownerId: string, episodeId: string, audio: Uint8Array): Promise<StoredAudio>
-  createAccessUrl(ownerId: string, key: string, ttlSeconds: number): Promise<URL>
+  put(
+    ownerId: string,
+    episodeId: string,
+    audio: Uint8Array
+  ): Promise<StoredAudio>
+  createAccessUrl(
+    ownerId: string,
+    key: string,
+    ttlSeconds: number
+  ): Promise<URL>
 }
 
 export interface EpisodeJobMessage {
@@ -84,5 +92,8 @@ export interface GenerationSchedule {
 
 export interface UserSettingsRepository {
   get(ownerId: string): Promise<GenerationSchedule>
-  set(ownerId: string, schedule: GenerationSchedule): Promise<GenerationSchedule>
+  set(
+    ownerId: string,
+    schedule: GenerationSchedule
+  ): Promise<GenerationSchedule>
 }
