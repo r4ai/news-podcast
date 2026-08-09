@@ -192,6 +192,34 @@ export class ArticleArchiver {
       return nested ? assetHash : `assets/${assetHash}`
     }
 
+    for (const style of Array.from(document.querySelectorAll("style"))) {
+      style.textContent = await rewriteCssUrls(
+        style.textContent ?? "",
+        sourceUrl,
+        async (url) => {
+          try {
+            return await capture(url)
+          } catch {
+            return undefined
+          }
+        }
+      )
+    }
+    for (const element of Array.from(document.querySelectorAll("[style]"))) {
+      const css = element.getAttribute("style")
+      if (!css) continue
+      element.setAttribute(
+        "style",
+        await rewriteCssUrls(css, sourceUrl, async (url) => {
+          try {
+            return await capture(url)
+          } catch {
+            return undefined
+          }
+        })
+      )
+    }
+
     for (const candidate of candidates) {
       const rawUrl = candidate.element.getAttribute(candidate.attribute)
       if (!rawUrl || rawUrl.startsWith("data:")) continue
@@ -233,7 +261,7 @@ async function rewriteCssUrls(
 function sanitize(document: ReturnType<typeof parseHTML>["document"]): void {
   document
     .querySelectorAll(
-      "script,noscript,iframe,object,embed,portal,meta[http-equiv='refresh']"
+      "script,noscript,iframe,object,embed,portal,meta[http-equiv='refresh'],link[rel~='modulepreload'],link[rel~='preload'],link[rel~='prefetch'],link[rel~='preconnect'],link[rel~='dns-prefetch']"
     )
     .forEach((element: Element) => element.remove())
   document.querySelectorAll("*").forEach((element: Element) => {
@@ -299,7 +327,7 @@ function extractMarkdown(html: string, sourceUrl: string): string {
 
 function addContentSecurityPolicy(html: string): string {
   const policy =
-    "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'"
+    "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'"
   return html.replace(
     /<head(?:\s[^>]*)?>/i,
     (match) =>

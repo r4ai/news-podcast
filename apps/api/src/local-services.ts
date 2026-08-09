@@ -167,15 +167,17 @@ export function createArticleAccess(input: {
 }) {
   async function responseFor(
     value: { readonly key: string; readonly contentType?: string } | undefined,
-    extraHeaders: Record<string, string> = {}
+    extraHeaders: Record<string, string> = {},
+    transformBody: (body: Uint8Array) => Uint8Array = (body) => body
   ): Promise<Response> {
     if (!value) return new Response(null, { status: 404 })
     const object = await input.objects.get(value.key)
     if (!object) return new Response(null, { status: 404 })
-    return new Response(Uint8Array.from(object.body).buffer, {
+    const body = transformBody(Uint8Array.from(object.body))
+    return new Response(Uint8Array.from(body).buffer, {
       headers: {
         "Content-Type": value.contentType ?? object.contentType,
-        "Content-Length": String(object.byteLength),
+        "Content-Length": String(body.byteLength),
         "Cache-Control": "private, no-store",
         ...extraHeaders,
       },
@@ -193,15 +195,27 @@ export function createArticleAccess(input: {
         input.store.getArticleObject(ownerId, articleId, "replay"),
         {
           "Content-Security-Policy":
-            "sandbox; default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; form-action 'none'; base-uri 'none'",
+            "sandbox allow-same-origin; default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
           "X-Content-Type-Options": "nosniff",
-        }
+        },
+        prepareReplayBody
       )
     },
     asset(ownerId: string, articleId: string, hash: string) {
       return responseFor(input.store.getArticleAsset(ownerId, articleId, hash))
     },
   }
+}
+
+function prepareReplayBody(body: Uint8Array): Uint8Array {
+  const html = new TextDecoder()
+    .decode(body)
+    .replace(/;\s*frame-ancestors\s+[^;"]*/gi, "")
+    .replace(
+      /<link\b(?=[^>]*\brel\s*=\s*["'][^"']*(?:modulepreload|preload|prefetch|preconnect|dns-prefetch)[^"']*["'])[^>]*>/gi,
+      ""
+    )
+  return new TextEncoder().encode(html)
 }
 
 function parseRange(value: string | undefined, length: number) {

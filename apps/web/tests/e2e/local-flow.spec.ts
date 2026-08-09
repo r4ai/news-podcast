@@ -218,6 +218,7 @@ test("subscription changes confirm destructive actions and roll back failed opti
 test("RSS reader shows archived articles and persists saved state", async ({
   page,
 }) => {
+  const stylesheetHash = "a".repeat(64)
   const article = {
     id: "00000000-0000-4000-8000-000000000020",
     feedId: "00000000-0000-4000-8000-000000000001",
@@ -234,6 +235,28 @@ test("RSS reader shows archived articles and persists saved state", async ({
     markdownUrl:
       "/v1/me/articles/00000000-0000-4000-8000-000000000020/markdown",
   }
+  const archiveErrors: string[] = []
+  page.context().on("page", (openedPage) => {
+    openedPage.on("console", (message) => {
+      if (message.type() === "error") archiveErrors.push(message.text())
+    })
+  })
+  await page.context().route(`**${article.archiveUrl}`, (route) =>
+    route.fulfill({
+      body: `<!doctype html><html><head><title>保存された記事</title><link rel="stylesheet" href="assets/${stylesheetHash}"></head><body><main><h1>保存された記事</h1><p>保存時点の本文です。</p></main></body></html>`,
+      contentType: "text/html; charset=utf-8",
+      headers: {
+        "Content-Security-Policy":
+          "sandbox allow-same-origin; default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'self'; frame-ancestors 'self'",
+      },
+    })
+  )
+  await page.context().route(`**/assets/${stylesheetHash}`, (route) =>
+    route.fulfill({
+      body: "body { background: rgb(240, 244, 248); } h1 { color: rgb(17, 24, 39); font-size: 32px; }",
+      contentType: "text/css",
+    })
+  )
   await page.route("**/v1/me/articles", (route) =>
     route.fulfill({
       body: JSON.stringify({ items: [article], page: { hasMore: false } }),
@@ -242,8 +265,12 @@ test("RSS reader shows archived articles and persists saved state", async ({
   )
   await page.route("**/v1/me/articles/*", async (route) => {
     if (route.request().method() !== "PATCH") return route.continue()
+    const update = route.request().postDataJSON() as {
+      read?: boolean
+      saved?: boolean
+    }
     await route.fulfill({
-      body: JSON.stringify({ ...article, saved: true }),
+      body: JSON.stringify({ ...article, ...update }),
       contentType: "application/json",
     })
   })
@@ -261,6 +288,19 @@ test("RSS reader shows archived articles and persists saved state", async ({
   await expect(
     page.getByRole("link", { name: "アーカイブを読む" })
   ).toHaveAttribute("href", article.archiveUrl)
+  const archivePagePromise = page.waitForEvent("popup")
+  await page.getByRole("link", { name: "アーカイブを読む" }).click()
+  const archivePage = await archivePagePromise
+  await expect(archivePage).toHaveTitle("保存された記事")
+  await expect(
+    archivePage.getByRole("heading", { name: "保存された記事" })
+  ).toHaveCSS("font-size", "32px")
+  await expect(archivePage.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(240, 244, 248)"
+  )
+  expect(archiveErrors).toEqual([])
+  await archivePage.close()
   await page.getByRole("button", { name: "記事を保存" }).click()
   await expect(page.getByRole("button", { name: "保存を解除" })).toBeVisible()
 })
