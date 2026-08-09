@@ -7,15 +7,20 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "turbo format",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "contract:lint": "pnpm --filter @news-podcast/contracts lint",
+    "contract:generate": "pnpm --filter @news-podcast/contracts generate",
+    "storybook:build": "pnpm --filter web build-storybook"
   },
   "devDependencies": {
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.9.18",
-    "typescript": "~6"
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
   },
-  "packageManager": "pnpm@10.33.4",
+  "packageManager": "pnpm@11.16.0",
   "engines": {
     "node": ">=20"
   }

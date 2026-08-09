@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Architecture Decisions"
+  short_description: "Record ADRs and synchronize affected artifacts"
+  default_prompt: "Use $maintain-architecture-decisions to record this architectural decision and synchronize affected design documents, OpenAPI, code, and tests."

@@ -3,5 +3,10 @@ packages:
   - "packages/*"
 
 allowBuilds:
+  '@scarf/scarf': false
   esbuild: true
   msw: false
+  workerd: true
+
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types@5.20260809.1'

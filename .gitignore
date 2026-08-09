@@ -10,10 +10,18 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+storybook-static
+test-results
 *.local
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# Codex scratch and generated nested bootstrap recovery
+work/
+outputs/
+news-podcast-app/
 
 # turbo
 .turbo

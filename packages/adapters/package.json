@@ -1,0 +1,28 @@
+{
+  "name": "@news-podcast/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@news-podcast/application": "workspace:*",
+    "better-auth": "^1.6.26"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "exports": {
+    "./config": "./src/config.ts",
+    "./openai": "./src/openai-summary-generator.ts",
+    "./voicevox": "./src/voicevox-speech-synthesizer.ts",
+    "./auth/local": "./src/auth/local-auth.ts",
+    "./jobs/sqlite": "./src/jobs/sqlite-job-lease-store.ts"
+  }
+}

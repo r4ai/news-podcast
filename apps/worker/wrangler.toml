@@ -1,0 +1,19 @@
+name = "news-podcast-worker"
+main = "src/cloudflare.ts"
+compatibility_date = "2026-08-09"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "news-podcast"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[r2_buckets]]
+binding = "AUDIO"
+bucket_name = "news-podcast-audio"
+
+[[queues.consumers]]
+queue = "episode-jobs"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "episode-jobs-dead"
