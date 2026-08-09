@@ -8,7 +8,12 @@ import type { OpenAiConfig } from "./config.js"
 import { z } from "zod"
 
 interface OpenAiResponse {
-  readonly output_text?: unknown
+  readonly output?: readonly {
+    readonly content?: readonly {
+      readonly type?: unknown
+      readonly text?: unknown
+    }[]
+  }[]
 }
 
 const ScriptPayload = z.object({
@@ -70,7 +75,7 @@ export class OpenAiSummaryGenerator implements SummaryGenerator {
                   script: { type: "string" },
                   source_urls: {
                     type: "array",
-                    items: { type: "string", format: "uri" },
+                    items: { type: "string" },
                   },
                 },
               },
@@ -89,14 +94,17 @@ export class OpenAiSummaryGenerator implements SummaryGenerator {
     }
 
     const providerResponse = (await response.json()) as OpenAiResponse
-    if (typeof providerResponse.output_text !== "string") {
+    const outputText = providerResponse.output
+      ?.flatMap((item) => item.content ?? [])
+      .find((item) => item.type === "output_text")?.text
+    if (typeof outputText !== "string") {
       throw new SummaryProviderError(
         "OpenAI response did not contain output_text",
         false
       )
     }
 
-    return parseScriptPayload(providerResponse.output_text, items)
+    return parseScriptPayload(outputText, items)
   }
 }
 

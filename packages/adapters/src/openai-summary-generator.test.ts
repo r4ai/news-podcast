@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import {
-  OpenAiSummaryGenerator,
-  SummaryProviderError,
-} from "./openai-summary-generator.js"
+import { OpenAiSummaryGenerator } from "./openai-summary-generator.js"
 
 const item = {
   sourceName: "Example Feed",
@@ -17,11 +14,21 @@ describe("OpenAiSummaryGenerator", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
-          output_text: JSON.stringify({
-            title: "技術ニュース",
-            script: "確認できる事実だけの台本",
-            source_urls: [item.url.href],
-          }),
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    title: "技術ニュース",
+                    script: "確認できる事実だけの台本",
+                    source_urls: [item.url.href],
+                  }),
+                },
+              ],
+            },
+          ],
         }),
         { status: 200 }
       )
@@ -37,17 +44,31 @@ describe("OpenAiSummaryGenerator", () => {
       sourceUrls: [item.url],
     })
     expect(fetcher).toHaveBeenCalledOnce()
+    const request = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
+    expect(request.text.format.schema.properties.source_urls.items).toEqual({
+      type: "string",
+    })
   })
 
   it("rejects provider-invented source URLs", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
-          output_text: JSON.stringify({
-            title: "title",
-            script: "script",
-            source_urls: ["https://invented.example/news"],
-          }),
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    title: "title",
+                    script: "script",
+                    source_urls: ["https://invented.example/news"],
+                  }),
+                },
+              ],
+            },
+          ],
         }),
         { status: 200 }
       )
@@ -58,6 +79,6 @@ describe("OpenAiSummaryGenerator", () => {
         { apiKey: "test-key", model: "gpt-5.6-luna" },
         fetcher
       ).generate([item])
-    ).rejects.toThrow(SummaryProviderError)
+    ).rejects.toThrow("OpenAI response referenced an unknown source URL")
   })
 })
