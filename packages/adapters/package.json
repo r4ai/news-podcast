@@ -6,12 +6,17 @@
   "exports": {
     "./config": "./src/config.ts",
     "./openai": "./src/openai-summary-generator.ts",
+    "./openai-agent": "./src/openai-podcast-agent.ts",
     "./voicevox": "./src/voicevox-speech-synthesizer.ts",
     "./auth/local": "./src/auth/local-auth.ts",
     "./jobs/sqlite": "./src/jobs/sqlite-job-lease-store.ts",
     "./db/local": "./src/db/local-store.ts",
     "./rss": "./src/rss/rss-feed-reader.ts",
-    "./audio/local": "./src/audio/local-audio-store.ts"
+    "./http/safe": "./src/http/safe-fetch.ts",
+    "./archive": "./src/archive/article-archiver.ts",
+    "./audio/local": "./src/audio/local-audio-store.ts",
+    "./audio/object": "./src/audio/object-audio-store.ts",
+    "./object-store/s3": "./src/object-store/s3-object-store.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -20,14 +25,19 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1106.0",
+    "@mozilla/readability": "0.6.0",
     "@news-podcast/application": "workspace:*",
     "@news-podcast/domain": "workspace:*",
     "better-auth": "1.6.26",
     "fast-xml-parser": "5.10.1",
+    "linkedom": "0.18.13",
+    "turndown": "7.2.4",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
+    "@types/turndown": "5.0.6",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }

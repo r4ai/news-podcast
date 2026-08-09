@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 
 import { LocalAudioStore } from "@news-podcast/adapters/audio/local"
 import type { LocalStore } from "@news-podcast/adapters/db/local"
+import type { ObjectStore } from "@news-podcast/application"
 
 const DEV_COOKIE = "news_podcast_dev"
 
@@ -83,9 +84,12 @@ export function createAudioAccess(input: {
   readonly secret: string
   readonly baseUrl: string
   readonly store: LocalStore
-  readonly directory: string
+  readonly objects?: ObjectStore
+  readonly directory?: string
 }) {
-  const audio = new LocalAudioStore(input.directory)
+  const local = input.directory
+    ? new LocalAudioStore(input.directory)
+    : undefined
   const signature = (payload: string) =>
     createHmac("sha256", input.secret).update(payload).digest("base64url")
 
@@ -119,10 +123,23 @@ export function createAudioAccess(input: {
         return new Response(null, { status: 404 })
       const stored = input.store.getAudio(value.ownerId, value.episodeId)
       if (!stored) return new Response(null, { status: 404 })
-      const bytes = await readFile(audio.resolve(stored.key))
+      const object = input.objects ? await input.objects.get(stored.key) : null
+      const localBytes =
+        !object && local
+          ? new Uint8Array(await readFile(local.resolve(stored.key)))
+          : null
+      if (localBytes && input.objects) {
+        await input.objects.put({
+          key: stored.key,
+          body: localBytes,
+          contentType: "audio/wav",
+        })
+      }
+      const bytes = object?.body ?? localBytes
+      if (!bytes) return new Response(null, { status: 404 })
       const bounds = parseRange(range, bytes.length)
       if (!bounds) {
-        return new Response(bytes, {
+        return new Response(Uint8Array.from(bytes).buffer, {
           headers: {
             "Accept-Ranges": "bytes",
             "Content-Length": String(bytes.length),
@@ -131,7 +148,7 @@ export function createAudioAccess(input: {
         })
       }
       const body = bytes.subarray(bounds.start, bounds.end + 1)
-      return new Response(body, {
+      return new Response(Uint8Array.from(body).buffer, {
         status: 206,
         headers: {
           "Accept-Ranges": "bytes",
@@ -140,6 +157,49 @@ export function createAudioAccess(input: {
           "Content-Type": "audio/wav",
         },
       })
+    },
+  }
+}
+
+export function createArticleAccess(input: {
+  readonly store: LocalStore
+  readonly objects: ObjectStore
+}) {
+  async function responseFor(
+    value: { readonly key: string; readonly contentType?: string } | undefined,
+    extraHeaders: Record<string, string> = {}
+  ): Promise<Response> {
+    if (!value) return new Response(null, { status: 404 })
+    const object = await input.objects.get(value.key)
+    if (!object) return new Response(null, { status: 404 })
+    return new Response(Uint8Array.from(object.body).buffer, {
+      headers: {
+        "Content-Type": value.contentType ?? object.contentType,
+        "Content-Length": String(object.byteLength),
+        "Cache-Control": "private, no-store",
+        ...extraHeaders,
+      },
+    })
+  }
+
+  return {
+    markdown(ownerId: string, articleId: string) {
+      return responseFor(
+        input.store.getArticleObject(ownerId, articleId, "markdown")
+      )
+    },
+    replay(ownerId: string, articleId: string) {
+      return responseFor(
+        input.store.getArticleObject(ownerId, articleId, "replay"),
+        {
+          "Content-Security-Policy":
+            "sandbox; default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; form-action 'none'; base-uri 'none'",
+          "X-Content-Type-Options": "nosniff",
+        }
+      )
+    },
+    asset(ownerId: string, articleId: string, hash: string) {
+      return responseFor(input.store.getArticleAsset(ownerId, articleId, hash))
     },
   }
 }

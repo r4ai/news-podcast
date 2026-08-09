@@ -4,7 +4,7 @@
 - Date: 2026-08-09
 - Decision owners: Product owner / Editorial
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0013
 - Related: SummaryGenerator port
 
 ## コンテキストと変更契機

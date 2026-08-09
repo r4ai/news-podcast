@@ -47,6 +47,13 @@ import {
 } from "@workspace/ui/components/item"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { Switch } from "@workspace/ui/components/switch"
+import { Input } from "@workspace/ui/components/input"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@workspace/ui/components/field"
 
 import { api } from "@/api/client"
 import { PageHeader } from "@/app/page-header"
@@ -69,7 +76,9 @@ export function SubscriptionsPage() {
     "/v1/me/feed-subscriptions/{subscriptionId}"
   )
   const add = api.useMutation("post", "/v1/me/feed-subscriptions")
+  const register = api.useMutation("post", "/v1/feeds")
   const [selectedFeedId, setSelectedFeedId] = useState("")
+  const [feedUrl, setFeedUrl] = useState("")
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set())
   const [, startTransition] = useTransition()
   const queryKey = api.queryOptions("get", "/v1/me/feed-subscriptions").queryKey
@@ -187,12 +196,76 @@ export function SubscriptionsPage() {
     })
   }
 
+  function registerFeed() {
+    if (!feedUrl.trim()) return
+    setPending("register", true)
+    startTransition(async () => {
+      try {
+        await register.mutateAsync({ body: { feedUrl: feedUrl.trim() } })
+        setFeedUrl("")
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey }),
+          queryClient.invalidateQueries({
+            queryKey: api.queryOptions("get", "/v1/feeds", {
+              params: { query: {} },
+            }).queryKey,
+          }),
+        ])
+        toast.success("RSSフィードを登録しました")
+      } catch {
+        toast.error("RSSフィードを確認できませんでした")
+      } finally {
+        setPending("register", false)
+      }
+    })
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         description="番組生成に使用するRSSフィードを管理します。"
         title="購読フィード"
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>RSS URLから追加</h2>
+          </CardTitle>
+          <CardDescription>
+            RSSまたはAtomのURLを確認し、そのまま購読へ追加します。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="feed-url">フィードURL</FieldLabel>
+              <Input
+                id="feed-url"
+                inputMode="url"
+                onChange={(event) => setFeedUrl(event.target.value)}
+                placeholder="https://example.com/feed.xml"
+                type="url"
+                value={feedUrl}
+              />
+              <FieldDescription>
+                登録後、新着記事は自動的にオフライン保存されます。
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button
+            disabled={pendingIds.has("register") || feedUrl.trim().length === 0}
+            onClick={registerFeed}
+          >
+            {pendingIds.has("register") ? (
+              <Spinner data-icon="inline-start" />
+            ) : null}
+            URLから追加
+          </Button>
+        </CardFooter>
+      </Card>
 
       <Card>
         <CardHeader>

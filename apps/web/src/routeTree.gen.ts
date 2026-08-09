@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated.index'
+import { Route as AuthenticatedArticlesRouteImport } from './routes/_authenticated.articles'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated.library'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated.schedule'
 import { Route as AuthenticatedSubscriptionsRouteImport } from './routes/_authenticated.subscriptions'
@@ -28,6 +29,11 @@ const LoginRoute = LoginRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedArticlesRoute = AuthenticatedArticlesRouteImport.update({
+  id: '/articles',
+  path: '/articles',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
@@ -50,12 +56,14 @@ const AuthenticatedSubscriptionsRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
+  '/articles': typeof AuthenticatedArticlesRoute
   '/library': typeof AuthenticatedLibraryRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/articles': typeof AuthenticatedArticlesRoute
   '/library': typeof AuthenticatedLibraryRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsRoute
@@ -65,6 +73,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/articles': typeof AuthenticatedArticlesRoute
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
   '/_authenticated/subscriptions': typeof AuthenticatedSubscriptionsRoute
@@ -72,13 +81,20 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/library' | '/schedule' | '/subscriptions'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/articles'
+    | '/library'
+    | '/schedule'
+    | '/subscriptions'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/library' | '/schedule' | '/subscriptions' | '/'
+  to: '/login' | '/articles' | '/library' | '/schedule' | '/subscriptions' | '/'
   id:
     | '__root__'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/articles'
     | '/_authenticated/library'
     | '/_authenticated/schedule'
     | '/_authenticated/subscriptions'
@@ -113,6 +129,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/articles': {
+      id: '/_authenticated/articles'
+      path: '/articles'
+      fullPath: '/articles'
+      preLoaderRoute: typeof AuthenticatedArticlesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/library': {
       id: '/_authenticated/library'
       path: '/library'
@@ -138,6 +161,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedArticlesRoute: typeof AuthenticatedArticlesRoute
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
   AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
   AuthenticatedSubscriptionsRoute: typeof AuthenticatedSubscriptionsRoute
@@ -145,6 +169,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedArticlesRoute: AuthenticatedArticlesRoute,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
   AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
   AuthenticatedSubscriptionsRoute: AuthenticatedSubscriptionsRoute,

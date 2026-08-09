@@ -22,6 +22,10 @@
       "description": "Owner-scoped RSS subscriptions"
     },
     {
+      "name": "Articles",
+      "description": "Archived RSS articles and read state"
+    },
+    {
       "name": "Settings",
       "description": "Owner-scoped generation schedule"
     },
@@ -123,6 +127,73 @@
           "createdAt"
         ]
       },
+      "Article": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "feedId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "sourceName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "discoveredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archiveStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "archiving",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "snapshotId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "saved": {
+            "type": "boolean"
+          },
+          "archiveUrl": {
+            "type": "string"
+          },
+          "markdownUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "feedId",
+          "sourceName",
+          "title",
+          "url",
+          "discoveredAt",
+          "archiveStatus",
+          "read",
+          "saved"
+        ]
+      },
       "UserSettings": {
         "type": "object",
         "properties": {
@@ -215,6 +286,7 @@
       "JobStage": {
         "type": "string",
         "enum": [
+          "researching_sources",
           "fetching_sources",
           "generating_script",
           "synthesizing_audio",
@@ -310,6 +382,16 @@
           "publishedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "snapshotId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "rss",
+              "web"
+            ]
           }
         },
         "required": [
@@ -516,6 +598,484 @@
           },
           "401": {
             "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Feeds"
+        ],
+        "operationId": "registerFeed",
+        "description": "Discover, register, and subscribe to an arbitrary RSS URL.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "feedUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "feedUrl"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "feed": {
+                      "$ref": "#/components/schemas/Feed"
+                    },
+                    "subscription": {
+                      "$ref": "#/components/schemas/FeedSubscription"
+                    }
+                  },
+                  "required": [
+                    "feed",
+                    "subscription"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feed discovery failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/articles": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "listArticles",
+        "description": "List articles from the authenticated owner's subscriptions.",
+        "responses": {
+          "200": {
+            "description": "Articles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Article"
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "hasMore": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        }
+                      },
+                      "required": [
+                        "hasMore"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "page"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/articles/{articleId}": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "getArticle",
+        "description": "Return one owner-scoped article and archive status.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "articleId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Article",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "updateArticleState",
+        "description": "Update read or saved state for one article.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "articleId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "boolean"
+                  },
+                  "saved": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/articles/{articleId}/markdown": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "getArticleMarkdown",
+        "description": "Return the archived Markdown used by the Podcast Agent.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "articleId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archived article Markdown",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/articles/{articleId}/archive": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "getArticleArchive",
+        "description": "Return sanitized replay HTML with external scripts disabled.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "articleId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitized replay HTML",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/articles/{articleId}/assets/{hash}": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "getArticleAsset",
+        "description": "Return one owner-scoped asset captured with an article snapshot.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "articleId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true,
+            "name": "hash",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archived asset",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/problem+json": {
                 "schema": {

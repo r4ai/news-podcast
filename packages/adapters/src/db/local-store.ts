@@ -11,6 +11,7 @@ import type {
 import type { JobStatus } from "@news-podcast/domain"
 
 export type JobStage =
+  | "researching_sources"
   | "fetching_sources"
   | "generating_script"
   | "synthesizing_audio"
@@ -21,6 +22,38 @@ export interface FeedDto {
   readonly name: string
   readonly siteUrl: string
   readonly feedUrl: string
+}
+
+export interface FeedItemInput {
+  readonly externalId: string
+  readonly title: string
+  readonly url: string
+  readonly publishedAt?: string
+  readonly summary?: string
+}
+
+export interface ArchiveCandidate {
+  readonly id: string
+  readonly feedId: string
+  readonly sourceName: string
+  readonly title: string
+  readonly url: string
+  readonly publishedAt?: string
+}
+
+export interface ArticleDto {
+  readonly id: string
+  readonly feedId: string
+  readonly sourceName: string
+  readonly title: string
+  readonly url: string
+  readonly publishedAt?: string
+  readonly summary?: string
+  readonly discoveredAt: string
+  readonly archiveStatus: "pending" | "archiving" | "succeeded" | "failed"
+  readonly snapshotId?: string
+  readonly read: boolean
+  readonly saved: boolean
 }
 
 export interface SubscriptionDto {
@@ -53,6 +86,8 @@ export interface EpisodeSourceDto {
   readonly url: string
   readonly title: string
   readonly publishedAt?: string
+  readonly snapshotId?: string
+  readonly sourceKind?: "rss" | "web"
 }
 
 export interface EpisodeDto {
@@ -115,6 +150,455 @@ export class LocalStore implements EpisodeJobRepository {
     return rows.map(toFeed)
   }
 
+  listVisibleFeeds(ownerId: string, query?: string): readonly FeedDto[] {
+    const pattern = `%${query ?? ""}%`
+    return this.database
+      .prepare(
+        `SELECT DISTINCT f.id, f.name, f.site_url, f.feed_url
+         FROM feed_catalog f
+         LEFT JOIN feed_subscriptions s
+           ON s.feed_id = f.id AND s.owner_id = ?
+         WHERE (f.created_by_owner_id IS NULL OR s.id IS NOT NULL)
+           AND f.name LIKE ?
+         ORDER BY f.name`
+      )
+      .all(ownerId, pattern)
+      .map(toFeed)
+  }
+
+  registerFeed(input: {
+    readonly ownerId: string
+    readonly name: string
+    readonly siteUrl: string
+    readonly feedUrl: string
+  }): { readonly feed: FeedDto; readonly subscription: SubscriptionDto } {
+    return this.transaction(() => {
+      const existing = this.database
+        .prepare(
+          "SELECT id, name, site_url, feed_url FROM feed_catalog WHERE feed_url = ?"
+        )
+        .get(input.feedUrl)
+      const feed = existing
+        ? toFeed(existing)
+        : {
+            id: randomUUID(),
+            name: input.name,
+            siteUrl: input.siteUrl,
+            feedUrl: input.feedUrl,
+          }
+      if (!existing) {
+        this.database
+          .prepare(
+            `INSERT INTO feed_catalog
+             (id, name, site_url, feed_url, created_at, created_by_owner_id, next_sync_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            feed.id,
+            feed.name,
+            feed.siteUrl,
+            feed.feedUrl,
+            new Date().toISOString(),
+            input.ownerId,
+            new Date(0).toISOString()
+          )
+      }
+      const existingSubscription = this.database
+        .prepare(
+          `SELECT id, feed_id, enabled, created_at FROM feed_subscriptions
+           WHERE owner_id = ? AND feed_id = ?`
+        )
+        .get(input.ownerId, feed.id)
+      if (existingSubscription) {
+        return { feed, subscription: toSubscription(existingSubscription) }
+      }
+      const subscription: SubscriptionDto = {
+        id: randomUUID(),
+        feedId: feed.id,
+        enabled: true,
+        createdAt: new Date().toISOString(),
+      }
+      this.database
+        .prepare(
+          `INSERT INTO feed_subscriptions
+           (id, owner_id, feed_id, enabled, created_at) VALUES (?, ?, ?, 1, ?)`
+        )
+        .run(
+          subscription.id,
+          input.ownerId,
+          subscription.feedId,
+          subscription.createdAt
+        )
+      return { feed, subscription }
+    })
+  }
+
+  listFeedsDue(now = new Date(), limit = 5): readonly FeedDto[] {
+    return this.database
+      .prepare(
+        `SELECT DISTINCT f.id, f.name, f.site_url, f.feed_url
+         FROM feed_catalog f
+         JOIN feed_subscriptions s ON s.feed_id = f.id AND s.enabled = 1
+         WHERE f.next_sync_at IS NULL OR f.next_sync_at <= ?
+         ORDER BY COALESCE(f.next_sync_at, ''), f.id LIMIT ?`
+      )
+      .all(now.toISOString(), limit)
+      .map(toFeed)
+  }
+
+  upsertFeedItems(feedId: string, items: readonly FeedItemInput[]): number {
+    const insert = this.database.prepare(
+      `INSERT INTO feed_items
+       (id, feed_id, external_id, title, url, published_at, summary, discovered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(feed_id, external_id) DO UPDATE SET
+         title = excluded.title,
+         url = excluded.url,
+         published_at = excluded.published_at,
+         summary = excluded.summary`
+    )
+    let created = 0
+    this.transaction(() => {
+      for (const item of items) {
+        const before = this.database
+          .prepare(
+            "SELECT 1 FROM feed_items WHERE feed_id = ? AND external_id = ?"
+          )
+          .get(feedId, item.externalId)
+        insert.run(
+          randomUUID(),
+          feedId,
+          item.externalId,
+          item.title,
+          item.url,
+          item.publishedAt ?? null,
+          item.summary ?? null,
+          new Date().toISOString()
+        )
+        if (!before) created += 1
+      }
+    })
+    return created
+  }
+
+  markFeedSynced(feedId: string, error?: string): void {
+    const now = new Date()
+    this.database
+      .prepare(
+        `UPDATE feed_catalog SET last_synced_at = ?, next_sync_at = ?, sync_error = ?
+         WHERE id = ?`
+      )
+      .run(
+        now.toISOString(),
+        new Date(now.getTime() + (error ? 5 : 30) * 60_000).toISOString(),
+        error ?? null,
+        feedId
+      )
+  }
+
+  leaseArchiveCandidate(): ArchiveCandidate | undefined {
+    return this.transaction(() => {
+      const row = this.database
+        .prepare(
+          `SELECT i.id, i.feed_id, i.title, i.url, i.published_at,
+                  f.name AS source_name
+           FROM feed_items i JOIN feed_catalog f ON f.id = i.feed_id
+           WHERE i.archive_status = 'pending'
+              OR (i.archive_status = 'failed' AND i.next_archive_at <= ?)
+           ORDER BY i.discovered_at, i.id LIMIT 1`
+        )
+        .get(new Date().toISOString()) as Record<string, unknown> | undefined
+      if (!row) return undefined
+      this.database
+        .prepare(
+          `UPDATE feed_items SET archive_status = 'archiving', archive_error = NULL,
+           archive_attempt = archive_attempt + 1, next_archive_at = NULL WHERE id = ?`
+        )
+        .run(String(row.id))
+      return {
+        id: String(row.id),
+        feedId: String(row.feed_id),
+        sourceName: String(row.source_name),
+        title: String(row.title),
+        url: String(row.url),
+        ...(row.published_at ? { publishedAt: String(row.published_at) } : {}),
+      }
+    })
+  }
+
+  completeArchive(input: {
+    readonly articleId: string
+    readonly snapshotId: string
+    readonly sourceUrl: string
+    readonly title: string
+    readonly contentHash: string
+    readonly rawKey: string
+    readonly replayKey: string
+    readonly markdownKey: string
+    readonly byteLength: number
+    readonly assets: readonly {
+      hash: string
+      originalUrl: string
+      key: string
+      contentType: string
+      byteLength: number
+    }[]
+  }): void {
+    this.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO article_snapshots
+           (id, feed_item_id, source_url, title, fetched_at, content_hash,
+            raw_key, replay_key, markdown_key, byte_length)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          input.snapshotId,
+          input.articleId,
+          input.sourceUrl,
+          input.title,
+          new Date().toISOString(),
+          input.contentHash,
+          input.rawKey,
+          input.replayKey,
+          input.markdownKey,
+          input.byteLength
+        )
+      const insertAsset = this.database.prepare(
+        `INSERT OR REPLACE INTO archive_assets
+         (snapshot_id, asset_hash, original_url, object_key, content_type, byte_length)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      input.assets.forEach((asset) =>
+        insertAsset.run(
+          input.snapshotId,
+          asset.hash,
+          asset.originalUrl,
+          asset.key,
+          asset.contentType,
+          asset.byteLength
+        )
+      )
+      this.database
+        .prepare(
+          `UPDATE feed_items SET archive_status = 'succeeded', archive_error = NULL,
+           latest_snapshot_id = ? WHERE id = ?`
+        )
+        .run(input.snapshotId, input.articleId)
+    })
+  }
+
+  failArchive(articleId: string, message: string): void {
+    this.database
+      .prepare(
+        `UPDATE feed_items SET archive_status = 'failed', archive_error = ?,
+         next_archive_at = ? WHERE id = ?`
+      )
+      .run(
+        message.slice(0, 500),
+        new Date(Date.now() + 30 * 60_000).toISOString(),
+        articleId
+      )
+  }
+
+  listArticles(ownerId: string, limit = 100): readonly ArticleDto[] {
+    return this.articleRows(ownerId, undefined, limit).map(toArticle)
+  }
+
+  getArticle(ownerId: string, articleId: string): ArticleDto | undefined {
+    const row = this.articleRows(ownerId, articleId, 1)[0]
+    return row ? toArticle(row) : undefined
+  }
+
+  setArticleState(
+    ownerId: string,
+    articleId: string,
+    state: { readonly read?: boolean; readonly saved?: boolean }
+  ): ArticleDto | undefined {
+    if (!this.getArticle(ownerId, articleId)) return undefined
+    const current = this.database
+      .prepare(
+        "SELECT read, saved FROM article_user_states WHERE owner_id = ? AND feed_item_id = ?"
+      )
+      .get(ownerId, articleId) as Record<string, unknown> | undefined
+    this.database
+      .prepare(
+        `INSERT INTO article_user_states (owner_id, feed_item_id, read, saved, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(owner_id, feed_item_id) DO UPDATE SET
+           read = excluded.read, saved = excluded.saved, updated_at = excluded.updated_at`
+      )
+      .run(
+        ownerId,
+        articleId,
+        (state.read ?? Boolean(current?.read)) ? 1 : 0,
+        (state.saved ?? Boolean(current?.saved)) ? 1 : 0,
+        new Date().toISOString()
+      )
+    return this.getArticle(ownerId, articleId)
+  }
+
+  getArticleObject(
+    ownerId: string,
+    articleId: string,
+    kind: "markdown" | "replay" | "raw"
+  ): { readonly key: string; readonly snapshotId: string } | undefined {
+    const article = this.getArticle(ownerId, articleId)
+    if (!article?.snapshotId) return undefined
+    const column =
+      kind === "markdown"
+        ? "markdown_key"
+        : kind === "replay"
+          ? "replay_key"
+          : "raw_key"
+    const row = this.database
+      .prepare(
+        `SELECT ${column} AS object_key FROM article_snapshots WHERE id = ?`
+      )
+      .get(article.snapshotId) as Record<string, unknown> | undefined
+    return row
+      ? { key: String(row.object_key), snapshotId: article.snapshotId }
+      : undefined
+  }
+
+  getArticleAsset(
+    ownerId: string,
+    articleId: string,
+    hash: string
+  ): { readonly key: string; readonly contentType: string } | undefined {
+    const article = this.getArticle(ownerId, articleId)
+    if (!article?.snapshotId) return undefined
+    const row = this.database
+      .prepare(
+        `SELECT object_key, content_type FROM archive_assets
+         WHERE snapshot_id = ? AND asset_hash = ?`
+      )
+      .get(article.snapshotId, hash) as Record<string, unknown> | undefined
+    return row
+      ? { key: String(row.object_key), contentType: String(row.content_type) }
+      : undefined
+  }
+
+  resolveEpisodeSources(
+    ownerId: string,
+    urls: readonly URL[]
+  ): readonly EpisodeSourceDto[] {
+    return urls.map((url) => {
+      const row = this.database
+        .prepare(
+          `SELECT i.title, i.published_at, i.latest_snapshot_id
+           FROM feed_items i
+           JOIN feed_subscriptions s ON s.feed_id = i.feed_id
+           WHERE s.owner_id = ? AND i.url = ? LIMIT 1`
+        )
+        .get(ownerId, url.href) as Record<string, unknown> | undefined
+      if (!row) {
+        return { url: url.href, title: url.hostname, sourceKind: "web" }
+      }
+      return {
+        url: url.href,
+        title: String(row.title),
+        ...(row.published_at ? { publishedAt: String(row.published_at) } : {}),
+        ...(row.latest_snapshot_id
+          ? { snapshotId: String(row.latest_snapshot_id) }
+          : {}),
+        sourceKind: "rss",
+      }
+    })
+  }
+
+  listAgentArticles(
+    ownerId: string,
+    feedIds: readonly string[],
+    limit: number
+  ): readonly ArticleDto[] {
+    if (feedIds.length === 0) return []
+    const placeholders = feedIds.map(() => "?").join(",")
+    return this.database
+      .prepare(
+        `SELECT i.id, i.feed_id, f.name AS source_name, i.title, i.url,
+                i.published_at, i.summary, i.discovered_at, i.archive_status,
+                i.latest_snapshot_id, 0 AS read, 0 AS saved
+         FROM feed_items i
+         JOIN feed_catalog f ON f.id = i.feed_id
+         JOIN feed_subscriptions s
+           ON s.feed_id = i.feed_id AND s.owner_id = ? AND s.enabled = 1
+         WHERE i.archive_status = 'succeeded'
+           AND i.latest_snapshot_id IS NOT NULL
+           AND i.feed_id IN (${placeholders})
+         ORDER BY COALESCE(i.published_at, i.discovered_at) DESC
+         LIMIT ?`
+      )
+      .all(ownerId, ...feedIds, limit)
+      .map(toArticle)
+  }
+
+  startAgentRun(input: {
+    readonly jobId: string
+    readonly ownerId: string
+    readonly model: string
+  }): string {
+    const id = randomUUID()
+    this.database
+      .prepare(
+        `INSERT INTO agent_runs
+         (id, episode_job_id, owner_id, model, status, started_at)
+         VALUES (?, ?, ?, ?, 'running', ?)`
+      )
+      .run(
+        id,
+        input.jobId,
+        input.ownerId,
+        input.model,
+        new Date().toISOString()
+      )
+    return id
+  }
+
+  recordAgentToolCall(input: {
+    readonly runId: string
+    readonly position: number
+    readonly name: string
+    readonly argumentsJson: string
+    readonly outputSummary: unknown
+  }): void {
+    this.database
+      .prepare(
+        `INSERT INTO agent_tool_calls
+         (id, agent_run_id, position, tool_name, input_json,
+          output_summary_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        randomUUID(),
+        input.runId,
+        input.position,
+        input.name,
+        input.argumentsJson.slice(0, 10_000),
+        JSON.stringify(input.outputSummary).slice(0, 10_000),
+        new Date().toISOString()
+      )
+    this.database
+      .prepare(
+        "UPDATE agent_runs SET tool_call_count = ?, turn_count = MAX(turn_count, ?) WHERE id = ?"
+      )
+      .run(input.position + 1, input.position + 1, input.runId)
+  }
+
+  finishAgentRun(runId: string, failureCode?: string): void {
+    this.database
+      .prepare(
+        `UPDATE agent_runs SET status = ?, finished_at = ?, failure_code = ?
+         WHERE id = ?`
+      )
+      .run(
+        failureCode ? "failed" : "succeeded",
+        new Date().toISOString(),
+        failureCode ?? null,
+        runId
+      )
+  }
+
   listSubscriptions(ownerId: string): readonly SubscriptionDto[] {
     return this.database
       .prepare(
@@ -131,7 +615,14 @@ export class LocalStore implements EpisodeJobRepository {
        (id, owner_id, feed_id, enabled, created_at)
        VALUES (?, ?, ?, 1, ?)`
     )
-    for (const feed of this.listFeeds()) {
+    const defaultFeeds = this.database
+      .prepare(
+        `SELECT id, name, site_url, feed_url FROM feed_catalog
+         WHERE created_by_owner_id IS NULL ORDER BY name`
+      )
+      .all()
+      .map(toFeed)
+    for (const feed of defaultFeeds) {
       insert.run(randomUUID(), ownerId, feed.id, new Date().toISOString())
     }
   }
@@ -444,7 +935,8 @@ export class LocalStore implements EpisodeJobRepository {
         )
       const insertSource = this.database.prepare(
         `INSERT INTO episode_sources
-         (episode_id, position, url, title, published_at) VALUES (?, ?, ?, ?, ?)`
+         (episode_id, position, url, title, published_at, snapshot_id, source_kind)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       input.sources.forEach((source, index) =>
         insertSource.run(
@@ -452,7 +944,9 @@ export class LocalStore implements EpisodeJobRepository {
           index,
           source.url,
           source.title,
-          source.publishedAt ?? null
+          source.publishedAt ?? null,
+          source.snapshotId ?? null,
+          source.sourceKind ?? "rss"
         )
       )
       const result = this.database
@@ -545,11 +1039,32 @@ export class LocalStore implements EpisodeJobRepository {
     return row ? toSubscription(row) : undefined
   }
 
+  private articleRows(ownerId: string, articleId?: string, limit = 100) {
+    return this.database
+      .prepare(
+        `SELECT i.id, i.feed_id, f.name AS source_name, i.title, i.url,
+                i.published_at, i.summary, i.discovered_at, i.archive_status,
+                i.latest_snapshot_id, COALESCE(s.read, 0) AS read,
+                COALESCE(s.saved, 0) AS saved
+         FROM feed_items i
+         JOIN feed_catalog f ON f.id = i.feed_id
+         JOIN feed_subscriptions sub
+           ON sub.feed_id = i.feed_id AND sub.owner_id = ?
+         LEFT JOIN article_user_states s
+           ON s.feed_item_id = i.id AND s.owner_id = ?
+         WHERE sub.enabled = 1 AND (? IS NULL OR i.id = ?)
+         ORDER BY COALESCE(i.published_at, i.discovered_at) DESC, i.id DESC
+         LIMIT ?`
+      )
+      .all(ownerId, ownerId, articleId ?? null, articleId ?? null, limit)
+  }
+
   private toEpisode(row: unknown): EpisodeDto {
     const value = row as Record<string, unknown>
     const sources = this.database
       .prepare(
-        `SELECT url, title, published_at FROM episode_sources
+        `SELECT url, title, published_at, snapshot_id, source_kind
+         FROM episode_sources
          WHERE episode_id = ? ORDER BY position`
       )
       .all(String(value.id))
@@ -561,6 +1076,8 @@ export class LocalStore implements EpisodeJobRepository {
           ...(item.published_at
             ? { publishedAt: String(item.published_at) }
             : {}),
+          ...(item.snapshot_id ? { snapshotId: String(item.snapshot_id) } : {}),
+          sourceKind: String(item.source_kind ?? "rss") as "rss" | "web",
         }
       })
     return {
@@ -625,6 +1142,26 @@ function toSubscription(row: unknown): SubscriptionDto {
     feedId: String(value.feed_id),
     enabled: Boolean(value.enabled),
     createdAt: String(value.created_at),
+  }
+}
+
+function toArticle(row: unknown): ArticleDto {
+  const value = row as Record<string, unknown>
+  return {
+    id: String(value.id),
+    feedId: String(value.feed_id),
+    sourceName: String(value.source_name),
+    title: String(value.title),
+    url: String(value.url),
+    ...(value.published_at ? { publishedAt: String(value.published_at) } : {}),
+    ...(value.summary ? { summary: String(value.summary) } : {}),
+    discoveredAt: String(value.discovered_at),
+    archiveStatus: String(value.archive_status) as ArticleDto["archiveStatus"],
+    ...(value.latest_snapshot_id
+      ? { snapshotId: String(value.latest_snapshot_id) }
+      : {}),
+    read: Boolean(value.read),
+    saved: Boolean(value.saved),
   }
 }
 

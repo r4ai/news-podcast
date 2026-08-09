@@ -1,26 +1,26 @@
 import { randomUUID } from "node:crypto"
 
 import { LocalAudioStore } from "@news-podcast/adapters/audio/local"
+import { ObjectAudioStore } from "@news-podcast/adapters/audio/object"
 import type {
-  EpisodeSourceDto,
   JobStage,
   LocalStore,
   WorkerJob,
 } from "@news-podcast/adapters/db/local"
 import {
-  OpenAiSummaryGenerator,
-  SummaryProviderError,
-} from "@news-podcast/adapters/openai"
-import { RssFeedReader, RssProviderError } from "@news-podcast/adapters/rss"
+  OpenAiPodcastAgent,
+  PodcastAgentError,
+} from "@news-podcast/adapters/openai-agent"
 import {
   VoicevoxProviderError,
   VoicevoxSpeechSynthesizer,
 } from "@news-podcast/adapters/voicevox"
 import type {
-  EpisodeScriptDraft,
+  AudioStore,
+  ObjectStore,
+  PodcastAgentRunner,
   RssSourceItem,
   SpeechSynthesizer,
-  SummaryGenerator,
 } from "@news-podcast/application"
 import {
   noopObservability,
@@ -29,19 +29,10 @@ import {
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const
 
-class PipelineInputError extends Error {}
-
-interface SourceReader {
-  read(
-    feeds: readonly { name: string; feedUrl: string }[]
-  ): Promise<readonly RssSourceItem[]>
-}
-
 export interface EpisodeProcessorDependencies {
   readonly store: LocalStore
-  readonly audio: LocalAudioStore
-  readonly sources: SourceReader
-  readonly summary: SummaryGenerator
+  readonly audio: AudioStore
+  readonly agent: PodcastAgentRunner
   readonly speech: SpeechSynthesizer
   readonly voice: { characterName: string; styleName?: string }
   readonly observability?: Observability
@@ -95,23 +86,24 @@ export class EpisodeProcessor {
     now: Date,
     observability: Observability
   ): Promise<void> {
-    const feeds = this.dependencies.store.getJobFeeds(job.id)
-    const items = selectRecentItems(
-      await this.stage(job, "fetching_sources", observability, () =>
-        this.dependencies.sources.read(feeds)
-      ),
-      now
-    )
-    if (items.length === 0) {
-      throw new PipelineInputError("直近24時間のRSS項目がありません")
-    }
+    const feedIds = this.dependencies.store
+      .getJobFeeds(job.id)
+      .map((feed) => feed.id)
     const draft = await this.stage(
       job,
-      "generating_script",
+      "researching_sources",
       observability,
-      () => this.dependencies.summary.generate(items)
+      () =>
+        this.dependencies.agent.run({
+          jobId: job.id,
+          ownerId: job.ownerId,
+          feedIds,
+        })
     )
-    const sources = resolveSources(draft, items)
+    const sources = this.dependencies.store.resolveEpisodeSources(
+      job.ownerId,
+      draft.sourceUrls
+    )
     const wave = await this.stage(
       job,
       "synthesizing_audio",
@@ -173,16 +165,68 @@ export class EpisodeProcessor {
 
 export function createLiveProcessor(input: {
   readonly store: LocalStore
-  readonly audioDirectory: string
-  readonly openAi: ConstructorParameters<typeof OpenAiSummaryGenerator>[0]
+  readonly objects: ObjectStore
+  readonly openAi: ConstructorParameters<typeof OpenAiPodcastAgent>[0]
   readonly voicevox: ConstructorParameters<typeof VoicevoxSpeechSynthesizer>[0]
   readonly observability?: Observability
 }): EpisodeProcessor {
   return new EpisodeProcessor({
     store: input.store,
-    audio: new LocalAudioStore(input.audioDirectory),
-    sources: new RssFeedReader(),
-    summary: new OpenAiSummaryGenerator(input.openAi),
+    audio: new ObjectAudioStore(input.objects),
+    agent: new OpenAiPodcastAgent(
+      input.openAi,
+      {
+        listArticles: ({ ownerId, feedIds, limit }) =>
+          Promise.resolve(
+            input.store
+              .listAgentArticles(ownerId, feedIds, limit)
+              .map((item) => ({
+                id: item.id,
+                snapshotId: item.snapshotId!,
+                feedId: item.feedId,
+                sourceName: item.sourceName,
+                title: item.title,
+                url: new URL(item.url),
+                ...(item.publishedAt
+                  ? { publishedAt: new Date(item.publishedAt) }
+                  : {}),
+                ...(item.summary ? { summary: item.summary } : {}),
+              }))
+          ),
+        readArticle: async ({ ownerId, articleId }) => {
+          const item = input.store.getArticle(ownerId, articleId)
+          const stored = input.store.getArticleObject(
+            ownerId,
+            articleId,
+            "markdown"
+          )
+          if (!item?.snapshotId || !stored) throw new Error("article-not-found")
+          const object = await input.objects.get(stored.key)
+          if (!object) throw new Error("article-object-not-found")
+          return {
+            article: {
+              id: item.id,
+              snapshotId: item.snapshotId,
+              feedId: item.feedId,
+              sourceName: item.sourceName,
+              title: item.title,
+              url: new URL(item.url),
+              ...(item.publishedAt
+                ? { publishedAt: new Date(item.publishedAt) }
+                : {}),
+              ...(item.summary ? { summary: item.summary } : {}),
+            },
+            markdown: new TextDecoder().decode(object.body),
+          }
+        },
+      },
+      {
+        start: (value) => input.store.startAgentRun(value),
+        tool: (value) => input.store.recordAgentToolCall(value),
+        finish: (runId, failureCode) =>
+          input.store.finishAgentRun(runId, failureCode),
+      }
+    ),
     speech: new VoicevoxSpeechSynthesizer(input.voicevox),
     voice: {
       characterName: input.voicevox.characterName,
@@ -209,15 +253,29 @@ export function createFakeProcessor(
   return new EpisodeProcessor({
     store,
     audio: new LocalAudioStore(audioDirectory),
-    sources: { read: () => Promise.resolve([item]) },
-    summary: {
-      generate: () =>
-        Promise.resolve({
+    agent: {
+      run: ({ feedIds }) => {
+        const feedId = feedIds[0]
+        if (feedId) {
+          store.upsertFeedItems(feedId, [
+            {
+              externalId: "local-e2e-news",
+              title: item.title,
+              url: item.url.href,
+              ...(item.publishedAt
+                ? { publishedAt: item.publishedAt.toISOString() }
+                : {}),
+              ...(item.description ? { summary: item.description } : {}),
+            },
+          ])
+        }
+        return Promise.resolve({
           title: "今日の開発ニュース",
           script:
             "開発ニュースからお伝えします。ローカル環境の生成パイプラインが正常に完了しました。",
           sourceUrls: [item.url],
-        }),
+        })
+      },
     },
     speech: { synthesize: () => Promise.resolve(silentWave()) },
     voice: { characterName: "ずんだもん" },
@@ -225,42 +283,9 @@ export function createFakeProcessor(
   })
 }
 
-function selectRecentItems(
-  items: readonly RssSourceItem[],
-  now: Date
-): readonly RssSourceItem[] {
-  const cutoff = now.getTime() - 24 * 60 * 60 * 1000
-  return items
-    .filter((item) => item.publishedAt && item.publishedAt.getTime() >= cutoff)
-    .sort(
-      (left, right) =>
-        right.publishedAt!.getTime() - left.publishedAt!.getTime()
-    )
-    .slice(0, 10)
-}
-
-function resolveSources(
-  draft: EpisodeScriptDraft,
-  items: readonly RssSourceItem[]
-): readonly EpisodeSourceDto[] {
-  const byUrl = new Map(items.map((item) => [item.url.href, item]))
-  return draft.sourceUrls.map((url) => {
-    const item = byUrl.get(url.href)
-    if (!item) throw new PipelineInputError("台本に未知の出典が含まれています")
-    return {
-      url: item.url.href,
-      title: item.title,
-      ...(item.publishedAt
-        ? { publishedAt: item.publishedAt.toISOString() }
-        : {}),
-    }
-  })
-}
-
 function classifyFailure(error: unknown) {
   const retryable =
-    error instanceof RssProviderError ||
-    (error instanceof SummaryProviderError && error.retryable) ||
+    (error instanceof PodcastAgentError && error.retryable) ||
     error instanceof VoicevoxProviderError
   return {
     code: retryable ? "provider-unavailable" : "pipeline-input-invalid",

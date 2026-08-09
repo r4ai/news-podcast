@@ -48,6 +48,93 @@ export interface paths {
         /** @description Search the configured RSS feed catalog. */
         get: operations["listFeeds"];
         put?: never;
+        /** @description Discover, register, and subscribe to an arbitrary RSS URL. */
+        post: operations["registerFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List articles from the authenticated owner's subscriptions. */
+        get: operations["listArticles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return one owner-scoped article and archive status. */
+        get: operations["getArticle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Update read or saved state for one article. */
+        patch: operations["updateArticleState"];
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return the archived Markdown used by the Podcast Agent. */
+        get: operations["getArticleMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return sanitized replay HTML with external scripts disabled. */
+        get: operations["getArticleArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/assets/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return one owner-scoped asset captured with an article snapshot. */
+        get: operations["getArticleAsset"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -240,6 +327,26 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        Article: {
+            id: components["schemas"]["Id"];
+            feedId: components["schemas"]["Id"];
+            sourceName: string;
+            title: string;
+            /** Format: uri */
+            url: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            summary?: string;
+            /** Format: date-time */
+            discoveredAt: string;
+            /** @enum {string} */
+            archiveStatus: "pending" | "archiving" | "succeeded" | "failed";
+            snapshotId?: components["schemas"]["Id"];
+            read: boolean;
+            saved: boolean;
+            archiveUrl?: string;
+            markdownUrl?: string;
+        };
         UserSettings: {
             generationSchedule: components["schemas"]["GenerationSchedule"];
         };
@@ -267,7 +374,7 @@ export interface components {
         /** @enum {string} */
         JobStatus: "queued" | "running" | "retrying" | "succeeded" | "failed" | "canceled";
         /** @enum {string} */
-        JobStage: "fetching_sources" | "generating_script" | "synthesizing_audio" | "storing_episode";
+        JobStage: "researching_sources" | "fetching_sources" | "generating_script" | "synthesizing_audio" | "storing_episode";
         JobFailure: {
             code: string;
             message: string;
@@ -294,6 +401,9 @@ export interface components {
             title: string;
             /** Format: date-time */
             publishedAt?: string;
+            snapshotId?: components["schemas"]["Id"];
+            /** @enum {string} */
+            sourceKind?: "rss" | "web";
         };
     };
     responses: never;
@@ -434,6 +544,360 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    registerFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    feedUrl: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        feed: components["schemas"]["Feed"];
+                        subscription: components["schemas"]["FeedSubscription"];
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Feed discovery failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listArticles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Articles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Article"][];
+                        page: {
+                            /** @enum {boolean} */
+                            hasMore: false;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                articleId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateArticleState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                articleId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    read?: boolean;
+                    saved?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getArticleMarkdown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                articleId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archived article Markdown */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getArticleArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                articleId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sanitized replay HTML */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getArticleAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                articleId: components["schemas"]["Id"];
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archived asset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

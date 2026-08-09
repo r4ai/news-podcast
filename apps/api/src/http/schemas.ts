@@ -6,6 +6,7 @@ export const JobStatusSchema = z
   .openapi("JobStatus")
 export const JobStageSchema = z
   .enum([
+    "researching_sources",
     "fetching_sources",
     "generating_script",
     "synthesizing_audio",
@@ -40,6 +41,25 @@ export const SubscriptionSchema = z
     createdAt: z.iso.datetime(),
   })
   .openapi("FeedSubscription")
+
+export const ArticleSchema = z
+  .object({
+    id: IdSchema,
+    feedId: IdSchema,
+    sourceName: z.string(),
+    title: z.string(),
+    url: z.url(),
+    publishedAt: z.iso.datetime().optional(),
+    summary: z.string().optional(),
+    discoveredAt: z.iso.datetime(),
+    archiveStatus: z.enum(["pending", "archiving", "succeeded", "failed"]),
+    snapshotId: IdSchema.optional(),
+    read: z.boolean(),
+    saved: z.boolean(),
+    archiveUrl: z.string().optional(),
+    markdownUrl: z.string().optional(),
+  })
+  .openapi("Article")
 
 export const ScheduleSchema = z
   .object({
@@ -88,6 +108,8 @@ const EpisodeSourceSchema = z
     url: z.url(),
     title: z.string(),
     publishedAt: z.iso.datetime().optional(),
+    snapshotId: IdSchema.optional(),
+    sourceKind: z.enum(["rss", "web"]).optional(),
   })
   .openapi("EpisodeSource")
 

@@ -215,6 +215,56 @@ test("subscription changes confirm destructive actions and roll back failed opti
   await expect(zenn).toBeChecked()
 })
 
+test("RSS reader shows archived articles and persists saved state", async ({
+  page,
+}) => {
+  const article = {
+    id: "00000000-0000-4000-8000-000000000020",
+    feedId: "00000000-0000-4000-8000-000000000001",
+    sourceName: "Example Feed",
+    title: "保存された記事",
+    url: "https://example.com/article",
+    publishedAt: "2026-08-10T00:00:00.000Z",
+    discoveredAt: "2026-08-10T00:01:00.000Z",
+    archiveStatus: "succeeded",
+    snapshotId: "00000000-0000-4000-8000-000000000021",
+    read: false,
+    saved: false,
+    archiveUrl: "/v1/me/articles/00000000-0000-4000-8000-000000000020/archive",
+    markdownUrl:
+      "/v1/me/articles/00000000-0000-4000-8000-000000000020/markdown",
+  }
+  await page.route("**/v1/me/articles", (route) =>
+    route.fulfill({
+      body: JSON.stringify({ items: [article], page: { hasMore: false } }),
+      contentType: "application/json",
+    })
+  )
+  await page.route("**/v1/me/articles/*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue()
+    await route.fulfill({
+      body: JSON.stringify({ ...article, saved: true }),
+      contentType: "application/json",
+    })
+  })
+
+  await page.goto("/articles")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  await expect(
+    page.getByRole("heading", { name: "記事", exact: true })
+  ).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "保存された記事" })
+  ).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "アーカイブを読む" })
+  ).toHaveAttribute("href", article.archiveUrl)
+  await page.getByRole("button", { name: "記事を保存" }).click()
+  await expect(page.getByRole("button", { name: "保存を解除" })).toBeVisible()
+})
+
 test("development login to generated episode playback completes", async ({
   page,
 }) => {

@@ -13,6 +13,7 @@ const statusLabels = {
 } satisfies Record<JobStatus, string>
 
 const stageLabels = {
+  researching_sources: "記事を調査中",
   fetching_sources: "RSSを取得中",
   generating_script: "台本を生成中",
   synthesizing_audio: "音声を生成中",

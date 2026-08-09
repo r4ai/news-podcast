@@ -40,6 +40,10 @@ export const telemetryEventNames = [
   "episode.retrying",
   "episode.succeeded",
   "episode.failed",
+  "rss.sync.succeeded",
+  "rss.sync.failed",
+  "article.archive.succeeded",
+  "article.archive.failed",
 ] as const
 
 export type TelemetryEventName = (typeof telemetryEventNames)[number]

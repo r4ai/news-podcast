@@ -1,4 +1,11 @@
-import { Clock3, Headphones, House, Library, Rss } from "lucide-react"
+import {
+  Clock3,
+  Headphones,
+  House,
+  Library,
+  Newspaper,
+  Rss,
+} from "lucide-react"
 import type { PropsWithChildren } from "react"
 
 import { Link, useMatchRoute } from "@tanstack/react-router"
@@ -9,6 +16,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 
 const links = [
   { to: "/", label: "今日", icon: House },
+  { to: "/articles", label: "記事", icon: Newspaper },
   { to: "/subscriptions", label: "購読", icon: Rss },
   { to: "/schedule", label: "生成時刻", icon: Clock3 },
   { to: "/library", label: "ライブラリ", icon: Library },
@@ -34,7 +42,7 @@ function Navigation({ mobile = false }: { readonly mobile?: boolean }) {
   return (
     <nav
       aria-label={mobile ? "モバイルナビゲーション" : "メインナビゲーション"}
-      className={mobile ? "grid grid-cols-4 gap-1" : "flex flex-col gap-1"}
+      className={mobile ? "grid grid-cols-5 gap-1" : "flex flex-col gap-1"}
     >
       {links.map(({ icon: Icon, label, to }) => {
         const active = Boolean(matchRoute({ to, fuzzy: to !== "/" }))

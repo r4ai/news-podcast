@@ -6,6 +6,7 @@ export interface RssSourceItem {
   readonly url: URL
   readonly publishedAt?: Date
   readonly description?: string
+  readonly externalId?: string
 }
 
 export interface EpisodeScriptDraft {
@@ -31,6 +32,57 @@ export interface SpeechSynthesizer {
 export interface StoredAudio {
   readonly key: string
   readonly byteLength: number
+}
+
+export interface StoredObject {
+  readonly key: string
+  readonly byteLength: number
+  readonly contentType: string
+}
+
+export interface ObjectStore {
+  put(input: {
+    readonly key: string
+    readonly body: Uint8Array
+    readonly contentType: string
+  }): Promise<StoredObject>
+  get(key: string): Promise<{
+    readonly body: Uint8Array
+    readonly contentType: string
+    readonly byteLength: number
+  } | null>
+  delete(key: string): Promise<void>
+}
+
+export interface AgentArticle {
+  readonly id: string
+  readonly snapshotId: string
+  readonly feedId: string
+  readonly sourceName: string
+  readonly title: string
+  readonly url: URL
+  readonly publishedAt?: Date
+  readonly summary?: string
+}
+
+export interface PodcastAgentContext {
+  listArticles(input: {
+    readonly ownerId: string
+    readonly feedIds: readonly string[]
+    readonly limit: number
+  }): Promise<readonly AgentArticle[]>
+  readArticle(input: {
+    readonly ownerId: string
+    readonly articleId: string
+  }): Promise<{ readonly article: AgentArticle; readonly markdown: string }>
+}
+
+export interface PodcastAgentRunner {
+  run(input: {
+    readonly jobId: string
+    readonly ownerId: string
+    readonly feedIds: readonly string[]
+  }): Promise<EpisodeScriptDraft>
 }
 
 export interface AudioStore {

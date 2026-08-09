@@ -1,7 +1,7 @@
 # RSSニュース・ポッドキャスト 設計書
 
-- 状態: 初期ユースケース Accepted、追加機能 Confirmation required
-- 更新日: 2026-08-09
+- 状態: RSS Reader・記事アーカイブ・Agent生成 Accepted、実装中
+- 更新日: 2026-08-10
 - 契約の正本: `apps/api/src/app.ts` のHono/Zod route schema
 - 生成契約: `packages/contracts/openapi/openapi.json`
 - 判断記録: `docs/adr/`
@@ -48,8 +48,8 @@ flowchart LR
 | ----------------- | ------------------------------ | -------------------------------------------------- |
 | IdentityAccess    | セッション主体、認可           | Better Auth、Google OIDC                           |
 | FeedManagement    | 媒体カタログ、所有者別購読     | FeedReader                                         |
-| EpisodeProduction | ジョブ、状態遷移、冪等性、出典 | SummaryGenerator、SpeechSynthesizer、JobDispatcher |
-| EpisodeLibrary    | 所有者別一覧、音声アクセス     | AudioStore、短期URL発行                            |
+| EpisodeProduction | ジョブ、Agent実行、冪等性、出典 | PodcastAgentRunner、SpeechSynthesizer、JobDispatcher |
+| EpisodeLibrary    | 所有者別一覧、音声アクセス       | ObjectStore、短期URL発行                              |
 
 ## 4. 非同期パイプライン
 
@@ -79,7 +79,7 @@ flowchart LR
 | API   | Hono / Node                            | Hono / Workers                  |
 | DB    | SQLite                                 | D1                              |
 | Job   | SQLite table + polling Worker          | D1 outbox + Queues consumer     |
-| Audio | local filesystem + opaque access token | R2 + short-lived authorized URL |
+| Object | SeaweedFS S3 + opaque access token | R2 + short-lived authorized URL |
 | TTS   | Composeの別VOICEVOX service            | 外部VOICEVOX endpoint           |
 | Auth  | Better Auth + SQLite                   | Better Auth + D1 adapter        |
 
@@ -133,7 +133,61 @@ Browserは匿名操作、例外、Web Vitalsだけを送る。属性allowlistで
 
 実アプリは生成OpenAPI型とTanStack Query/RouterでAPIへ接続する。StorybookのfixtureはUIの独立確認専用で、実アプリのデータ源には使用しない。
 
-## 8. 実装DAGと順序
+## 8. RSS Reader・アーカイブ・Agent生成
+
+セルフホスト環境を正とし、RSS同期で発見した新着記事を自動的に静的archiveへ変換する。記事本文と音声を含む大きなobjectはSeaweedFS、検索・認可・状態・provenanceはSQLiteへ保存する。Podcast生成は固定promptの一括変換ではなく、read-only toolを使うagentが記事選定、本文読解、補足検索、構成、執筆を行う。
+
+```mermaid
+flowchart LR
+  Web["RSS Reader Web"] --> API["Hono API"]
+  API --> DB[("SQLite metadata")]
+  API --> S3[("SeaweedFS / S3")]
+  Scheduler --> Sync["RSS Sync"]
+  Sync --> Archive["Safe Web Archive"]
+  Archive --> S3
+  Archive --> DB
+  EpisodeJob --> Agent["Podcast Agent"]
+  Agent --> Tools["RSS / Archive / Web Search tools"]
+  Tools --> DB
+  Tools --> S3
+  Agent --> Verify["Structured draft + provenance validation"]
+  Verify --> Voicevox
+  Voicevox --> S3
+```
+
+### 8.1 モジュール境界
+
+| 境界 | 所有する規則 | 主なport |
+| --- | --- | --- |
+| FeedManagement | 任意feed登録、購読、同期、記事状態 | FeedReader、FeedRepository |
+| ContentArchive | 安全な取得、snapshot、HTML replay、Markdown | ArticleFetcher、ArchiveBuilder、ObjectStore |
+| AgentRuntime | tool権限、turn/費用制限、実行監査 | PodcastAgentRunner、AgentTool |
+| EpisodeProduction | draft検証、出典、TTS、完成処理 | SpeechSynthesizer、EpisodeRepository |
+
+### 8.2 保存規則
+
+```text
+articles/{snapshot-id}/raw/response.html
+articles/{snapshot-id}/raw/response.json
+articles/{snapshot-id}/replay/index.html
+articles/{snapshot-id}/markdown/article.md
+articles/{snapshot-id}/assets/{content-hash}.{extension}
+episodes/{owner-id}/{episode-id}.wav
+```
+
+bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去し、認可済みの専用routeからCSP付きで返す。記事更新時は上書きせずsnapshotを追加する。
+
+### 8.3 Agentの裁量と制約
+
+| Agentへ委ねる | Applicationが強制する |
+| --- | --- |
+| 記事選定、調査順序、番組構成 | owner scope、read-only tool |
+| 話題数、語り口、補足検索 | turn、tool call、HTTP時間上限 |
+| 使用する根拠の選択 | source ID検証、structured result、TTS可能性 |
+
+初期toolは`list_rss_articles`、`read_article`、Responses APIのhosted `web_search`、`submit_episode_draft`とする。RSS記事を主題の起点にし、Web検索は補足と事実確認に使い、異なるsource kindとして保存する。RSS出典はagentが保存済みMarkdown本文を読んだ記事だけを受理する。
+
+## 9. 実装DAGと順序
 
 ```mermaid
 flowchart TD
@@ -154,20 +208,20 @@ flowchart TD
 
 実装順は S0 → S1 → S2A/S2B（並行）→ S3 → S4A/S4B/S5 → S6/S7 → 確認ゲート。確認後は最小縦スライスを「契約test → domain/application → adapter → API → UI story → E2E」の順で追加する。
 
-## 9. 追加機能の確認ゲート
+## 10. 追加機能の確認ゲート
 
 次は初期ユースケースの外側に残し、ユーザーが決めるまでrouteと画面を追加しない。
 
 1. 期間、件数、個別記事選択を生成条件へ追加するか。
-2. 初期3媒体以外の任意RSS登録を許すか。許す場合はSSRF対策と検証責任。
-3. feed記載内容だけでなくリンク先本文を取得するか。
-4. 台本の長さ、構成、引用粒度、事実確認UI。
+2. 任意RSS登録はADR-0012で採用済み。SSRF対策とredirect再検査を維持する。
+3. 動的JavaScript実行後のページまでarchive対象にするか。
+4. 台本の長さ、構成、引用粒度をユーザー設定にするか。
 5. ずんだもん内のstyle、速度/抑揚など追加個人設定。
 6. ユーザーcancel/retry、Idempotency-Key保持期間の変更。
 7. 個人podcast RSS/enclosureを公開するか。
-8. 音声/台本/元記事snapshotの保持期間と削除規則。
+8. 音声/台本/元記事snapshotの保持期間を無期限から変更するか。
 
-## 10. 主要リスク
+## 11. 主要リスク
 
 - RSSだけで事実確認できる範囲と著作権上許容される引用量。
 - Cloudflareから外部VOICEVOXへのTLS、認証、到達性、長文分割。
@@ -175,8 +229,11 @@ flowchart TD
 - D1/Queuesのat-least-once配送とD1→Queue間の原子性。outboxを必須とする。
 - Better AuthのSQLite/D1 adapter差とcookie設定。セッションcookie名をOpenAPIへ手書き固定しない。
 - OpenAIのproviderエラーや生成根拠を外部レスポンスへ露出しない。
+- 任意RSSと記事redirectによるSSRF。接続前とredirectごとに解決IPを検査する。
+- SQLiteとObjectStore間の孤児object。現在は冪等keyと再試行で利用経路を保護し、運用reconcilerを追加する。
+- agentの費用・latency・非決定性。実行limitと代表fixtureのevalを持つ。
 
-## 11. ADR一覧
+## 12. ADR一覧
 
 - [ADR-0001 DDDとオニオンアーキテクチャ](adr/0001-ddd-onion.md)
 - [ADR-0002 OpenAPI-first RESTと非同期ジョブ](adr/0002-openapi-async-jobs.md)
@@ -188,3 +245,6 @@ flowchart TD
 - [ADR-0008 Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)
 - [ADR-0009 TanStack Router/QueryとAsync React](adr/0009-async-react-tanstack.md)
 - [ADR-0010 OpenTelemetryとSigNoz](adr/0010-opentelemetry-signoz.md)
+- [ADR-0011 SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
+- [ADR-0012 RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
+- [ADR-0013 Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)

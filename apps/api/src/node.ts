@@ -1,7 +1,13 @@
 import { serve } from "@hono/node-server"
 import { createLocalAuth } from "@news-podcast/adapters/auth/local"
-import { readLocalAuthConfig } from "@news-podcast/adapters/config"
+import {
+  readLocalAuthConfig,
+  readS3Config,
+} from "@news-podcast/adapters/config"
 import { LocalStore } from "@news-podcast/adapters/db/local"
+import { createSafeFetcher } from "@news-podcast/adapters/http/safe"
+import { S3ObjectStore } from "@news-podcast/adapters/object-store/s3"
+import { RssFeedReader } from "@news-podcast/adapters/rss"
 import { CreateEpisodeJob } from "@news-podcast/application"
 import {
   createNodeObservability,
@@ -9,13 +15,18 @@ import {
 } from "@news-podcast/observability/node"
 
 import { createApp } from "./app.js"
-import { createAudioAccess, createDevAuth } from "./local-services.js"
+import {
+  createArticleAccess,
+  createAudioAccess,
+  createDevAuth,
+} from "./local-services.js"
 
 const config = readLocalAuthConfig(process.env)
 const observability = createNodeObservability(
   readNodeObservabilityConfig(process.env, "news-podcast-api")
 )
 const store = new LocalStore(config.databasePath)
+const objects = new S3ObjectStore(readS3Config(process.env))
 const auth = createLocalAuth(config)
 const appEnvironment = process.env.APP_ENV ?? "development"
 const devEnabled = process.env.DEV_AUTH_ENABLED === "true"
@@ -34,8 +45,11 @@ const audio = createAudioAccess({
   secret: required("AUDIO_ACCESS_SECRET"),
   baseUrl: config.baseUrl,
   store,
+  objects,
   directory: required("AUDIO_DIRECTORY"),
 })
+const articles = createArticleAccess({ store, objects })
+const rss = new RssFeedReader(createSafeFetcher())
 
 const app = createApp({
   store,
@@ -78,6 +92,21 @@ const app = createApp({
   },
   issueAudioAccess: (ownerId, episodeId) => audio.issue(ownerId, episodeId),
   serveAudio: (token, range) => audio.serve(token, range),
+  discoverFeed: async (ownerId, feedUrl) => {
+    const discovered = await rss.discover(feedUrl)
+    return store.registerFeed({
+      ownerId,
+      name: discovered.name,
+      siteUrl: discovered.siteUrl,
+      feedUrl: discovered.feedUrl,
+    })
+  },
+  serveArticleMarkdown: (ownerId, articleId) =>
+    articles.markdown(ownerId, articleId),
+  serveArticleArchive: (ownerId, articleId) =>
+    articles.replay(ownerId, articleId),
+  serveArticleAsset: (ownerId, articleId, hash) =>
+    articles.asset(ownerId, articleId, hash),
 })
 
 const server = serve(

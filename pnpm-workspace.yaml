@@ -25,7 +25,7 @@ strictDepBuilds: true
 allowBuilds:
   "@scarf/scarf": false
   esbuild: true
-  protobufjs: set this to true or false
+  protobufjs: true
   workerd: true
 
 # `pnpm add` writes exact versions; committed manifests and the lockfile remain

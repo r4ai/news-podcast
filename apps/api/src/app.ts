@@ -9,6 +9,7 @@ import type { JobDto, LocalStore } from "@news-podcast/adapters/db/local"
 
 import {
   EpisodeSchema,
+  ArticleSchema,
   FeedSchema,
   IdSchema,
   JobReceiptSchema,
@@ -51,6 +52,36 @@ export interface AppDependencies {
     episodeId: string
   ) => Promise<{ url: string; expiresAt: string } | undefined>
   readonly serveAudio?: (token: string, range?: string) => Promise<Response>
+  readonly discoverFeed?: (
+    ownerId: string,
+    feedUrl: string
+  ) => Promise<{
+    readonly feed: {
+      id: string
+      name: string
+      siteUrl: string
+      feedUrl: string
+    }
+    readonly subscription: {
+      id: string
+      feedId: string
+      enabled: boolean
+      createdAt: string
+    }
+  }>
+  readonly serveArticleMarkdown?: (
+    ownerId: string,
+    articleId: string
+  ) => Promise<Response>
+  readonly serveArticleArchive?: (
+    ownerId: string,
+    articleId: string
+  ) => Promise<Response>
+  readonly serveArticleAsset?: (
+    ownerId: string,
+    articleId: string,
+    hash: string
+  ) => Promise<Response>
 }
 
 const unavailable = () =>
@@ -191,10 +222,92 @@ export function createApp(dependencies: AppDependencies = {}) {
     if (!dependencies.store) return context.json(unavailable(), 503)
     const { q } = context.req.valid("query")
     return context.json(
-      { items: dependencies.store.listFeeds(q), page: { hasMore: false } },
+      {
+        items: dependencies.store.listVisibleFeeds(context.get("ownerId"), q),
+        page: { hasMore: false },
+      },
       200
     )
   })
+
+  app.openapi(registerFeedRoute, async (context) => {
+    if (!dependencies.discoverFeed) return context.json(unavailable(), 503)
+    try {
+      const result = await dependencies.discoverFeed(
+        context.get("ownerId"),
+        context.req.valid("json").feedUrl
+      )
+      context.header("Location", `/v1/feeds/${result.feed.id}`)
+      return context.json(result, 201)
+    } catch {
+      return context.json(
+        problem(422, "feed-discovery-failed", "Feed discovery failed"),
+        422
+      )
+    }
+  })
+
+  app.openapi(listArticlesRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    return context.json(
+      {
+        items: dependencies.store
+          .listArticles(context.get("ownerId"))
+          .map(articleResponse),
+        page: { hasMore: false },
+      },
+      200
+    )
+  })
+
+  app.openapi(getArticleRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const article = dependencies.store.getArticle(
+      context.get("ownerId"),
+      context.req.valid("param").articleId
+    )
+    return article
+      ? context.json(articleResponse(article), 200)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
+  app.openapi(patchArticleRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const article = dependencies.store.setArticleState(
+      context.get("ownerId"),
+      context.req.valid("param").articleId,
+      context.req.valid("json")
+    )
+    return article
+      ? context.json(articleResponse(article), 200)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
+  app.openapi(articleMarkdownRoute, (context) =>
+    dependencies.serveArticleMarkdown
+      ? dependencies.serveArticleMarkdown(
+          context.get("ownerId"),
+          context.req.valid("param").articleId
+        )
+      : context.json(unavailable(), 503)
+  )
+  app.openapi(articleArchiveRoute, (context) =>
+    dependencies.serveArticleArchive
+      ? dependencies.serveArticleArchive(
+          context.get("ownerId"),
+          context.req.valid("param").articleId
+        )
+      : context.json(unavailable(), 503)
+  )
+  app.openapi(articleAssetRoute, (context) =>
+    dependencies.serveArticleAsset
+      ? dependencies.serveArticleAsset(
+          context.get("ownerId"),
+          context.req.valid("param").articleId,
+          context.req.valid("param").hash
+        )
+      : context.json(unavailable(), 503)
+  )
 
   app.openapi(listSubscriptionsRoute, (context) => {
     if (!dependencies.store) return context.json(unavailable(), 503)
@@ -399,6 +512,7 @@ export const documentConfig = {
     { name: "System", description: "Runtime health and contract" },
     { name: "Feeds", description: "RSS feed catalog" },
     { name: "Subscriptions", description: "Owner-scoped RSS subscriptions" },
+    { name: "Articles", description: "Archived RSS articles and read state" },
     { name: "Settings", description: "Owner-scoped generation schedule" },
     { name: "Episode jobs", description: "Asynchronous generation jobs" },
     { name: "Episodes", description: "Completed episodes and audio access" },
@@ -470,6 +584,164 @@ const listFeedsRoute = createRoute({
   responses: {
     200: jsonContent(page(FeedSchema), "Feed catalog"),
     401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const registerFeedRoute = createRoute({
+  method: "post",
+  path: "/v1/feeds",
+  tags: ["Feeds"],
+  operationId: "registerFeed",
+  description: "Discover, register, and subscribe to an arbitrary RSS URL.",
+  request: {
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: z.object({ feedUrl: z.url() }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: jsonContent(
+      z.object({ feed: FeedSchema, subscription: SubscriptionSchema }),
+      "Registered"
+    ),
+    401: problemContent("Unauthorized"),
+    422: problemContent("Feed discovery failed"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const articleParams = z.object({
+  articleId: IdSchema.openapi({ param: { name: "articleId", in: "path" } }),
+})
+
+const listArticlesRoute = createRoute({
+  method: "get",
+  path: "/v1/me/articles",
+  tags: ["Articles"],
+  operationId: "listArticles",
+  description: "List articles from the authenticated owner's subscriptions.",
+  responses: {
+    200: jsonContent(page(ArticleSchema), "Articles"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const getArticleRoute = createRoute({
+  method: "get",
+  path: "/v1/me/articles/{articleId}",
+  tags: ["Articles"],
+  operationId: "getArticle",
+  description: "Return one owner-scoped article and archive status.",
+  request: { params: articleParams },
+  responses: {
+    200: jsonContent(ArticleSchema, "Article"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const patchArticleRoute = createRoute({
+  method: "patch",
+  path: "/v1/me/articles/{articleId}",
+  tags: ["Articles"],
+  operationId: "updateArticleState",
+  description: "Update read or saved state for one article.",
+  request: {
+    params: articleParams,
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: z
+            .object({
+              read: z.boolean().optional(),
+              saved: z.boolean().optional(),
+            })
+            .refine(
+              (value: { read?: boolean; saved?: boolean }) =>
+                value.read !== undefined || value.saved !== undefined
+            ),
+        },
+      },
+    },
+  },
+  responses: {
+    200: jsonContent(ArticleSchema, "Updated"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const articleMarkdownRoute = createRoute({
+  method: "get",
+  path: "/v1/me/articles/{articleId}/markdown",
+  tags: ["Articles"],
+  operationId: "getArticleMarkdown",
+  description: "Return the archived Markdown used by the Podcast Agent.",
+  request: { params: articleParams },
+  responses: {
+    200: {
+      description: "Archived article Markdown",
+      content: { "text/markdown": { schema: z.string() } },
+    },
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const articleArchiveRoute = createRoute({
+  method: "get",
+  path: "/v1/me/articles/{articleId}/archive",
+  tags: ["Articles"],
+  operationId: "getArticleArchive",
+  description: "Return sanitized replay HTML with external scripts disabled.",
+  request: { params: articleParams },
+  responses: {
+    200: {
+      description: "Sanitized replay HTML",
+      content: { "text/html": { schema: z.string() } },
+    },
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const articleAssetRoute = createRoute({
+  method: "get",
+  path: "/v1/me/articles/{articleId}/assets/{hash}",
+  tags: ["Articles"],
+  operationId: "getArticleAsset",
+  description:
+    "Return one owner-scoped asset captured with an article snapshot.",
+  request: {
+    params: articleParams.extend({
+      hash: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .openapi({ param: { name: "hash", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Archived asset",
+      content: {
+        "application/octet-stream": {
+          schema: z.string().openapi({ type: "string", format: "binary" }),
+        },
+      },
+    },
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
     503: problemContent("Unavailable"),
   },
 })
@@ -738,6 +1010,20 @@ function problem(status: number, code: string, title: string) {
     title,
     status,
     code,
+  }
+}
+
+function articleResponse(
+  article: ReturnType<LocalStore["listArticles"]>[number]
+) {
+  return {
+    ...article,
+    ...(article.snapshotId
+      ? {
+          archiveUrl: `/v1/me/articles/${article.id}/archive`,
+          markdownUrl: `/v1/me/articles/${article.id}/markdown`,
+        }
+      : {}),
   }
 }
 

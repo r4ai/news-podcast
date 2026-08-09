@@ -14,6 +14,7 @@ description: Record and maintain this project's architecture decisions as ADRs, 
 7. Synchronize affected design documents, OpenAPI, code, configuration, and tests in the same change. Mark an unaffected surface `N/A` with a reason.
 8. Validate links, status consistency, contradictions, and the final diff. Run relevant contract, build, and test checks.
 9. Report incomplete synchronization and acceptance gates explicitly.
+10. Make architectural ADRs directly understandable: when a decision changes system boundaries, data ownership, deployment topology, or a multi-step flow, include the smallest useful Mermaid diagram or comparison table. Focus on the important relationships and keep the visual and surrounding prose concise; do not add decorative diagrams.
 
 ## Completion checklist
 
@@ -24,3 +25,4 @@ description: Record and maintain this project's architecture decisions as ADRs, 
 - OpenAPI, code, and tests agree where an external contract changed.
 - Superseded decisions are linked in both directions.
 - Unresolved functional choices remain visible as confirmation gates.
+- Material system design is explained with a concise diagram or table when that is clearer than prose alone.

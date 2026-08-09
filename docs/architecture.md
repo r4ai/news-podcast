@@ -6,7 +6,7 @@
 
 ## 1. 全体像
 
-本システムは、購読したRSSから直近のニュースを取得し、OpenAIで出典付きの台本を生成し、VOICEVOXで音声化する**モジュラーモノリス**である。長時間かかる生成処理を非同期ジョブへ分離し、Web、API、Workerで責務を分けている。
+本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、tool駆動Agentが記事本文と補足Web検索から出典付きPodcastを制作する**モジュラーモノリス**である。長時間処理はWorkerへ分離し、本文・asset・音声はSeaweedFSへ保存する。
 
 設計の軸は次の4点である。
 
@@ -24,10 +24,11 @@ flowchart LR
   API --> DB[("Job・購読・番組DB")]
   Worker["Episode Worker"] --> DB
   Worker --> RSS["RSS配信元"]
-  Worker --> OpenAI["OpenAI API"]
+  Worker --> OpenAI["OpenAI Responses API / Web Search"]
   Worker --> Voicevox["VOICEVOX Engine"]
-  Worker --> Audio[("音声ストレージ")]
-  API --> Audio
+  Worker --> Objects[("SeaweedFS / S3")]
+  API --> Objects
+  Worker --> Articles["記事HTML・assets"]
   API -.->|"OTLP"| Obs["Collector / SigNoz"]
   Worker -.->|"OTLP"| Obs
   Web -.->|"認証済みAPI Gateway経由"| Obs
@@ -41,7 +42,9 @@ flowchart LR
 | --- | --- | --- |
 | Identity & Access | ログイン、セッション、所有者の特定 | Better Auth、Google OIDC、`ownerId` |
 | Feed Management | RSSカタログとユーザー別購読 | Feed、Subscription、有効/無効 |
-| Episode Production | 生成要求、冪等性、状態遷移、生成パイプライン | EpisodeJob、RSS snapshot、Script、Audio |
+| Content Archive | 記事版、安全なreplay、Markdown | FeedItem、ArticleSnapshot、ArchiveAsset |
+| Agent Runtime | tool権限、実行上限、監査 | AgentRun、AgentToolCall |
+| Episode Production | 生成要求、Agent実行、状態遷移、生成パイプライン | EpisodeJob、AgentRun、Script、Audio |
 | Episode Library | 完成番組、出典、所有者別アクセス | Episode、EpisodeSource、短期音声URL |
 
 重要な不変条件は以下である。
@@ -49,7 +52,7 @@ flowchart LR
 - `ownerId` はセッションから導出し、URLやリクエスト本文から受け取らない。
 - ジョブ作成は `owner + route + Idempotency-Key` で一意。同じキーと異なる入力の組み合わせは競合とする。
 - ジョブ作成時の有効な購読フィードをsnapshotし、処理中の購読変更から切り離す。
-- 台本が返す出典URLは、入力したRSS項目に存在するURLだけを許可する。
+- 台本が返す出典URLは、Agentが読んだRSS記事またはWeb検索で観測したURLだけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
 - 署名付き音声URLは永続化せず、アクセス要求ごとに短期発行する。
 
@@ -126,8 +129,8 @@ sequenceDiagram
   participant API
   participant DB as SQLite / D1
   participant Worker
-  participant Providers as RSS / OpenAI / VOICEVOX
-  participant Audio as Local FS / R2
+  participant Providers as Agent tools / OpenAI / VOICEVOX
+  participant Objects as SeaweedFS / R2
 
   User->>Web: 番組を生成
   Web->>API: POST /v1/episode-jobs<br/>Idempotency-Key
@@ -139,8 +142,8 @@ sequenceDiagram
     API-->>Web: status / stage / attempt
   end
   Worker->>DB: jobを60秒lease
-  Worker->>Providers: RSS取得 → 台本生成 → 音声合成
-  Worker->>Audio: WAVを保存
+  Worker->>Providers: 保存記事調査 → Web補足 → 台本 → 音声合成
+  Worker->>Objects: WAVを保存
   Worker->>DB: Episode・出典を保存しsucceededへ更新
   Web->>API: POST /v1/episodes/{id}/audio-access
   API-->>Web: 5分間の音声アクセスURL
@@ -152,10 +155,10 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  Lease["Job lease"] --> Fetch["RSS取得"]
-  Fetch --> Select["直近24時間\n最大10件"]
-  Select --> Script["OpenAIで台本生成"]
-  Script --> Verify["出典URLを入力RSSと照合"]
+  Lease["Job lease"] --> Agent["Podcast Agent"]
+  Agent --> Tools["RSS記事一覧・Markdown・Web検索"]
+  Tools --> Script["Agentが選定・調査・執筆"]
+  Script --> Verify["出典とstructured draftを検証"]
   Verify --> TTS["VOICEVOXでWAV生成"]
   TTS --> Store["音声を保存"]
   Store --> Commit["Episode・出典・Jobをcommit"]
@@ -181,7 +184,7 @@ stateDiagram-v2
   canceled --> [*]
 ```
 
-`running` 中の詳細stageは `fetching_sources`、`generating_script`、`synthesizing_audio`、`storing_episode` の4段階である。
+`running` 中の新規生成は`researching_sources`、`synthesizing_audio`、`storing_episode`を使う。従来stageは既存jobとの契約互換のため残す。
 
 ## 5. データ設計
 
@@ -190,20 +193,29 @@ erDiagram
   USER ||--o{ SESSION : has
   USER ||--o{ FEED_SUBSCRIPTION : owns
   FEED_CATALOG ||--o{ FEED_SUBSCRIPTION : selected_by
+  FEED_CATALOG ||--o{ FEED_ITEM : publishes
+  FEED_ITEM ||--o{ ARTICLE_SNAPSHOT : archived_as
+  USER ||--o{ ARTICLE_USER_STATE : tracks
+  FEED_ITEM ||--o{ ARTICLE_USER_STATE : has_state
   USER ||--o| USER_SETTINGS : configures
   USER ||--o{ EPISODE_JOB : requests
   EPISODE_JOB ||--o{ EPISODE_JOB_FEED : snapshots
   FEED_CATALOG ||--o{ EPISODE_JOB_FEED : included_in
   EPISODE_JOB o|--o| EPISODE : produces
   EPISODE ||--o{ EPISODE_SOURCE : cites
+  EPISODE_JOB ||--o{ AGENT_RUN : executes
+  AGENT_RUN ||--o{ AGENT_TOOL_CALL : audits
   EPISODE_JOB ||--o{ JOB_OUTBOX : dispatches
 ```
 
 | データ | 設計上の意味 |
 | --- | --- |
 | `feed_catalog` / `feed_subscriptions` | 共通の媒体カタログとユーザーの選択を分離 |
+| `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
+| `article_user_states` | ユーザーごとの既読・保存状態 |
 | `episode_jobs` / `episode_job_feeds` | 状態、lease、retry、冪等性、生成時点の購読snapshot |
 | `episodes` / `episode_sources` | 台本・音声keyと、入力RSSへ遡れるprovenance |
+| `agent_runs` / `agent_tool_calls` | Agent実行結果と、思考過程を含めないtool監査要約 |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
 | `job_outbox` | D1からQueueへの送信を安全に連携するための境界（cloud実装は未完） |
 | Better Auth tables | user、session、account、verification |
@@ -218,12 +230,12 @@ SQLiteはforeign key、WAL、5秒のbusy timeout、`BEGIN IMMEDIATE` transaction
 | API | Hono on Node | Hono on Workers |
 | DB | SQLite | D1 |
 | 非同期実行 | DB polling + lease | Queues consumer |
-| 音声 | local filesystem | R2 |
+| object | SeaweedFS S3（記事・音声） | R2 |
 | TTS | Compose内のVOICEVOX | Cloudflare外のVOICEVOX endpoint |
 | 起動定義 | `compose.yaml` | `apps/*/wrangler.toml` |
 | 現在の完成度 | 主要vertical slice実装済み | bindingとentrypointのみ。業務処理は未接続 |
 
-Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition rootへ接続されていない。Cloudflare Workerもメッセージを処理せずretryする安全なstubである。このため、現時点の実動構成はNode + SQLite + local audioを正とする。
+Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition rootへ接続されていない。Cloudflare Workerもメッセージを処理せずretryする安全なstubである。このため、現時点の実動構成はNode + SQLite + SeaweedFSを正とする。
 
 ## 7. 横断設計
 
@@ -263,3 +275,6 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 - [ADR-0008: Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)
 - [ADR-0009: TanStack Router/Query](adr/0009-async-react-tanstack.md)
 - [ADR-0010: OpenTelemetryとSigNoz](adr/0010-opentelemetry-signoz.md)
+- [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
+- [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
+- [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)

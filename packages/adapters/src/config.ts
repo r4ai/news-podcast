@@ -13,6 +13,26 @@ export interface OpenAiConfig {
   readonly model: string
 }
 
+export interface S3Config {
+  readonly endpoint: URL
+  readonly region: string
+  readonly bucket: string
+  readonly accessKeyId: string
+  readonly secretAccessKey: string
+}
+
+export function readS3Config(
+  env: Readonly<Record<string, string | undefined>>
+): S3Config {
+  return {
+    endpoint: new URL(required(env, "S3_ENDPOINT")),
+    region: env.S3_REGION?.trim() || "us-east-1",
+    bucket: required(env, "S3_BUCKET"),
+    accessKeyId: required(env, "S3_ACCESS_KEY_ID"),
+    secretAccessKey: required(env, "S3_SECRET_ACCESS_KEY"),
+  }
+}
+
 export interface VoicevoxConfig {
   readonly baseUrl: URL
   readonly characterName: string

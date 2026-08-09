@@ -6,6 +6,7 @@ import {
   DEFAULT_VOICEVOX_CHARACTER,
   readLocalAuthConfig,
   readOpenAiConfig,
+  readS3Config,
   readVoicevoxConfig,
 } from "./config.js"
 
@@ -19,6 +20,23 @@ describe("runtime configuration", () => {
 
   it("fails only when an OpenAI adapter is configured without a key", () => {
     expect(() => readOpenAiConfig({})).toThrow(ConfigurationError)
+  })
+
+  it("reads the self-hosted S3 endpoint with a stable default region", () => {
+    expect(
+      readS3Config({
+        S3_ENDPOINT: "http://seaweedfs:8333",
+        S3_BUCKET: "news-podcast",
+        S3_ACCESS_KEY_ID: "test-access",
+        S3_SECRET_ACCESS_KEY: "test-secret",
+      })
+    ).toEqual({
+      endpoint: new URL("http://seaweedfs:8333"),
+      region: "us-east-1",
+      bucket: "news-podcast",
+      accessKeyId: "test-access",
+      secretAccessKey: "test-secret",
+    })
   })
 
   it("resolves the VOICEVOX character by name and leaves style unresolved", () => {

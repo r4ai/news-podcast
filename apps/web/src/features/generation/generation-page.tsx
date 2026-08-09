@@ -8,6 +8,7 @@ import { recordBrowserEvent } from "@/observability/events"
 
 const active = new Set(["queued", "running", "retrying"])
 const stageProgress = {
+  researching_sources: 35,
   fetching_sources: 20,
   generating_script: 45,
   synthesizing_audio: 75,

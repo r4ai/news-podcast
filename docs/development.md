@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Node.js | 24以上 | セットアップ、テスト、ビルド |
 | pnpm | 11.16.0 | ワークスペースの依存関係とコマンドの管理 |
-| Docker | Docker Composeを利用できる版 | Web、API、Worker、VOICEVOXの起動 |
+| Docker | Docker Composeを利用できる版 | Web、API、Worker、VOICEVOX、SeaweedFSの起動 |
 
 バージョンを確認します。
 
@@ -57,6 +57,8 @@ APIのヘルスチェックが通ると、Webアプリを開けます。
 | APIヘルスチェック | <http://localhost:3000/health> |
 | OpenAPIドキュメント | <http://localhost:3000/openapi.json> |
 | VOICEVOX Engine | <http://localhost:50021> |
+| SeaweedFS S3 API | <http://localhost:8333> |
+| SeaweedFS Master UI | <http://localhost:9333> |
 
 ### 3. 番組生成を確認する
 
@@ -78,7 +80,7 @@ APIのヘルスチェックが通ると、Webアプリを開けます。
 docker compose down
 ```
 
-SQLiteデータと生成音声はDocker volumeに残ります。
+SQLiteデータ、記事アーカイブ、生成音声はDocker volumeに残ります。
 初期状態へ戻す場合だけ、`docker compose down --volumes` でvolumeも削除してください。
 
 ## ローカル構成
@@ -93,12 +95,14 @@ flowchart LR
     Provider -->|fake| Fake["固定データと無音音声"]
     Provider -->|live| OpenAI["OpenAI"]
     Provider -->|live| Voicevox["VOICEVOX Engine"]
-    Worker --> Audio[("音声ファイル")]
-    API --> Audio
+    Worker --> Objects[("SeaweedFS / S3")]
+    API --> Objects
+    Worker --> Archive["RSS同期・Webアーカイブ"]
+    Archive --> Objects
 ```
 
 APIは生成要求をSQLiteへ保存し、Workerはジョブを定期的に取得します。
-APIとWorkerが同じSQLiteと音声ディレクトリを共有するため、生成状態と完成した音声をWebから参照できます。
+APIとWorkerはSQLiteをメタデータの正本とし、記事HTML、Markdown、asset、音声をSeaweedFSへ保存します。従来のローカル音声は初回再生時にObjectStoreへ遅延移行します。
 
 ## 技術スタックとリポジトリ構成
 
@@ -106,8 +110,8 @@ APIとWorkerが同じSQLiteと音声ディレクトリを共有するため、�
 | --- | --- |
 | Web | React、Vite、TypeScript、TanStack Router、TanStack Query、Tailwind CSS、shadcn/ui、Base UI |
 | API | Hono、Zod、コードファーストOpenAPI |
-| Worker | Node.js、RSS、OpenAI、VOICEVOX |
-| データ | ローカル環境ではSQLiteとファイル、Cloudflare環境ではD1、R2、Queues |
+| Worker | Node.js、RSS、Webアーカイブ、OpenAI Responses API、VOICEVOX |
+| データ | セルフホストではSQLiteとSeaweedFS、将来cloud runtimeではD1、R2、Queues |
 | 品質 | oxlint、oxfmt、Vitest、Storybook、Playwright、Spectral |
 
 ```text
@@ -204,7 +208,7 @@ OPENAI_API_KEY=your-api-key
 docker compose up --build
 ```
 
-liveモードでは、購読中のRSSから直近24時間の記事を取得し、OpenAIで台本を生成してVOICEVOXで音声化します。
+liveモードでは、新着RSS記事を自動アーカイブします。Podcast Agentは保存済みMarkdownをtoolで読み、必要な場合はWeb検索で補足確認してから、台本を構造化して提出します。検証済み台本だけをVOICEVOXで音声化します。
 OpenAIの利用料金が発生し、RSS、OpenAI、VOICEVOXへのネットワーク接続が必要です。
 
 ## コマンドリファレンス
@@ -285,7 +289,12 @@ APIのrouteやschemaを変更した場合は `pnpm contract:generate` を実行�
 | 変数 | 未設定時またはテンプレート値 | 必須になるサービス | 説明 |
 | --- | --- | --- | --- |
 | `DATABASE_PATH` | `/app/data/news-podcast.sqlite` | API、Worker | 共有するSQLiteファイルのパス |
-| `AUDIO_DIRECTORY` | `/app/audio` | API、Worker | 生成音声を保存し、配信するディレクトリ |
+| `AUDIO_DIRECTORY` | `/app/audio` | API、fake Worker | 従来音声の遅延移行とfake E2E用ディレクトリ |
+| `S3_ENDPOINT` | `http://seaweedfs:8333` | API、Worker | SeaweedFSのS3 endpoint |
+| `S3_REGION` | `us-east-1` | API、Worker | S3署名に使うregion |
+| `S3_BUCKET` | `news-podcast` | API、Worker | 記事と音声を保存する非公開bucket |
+| `S3_ACCESS_KEY_ID` | 開発用値 | API、Worker、SeaweedFS | S3 access key |
+| `S3_SECRET_ACCESS_KEY` | 開発用値 | API、Worker、SeaweedFS | S3 secret key。本番では変更する |
 | `AUDIO_ACCESS_SECRET` | 自動生成 | API | 音声アクセス用トークンの署名に使う秘密値 |
 | `API_PORT` | `3000` | API | APIが待ち受けるポート |
 | `VITE_API_PROXY_TARGET` | `http://localhost:3000` | Web | Viteが `/api`、`/v1` などを転送するAPIのURL |
@@ -308,7 +317,7 @@ docker compose logs api
 docker compose config
 ```
 
-`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`DATABASE_PATH`、`AUDIO_ACCESS_SECRET`、`AUDIO_DIRECTORY` が空でないことを確認します。
+`BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`DATABASE_PATH`、`AUDIO_ACCESS_SECRET`、`S3_*` が空でないことを確認します。
 `pnpm setup:env` は既存の `.env` を更新しないため、項目が増えた場合は `.env.example` と手動で比較します。
 
 ### 番組生成が完了しない
