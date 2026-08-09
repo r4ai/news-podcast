@@ -53,11 +53,6 @@ export function createApp(dependencies: AppDependencies = {}) {
           ),
   })
 
-  if (dependencies.authHandler) {
-    app.on(["GET", "POST"], "/api/auth/*", (context) =>
-      dependencies.authHandler!(context.req.raw)
-    )
-  }
   app.post("/api/dev/login", (context) =>
     dependencies.devLoginHandler
       ? dependencies.devLoginHandler(context.req.raw)
@@ -86,6 +81,12 @@ export function createApp(dependencies: AppDependencies = {}) {
       return context.json(unavailable(), 503)
     }
   })
+
+  if (dependencies.authHandler) {
+    app.on(["GET", "POST"], "/api/auth/*", (context) =>
+      dependencies.authHandler!(context.req.raw)
+    )
+  }
 
   app.use("/v1/*", async (context, next) => {
     if (context.req.path.startsWith("/v1/audio/")) return next()

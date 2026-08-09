@@ -11,6 +11,7 @@ describe("API foundation", () => {
 
   it("reports unauthenticated state without caching it", async () => {
     const response = await createApp({
+      authHandler: () => new Response(null, { status: 404 }),
       loginMethods: { development: true, google: false },
       resolveOwner: async () => null,
     }).request("/api/auth/state")
