@@ -10,6 +10,90 @@ import type { OpenAiConfig } from "./config.js"
 const MAX_TURNS = 8
 const MAX_TOOL_CALLS = 16
 
+type StrictFunctionParameter =
+  | {
+      readonly type: "object"
+      readonly additionalProperties: false
+      readonly required: readonly string[]
+      readonly properties: Readonly<Record<string, StrictFunctionParameter>>
+    }
+  | {
+      readonly type: "array"
+      readonly minItems?: number
+      readonly items: StrictFunctionParameter
+    }
+  | {
+      readonly type: "string"
+    }
+  | {
+      readonly type: "integer"
+      readonly minimum?: number
+      readonly maximum?: number
+    }
+
+type StrictFunctionTool = {
+  readonly type: "function"
+  readonly name: string
+  readonly description: string
+  readonly strict: true
+  readonly parameters: Extract<StrictFunctionParameter, { type: "object" }>
+}
+
+type PodcastAgentTool = StrictFunctionTool | { readonly type: "web_search" }
+
+const PODCAST_AGENT_TOOLS = [
+  {
+    type: "function",
+    name: "list_rss_articles",
+    description: "購読中の、アーカイブが完了したRSS記事を新しい順に一覧する。",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["limit"],
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+    },
+  },
+  {
+    type: "function",
+    name: "read_article",
+    description: "RSS記事の保存済みMarkdown本文を読む。内容を使う前に呼ぶ。",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["article_id"],
+      properties: { article_id: { type: "string" } },
+    },
+  },
+  { type: "web_search" },
+  {
+    type: "function",
+    name: "submit_episode_draft",
+    description:
+      "完成したPodcast台本と、実際に使用したRSSまたはWeb検索の出典URLを提出する。",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["title", "script", "source_urls"],
+      properties: {
+        title: { type: "string" },
+        script: { type: "string" },
+        source_urls: {
+          type: "array",
+          minItems: 1,
+          // URLs are parsed and validated after the tool call is returned.
+          // Responses strict function schemas do not accept `format: "uri"`.
+          items: { type: "string" },
+        },
+      },
+    },
+  },
+] as const satisfies readonly PodcastAgentTool[]
+
 const SubmitDraft = z.object({
   title: z.string().min(1).max(200),
   script: z.string().min(100),
@@ -217,66 +301,36 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
           ? { previous_response_id: input.previousResponseId }
           : {}),
         parallel_tool_calls: false,
-        tools: [
-          {
-            type: "function",
-            name: "list_rss_articles",
-            description:
-              "購読中の、アーカイブが完了したRSS記事を新しい順に一覧する。",
-            strict: true,
-            parameters: {
-              type: "object",
-              additionalProperties: false,
-              required: ["limit"],
-              properties: {
-                limit: { type: "integer", minimum: 1, maximum: 50 },
-              },
-            },
-          },
-          {
-            type: "function",
-            name: "read_article",
-            description:
-              "RSS記事の保存済みMarkdown本文を読む。内容を使う前に呼ぶ。",
-            strict: true,
-            parameters: {
-              type: "object",
-              additionalProperties: false,
-              required: ["article_id"],
-              properties: { article_id: { type: "string", format: "uuid" } },
-            },
-          },
-          { type: "web_search" },
-          {
-            type: "function",
-            name: "submit_episode_draft",
-            description:
-              "完成したPodcast台本と、実際に使用したRSSまたはWeb検索の出典URLを提出する。",
-            strict: true,
-            parameters: {
-              type: "object",
-              additionalProperties: false,
-              required: ["title", "script", "source_urls"],
-              properties: {
-                title: { type: "string" },
-                script: { type: "string" },
-                source_urls: {
-                  type: "array",
-                  minItems: 1,
-                  items: { type: "string", format: "uri" },
-                },
-              },
-            },
-          },
-        ],
+        tools: PODCAST_AGENT_TOOLS,
       }),
     })
     if (!response.ok) {
       throw new PodcastAgentError(
-        `OpenAI request failed with ${response.status}`
+        `OpenAI request failed with ${response.status}: ${await readOpenAiError(
+          response
+        )}`
       )
     }
     return (await response.json()) as OpenAiResponse
+  }
+}
+
+async function readOpenAiError(response: Response): Promise<string> {
+  const fallback = response.statusText || "Unknown API error"
+  try {
+    const payload = (await response.json()) as {
+      error?: { message?: unknown; code?: unknown; param?: unknown }
+    }
+    const error = payload.error
+    if (!error || typeof error.message !== "string") return fallback
+    const details = [
+      typeof error.code === "string" ? error.code : undefined,
+      typeof error.param === "string" ? error.param : undefined,
+      error.message,
+    ].filter((value): value is string => Boolean(value))
+    return details.join(" — ").slice(0, 1_000)
+  } catch {
+    return fallback
   }
 }
 
