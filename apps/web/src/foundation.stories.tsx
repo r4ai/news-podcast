@@ -8,11 +8,24 @@ const meta = {
   component: PodcastDashboard,
   args: {
     onGenerate: fn(),
+    schedule: {
+      enabled: true,
+      localTime: "07:30",
+      timeZone: "Asia/Tokyo",
+    },
     state: "ready",
+    subscriptionNames: ["Zenn", "azukiazusaの技術ブログ", "Hacker News"],
   },
   parameters: {
     layout: "fullscreen",
   },
+  decorators: [
+    (Story) => (
+      <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+        <Story />
+      </main>
+    ),
+  ],
 } satisfies Meta<typeof PodcastDashboard>
 
 export default meta
@@ -27,15 +40,22 @@ export const Ready: Story = {
 }
 
 export const Running: Story = {
-  args: { state: "running" },
+  args: { progress: 75, stage: "音声を生成中", state: "running" },
 }
 
 export const Succeeded: Story = {
-  args: { state: "succeeded" },
+  args: {
+    episode: {
+      title: "今日のテックニュース",
+      createdAt: "2026-08-09T07:30:00.000Z",
+      sourceCount: 3,
+    },
+    state: "succeeded",
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const disclosure = canvas.getByText("出典を確認", { exact: true })
-    await userEvent.click(disclosure)
-    await expect(disclosure.parentElement).toHaveAttribute("open")
+    await expect(
+      canvas.getByText("今日のテックニュース", { exact: true })
+    ).toBeVisible()
   },
 }

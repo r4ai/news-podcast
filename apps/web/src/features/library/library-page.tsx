@@ -1,6 +1,33 @@
 import { useState, useTransition } from "react"
+import { ChevronDown, Library, Play } from "lucide-react"
+import { toast } from "@workspace/ui/components/sonner"
+
+import { Button } from "@workspace/ui/components/button"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@workspace/ui/components/collapsible"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@workspace/ui/components/empty"
+import { Separator } from "@workspace/ui/components/separator"
+import { Spinner } from "@workspace/ui/components/spinner"
 
 import { api } from "@/api/client"
+import { PageHeader } from "@/app/page-header"
 
 export function LibraryPage() {
   const episodes = api.useSuspenseQuery("get", "/v1/episodes")
@@ -9,71 +36,112 @@ export function LibraryPage() {
     "/v1/episodes/{episodeId}/audio-access"
   )
   const [audioUrl, setAudioUrl] = useState<string>()
+  const [pendingEpisodeId, setPendingEpisodeId] = useState<string>()
   const [pending, startTransition] = useTransition()
 
   function play(episodeId: string) {
+    setPendingEpisodeId(episodeId)
     startTransition(async () => {
-      const result = await access.mutateAsync({
-        params: { path: { episodeId } },
-      })
-      setAudioUrl(result.url)
+      try {
+        const result = await access.mutateAsync({
+          params: { path: { episodeId } },
+        })
+        setAudioUrl(result.url)
+      } catch {
+        toast.error("音声を再生できませんでした")
+      } finally {
+        setPendingEpisodeId(undefined)
+      }
     })
   }
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-semibold">ライブラリ</h1>
-        <p className="mt-2 text-muted-foreground">
-          音声と、台本の根拠になった記事を確認できます。
-        </p>
-      </header>
-      {audioUrl && (
-        <audio autoPlay className="w-full" controls src={audioUrl} />
-      )}
-      {episodes.data.items.map((episode) => (
-        <article className="rounded-2xl border bg-card p-6" key={episode.id}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold">{episode.title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {new Date(episode.createdAt).toLocaleString("ja-JP")}
-              </p>
-            </div>
-            <button
-              className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-              disabled={pending}
-              onClick={() => play(episode.id)}
-              type="button"
-            >
-              再生
-            </button>
-          </div>
-          <details className="mt-5">
-            <summary className="cursor-pointer font-medium">
-              出典 {episode.sources.length}件
-            </summary>
-            <ul className="mt-3 space-y-2">
-              {episode.sources.map((source) => (
-                <li key={source.url}>
-                  <a
-                    className="text-sm text-primary underline"
-                    href={source.url}
-                    rel="noreferrer"
-                    target="_blank"
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        description="完成した音声と、台本の根拠になった記事を確認できます。"
+        title="ライブラリ"
+      />
+      {audioUrl ? (
+        <Card size="sm">
+          <CardContent>
+            <audio autoPlay className="h-11 w-full" controls src={audioUrl} />
+          </CardContent>
+        </Card>
+      ) : null}
+      {episodes.data.items.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          {episodes.data.items.map((episode) => (
+            <Card key={episode.id}>
+              <CardHeader>
+                <CardTitle>
+                  <h2>{episode.title}</h2>
+                </CardTitle>
+                <CardDescription>
+                  {new Date(episode.createdAt).toLocaleString("ja-JP")} ・ 出典
+                  {episode.sources.length}件
+                </CardDescription>
+                <CardAction>
+                  <Button
+                    disabled={pending}
+                    onClick={() => play(episode.id)}
+                    size="sm"
                   >
-                    {source.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        </article>
-      ))}
-      {episodes.data.items.length === 0 && (
-        <p className="rounded-2xl border bg-card p-6 text-muted-foreground">
-          完成した番組はまだありません。
-        </p>
+                    {pendingEpisodeId === episode.id ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <Play aria-hidden="true" data-icon="inline-start" />
+                    )}
+                    再生
+                  </Button>
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                <Collapsible>
+                  <CollapsibleTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-between"
+                      />
+                    }
+                  >
+                    出典を確認
+                    <ChevronDown aria-hidden="true" data-icon="inline-end" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ul className="mt-3 flex flex-col text-sm">
+                      {episode.sources.map((source, index) => (
+                        <li className="flex flex-col gap-3" key={source.url}>
+                          {index > 0 ? <Separator /> : null}
+                          <a
+                            className="rounded-sm underline underline-offset-4 outline-none hover:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                            href={source.url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            {source.title}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </CollapsibleContent>
+                </Collapsible>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Library aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyTitle>完成した番組はまだありません</EmptyTitle>
+            <EmptyDescription>
+              「今日」から最初のニュース番組を生成してください。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
     </div>
   )

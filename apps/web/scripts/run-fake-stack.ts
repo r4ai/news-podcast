@@ -17,6 +17,8 @@ import { createFakeProcessor } from "../../worker/src/process-episode-job.js"
 import { LocalScheduler } from "../../worker/src/scheduler.js"
 
 const directory = mkdtempSync(join(tmpdir(), "news-podcast-e2e-"))
+const apiPort = Number(process.env.E2E_API_PORT ?? 3000)
+const webPort = Number(process.env.E2E_WEB_PORT ?? 4173)
 const ownerId = "00000000-0000-4000-8000-000000000100"
 const store = new LocalStore(join(directory, "app.sqlite"))
 const devAuth = createDevAuth({
@@ -28,7 +30,7 @@ const devAuth = createDevAuth({
 })
 const audio = createAudioAccess({
   secret: "e2e-audio-access-secret-at-least-32-characters",
-  baseUrl: "http://127.0.0.1:4173",
+  baseUrl: `http://127.0.0.1:${webPort}`,
   store,
   directory: join(directory, "audio"),
 })
@@ -40,6 +42,7 @@ const app = createApp({
   resolveOwner: async (request) => devAuth.owner(request),
   devLoginHandler: (request) => devAuth.login(request),
   devLogoutHandler: () => devAuth.logout(),
+  loginMethods: { development: true, google: false },
   createEpisodeJob: async ({ ownerId: requestedOwner, idempotencyKey }) => {
     const useCase = new CreateEpisodeJob(store, store, {
       dispatch: () => Promise.resolve(),
@@ -56,12 +59,12 @@ const app = createApp({
   serveAudio: (token, range) => audio.serve(token, range),
 })
 
-const apiServer = serve({ fetch: app.fetch, port: 3000 })
-process.env.VITE_API_PROXY_TARGET = "http://127.0.0.1:3000"
+const apiServer = serve({ fetch: app.fetch, port: apiPort })
+process.env.VITE_API_PROXY_TARGET = `http://127.0.0.1:${apiPort}`
 const vite = await createServer({
   configFile: fileURLToPath(new URL("../vite.config.ts", import.meta.url)),
   root: fileURLToPath(new URL("..", import.meta.url)),
-  server: { host: "127.0.0.1", port: 4173 },
+  server: { host: "127.0.0.1", port: webPort },
 })
 await vite.listen()
 

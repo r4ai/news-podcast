@@ -50,8 +50,8 @@ Better Authがアプリセッションを発行し、`/v1` はsession cookieを�
 | データ/ストレージ | auth schema | Pending | Better Auth migration生成時 |
 | 実行/配備 | local env/cloud secrets | Partial | env example/wrangler |
 | 認証/セキュリティ | Google initial provider | Done | auth factory |
-| フロント/品質保証 | login UI/stories | Pending | 視覚設計後 |
-| テスト/運用 | auth matrix | Pending | 機能route実装時 |
+| フロント/品質保証 | login UI/stories | Done | `apps/web/src/routes/login.tsx` |
+| テスト/運用 | auth matrix | Done | API unit / Web E2E |
 
 ## 再検討条件
 

@@ -54,7 +54,7 @@ shadcn/ui neutral + Base UIを使い、Storybookを状態の確認面にする�
 | コード/ポート         | UI state fixtures      | Done    | `PodcastDashboard` stories |
 | データ/ストレージ     | N/A — story fixture    | Done    | N/A                        |
 | 実行/配備             | static Storybook build | Done    | web scripts                |
-| 認証/セキュリティ     | auth states            | Pending | login UI時                 |
+| 認証/セキュリティ     | auth states            | Done    | login route / E2E          |
 | フロント/品質保証     | Storybook/a11y/visual  | Done    | scaffold config            |
 | テスト/運用           | browser commands       | Done    | web scripts                |
 

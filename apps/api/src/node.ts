@@ -35,6 +35,10 @@ const app = createApp({
   authHandler: auth.handler,
   devLoginHandler: (request) => devAuth.login(request),
   devLogoutHandler: () => devAuth.logout(),
+  loginMethods: {
+    development: devEnabled,
+    google: Boolean(config.googleClientId && config.googleClientSecret),
+  },
   resolveOwner: async (request) => {
     const localOwner = devAuth.owner(request)
     if (localOwner) return localOwner

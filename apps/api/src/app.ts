@@ -24,6 +24,10 @@ export interface AppDependencies {
   readonly resolveOwner?: (request: Request) => Promise<string | null>
   readonly devLoginHandler?: (request: Request) => Promise<Response>
   readonly devLogoutHandler?: (request: Request) => Promise<Response>
+  readonly loginMethods?: {
+    readonly development: boolean
+    readonly google: boolean
+  }
   readonly createEpisodeJob?: (input: {
     readonly ownerId: string
     readonly idempotencyKey: string
@@ -64,6 +68,24 @@ export function createApp(dependencies: AppDependencies = {}) {
       ? dependencies.devLogoutHandler(context.req.raw)
       : context.json(unavailable(), 503)
   )
+
+  app.get("/api/auth/state", async (context) => {
+    context.header("Cache-Control", "private, no-store")
+    try {
+      const ownerId = dependencies.resolveOwner
+        ? await dependencies.resolveOwner(context.req.raw)
+        : null
+      return context.json({
+        authenticated: ownerId !== null,
+        loginMethods: dependencies.loginMethods ?? {
+          development: false,
+          google: false,
+        },
+      })
+    } catch {
+      return context.json(unavailable(), 503)
+    }
+  })
 
   app.use("/v1/*", async (context, next) => {
     if (context.req.path.startsWith("/v1/audio/")) return next()
