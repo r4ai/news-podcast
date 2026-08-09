@@ -35,6 +35,7 @@ import { Switch } from "@workspace/ui/components/switch"
 import { api } from "@/api/client"
 import { PageHeader } from "@/app/page-header"
 import { queryClient } from "@/app/query-client"
+import { recordBrowserEvent } from "@/observability/events"
 
 function supportedTimeZones(current: string) {
   const supported = Intl.supportedValuesOf?.("timeZone") ?? []
@@ -69,8 +70,10 @@ export function SchedulePage() {
           api.queryOptions("get", "/v1/me/settings").queryKey,
           updated
         )
+        recordBrowserEvent("schedule.changed", { result: "succeeded" })
         toast.success("生成時刻を保存しました")
       } catch {
+        recordBrowserEvent("schedule.changed", { result: "failed" })
         setError("時刻とタイムゾーンを確認してください。")
         toast.error("生成時刻を保存できませんでした")
       }

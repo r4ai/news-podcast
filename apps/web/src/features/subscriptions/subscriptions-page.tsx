@@ -51,6 +51,7 @@ import { Switch } from "@workspace/ui/components/switch"
 import { api } from "@/api/client"
 import { PageHeader } from "@/app/page-header"
 import { queryClient } from "@/app/query-client"
+import { recordBrowserEvent } from "@/observability/events"
 
 type Subscription = components["schemas"]["FeedSubscription"]
 
@@ -110,8 +111,10 @@ export function SubscriptionsPage() {
     startTransition(async () => {
       try {
         await request()
+        recordBrowserEvent("subscription.changed", { result: "succeeded" })
         toast.success(successMessage)
       } catch {
+        recordBrowserEvent("subscription.changed", { result: "failed" })
         queryClient.setQueryData(queryKey, previous)
         toast.error("購読設定を更新できませんでした")
       } finally {
@@ -167,8 +170,16 @@ export function SubscriptionsPage() {
         })
         setItems((items) => [...items, created])
         setSelectedFeedId("")
+        recordBrowserEvent("subscription.changed", {
+          action: "add",
+          result: "succeeded",
+        })
         toast.success("購読を追加しました")
       } catch {
+        recordBrowserEvent("subscription.changed", {
+          action: "add",
+          result: "failed",
+        })
         toast.error("購読を追加できませんでした")
       } finally {
         setPending("new", false)

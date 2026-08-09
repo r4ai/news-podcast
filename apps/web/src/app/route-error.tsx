@@ -1,4 +1,6 @@
 import type { ErrorComponentProps } from "@tanstack/react-router"
+import { useEffect } from "react"
+import { recordBrowserEvent } from "@/observability/events"
 import { AlertTriangle } from "lucide-react"
 
 import {
@@ -10,6 +12,10 @@ import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 
 export function RouteError({ error, reset }: ErrorComponentProps) {
+  const errorType = error instanceof Error ? error.name : "UnknownError"
+  useEffect(() => {
+    recordBrowserEvent("route.error", { "error.type": errorType })
+  }, [errorType])
   const message =
     error instanceof Error ? error.message : "データを取得できませんでした"
 

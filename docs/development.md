@@ -121,6 +121,7 @@ packages/
   adapters/     SQLite、RSS、OpenAI、VOICEVOXなどの実装
   contracts/    OpenAPIドキュメントと生成したTypeScript型
   ui/           共有UIコンポーネント
+  observability/ 匿名event契約、privacy、Node/no-op adapter
 docs/
   adr/          Architecture Decision Records
 infra/          コンテナ定義
@@ -128,6 +129,25 @@ scripts/        開発用スクリプト
 ```
 
 依存関係の向きと配備構成は[設計書](design.md)を参照してください。
+
+## OpenTelemetryをローカルで有効にする
+
+既定の`OTEL_ENABLED=false`ではno-op adapterを使うため、SigNozなしで通常のbuild、test、E2Eを実行できる。Collectorへ送る場合だけ`.env`へ次を設定する。
+
+```dotenv
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer replace-me
+OTEL_SERVICE_VERSION=git-sha-or-release
+OTEL_TRACE_SAMPLE_RATE=0.2
+TELEMETRY_PROXY_ORIGIN=https://otel.example.com
+TELEMETRY_PROXY_TOKEN=replace-me
+VITE_TELEMETRY_ENABLED=true
+```
+
+Node SDKはAPI/Workerのcomposition rootでアプリ本体より先に初期化する。Browserは同意設定とDNTを確認してから動的importされ、OTLPを`/v1/telemetry/{traces|logs|metrics}`へ送る。このgatewayはアプリsession、same-origin、Content-Type、256KB、所有者単位60 request/分を検証する。
+
+セルフホスト手順、公開port、保持期間、dashboard、alert、backupは[`infra/observability/README.md`](../infra/observability/README.md)を参照する。Windowsの通常検証にSigNozは不要で、SigNoz smoke/restore試験はLinuxまたはWSL2内のnative Docker Engineで行う。
 
 ## シナリオ別の開発手順
 

@@ -7,8 +7,11 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
+
+import { TelemetryPreference } from "@/observability/telemetry-preference"
 
 import { type Theme, useTheme } from "./theme-provider"
 
@@ -46,6 +49,11 @@ export function ThemeToggle() {
               ) : null}
             </DropdownMenuItem>
           ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>プライバシー</DropdownMenuLabel>
+          <TelemetryPreference />
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

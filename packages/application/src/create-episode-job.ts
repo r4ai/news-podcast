@@ -4,6 +4,7 @@ import type {
   EnabledSubscriptionReader,
   EpisodeJobRecord,
   EpisodeJobRepository,
+  EpisodeTraceContext,
   JobDispatcher,
 } from "./ports.js"
 
@@ -11,6 +12,7 @@ export interface CreateEpisodeJobCommand {
   readonly ownerId: string
   readonly idempotencyKey: string
   readonly trigger: "manual" | "scheduled"
+  readonly traceContext?: EpisodeTraceContext
 }
 
 export class CreateEpisodeJob {
@@ -30,12 +32,14 @@ export class CreateEpisodeJob {
       requestHash,
       trigger: command.trigger,
       feedIds,
+      ...(command.traceContext ? { traceContext: command.traceContext } : {}),
     })
 
     if (record.created) {
       await this.dispatcher.dispatch({
         ownerId: record.ownerId,
         jobId: record.jobId,
+        ...(command.traceContext ? { traceContext: command.traceContext } : {}),
       })
     }
 

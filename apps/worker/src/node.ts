@@ -9,10 +9,17 @@ import {
   createLiveProcessor,
 } from "./process-episode-job.js"
 import { LocalScheduler } from "./scheduler.js"
+import {
+  createNodeObservability,
+  readNodeObservabilityConfig,
+} from "@news-podcast/observability/node"
 
 const databasePath = required("DATABASE_PATH")
 const audioDirectory = required("AUDIO_DIRECTORY")
 const mode = process.env.PROVIDER_MODE ?? "live"
+const observability = createNodeObservability(
+  readNodeObservabilityConfig(process.env, "news-podcast-worker")
+)
 if (mode === "fake" && process.env.APP_ENV === "production") {
   throw new Error("Fake providers are forbidden in production")
 }
@@ -20,12 +27,13 @@ if (mode === "fake" && process.env.APP_ENV === "production") {
 const store = new LocalStore(databasePath)
 const processor =
   mode === "fake"
-    ? createFakeProcessor(store, audioDirectory)
+    ? createFakeProcessor(store, audioDirectory, observability)
     : createLiveProcessor({
         store,
         audioDirectory,
         openAi: readOpenAiConfig(process.env),
         voicevox: readVoicevoxConfig(process.env),
+        observability,
       })
 const scheduler = new LocalScheduler(store)
 
@@ -42,7 +50,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     clearInterval(timer)
     store.close()
-    process.exit(0)
+    void observability.shutdown().finally(() => process.exit(0))
   })
 }
 

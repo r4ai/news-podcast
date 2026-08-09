@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { LocalAudioStore } from "@news-podcast/adapters/audio/local"
 import type {
   EpisodeSourceDto,
+  JobStage,
   LocalStore,
   WorkerJob,
 } from "@news-podcast/adapters/db/local"
@@ -21,6 +22,10 @@ import type {
   SpeechSynthesizer,
   SummaryGenerator,
 } from "@news-podcast/application"
+import {
+  noopObservability,
+  type Observability,
+} from "@news-podcast/observability"
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const
 
@@ -39,6 +44,7 @@ export interface EpisodeProcessorDependencies {
   readonly summary: SummaryGenerator
   readonly speech: SpeechSynthesizer
   readonly voice: { characterName: string; styleName?: string }
+  readonly observability?: Observability
 }
 
 export class EpisodeProcessor {
@@ -46,35 +52,84 @@ export class EpisodeProcessor {
 
   async process(job: WorkerJob, now = new Date()): Promise<void> {
     const { store } = this.dependencies
+    const observability = this.dependencies.observability ?? noopObservability
+    const startedAt = performance.now()
+    observability.log({ name: "episode.started" })
     try {
-      store.setJobStage(job.id, job.leaseToken, "fetching_sources")
-      const feeds = store.getJobFeeds(job.id)
-      const items = selectRecentItems(
-        await this.dependencies.sources.read(feeds),
-        now
+      await observability.withSpan(
+        "episode.process",
+        {},
+        () => this.runPipeline(job, now, observability),
+        job.traceContext ? { link: job.traceContext } : undefined
       )
-      if (items.length === 0) {
-        throw new PipelineInputError("直近24時間のRSS項目がありません")
+      observability.count("episode.succeeded")
+      observability.log({ name: "episode.succeeded" })
+    } catch (error) {
+      const failure = classifyFailure(error)
+      const delay = RETRY_DELAYS_MS[job.attempt - 1]
+      const willRetry = failure.retryable && delay !== undefined
+      if (willRetry) {
+        store.retryJob(
+          job.id,
+          job.leaseToken,
+          new Date(now.getTime() + delay),
+          failure
+        )
+      } else {
+        store.failJob(job.id, job.leaseToken, failure)
       }
-
-      store.setJobStage(job.id, job.leaseToken, "generating_script")
-      const draft = await this.dependencies.summary.generate(items)
-      const sources = resolveSources(draft, items)
-
-      store.setJobStage(job.id, job.leaseToken, "synthesizing_audio")
-      const wave = await this.dependencies.speech.synthesize({
-        text: draft.script,
-        ...this.dependencies.voice,
+      observability.count("episode.failed")
+      observability.log({
+        name: willRetry ? "episode.retrying" : "episode.failed",
+        level: willRetry ? "warn" : "error",
+        attributes: { "error.retryable": failure.retryable },
+        error,
       })
+    } finally {
+      observability.measure("episode.duration", performance.now() - startedAt)
+    }
+  }
 
-      store.setJobStage(job.id, job.leaseToken, "storing_episode")
+  private async runPipeline(
+    job: WorkerJob,
+    now: Date,
+    observability: Observability
+  ): Promise<void> {
+    const feeds = this.dependencies.store.getJobFeeds(job.id)
+    const items = selectRecentItems(
+      await this.stage(job, "fetching_sources", observability, () =>
+        this.dependencies.sources.read(feeds)
+      ),
+      now
+    )
+    if (items.length === 0) {
+      throw new PipelineInputError("直近24時間のRSS項目がありません")
+    }
+    const draft = await this.stage(
+      job,
+      "generating_script",
+      observability,
+      () => this.dependencies.summary.generate(items)
+    )
+    const sources = resolveSources(draft, items)
+    const wave = await this.stage(
+      job,
+      "synthesizing_audio",
+      observability,
+      () =>
+        this.dependencies.speech.synthesize({
+          text: draft.script,
+          ...this.dependencies.voice,
+        })
+    )
+    await this.stage(job, "storing_episode", observability, async () => {
       const episodeId = randomUUID()
       const stored = await this.dependencies.audio.put(
         job.ownerId,
         episodeId,
         wave
       )
-      store.completeJob({
+      this.dependencies.store.completeJob({
         jobId: job.id,
         episodeId,
         ownerId: job.ownerId,
@@ -85,19 +140,33 @@ export class EpisodeProcessor {
         audioByteLength: stored.byteLength,
         sources,
       })
-    } catch (error) {
-      const failure = classifyFailure(error)
-      const delay = RETRY_DELAYS_MS[job.attempt - 1]
-      if (failure.retryable && delay !== undefined) {
-        store.retryJob(
-          job.id,
-          job.leaseToken,
-          new Date(now.getTime() + delay),
-          failure
-        )
-      } else {
-        store.failJob(job.id, job.leaseToken, failure)
-      }
+    })
+  }
+
+  private async stage<T>(
+    job: WorkerJob,
+    stage: JobStage,
+    observability: Observability,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    this.dependencies.store.setJobStage(job.id, job.leaseToken, stage)
+    const startedAt = performance.now()
+    try {
+      const result = await observability.withSpan(
+        `episode.${stage}`,
+        { "operation.stage": stage },
+        operation
+      )
+      observability.log({
+        name: "episode.stage.completed",
+        attributes: { "operation.stage": stage },
+      })
+      return result
+    } finally {
+      observability.measure(
+        "episode.stage.duration",
+        performance.now() - startedAt
+      )
     }
   }
 }
@@ -107,6 +176,7 @@ export function createLiveProcessor(input: {
   readonly audioDirectory: string
   readonly openAi: ConstructorParameters<typeof OpenAiSummaryGenerator>[0]
   readonly voicevox: ConstructorParameters<typeof VoicevoxSpeechSynthesizer>[0]
+  readonly observability?: Observability
 }): EpisodeProcessor {
   return new EpisodeProcessor({
     store: input.store,
@@ -120,12 +190,14 @@ export function createLiveProcessor(input: {
         ? { styleName: input.voicevox.styleName }
         : {}),
     },
+    ...(input.observability ? { observability: input.observability } : {}),
   })
 }
 
 export function createFakeProcessor(
   store: LocalStore,
-  audioDirectory: string
+  audioDirectory: string,
+  observability: Observability = noopObservability
 ): EpisodeProcessor {
   const item: RssSourceItem = {
     sourceName: "開発ニュース",
@@ -149,6 +221,7 @@ export function createFakeProcessor(
     },
     speech: { synthesize: () => Promise.resolve(silentWave()) },
     voice: { characterName: "ずんだもん" },
+    observability,
   })
 }
 

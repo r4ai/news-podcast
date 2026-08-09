@@ -40,3 +40,8 @@ news-podcast-app/
 
 # typescript
 *.tsbuildinfo
+
+# SigNoz Foundry generated deployment and local backups
+infra/observability/pours/
+infra/observability/casting.yaml.lock
+infra/observability/backup/data/

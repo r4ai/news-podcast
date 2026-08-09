@@ -35,6 +35,7 @@ import {
   safeRedirect,
 } from "@/auth/auth"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { recordBrowserEvent } from "@/observability/events"
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -63,11 +64,13 @@ function useLogin(destination: string) {
     startTransition(async () => {
       try {
         await action()
+        recordBrowserEvent("login.result", { result: "succeeded" })
         await queryClient.invalidateQueries({
           queryKey: authStateQueryOptions.queryKey,
         })
         window.location.replace(destination)
       } catch (loginError) {
+        recordBrowserEvent("login.result", { result: "failed" })
         setError(
           loginError instanceof Error
             ? loginError.message

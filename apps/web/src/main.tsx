@@ -5,6 +5,9 @@ import "@workspace/ui/globals.css"
 import { App } from "./App.tsx"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { TooltipProvider } from "@workspace/ui/components/tooltip"
+import { startBrowserObservability } from "@/observability/browser"
+
+startBrowserObservability()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

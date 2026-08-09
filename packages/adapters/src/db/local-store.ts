@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite"
 import type {
   EpisodeJobRecord,
   EpisodeJobRepository,
+  EpisodeTraceContext,
   GenerationSchedule,
 } from "@news-podcast/application"
 import type { JobStatus } from "@news-podcast/domain"
@@ -67,6 +68,7 @@ export interface WorkerJob {
   readonly ownerId: string
   readonly attempt: number
   readonly leaseToken: string
+  readonly traceContext?: EpisodeTraceContext
 }
 
 export interface ScheduledOwner {
@@ -230,6 +232,7 @@ export class LocalStore implements EpisodeJobRepository {
     readonly requestHash: string
     readonly trigger: "manual" | "scheduled"
     readonly feedIds: readonly string[]
+    readonly traceContext?: EpisodeTraceContext
   }): Promise<EpisodeJobRecord> {
     const existing = this.database
       .prepare(
@@ -259,8 +262,9 @@ export class LocalStore implements EpisodeJobRepository {
         .prepare(
           `INSERT INTO episode_jobs
            (id, owner_id, idempotency_route, idempotency_key, request_hash,
-            status, receipt_json, available_at, created_at)
-           VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)`
+            status, receipt_json, available_at, created_at, trace_parent,
+            trace_state)
+           VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)`
         )
         .run(
           jobId,
@@ -270,7 +274,9 @@ export class LocalStore implements EpisodeJobRepository {
           input.requestHash,
           receipt,
           createdAt,
-          createdAt
+          createdAt,
+          input.traceContext?.traceParent ?? null,
+          input.traceContext?.traceState ?? null
         )
       const insertFeed = this.database.prepare(
         "INSERT INTO episode_job_feeds (job_id, feed_id, position) VALUES (?, ?, ?)"
@@ -309,7 +315,8 @@ export class LocalStore implements EpisodeJobRepository {
       const timestamp = now.toISOString()
       const row = this.database
         .prepare(
-          `SELECT id, owner_id, attempt FROM episode_jobs
+          `SELECT id, owner_id, attempt, trace_parent, trace_state
+           FROM episode_jobs
            WHERE (status = 'queued')
               OR (status = 'retrying' AND next_attempt_at <= ?)
               OR (status = 'running' AND lease_expires_at <= ?)
@@ -333,6 +340,16 @@ export class LocalStore implements EpisodeJobRepository {
         ownerId: String(row.owner_id),
         attempt,
         leaseToken,
+        ...(row.trace_parent
+          ? {
+              traceContext: {
+                traceParent: String(row.trace_parent),
+                ...(row.trace_state
+                  ? { traceState: String(row.trace_state) }
+                  : {}),
+              },
+            }
+          : {}),
       }
     })
   }

@@ -1,4 +1,9 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi"
+import {
+  noopObservability,
+  type Observability,
+  type TraceContext,
+} from "@news-podcast/observability"
 
 import type { JobDto, LocalStore } from "@news-podcast/adapters/db/local"
 
@@ -17,6 +22,7 @@ import {
 } from "./http/schemas.js"
 
 type Variables = { ownerId: string }
+type TelemetrySignal = "logs" | "metrics" | "traces"
 
 export interface AppDependencies {
   readonly store?: LocalStore
@@ -31,7 +37,15 @@ export interface AppDependencies {
   readonly createEpisodeJob?: (input: {
     readonly ownerId: string
     readonly idempotencyKey: string
+    readonly traceContext?: TraceContext
   }) => Promise<JobDto>
+  readonly observability?: Observability
+  readonly telemetryOrigin?: string
+  readonly forwardTelemetry?: (
+    signal: TelemetrySignal,
+    body: Uint8Array,
+    contentType: string
+  ) => Promise<void>
   readonly issueAudioAccess?: (
     ownerId: string,
     episodeId: string
@@ -43,6 +57,11 @@ const unavailable = () =>
   problem(503, "service-unavailable", "Service unavailable")
 
 export function createApp(dependencies: AppDependencies = {}) {
+  const observability = dependencies.observability ?? noopObservability
+  const telemetryRequests = new Map<
+    string,
+    { count: number; resetAt: number }
+  >()
   const app = new OpenAPIHono<{ Variables: Variables }>({
     defaultHook: (result, context) =>
       result.success
@@ -98,6 +117,72 @@ export function createApp(dependencies: AppDependencies = {}) {
     }
     context.set("ownerId", ownerId)
     return next()
+  })
+
+  app.use("/v1/*", async (context, next) => {
+    if (context.req.path.startsWith("/v1/telemetry/")) return next()
+    const startedAt = performance.now()
+    await observability.withSpan(
+      "http.request",
+      { "http.request.method": context.req.method },
+      next
+    )
+    observability.log({
+      name: "api.request",
+      attributes: {
+        "http.request.method": context.req.method,
+        "http.response.status_code": context.res.status,
+      },
+      level: context.res.status >= 500 ? "error" : "info",
+    })
+    observability.measure("http.server.duration", performance.now() - startedAt)
+  })
+
+  app.openapi(telemetryRoute, async (context) => {
+    if (!dependencies.forwardTelemetry) {
+      return context.json(unavailable(), 503)
+    }
+    const origin = context.req.header("Origin")
+    if (!origin || origin !== dependencies.telemetryOrigin) {
+      return context.json(problem(403, "forbidden", "Forbidden"), 403)
+    }
+    const contentType = context.req.header("Content-Type")?.split(";", 1)[0]
+    if (
+      contentType !== "application/x-protobuf" &&
+      contentType !== "application/json"
+    ) {
+      return context.json(
+        problem(415, "unsupported-media-type", "Unsupported media type"),
+        415
+      )
+    }
+    const contentLength = Number(context.req.header("Content-Length") ?? "0")
+    if (Number.isFinite(contentLength) && contentLength > 256 * 1024) {
+      return context.json(
+        problem(413, "payload-too-large", "Payload too large"),
+        413
+      )
+    }
+    if (!consumeTelemetryRequest(telemetryRequests, context.get("ownerId"))) {
+      return context.json(problem(429, "rate-limited", "Rate limited"), 429)
+    }
+    const body = new Uint8Array(await context.req.arrayBuffer())
+    if (body.byteLength > 256 * 1024) {
+      return context.json(
+        problem(413, "payload-too-large", "Payload too large"),
+        413
+      )
+    }
+    try {
+      await dependencies.forwardTelemetry(
+        context.req.valid("param").signal,
+        body,
+        contentType
+      )
+      return context.body(null, 204)
+    } catch {
+      return context.json(unavailable(), 503)
+    }
   })
 
   app.openapi(healthRoute, (context) => context.json({ status: "ok" }, 200))
@@ -209,9 +294,16 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.openapi(createJobRoute, async (context) => {
     if (!dependencies.createEpisodeJob) return context.json(unavailable(), 503)
     try {
+      const traceContext = observability.captureContext()
       const job = await dependencies.createEpisodeJob({
         ownerId: context.get("ownerId"),
         idempotencyKey: context.req.valid("header")["Idempotency-Key"],
+        ...(traceContext ? { traceContext } : {}),
+      })
+      observability.count("episode.requested")
+      observability.log({
+        name: "episode.requested",
+        attributes: { trigger: "manual" },
       })
       context.header("Location", `/v1/episode-jobs/${job.id}`)
       context.header(
@@ -324,6 +416,49 @@ const healthRoute = createRoute({
     200: jsonContent(z.object({ status: z.literal("ok") }), "Alive"),
   },
 })
+
+const telemetryRoute = createRoute({
+  method: "post",
+  path: "/v1/telemetry/{signal}",
+  tags: ["System"],
+  operationId: "ingestBrowserTelemetry",
+  description: "Forward authenticated same-origin browser OTLP telemetry.",
+  request: {
+    params: z.object({ signal: z.enum(["logs", "metrics", "traces"]) }),
+    body: {
+      required: true,
+      content: {
+        "application/x-protobuf": {
+          schema: z.any().openapi({ type: "string", format: "binary" }),
+        },
+        "application/json": { schema: z.any() },
+      },
+    },
+  },
+  responses: {
+    204: { description: "Accepted" },
+    401: problemContent("Unauthorized"),
+    403: problemContent("Forbidden"),
+    413: problemContent("Payload too large"),
+    415: problemContent("Unsupported media type"),
+    429: problemContent("Rate limited"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+function consumeTelemetryRequest(
+  requests: Map<string, { count: number; resetAt: number }>,
+  ownerId: string,
+  now = Date.now()
+): boolean {
+  const current = requests.get(ownerId)
+  if (!current || current.resetAt <= now) {
+    requests.set(ownerId, { count: 1, resetAt: now + 60_000 })
+    return true
+  }
+  current.count += 1
+  return current.count <= 60
+}
 
 const listFeedsRoute = createRoute({
   method: "get",

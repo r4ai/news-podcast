@@ -49,6 +49,12 @@ export interface AudioStore {
 export interface EpisodeJobMessage {
   readonly ownerId: string
   readonly jobId: string
+  readonly traceContext?: EpisodeTraceContext
+}
+
+export interface EpisodeTraceContext {
+  readonly traceParent: string
+  readonly traceState?: string
 }
 
 export interface JobDispatcher {
@@ -82,6 +88,7 @@ export interface EpisodeJobRepository {
     readonly requestHash: string
     readonly trigger: "manual" | "scheduled"
     readonly feedIds: readonly string[]
+    readonly traceContext?: EpisodeTraceContext
   }): Promise<EpisodeJobRecord>
 }
 

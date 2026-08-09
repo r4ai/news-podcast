@@ -1,0 +1,1 @@
+{"id":"infrastructure","title":"Infrastructure","panels":["OTLP accepted/refused","export failures and queue size","ClickHouse disk usage","container CPU/memory","ingestion lag"]}

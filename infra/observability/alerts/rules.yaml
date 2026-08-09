@@ -1,0 +1,23 @@
+groups:
+  - name: application
+    rules:
+      - name: Http5xxRatioHigh
+        condition: 5xx_ratio > 0.05 for 10m
+        recovery: 5xx_ratio < 0.02 for 10m
+      - name: GenerationFailureHigh
+        condition: generation_failure_ratio > 0.10 for 15m
+        recovery: generation_failure_ratio < 0.05 for 15m
+      - name: GenerationLatencyHigh
+        condition: generation_duration_p95_ms > 600000 for 15m
+        recovery: generation_duration_p95_ms < 480000 for 15m
+      - name: FrontendLcpPoor
+        condition: web_vital_lcp_p75_ms > 2500 for 30m
+        recovery: web_vital_lcp_p75_ms < 2200 for 30m
+  - name: telemetry
+    rules:
+      - name: OtlpExportFailure
+        condition: exporter_failures > 0 for 10m
+        recovery: exporter_failures == 0 for 10m
+      - name: ClickHouseDiskHigh
+        condition: disk_usage_ratio > 0.80 for 15m
+        recovery: disk_usage_ratio < 0.70 for 15m

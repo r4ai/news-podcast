@@ -33,9 +33,17 @@ describe("local generation flow", () => {
       ownerId,
       idempotencyKey: "fake-e2e",
       trigger: "manual",
+      traceContext: {
+        traceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        traceState: "vendor=value",
+      },
     })
     const leased = store.leaseNext()
     expect(leased?.id).toBe(record.jobId)
+    expect(leased?.traceContext).toEqual({
+      traceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      traceState: "vendor=value",
+    })
 
     await createFakeProcessor(store, join(directory, "audio")).process(leased!)
 

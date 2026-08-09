@@ -28,6 +28,7 @@ import { Spinner } from "@workspace/ui/components/spinner"
 
 import { api } from "@/api/client"
 import { PageHeader } from "@/app/page-header"
+import { recordBrowserEvent } from "@/observability/events"
 
 export function LibraryPage() {
   const episodes = api.useSuspenseQuery("get", "/v1/episodes")
@@ -48,6 +49,7 @@ export function LibraryPage() {
         })
         setAudioUrl(result.url)
       } catch {
+        recordBrowserEvent("audio.error", { result: "access-failed" })
         toast.error("音声を再生できませんでした")
       } finally {
         setPendingEpisodeId(undefined)
@@ -64,7 +66,15 @@ export function LibraryPage() {
       {audioUrl ? (
         <Card size="sm">
           <CardContent>
-            <audio autoPlay className="h-11 w-full" controls src={audioUrl} />
+            <audio
+              autoPlay
+              className="h-11 w-full"
+              controls
+              onEnded={() => recordBrowserEvent("audio.completed")}
+              onError={() => recordBrowserEvent("audio.error")}
+              onPlay={() => recordBrowserEvent("audio.started")}
+              src={audioUrl}
+            />
           </CardContent>
         </Card>
       ) : null}

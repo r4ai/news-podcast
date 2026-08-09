@@ -4,6 +4,7 @@ import { api } from "@/api/client"
 import { queryClient } from "@/app/query-client"
 import { PodcastDashboard } from "@/features/dashboard/podcast-dashboard"
 import { stageLabel } from "./model"
+import { recordBrowserEvent } from "@/observability/events"
 
 const active = new Set(["queued", "running", "retrying"])
 const stageProgress = {
@@ -42,13 +43,19 @@ export function GenerationPage() {
 
   function generate() {
     startTransition(async () => {
-      await createJob.mutateAsync({
-        params: { header: { "Idempotency-Key": crypto.randomUUID() } },
-        body: { trigger: "manual" },
-      })
-      await queryClient.invalidateQueries({
-        queryKey: api.queryOptions("get", "/v1/episode-jobs").queryKey,
-      })
+      try {
+        await createJob.mutateAsync({
+          params: { header: { "Idempotency-Key": crypto.randomUUID() } },
+          body: { trigger: "manual" },
+        })
+        recordBrowserEvent("episode.requested", { result: "succeeded" })
+        await queryClient.invalidateQueries({
+          queryKey: api.queryOptions("get", "/v1/episode-jobs").queryKey,
+        })
+      } catch (error) {
+        recordBrowserEvent("episode.requested", { result: "failed" })
+        throw error
+      }
     })
   }
 

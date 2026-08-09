@@ -36,6 +36,8 @@ flowchart LR
   App --> Domain["packages/domain"]
   Api --> Adapter
   Worker --> Adapter
+  Api --> Observability["packages/observability"]
+  Worker --> Observability
 ```
 
 依存は外側から内側へだけ向ける。DomainはHTTP、DB、Cloudflare、OpenAI、VOICEVOXを知らない。Applicationはユースケースのポートを所有する。Adaptersはそのポートを実装し、appsは実行環境ごとのcomposition rootになる。WebはOpenAPIから生成した型だけをHTTP契約として使う。
@@ -82,6 +84,23 @@ flowchart LR
 | Auth  | Better Auth + SQLite                   | Better Auth + D1 adapter        |
 
 SQLiteとD1で共有できるSQL制約はmigrationに置くが、ランタイムadapterは別exportにしてNode専用依存をWorkers bundleへ混ぜない。
+
+### 6.1 監視トポロジー
+
+```mermaid
+flowchart LR
+  Browser["Browser OTel Web SDK"] -->|"認証済み same-origin"| Gateway["API /v1/telemetry/*"]
+  Cloudflare["Cloudflare Web / API / Worker"] -->|"native OTLP logs/traces"| Ingress["HTTPS OTLP ingress"]
+  Node["Local Node API / Worker"] -->|"OTLP HTTP"| Ingress
+  Gateway -->|"Bearer OTLP"| Ingress
+  Ingress --> Collector["OpenTelemetry Collector"]
+  Collector --> SigNoz["SigNoz Community"]
+  SigNoz --> ClickHouse[("ClickHouse")]
+```
+
+Cloudflareへのアプリ配備とLinux上の監視基盤は独立させる。Domain/Applicationは監視実装を知らず、appsとadapterだけが`packages/observability`を使う。生成要求時のW3C trace contextをジョブへ保存し、Worker処理はenqueue spanへlinkする。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
+
+Browserは匿名操作、例外、Web Vitalsだけを送る。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0010](adr/0010-opentelemetry-signoz.md)と[運用手順](../infra/observability/README.md)を正本にする。
 
 ## 7. 品質戦略
 
@@ -166,3 +185,6 @@ flowchart TD
 - [ADR-0005 Better AuthとGoogle OIDC](adr/0005-authentication.md)
 - [ADR-0006 フロントエンド品質保証](adr/0006-frontend-quality.md)
 - [ADR-0007 事実ベース台本と出典追跡](adr/0007-factual-provenance.md)
+- [ADR-0008 Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)
+- [ADR-0009 TanStack Router/QueryとAsync React](adr/0009-async-react-tanstack.md)
+- [ADR-0010 OpenTelemetryとSigNoz](adr/0010-opentelemetry-signoz.md)

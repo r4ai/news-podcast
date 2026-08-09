@@ -3,7 +3,6 @@ import type { PropsWithChildren } from "react"
 
 import { Link, useMatchRoute } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
-import { Separator } from "@workspace/ui/components/separator"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -67,11 +66,8 @@ export function AppShell({ children }: PropsWithChildren) {
       <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6">
         <Brand />
         <Navigation />
-        <div className="mt-auto flex flex-col gap-3">
-          <Separator />
-          <div className="flex justify-end">
-            <ThemeToggle />
-          </div>
+        <div className="mt-auto flex justify-end">
+          <ThemeToggle />
         </div>
       </aside>
 

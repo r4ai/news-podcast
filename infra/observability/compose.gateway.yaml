@@ -1,0 +1,27 @@
+services:
+  otel-gateway:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - ./collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+
+  otlp-ingress:
+    image: nginx:1.29.1-alpine
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    environment:
+      NGINX_ENVSUBST_FILTER: "^(OTLP_DOMAIN|TELEMETRY_PROXY_TOKEN)$"
+      OTLP_DOMAIN: ${OTLP_DOMAIN:?set OTLP_DOMAIN}
+      TELEMETRY_PROXY_TOKEN: ${TELEMETRY_PROXY_TOKEN:?set TELEMETRY_PROXY_TOKEN}
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - otel-gateway
