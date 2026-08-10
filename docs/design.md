@@ -60,6 +60,8 @@ flowchart LR
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. D1からQueuesへの送信はoutboxで原子的に記録し、reconcilerで再送する。Queuesの重複配送はジョブleaseと段階冪等性で吸収する。
 
+Node Workerは単一flightの逐次loopで動き、60秒leaseを15秒ごとに更新する。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。Agent、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
+
 ## 5. REST契約方針
 
 - `/v1/feeds` は媒体カタログ、`/v1/me/feed-subscriptions` は現在ユーザーの購読。body/pathにuserIdを置かない。
@@ -96,11 +98,14 @@ flowchart LR
   Ingress --> Collector["OpenTelemetry Collector"]
   Collector --> SigNoz["SigNoz Community"]
   SigNoz --> ClickHouse[("ClickHouse")]
+  Watchdog["同一host watchdog"] -->|"health/freshness poll"| Node
+  Watchdog --> SigNoz
+  Watchdog -->|"direct SMTP"| OnCall["Operations"]
 ```
 
 Cloudflareへのアプリ配備とLinux上の監視基盤は独立させる。Domain/Applicationは監視実装を知らず、appsとadapterだけが`packages/observability`を使う。生成要求時のW3C trace contextをジョブへ保存し、Worker処理はenqueue spanへlinkする。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
-Browserは匿名操作、例外、Web Vitalsだけを送る。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0010](adr/0010-opentelemetry-signoz.md)と[運用手順](../infra/observability/README.md)を正本にする。
+Browserは匿名操作、例外、Web Vitalsだけを送る。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Dashboard、rule、routingは公式SigNoz Terraform providerで管理し、watchdogはSigNoz停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0010](adr/0010-opentelemetry-signoz.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
 ## 7. 品質戦略
 

@@ -93,6 +93,7 @@ flowchart TB
 | `packages/adapters` | Infrastructure Adapter | SQLite、Better Auth、RSS、OpenAI、VOICEVOX、local音声保存 |
 | `apps/api` | Delivery / Composition Root | Hono route、認証・認可、OpenAPI schema、Node/Cloudflareの組み立て |
 | `apps/worker` | Driver / Composition Root | scheduler、lease、生成パイプライン、Node/Cloudflare entrypoint |
+| `apps/watchdog` | Operations | SigNoz非依存health/freshness監視、SMTP通知state |
 | `apps/web` | Presentation | React、TanStack Router/Query、生成OpenAPI client |
 | `packages/contracts` | Published Contract | Hono schemaから生成したOpenAPI JSONとTypeScript型 |
 | `packages/ui` | Presentation Shared | shadcn/Base UIベースの共通UI部品とtoken |
@@ -111,6 +112,7 @@ flowchart LR
   Worker --> Adapters
   API --> Observability["packages/observability"]
   Worker --> Observability
+  Watchdog["apps/watchdog"] --> SMTP["SMTP"]
   Adapters --> Application
   Adapters --> Domain["packages/domain"]
   Application --> Domain

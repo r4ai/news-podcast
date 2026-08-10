@@ -176,6 +176,8 @@ TELEMETRY_PROXY_TOKEN=news-podcast-local-observability
 
 このコマンドはFoundryで監視基盤を生成・起動した後、監視用Compose overrideでAPIとWorkerを`signoz-network`へ接続する。監視基盤なしの通常起動には`pnpm dev:up`を使う。
 
+本番相当のdashboard・alert検証は`SIGNOZ_ENDPOINT`とAdmin service accountの`SIGNOZ_ACCESS_TOKEN`をexportし、`infra/observability/terraform`で`terraform init / validate / plan`を実行する。SMTP channel bootstrap、Terraform apply、watchdog synthetic試験の正確な順序は[監視運用手順](../infra/observability/README.md)に従う。
+
 | 接続先 | URL |
 | --- | --- |
 | SigNoz UI | <http://localhost:8080> |

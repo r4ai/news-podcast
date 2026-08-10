@@ -102,15 +102,15 @@ SigNozとは別のwatchdogがAPI、Worker、VOICEVOX、SigNoz、telemetry freshn
 
 | 対象 | 必要な変更 | 状態 | 証拠 |
 | --- | --- | --- | --- |
-| 設計書 | bounded execution、監視、復旧 | Pending | `docs/design.md`、`docs/architecture.md` |
-| ドメイン/ユースケース | lease/checkpoint/cancel signal port | Pending | application ports |
-| OpenAPI/外部契約 | max attempt、progress、deadline | Pending | generated OpenAPI |
-| コード/ポート | heartbeat、fencing、deadline、resume | Pending | Worker/adapters |
-| データ/ストレージ | job constraint、checkpoint、event、cleanup | Pending | migration 0008 |
-| 実行/配備 | single-flight loop、watchdog | Pending | Compose/apps |
-| 認証/セキュリティ | telemetry allowlist、SigNoz service account | Pending | observability/Terraform |
-| フロント/品質保証 | 2/4、chunk進捗、cancel/retry | Pending | Web/E2E |
-| テスト/運用 | clock、crash、fence、alert smoke | Pending | workspace tests/runbook |
+| 設計書 | bounded execution、監視、復旧 | Done | `docs/design.md`、`docs/architecture.md` |
+| ドメイン/ユースケース | lease/checkpoint/cancel signal port | Done | application ports |
+| OpenAPI/外部契約 | max attempt、progress、deadline | Done | generated OpenAPI |
+| コード/ポート | heartbeat、fencing、deadline、resume | Done | Worker/adapters |
+| データ/ストレージ | job constraint、checkpoint、event、cleanup | Done | migration 0008 |
+| 実行/配備 | single-flight loop、watchdog | Done | Compose/apps |
+| 認証/セキュリティ | telemetry allowlist、SigNoz service account | Done | observability/Terraform |
+| フロント/品質保証 | 2/4、chunk進捗、cancel/retry | Done | Web/unit tests |
+| テスト/運用 | clock、crash、fence、alert smoke | Partial | automated tests/runbook。live SMTP/VOICEVOXは配備secretが必要 |
 
 ## 再検討条件
 
