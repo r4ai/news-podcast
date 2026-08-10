@@ -7,6 +7,7 @@
     "./config": "./src/config.ts",
     "./openai": "./src/openai-summary-generator.ts",
     "./openai-agent": "./src/openai-podcast-agent.ts",
+    "./agent-runtime/sqlite": "./src/agent-runtime/sqlite-agent-runtime-store.ts",
     "./voicevox": "./src/voicevox-speech-synthesizer.ts",
     "./auth/local": "./src/auth/local-auth.ts",
     "./jobs/sqlite": "./src/jobs/sqlite-job-lease-store.ts",
