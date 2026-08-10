@@ -31,7 +31,11 @@ import type {
   TraceContext,
 } from "./contract.js"
 import { noopObservability } from "./noop-adapter.js"
-import { normalizedError, sanitizeAttributes } from "./privacy.js"
+import {
+  normalizedError,
+  sanitizeAttributes,
+  sanitizeMetricAttributes,
+} from "./privacy.js"
 
 export interface NodeObservabilityConfig {
   readonly enabled: boolean
@@ -133,9 +137,7 @@ export function createNodeObservability(
         body: event.name,
         attributes: sanitizeAttributes({
           ...(event.attributes ?? {}),
-          ...(error
-            ? { "error.type": error.type, "error.message": error.message }
-            : {}),
+          ...(error ? { "error.type": error.type } : {}),
         }),
       })
     },
@@ -152,7 +154,7 @@ export function createNodeObservability(
             return await operation()
           } catch (error) {
             const normalized = normalizedError(error)
-            span.recordException(new Error(normalized.message))
+            span.recordException(new Error(normalized.type))
             span.setAttribute("error.type", normalized.type)
             span.setStatus({ code: SpanStatusCode.ERROR })
             throw error
@@ -165,17 +167,17 @@ export function createNodeObservability(
     count(name, value = 1, attributes = {}) {
       const counter = counters.get(name) ?? meter.createCounter(name)
       counters.set(name, counter)
-      counter.add(value, sanitizeAttributes(attributes))
+      counter.add(value, sanitizeMetricAttributes(attributes))
     },
     measure(name, value, attributes = {}) {
       const histogram = histograms.get(name) ?? meter.createHistogram(name)
       histograms.set(name, histogram)
-      histogram.record(value, sanitizeAttributes(attributes))
+      histogram.record(value, sanitizeMetricAttributes(attributes))
     },
     gauge(name, value, attributes = {}) {
       const gauge = gauges.get(name) ?? meter.createGauge(name)
       gauges.set(name, gauge)
-      gauge.record(value, sanitizeAttributes(attributes))
+      gauge.record(value, sanitizeMetricAttributes(attributes))
     },
     captureContext,
     shutdown: () => sdk.shutdown(),

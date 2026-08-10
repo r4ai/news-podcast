@@ -477,6 +477,7 @@ export function createApp(dependencies: AppDependencies = {}) {
         409
       )
     }
+    observability.count("episode.canceled")
     return context.json(dependencies.store.getJob(ownerId, jobId)!, 200)
   })
 

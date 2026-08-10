@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { normalizedError, sanitizeAttributes } from "./privacy.js"
+import {
+  normalizedError,
+  sanitizeAttributes,
+  sanitizeMetricAttributes,
+} from "./privacy.js"
 
 describe("observability privacy boundary", () => {
   it("keeps only the telemetry attribute allowlist", () => {
@@ -30,6 +34,23 @@ describe("observability privacy boundary", () => {
     expect(result).toEqual({
       type: "TypeError",
       message: "request [url] failed for [email] [secret]",
+    })
+  })
+
+  it("physically strips high-cardinality and content attributes from metrics", () => {
+    expect(
+      sanitizeMetricAttributes({
+        "job.id": "must-not-be-a-metric-label",
+        "error.message": "unbounded content",
+        "rss.url": "https://example.com/private",
+        "job.attempt": 2,
+        "operation.stage": "synthesizing_audio",
+        "provider.outcome": "timeout",
+      })
+    ).toEqual({
+      "job.attempt": 2,
+      "operation.stage": "synthesizing_audio",
+      "provider.outcome": "timeout",
     })
   })
 })

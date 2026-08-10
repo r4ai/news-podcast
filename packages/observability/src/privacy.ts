@@ -3,7 +3,6 @@ import type { TelemetryAttributes } from "./contract.js"
 const allowedAttributes = new Set([
   "deployment.environment",
   "error.retryable",
-  "error.message",
   "error.type",
   "failure.code",
   "http.request.method",
@@ -25,11 +24,42 @@ const allowedAttributes = new Set([
   "trigger",
 ])
 
+const allowedMetricAttributes = new Set([
+  "deployment.environment",
+  "error.retryable",
+  "failure.code",
+  "http.request.method",
+  "http.response.status_code",
+  "operation.stage",
+  "job.attempt",
+  "job.max_attempts",
+  "job.status",
+  "checkpoint.result",
+  "cleanup.result",
+  "lease.result",
+  "provider.name",
+  "provider.operation",
+  "provider.outcome",
+  "service.name",
+  "service.version",
+  "trigger",
+])
+
 export function sanitizeAttributes(
   attributes: TelemetryAttributes
 ): TelemetryAttributes {
   return Object.fromEntries(
     Object.entries(attributes).filter(([name]) => allowedAttributes.has(name))
+  )
+}
+
+export function sanitizeMetricAttributes(
+  attributes: TelemetryAttributes
+): TelemetryAttributes {
+  return Object.fromEntries(
+    Object.entries(attributes).filter(([name]) =>
+      allowedMetricAttributes.has(name)
+    )
   )
 }
 

@@ -21,7 +21,10 @@ import {
 const databasePath = required("DATABASE_PATH")
 const mode = process.env.PROVIDER_MODE ?? "live"
 const observability = createNodeObservability(
-  readNodeObservabilityConfig(process.env, "news-podcast-worker")
+  readNodeObservabilityConfig(
+    { ...process.env, OTEL_TRACE_SAMPLE_RATE: "1" },
+    "news-podcast-worker"
+  )
 )
 if (mode === "fake" && process.env.APP_ENV === "production") {
   throw new Error("Fake providers are forbidden in production")

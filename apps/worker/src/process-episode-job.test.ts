@@ -143,6 +143,38 @@ describe("bounded episode processing", () => {
     })
     store.close()
   })
+
+  it("terminalizes a permanent provider failure on attempt four", async () => {
+    vi.useFakeTimers({ now: new Date("2026-08-10T00:00:00.000Z") })
+    const { store, leased } = await createLeasedJob("four-attempt-limit")
+    const processor = new EpisodeProcessor({
+      store,
+      audio: memoryAudioStore(),
+      agent: { run: () => Promise.resolve(draft("失敗する台本です。")) },
+      speech: {
+        synthesize: () =>
+          Promise.reject(new VoicevoxProviderError("provider unavailable")),
+      },
+      voice: { characterName: "ずんだもん" },
+    })
+
+    let current = leased
+    for (const delay of [5_001, 30_001, 120_001, 0]) {
+      await processor.process(current)
+      if (delay > 0) {
+        await vi.advanceTimersByTimeAsync(delay)
+        current = store.leaseNext(new Date())!
+      }
+    }
+
+    expect(store.getJob("owner-1", leased.id)).toMatchObject({
+      status: "failed",
+      attempt: 4,
+      failure: { code: "attempt-limit-exceeded" },
+    })
+    expect(store.leaseNext(new Date())).toBeUndefined()
+    store.close()
+  })
 })
 
 async function createLeasedJob(key: string) {

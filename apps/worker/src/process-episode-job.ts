@@ -165,7 +165,17 @@ export class EpisodeProcessor {
         })
         return
       }
-      const failure = classifyFailure(effectiveError)
+      const classifiedFailure = classifyFailure(effectiveError)
+      const delay = RETRY_DELAYS_MS[job.attempt - 1]
+      const attemptLimitReached =
+        classifiedFailure.retryable && delay === undefined
+      const failure = attemptLimitReached
+        ? {
+            code: "attempt-limit-exceeded",
+            message: "Automatic generation reached the four-attempt limit",
+            retryable: true,
+          }
+        : classifiedFailure
       if (failure.code === "job-deadline-exceeded") {
         observability.count("episode.deadline.exceeded")
         observability.log({
@@ -175,8 +185,10 @@ export class EpisodeProcessor {
           error: effectiveError,
         })
       }
-      const delay = RETRY_DELAYS_MS[job.attempt - 1]
       const willRetry = failure.retryable && delay !== undefined
+      if (attemptLimitReached) {
+        observability.count("episode.attempt_limit.exceeded")
+      }
       try {
         if (willRetry) {
           store.retryJob(
@@ -192,11 +204,21 @@ export class EpisodeProcessor {
         } else {
           store.failJob(job.id, job.leaseToken, failure)
           store.enqueueAudioChunkCleanup(job.id, "terminal-failure")
+          observability.count("episode.failed", 1, {
+            "failure.code": failure.code,
+          })
         }
       } catch (transitionError) {
         if (!(transitionError instanceof LeaseLostError)) throw transitionError
+        observability.count("episode.lease.lost")
+        observability.log({
+          name: "episode.lease.lost",
+          level: "warn",
+          attributes: { ...jobAttributes(job), "lease.result": "lost" },
+          error: transitionError,
+        })
+        return
       }
-      observability.count("episode.failed")
       observability.log({
         name: willRetry ? "episode.retrying" : "episode.failed",
         level: willRetry ? "warn" : "error",
@@ -256,12 +278,20 @@ export class EpisodeProcessor {
         signal,
         EPISODE_EXECUTION_POLICY.agentDeadlineMs,
         async (stageSignal) => {
-          const generated = await this.dependencies.agent.run({
-            jobId: job.id,
-            ownerId: job.ownerId,
-            feedIds,
-            signal: stageSignal,
-          })
+          const generated = await providerOperation(
+            observability,
+            job,
+            "openai",
+            "agent.run",
+            stageSignal,
+            () =>
+              this.dependencies.agent.run({
+                jobId: job.id,
+                ownerId: job.ownerId,
+                feedIds,
+                signal: stageSignal,
+              })
+          )
           this.dependencies.store.saveDraftCheckpoint(job.id, job.leaseToken, {
             inputHash: draftInputHash,
             ...generated,
@@ -304,11 +334,19 @@ export class EpisodeProcessor {
       EPISODE_EXECUTION_POLICY.storeDeadlineMs,
       async (stageSignal) => {
         const episodeId = randomUUID()
-        const stored = await this.dependencies.audio.put(
-          job.ownerId,
-          episodeId,
-          wave,
-          stageSignal
+        const stored = await providerOperation(
+          observability,
+          job,
+          "object-store",
+          "episode.put",
+          stageSignal,
+          () =>
+            this.dependencies.audio.put(
+              job.ownerId,
+              episodeId,
+              wave,
+              stageSignal
+            )
         )
         try {
           this.dependencies.store.completeJob({
@@ -362,9 +400,13 @@ export class EpisodeProcessor {
       let wave: Uint8Array | undefined
       let reused = false
       if (checkpoint && this.dependencies.objects) {
-        const object = await this.dependencies.objects.get(
-          checkpoint.objectKey,
-          signal
+        const object = await providerOperation(
+          observability,
+          job,
+          "object-store",
+          "checkpoint.get",
+          signal,
+          () => this.dependencies.objects!.get(checkpoint.objectKey, signal)
         )
         if (
           object &&
@@ -393,7 +435,8 @@ export class EpisodeProcessor {
             signal
           )
         } catch (error) {
-          providerOutcome = signal.aborted ? "timeout" : "error"
+          providerOutcome =
+            signal.aborted || isProviderTimeout(error) ? "timeout" : "error"
           throw error
         } finally {
           const providerAttributes = {
@@ -421,12 +464,20 @@ export class EpisodeProcessor {
         }
         if (this.dependencies.objects) {
           const objectKey = `episode-jobs/${job.ownerId}/${job.id}/tts/${inputHash}/${position}.wav`
-          await this.dependencies.objects.put({
-            key: objectKey,
-            body: wave,
-            contentType: "audio/wav",
+          await providerOperation(
+            observability,
+            job,
+            "object-store",
+            "checkpoint.put",
             signal,
-          })
+            () =>
+              this.dependencies.objects!.put({
+                key: objectKey,
+                body: wave!,
+                contentType: "audio/wav",
+                signal,
+              })
+          )
           try {
             this.dependencies.store.saveAudioChunkCheckpoint(
               job.id,
@@ -631,6 +682,41 @@ function jobAttributes(job: WorkerJob) {
   } as const
 }
 
+async function providerOperation<T>(
+  observability: Observability,
+  job: WorkerJob,
+  provider: string,
+  operation: string,
+  signal: AbortSignal,
+  execute: () => Promise<T>
+): Promise<T> {
+  const startedAt = performance.now()
+  let outcome = "succeeded"
+  try {
+    return await execute()
+  } catch (error) {
+    outcome = signal.aborted || isProviderTimeout(error) ? "timeout" : "error"
+    throw error
+  } finally {
+    const attributes = {
+      "provider.name": provider,
+      "provider.operation": operation,
+      "provider.outcome": outcome,
+    } as const
+    observability.count("provider.request", 1, attributes)
+    observability.measure(
+      "provider.request.duration",
+      performance.now() - startedAt,
+      attributes
+    )
+    observability.log({
+      name: "provider.request",
+      level: outcome === "succeeded" ? "info" : "error",
+      attributes: { ...jobAttributes(job), ...attributes },
+    })
+  }
+}
+
 function classifyFailure(error: unknown) {
   if (error instanceof JobDeadlineExceededError) {
     return {
@@ -649,6 +735,13 @@ function classifyFailure(error: unknown) {
       retryable: false,
     }
   }
+  if (isProviderTimeout(error)) {
+    return {
+      code: "provider-timeout",
+      message: error instanceof Error ? error.message : "Provider timed out",
+      retryable: true,
+    }
+  }
   const retryable =
     (error instanceof PodcastAgentError && error.retryable) ||
     error instanceof VoicevoxProviderError
@@ -657,6 +750,13 @@ function classifyFailure(error: unknown) {
     message: error instanceof Error ? error.message : "Unknown pipeline error",
     retryable,
   }
+}
+
+function isProviderTimeout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || /timed out|timeout/i.test(error.message))
+  )
 }
 
 class JobDeadlineExceededError extends Error {
