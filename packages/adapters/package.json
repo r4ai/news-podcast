@@ -13,6 +13,7 @@
     "./jobs/sqlite": "./src/jobs/sqlite-job-lease-store.ts",
     "./db/local": "./src/db/local-store.ts",
     "./rss": "./src/rss/rss-feed-reader.ts",
+    "./sandbox/firecracker": "./src/sandbox/firecracker-sandbox-client.ts",
     "./http/safe": "./src/http/safe-fetch.ts",
     "./archive": "./src/archive/article-archiver.ts",
     "./audio/local": "./src/audio/local-audio-store.ts",
