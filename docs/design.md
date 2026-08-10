@@ -189,6 +189,21 @@ bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去�
 
 初期toolは`list_rss_articles`、`read_article`、Responses APIのhosted `web_search`、`submit_episode_draft`とする。RSS記事を主題の起点にし、Web検索は補足と事実確認に使い、異なるsource kindとして保存する。RSS出典はagentが保存済みMarkdown本文を読んだ記事だけを受理する。
 
+### 8.4 隔離型Agent Harness
+
+Agentはjob処理中だけTypeScript Worker上のHarnessとして動き、shell/Python/CLIは専用KVM hostのFirecracker microVMへ委譲する。RSS、Web検索、Memoryはowner scopedなMCP Tool Brokerが仲介し、出典検証、VOICEVOX、Episode commitはsandbox外のApplicationが行う。
+
+```mermaid
+flowchart LR
+  OpenAI["OpenAI model"] <-->|turn / tool call| Harness["TS Agent Harness"]
+  Harness <-->|MCP| Broker["RSS / Web / Memory"]
+  Harness <-->|internal API| Runner["Rust sandbox-runner"]
+  Runner <-->|vsock| VM["Firecracker microVM"]
+  Harness --> Verify["Source validation / TTS / commit"]
+```
+
+Agentは常駐せず、手動・定期jobのlease時に開始し、terminal時にVMを破棄する。承認待ちはworkspaceをcheckpointしてVMを止める。一時障害はtool call台帳とcheckpointから新VMへ復元する。長期Memoryは`owner + Agent instance`で分離し、生workspaceではなく検証済みMemoryだけを次runへread-onlyで渡す。詳細なuse case、状態、権限は[ADR-0015](adr/0015-firecracker-agent-harness.md)を正本とする。
+
 ## 9. 実装DAGと順序
 
 ```mermaid
@@ -251,3 +266,4 @@ flowchart TD
 - [ADR-0012 RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013 Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
 - [ADR-0014 静的Webアーカイブの完全性とresource上限](adr/0014-static-archive-completeness.md)
+- [ADR-0015 Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)

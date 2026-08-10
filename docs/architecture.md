@@ -43,7 +43,7 @@ flowchart LR
 | Identity & Access | ログイン、セッション、所有者の特定 | Better Auth、Google OIDC、`ownerId` |
 | Feed Management | RSSカタログとユーザー別購読 | Feed、Subscription、有効/無効 |
 | Content Archive | 記事版、安全なreplay、Markdown | FeedItem、ArticleSnapshot、ArchiveAsset |
-| Agent Runtime | tool権限、実行上限、監査 | AgentRun、AgentToolCall |
+| Agent Runtime | tool権限、実行上限、承認、Memory、隔離実行 | AgentRun、AgentEvent、Approval、Memory、SandboxSession |
 | Episode Production | 生成要求、Agent実行、状態遷移、生成パイプライン | EpisodeJob、AgentRun、Script、Audio |
 | Episode Library | 完成番組、出典、所有者別アクセス | Episode、EpisodeSource、短期音声URL |
 
@@ -278,3 +278,4 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
+- [ADR-0015: Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)
