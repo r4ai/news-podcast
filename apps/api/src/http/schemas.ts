@@ -95,7 +95,7 @@ export const JobSchema = z
     stageProgress: z
       .object({
         completed: z.number().int().nonnegative(),
-        total: z.number().int().positive(),
+        total: z.number().int().min(1),
       })
       .optional(),
     startedAt: z.iso.datetime().optional(),

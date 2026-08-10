@@ -326,7 +326,7 @@ test("development login to generated episode playback completes", async ({
   await expect(page.getByText("完成", { exact: true })).toBeVisible({
     timeout: 15_000,
   })
-  await expect(page.getByText("試行 1", { exact: true })).toBeVisible()
+  await expect(page.getByText("試行 1/4", { exact: true })).toBeVisible()
 
   await page.getByRole("link", { name: "ライブラリ" }).click()
   await expect(
