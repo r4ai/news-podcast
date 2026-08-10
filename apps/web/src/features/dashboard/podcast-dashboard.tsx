@@ -1,4 +1,12 @@
-import { AlertTriangle, Clock3, Library, ListMusic, Rss } from "lucide-react"
+import {
+  AlertTriangle,
+  Clock3,
+  Library,
+  ListMusic,
+  RotateCcw,
+  Rss,
+  Square,
+} from "lucide-react"
 
 import {
   Alert,
@@ -41,8 +49,15 @@ export type PodcastDashboardProps = {
   readonly state?: DashboardState
   readonly pending?: boolean
   readonly attempt?: number
+  readonly maxAttempts?: number
   readonly stage?: string
   readonly progress?: number
+  readonly stageProgress?: {
+    readonly completed: number
+    readonly total: number
+  }
+  readonly lastProgressAt?: string
+  readonly deadlineAt?: string
   readonly retryAt?: string
   readonly failure?: string
   readonly episode?: {
@@ -57,6 +72,8 @@ export type PodcastDashboardProps = {
   }
   readonly subscriptionNames?: readonly string[]
   readonly onGenerate?: () => void
+  readonly onCancel?: () => void
+  readonly onRetry?: () => void
 }
 
 const statusCopy: Record<
@@ -108,10 +125,22 @@ const activeStates = new Set<DashboardState>(["queued", "running", "retrying"])
 
 function StatusDetails({
   failure,
+  deadlineAt,
+  lastProgressAt,
   progress,
   retryAt,
   stage,
-}: Pick<PodcastDashboardProps, "failure" | "progress" | "retryAt" | "stage">) {
+  stageProgress,
+}: Pick<
+  PodcastDashboardProps,
+  | "failure"
+  | "deadlineAt"
+  | "lastProgressAt"
+  | "progress"
+  | "retryAt"
+  | "stage"
+  | "stageProgress"
+>) {
   return (
     <>
       {stage && progress !== undefined ? (
@@ -121,6 +150,21 @@ function StatusDetails({
             {progress}%
           </span>
         </Progress>
+      ) : null}
+      {stageProgress ? (
+        <p className="text-sm tabular-nums text-muted-foreground">
+          音声chunk: {stageProgress.completed}/{stageProgress.total}
+        </p>
+      ) : null}
+      {lastProgressAt ? (
+        <p className="text-sm text-muted-foreground">
+          最終進捗: {new Date(lastProgressAt).toLocaleString("ja-JP")}
+        </p>
+      ) : null}
+      {deadlineAt ? (
+        <p className="text-sm text-muted-foreground">
+          完了期限: {new Date(deadlineAt).toLocaleString("ja-JP")}
+        </p>
       ) : null}
       {retryAt ? (
         <p className="text-sm text-muted-foreground">
@@ -141,40 +185,82 @@ function StatusDetails({
 function GenerationAction({
   active,
   attempt,
+  maxAttempts = 4,
+  onCancel,
   onGenerate,
+  onRetry,
   pending,
-}: Pick<PodcastDashboardProps, "attempt" | "onGenerate" | "pending"> & {
+  state,
+}: Pick<
+  PodcastDashboardProps,
+  | "attempt"
+  | "maxAttempts"
+  | "onCancel"
+  | "onGenerate"
+  | "onRetry"
+  | "pending"
+  | "state"
+> & {
   readonly active: boolean
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <span className="text-xs text-muted-foreground">
-        {attempt === undefined ? "まだ生成していません" : `試行 ${attempt}`}
+        {attempt === undefined
+          ? "まだ生成していません"
+          : `試行 ${attempt}/${maxAttempts}`}
       </span>
-      <Button
-        className="min-h-11 min-w-32 sm:min-h-9"
-        disabled={pending || active}
-        onClick={onGenerate}
-      >
-        {pending ? (
-          <Spinner data-icon="inline-start" />
-        ) : (
-          <ListMusic aria-hidden="true" data-icon="inline-start" />
-        )}
-        {pending ? "受付中…" : "番組を生成"}
-      </Button>
+      {active ? (
+        <Button
+          className="min-h-11 min-w-32 sm:min-h-9"
+          disabled={pending || !onCancel}
+          onClick={onCancel}
+          variant="destructive"
+        >
+          {pending ? <Spinner data-icon="inline-start" /> : <Square />}
+          {pending ? "停止中…" : "生成を停止"}
+        </Button>
+      ) : state === "failed" ? (
+        <Button
+          className="min-h-11 min-w-32 sm:min-h-9"
+          disabled={pending || !onRetry}
+          onClick={onRetry}
+        >
+          {pending ? <Spinner data-icon="inline-start" /> : <RotateCcw />}
+          {pending ? "受付中…" : "この条件で再試行"}
+        </Button>
+      ) : (
+        <Button
+          className="min-h-11 min-w-32 sm:min-h-9"
+          disabled={pending || !onGenerate}
+          onClick={onGenerate}
+        >
+          {pending ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <ListMusic aria-hidden="true" data-icon="inline-start" />
+          )}
+          {pending ? "受付中…" : "番組を生成"}
+        </Button>
+      )}
     </div>
   )
 }
 
 function GenerationStatus({
   attempt,
+  deadlineAt,
   failure,
+  lastProgressAt,
+  maxAttempts,
+  onCancel,
   onGenerate,
+  onRetry,
   pending,
   progress,
   retryAt,
   stage,
+  stageProgress,
   state = "ready",
 }: PodcastDashboardProps) {
   const copy = statusCopy[state]
@@ -198,15 +284,22 @@ function GenerationStatus({
         </p>
         <StatusDetails
           failure={failure}
+          deadlineAt={deadlineAt}
+          lastProgressAt={lastProgressAt}
           progress={progress}
           retryAt={retryAt}
           stage={stage}
+          stageProgress={stageProgress}
         />
         <GenerationAction
           active={activeStates.has(state)}
           attempt={attempt}
+          maxAttempts={maxAttempts}
+          onCancel={onCancel}
           onGenerate={onGenerate}
+          onRetry={onRetry}
           pending={pending}
+          state={state}
         />
       </CardContent>
     </Card>

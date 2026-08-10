@@ -74,7 +74,15 @@ export interface JobDto {
   readonly status: JobStatus
   readonly createdAt: string
   readonly attempt: number
+  readonly maxAttempts: number
   readonly stage?: JobStage
+  readonly stageStartedAt?: string
+  readonly lastProgressAt?: string
+  readonly deadlineAt?: string
+  readonly stageProgress?: {
+    readonly completed: number
+    readonly total: number
+  }
   readonly startedAt?: string
   readonly finishedAt?: string
   readonly nextAttemptAt?: string
@@ -1740,7 +1748,23 @@ function toJob(row: unknown): JobDto {
     status: String(value.status) as JobStatus,
     createdAt: String(value.created_at),
     attempt: Number(value.attempt),
+    maxAttempts: Number(value.max_attempts),
     ...(value.stage ? { stage: String(value.stage) as JobStage } : {}),
+    ...(value.stage_started_at
+      ? { stageStartedAt: String(value.stage_started_at) }
+      : {}),
+    ...(value.last_progress_at
+      ? { lastProgressAt: String(value.last_progress_at) }
+      : {}),
+    ...(value.deadline_at ? { deadlineAt: String(value.deadline_at) } : {}),
+    ...(value.progress_completed !== null && value.progress_total !== null
+      ? {
+          stageProgress: {
+            completed: Number(value.progress_completed),
+            total: Number(value.progress_total),
+          },
+        }
+      : {}),
     ...(value.started_at ? { startedAt: String(value.started_at) } : {}),
     ...(value.finished_at ? { finishedAt: String(value.finished_at) } : {}),
     ...(value.next_attempt_at

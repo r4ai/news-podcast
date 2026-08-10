@@ -498,7 +498,19 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             attempt: number;
+            /** @enum {number} */
+            maxAttempts: 4;
             stage?: components["schemas"]["JobStage"];
+            /** Format: date-time */
+            stageStartedAt?: string;
+            /** Format: date-time */
+            lastProgressAt?: string;
+            /** Format: date-time */
+            deadlineAt?: string;
+            stageProgress?: {
+                completed: number;
+                total: number;
+            };
             /** Format: date-time */
             startedAt?: string;
             /** Format: date-time */
@@ -523,6 +535,8 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             attempt: number;
+            /** @enum {number} */
+            maxAttempts: 4;
         };
         AgentRun: {
             id: components["schemas"]["Id"];

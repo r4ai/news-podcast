@@ -249,10 +249,47 @@
           },
           "attempt": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 4
+          },
+          "maxAttempts": {
+            "type": "number",
+            "enum": [
+              4
+            ]
           },
           "stage": {
             "$ref": "#/components/schemas/JobStage"
+          },
+          "stageStartedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastProgressAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deadlineAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stageProgress": {
+            "type": "object",
+            "properties": {
+              "completed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              }
+            },
+            "required": [
+              "completed",
+              "total"
+            ]
           },
           "startedAt": {
             "type": "string",
@@ -277,7 +314,8 @@
           "id",
           "status",
           "createdAt",
-          "attempt"
+          "attempt",
+          "maxAttempts"
         ]
       },
       "JobStatus": {
@@ -335,14 +373,22 @@
           },
           "attempt": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 4
+          },
+          "maxAttempts": {
+            "type": "number",
+            "enum": [
+              4
+            ]
           }
         },
         "required": [
           "id",
           "status",
           "createdAt",
-          "attempt"
+          "attempt",
+          "maxAttempts"
         ]
       },
       "AgentRun": {

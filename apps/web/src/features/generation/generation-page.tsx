@@ -3,7 +3,7 @@ import { useEffect, useTransition } from "react"
 import { api } from "@/api/client"
 import { queryClient } from "@/app/query-client"
 import { PodcastDashboard } from "@/features/dashboard/podcast-dashboard"
-import { stageLabel } from "./model"
+import { failureMessage, stageLabel } from "./model"
 import { recordBrowserEvent } from "@/observability/events"
 
 const active = new Set(["queued", "running", "retrying"])
@@ -30,6 +30,8 @@ export function GenerationPage() {
     params: { query: {} },
   })
   const createJob = api.useMutation("post", "/v1/episode-jobs")
+  const cancelJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/cancel")
+  const retryJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/retry")
   const latestJob = jobs.data.items[0]
   const latestEpisode = episodes.data.items[0]
   const feedById = new Map(feeds.data.items.map((feed) => [feed.id, feed]))
@@ -60,9 +62,35 @@ export function GenerationPage() {
     })
   }
 
+  function cancel() {
+    if (!latestJob) return
+    startTransition(async () => {
+      await cancelJob.mutateAsync({
+        params: { path: { jobId: latestJob.id } },
+      })
+      await queryClient.invalidateQueries({
+        queryKey: api.queryOptions("get", "/v1/episode-jobs").queryKey,
+      })
+    })
+  }
+
+  function retry() {
+    if (!latestJob) return
+    startTransition(async () => {
+      await retryJob.mutateAsync({
+        params: { path: { jobId: latestJob.id } },
+      })
+      await queryClient.invalidateQueries({
+        queryKey: api.queryOptions("get", "/v1/episode-jobs").queryKey,
+      })
+    })
+  }
+
   return (
     <PodcastDashboard
       attempt={latestJob?.attempt}
+      maxAttempts={latestJob?.maxAttempts}
+      deadlineAt={latestJob?.deadlineAt}
       episode={
         latestEpisode
           ? {
@@ -72,11 +100,15 @@ export function GenerationPage() {
             }
           : undefined
       }
-      failure={latestJob?.failure?.message}
+      failure={failureMessage(latestJob?.failure)}
       onGenerate={generate}
+      onCancel={cancel}
+      onRetry={retry}
       pending={pending}
       progress={latestJob?.stage ? stageProgress[latestJob.stage] : undefined}
       retryAt={latestJob?.nextAttemptAt}
+      lastProgressAt={latestJob?.lastProgressAt}
+      stageProgress={latestJob?.stageProgress}
       schedule={settings.data.generationSchedule}
       stage={latestJob?.stage ? stageLabel(latestJob.stage) : undefined}
       state={latestJob?.status ?? "ready"}

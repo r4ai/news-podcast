@@ -86,8 +86,18 @@ export const JobSchema = z
     id: IdSchema,
     status: JobStatusSchema,
     createdAt: z.iso.datetime(),
-    attempt: z.number().int().nonnegative(),
+    attempt: z.number().int().min(0).max(4),
+    maxAttempts: z.literal(4),
     stage: JobStageSchema.optional(),
+    stageStartedAt: z.iso.datetime().optional(),
+    lastProgressAt: z.iso.datetime().optional(),
+    deadlineAt: z.iso.datetime().optional(),
+    stageProgress: z
+      .object({
+        completed: z.number().int().nonnegative(),
+        total: z.number().int().positive(),
+      })
+      .optional(),
     startedAt: z.iso.datetime().optional(),
     finishedAt: z.iso.datetime().optional(),
     nextAttemptAt: z.iso.datetime().optional(),
@@ -101,6 +111,7 @@ export const JobReceiptSchema = JobSchema.pick({
   status: true,
   createdAt: true,
   attempt: true,
+  maxAttempts: true,
 }).openapi("EpisodeJobReceipt")
 
 export const AgentRunSchema = z

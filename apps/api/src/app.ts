@@ -440,6 +440,7 @@ export function createApp(dependencies: AppDependencies = {}) {
           status: job.status,
           createdAt: job.createdAt,
           attempt: job.attempt,
+          maxAttempts: job.maxAttempts,
         },
         202
       )
@@ -502,6 +503,7 @@ export function createApp(dependencies: AppDependencies = {}) {
         status: job.status,
         createdAt: job.createdAt,
         attempt: job.attempt,
+        maxAttempts: job.maxAttempts,
       },
       202
     )
@@ -1238,7 +1240,8 @@ const approveAgentMemoryRoute = createRoute({
   path: "/v1/agent-instances/{agentId}/memories/{memoryId}/approve",
   tags: ["Agent memory"],
   operationId: "approveAgentMemory",
-  description: "Activate a proposed Memory within the same owner and Agent scope.",
+  description:
+    "Activate a proposed Memory within the same owner and Agent scope.",
   request: { params: memoryParams },
   responses: {
     200: jsonContent(AgentMemorySchema, "Approved memory"),
@@ -1368,9 +1371,7 @@ function toAgentMemoryResponse(memory: AgentMemoryRecord) {
     version: memory.version,
     content: memory.content,
     createdAt: memory.createdAt.toISOString(),
-    ...(memory.expiresAt
-      ? { expiresAt: memory.expiresAt.toISOString() }
-      : {}),
+    ...(memory.expiresAt ? { expiresAt: memory.expiresAt.toISOString() } : {}),
   }
 }
 

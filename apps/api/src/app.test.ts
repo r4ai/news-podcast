@@ -53,6 +53,7 @@ describe("API foundation", () => {
         status: "queued",
         createdAt: "2026-08-09T00:00:00.000Z",
         attempt: 0,
+        maxAttempts: 4,
       }),
     }).request("/v1/episode-jobs", {
       method: "POST",
