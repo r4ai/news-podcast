@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto"
 
 import { Readability } from "@mozilla/readability"
 import { parseHTML } from "linkedom"
+import postcss from "postcss"
+import valueParser from "postcss-value-parser"
 import TurndownService from "turndown"
 
 import type { ObjectStore } from "@news-podcast/application"
@@ -9,7 +11,22 @@ import { createSafeFetcher } from "../http/safe-fetch.js"
 
 const MAX_HTML_BYTES = 5 * 1024 * 1024
 const MAX_ASSET_BYTES = 10 * 1024 * 1024
-const MAX_ASSETS = 40
+const MAX_ASSET_TOTAL_BYTES = 50 * 1024 * 1024
+const MAX_ASSETS = 80
+type CssValueNode = ReturnType<typeof valueParser>["nodes"][number]
+const DISABLED_LINK_RELATIONS = new Set([
+  "apple-touch-icon",
+  "apple-touch-startup-image",
+  "dns-prefetch",
+  "expect",
+  "icon",
+  "manifest",
+  "mask-icon",
+  "modulepreload",
+  "preconnect",
+  "prefetch",
+  "preload",
+])
 
 export interface ArchivedArticle {
   readonly snapshotId: string
@@ -63,11 +80,13 @@ export class ArticleArchiver {
     ensureBase(document, sourceUrl)
     normalizeNavigation(document, sourceUrl)
     sanitize(document)
-    const assets = await this.captureAssets(document, sourceUrl, prefix)
+    const captureResult = await this.captureAssets(document, sourceUrl, prefix)
     document
       .querySelectorAll("base")
       .forEach((element: Element) => element.remove())
-    const replay = addContentSecurityPolicy(document.toString())
+    if (captureResult.missingStylesheets > 0)
+      replaceWithReaderView(document, sourceUrl)
+    const replay = addContentSecurityPolicy(document)
     const markdown = extractMarkdown(html, sourceUrl)
     const title =
       document.querySelector("title")?.textContent?.trim() ||
@@ -117,7 +136,7 @@ export class ArticleArchiver {
       replayKey,
       markdownKey,
       byteLength: raw.byteLength,
-      assets,
+      assets: captureResult.assets,
     }
   }
 
@@ -126,17 +145,40 @@ export class ArticleArchiver {
     sourceUrl: string,
     prefix: string
   ) {
-    const candidates: { element: Element; attribute: "src" | "href" }[] = []
-    document
-      .querySelectorAll("img[src],source[src]")
-      .forEach((element: Element) =>
-        candidates.push({ element, attribute: "src" })
+    const stylesheetCandidates = Array.from(document.querySelectorAll("link"))
+      .filter(
+        (element) =>
+          getHtmlAttribute(element, "href") &&
+          linkRelations(element).includes("stylesheet")
       )
-    document
-      .querySelectorAll('link[rel~="stylesheet"][href],link[rel~="icon"][href]')
-      .forEach((element: Element) =>
-        candidates.push({ element, attribute: "href" })
+      .map((element) => ({ element, attribute: "href" as const }))
+    const passiveAssetCandidates: {
+      element: Element
+      attribute: "href" | "poster" | "src"
+    }[] = []
+    for (const tagName of ["img", "source", "audio", "video", "track"]) {
+      document.querySelectorAll(tagName).forEach((element) => {
+        if (getHtmlAttribute(element, "src"))
+          passiveAssetCandidates.push({ element, attribute: "src" })
+      })
+    }
+    document.querySelectorAll("input").forEach((element) => {
+      if (
+        asciiLowercase(getHtmlAttribute(element, "type") ?? "") === "image" &&
+        getHtmlAttribute(element, "src")
       )
+        passiveAssetCandidates.push({ element, attribute: "src" })
+    })
+    document.querySelectorAll("video").forEach((element) => {
+      if (getHtmlAttribute(element, "poster"))
+        passiveAssetCandidates.push({ element, attribute: "poster" })
+    })
+    for (const tagName of ["image", "use"]) {
+      document.querySelectorAll(tagName).forEach((element) => {
+        if (getHtmlAttribute(element, "href"))
+          passiveAssetCandidates.push({ element, attribute: "href" })
+      })
+    }
 
     const stored: {
       hash: string
@@ -145,17 +187,28 @@ export class ArticleArchiver {
       contentType: string
       byteLength: number
     }[] = []
-    const capturedByUrl = new Map<string, string>()
+    let totalStoredBytes = 0
+    const capturedByUrl = new Map<
+      string,
+      { hash: string; contentType: string } | undefined
+    >()
     const capture = async (
       assetUrl: string,
-      nested = false
+      nested = false,
+      expectedContentType?: string
     ): Promise<string | undefined> => {
       if (capturedByUrl.has(assetUrl)) {
         const existing = capturedByUrl.get(assetUrl)
-        return existing ? (nested ? existing : `assets/${existing}`) : undefined
+        if (
+          !existing ||
+          (expectedContentType &&
+            !mediaTypeIs(existing.contentType, expectedContentType))
+        )
+          return undefined
+        return nested ? existing.hash : `assets/${existing.hash}`
       }
       if (stored.length >= MAX_ASSETS) return undefined
-      capturedByUrl.set(assetUrl, "")
+      capturedByUrl.set(assetUrl, undefined)
       const response = await this.fetcher(assetUrl, {
         headers: { "User-Agent": "NewsPodcastArchive/0.1 (+self-hosted)" },
         signal: AbortSignal.timeout(15_000),
@@ -165,23 +218,32 @@ export class ArticleArchiver {
       if (body.byteLength > MAX_ASSET_BYTES) return undefined
       const assetType =
         response.headers.get("content-type") ?? "application/octet-stream"
+      if (expectedContentType && !mediaTypeIs(assetType, expectedContentType))
+        return undefined
 
       if (assetType.toLowerCase().startsWith("text/css")) {
         const css = new TextDecoder().decode(body)
-        const rewritten = await rewriteCssUrls(css, assetUrl, async (url) => {
-          try {
-            return await capture(url, true)
-          } catch {
-            return undefined
+        const rewritten = await rewriteCssUrls(
+          css,
+          assetUrl,
+          async (url, nestedExpectedContentType) => {
+            try {
+              return await capture(url, true, nestedExpectedContentType)
+            } catch {
+              return undefined
+            }
           }
-        })
+        )
         body = new TextEncoder().encode(rewritten)
       }
+      if (totalStoredBytes + body.byteLength > MAX_ASSET_TOTAL_BYTES)
+        return undefined
 
       const assetHash = hash(body)
       const key = `${prefix}/assets/${assetHash}${extension(assetType)}`
       await this.objects.put({ key, body, contentType: assetType })
-      capturedByUrl.set(assetUrl, assetHash)
+      capturedByUrl.set(assetUrl, { hash: assetHash, contentType: assetType })
+      totalStoredBytes += body.byteLength
       stored.push({
         hash: assetHash,
         originalUrl: assetUrl,
@@ -192,13 +254,43 @@ export class ArticleArchiver {
       return nested ? assetHash : `assets/${assetHash}`
     }
 
+    const captureCandidate = async (
+      candidate: {
+        element: Element
+        attribute: "href" | "poster" | "src"
+      },
+      expectedContentType?: string
+    ) => {
+      const rawUrl = getHtmlAttribute(candidate.element, candidate.attribute)
+      if (!rawUrl || rawUrl.startsWith("data:")) return true
+      try {
+        const assetUrl = new URL(rawUrl, sourceUrl).href
+        const localUrl = await capture(assetUrl, false, expectedContentType)
+        if (localUrl)
+          setHtmlAttribute(candidate.element, candidate.attribute, localUrl)
+        else removeHtmlAttribute(candidate.element, candidate.attribute)
+        return Boolean(localUrl)
+      } catch {
+        removeHtmlAttribute(candidate.element, candidate.attribute)
+        return false
+      }
+    }
+
+    // Linked stylesheets establish the page layout, so reserve the capture
+    // budget for them before decorative inline assets and article images.
+    let missingStylesheets = 0
+    for (const candidate of stylesheetCandidates) {
+      if (!(await captureCandidate(candidate, "text/css")))
+        missingStylesheets += 1
+    }
+
     for (const style of Array.from(document.querySelectorAll("style"))) {
       style.textContent = await rewriteCssUrls(
         style.textContent ?? "",
         sourceUrl,
-        async (url) => {
+        async (url, expectedContentType) => {
           try {
-            return await capture(url)
+            return await capture(url, false, expectedContentType)
           } catch {
             return undefined
           }
@@ -210,68 +302,366 @@ export class ArticleArchiver {
       if (!css) continue
       element.setAttribute(
         "style",
-        await rewriteCssUrls(css, sourceUrl, async (url) => {
-          try {
-            return await capture(url)
-          } catch {
-            return undefined
-          }
-        })
+        await rewriteCssUrls(
+          css,
+          sourceUrl,
+          async (url, expectedContentType) => {
+            try {
+              return await capture(url, false, expectedContentType)
+            } catch {
+              return undefined
+            }
+          },
+          true
+        )
       )
     }
 
-    for (const candidate of candidates) {
-      const rawUrl = candidate.element.getAttribute(candidate.attribute)
-      if (!rawUrl || rawUrl.startsWith("data:")) continue
-      try {
-        const assetUrl = new URL(rawUrl, sourceUrl).href
-        const localUrl = await capture(assetUrl)
-        if (localUrl)
-          candidate.element.setAttribute(candidate.attribute, localUrl)
-        else candidate.element.removeAttribute(candidate.attribute)
-      } catch {
-        candidate.element.removeAttribute(candidate.attribute)
-      }
+    for (const candidate of passiveAssetCandidates)
+      await captureCandidate(candidate)
+    return {
+      assets: deduplicateAssets(stored),
+      missingStylesheets,
     }
-    return deduplicateAssets(stored)
   }
 }
+
+function replaceWithReaderView(
+  document: ReturnType<typeof parseHTML>["document"],
+  sourceUrl: string
+): void {
+  const clone = parseHTML(document.toString()).document
+  const article = new Readability(clone as unknown as Document, {
+    charThreshold: 0,
+  }).parse()
+  if (!article?.content) return
+  const articleTitle = article.title ?? new URL(sourceUrl).hostname
+
+  document.documentElement.setAttribute("data-archive-view", "reader")
+  document.head.innerHTML = ""
+  const charset = document.createElement("meta")
+  charset.setAttribute("charset", "utf-8")
+  const viewport = document.createElement("meta")
+  viewport.setAttribute("name", "viewport")
+  viewport.setAttribute("content", "width=device-width, initial-scale=1")
+  const title = document.createElement("title")
+  title.textContent = articleTitle
+  const style = document.createElement("style")
+  style.textContent = READER_STYLE
+  for (const element of [charset, viewport, title, style])
+    document.head.appendChild(element)
+
+  document.body.innerHTML = ""
+  const main = document.createElement("main")
+  const heading = document.createElement("h1")
+  heading.textContent = articleTitle
+  main.appendChild(heading)
+  if (article.byline) {
+    const byline = document.createElement("p")
+    byline.className = "archive-byline"
+    byline.textContent = article.byline
+    main.appendChild(byline)
+  }
+  const source = document.createElement("p")
+  source.className = "archive-source"
+  const sourceLink = document.createElement("a")
+  sourceLink.href = sourceUrl
+  sourceLink.rel = "noreferrer"
+  sourceLink.textContent = "元の記事を開く"
+  source.appendChild(sourceLink)
+  main.appendChild(source)
+  const content = document.createElement("article")
+  content.innerHTML = article.content
+  main.appendChild(content)
+  document.body.appendChild(main)
+}
+
+const READER_STYLE = `
+  :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f7f7f5; color: #202124; line-height: 1.7; overflow-wrap: anywhere; }
+  main { width: min(100% - 2rem, 52rem); margin: 0 auto; padding: 3rem clamp(1rem, 4vw, 3rem); background: #fff; min-height: 100vh; }
+  h1 { margin: 0 0 1rem; font-size: clamp(2rem, 6vw, 3.25rem); line-height: 1.12; }
+  h2, h3, h4 { line-height: 1.3; margin-top: 2em; }
+  p, li { font-size: 1.05rem; }
+  a { color: #075db7; text-underline-offset: 0.15em; }
+  img, picture, video, svg, canvas { max-width: 100% !important; height: auto !important; }
+  figure { margin: 2rem 0; }
+  figcaption, .archive-byline, .archive-source { color: #5f6368; font-size: 0.9rem; }
+  pre { max-width: 100%; overflow-x: auto; padding: 1rem; background: #f1f3f4; }
+  blockquote { margin-inline: 0; padding-left: 1rem; border-left: 0.25rem solid #dadce0; color: #3c4043; }
+  table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+  th, td { padding: 0.5rem; border: 1px solid #dadce0; }
+  @media (max-width: 40rem) { main { width: 100%; padding-block: 1.5rem; } }
+`
 
 async function rewriteCssUrls(
   css: string,
   stylesheetUrl: string,
-  capture: (url: string) => Promise<string | undefined>
+  capture: (
+    url: string,
+    expectedContentType?: string
+  ) => Promise<string | undefined>,
+  inline = false
 ): Promise<string> {
-  const pattern = /url\(\s*(["']?)([^"')]+)\1\s*\)/gi
-  const matches = [...css.matchAll(pattern)]
-  let result = css
-  for (const match of matches) {
-    const value = match[2]?.trim()
-    if (!value || value.startsWith("data:") || value.startsWith("#")) continue
-    try {
-      const localUrl = await capture(new URL(value, stylesheetUrl).href)
-      if (localUrl) result = result.replace(match[0], `url("${localUrl}")`)
-    } catch {
-      // Keep the original URL; replay CSP prevents an external request.
+  try {
+    const root = postcss.parse(inline ? `archive-root{${css}}` : css)
+    const values: {
+      value: string
+      allowImportString: boolean
+      update(value: string): void
+    }[] = []
+    root.walkDecls((declaration) => {
+      values.push({
+        value: declaration.value,
+        allowImportString: false,
+        update: (value) => {
+          declaration.value = value
+        },
+      })
+    })
+    root.walkAtRules((atRule) => {
+      if (asciiLowercase(atRule.name) === "import") {
+        values.push({
+          value: atRule.params,
+          allowImportString: true,
+          update: (value) => {
+            atRule.params = value
+          },
+        })
+      }
+    })
+    for (const value of values) {
+      value.update(
+        await rewriteCssValue(
+          value.value,
+          stylesheetUrl,
+          capture,
+          value.allowImportString
+        )
+      )
+    }
+    if (!inline) return root.toString()
+    const rule = root.first
+    if (!rule || rule.type !== "rule") return ""
+    const declarations = rule.nodes.map((node) => node.toString()).join(";")
+    return rule.raws.semicolon && declarations
+      ? `${declarations};`
+      : declarations
+  } catch {
+    return ""
+  }
+}
+
+async function rewriteCssValue(
+  value: string,
+  stylesheetUrl: string,
+  capture: (
+    url: string,
+    expectedContentType?: string
+  ) => Promise<string | undefined>,
+  allowImportString = false
+): Promise<string> {
+  const parsed = valueParser(value)
+  const references: CssValueNode[] = []
+  parsed.walk((node) => {
+    if (node.type === "function" && asciiLowercase(node.value) === "url") {
+      references.push(node)
+      return false
+    }
+    return undefined
+  })
+  if (allowImportString) {
+    const first = parsed.nodes.find(
+      (node) => node.type !== "space" && node.type !== "comment"
+    )
+    if (first?.type === "string") references.push(first)
+  }
+
+  for (const reference of references) {
+    const rawValue =
+      reference.type === "function"
+        ? simpleCssUrl(reference.nodes)
+        : reference.value
+    const localUrl = await captureCssReference(
+      rawValue,
+      stylesheetUrl,
+      capture,
+      allowImportString ? "text/css" : undefined
+    )
+    if (reference.type === "function") {
+      reference.nodes = valueParser(`"${localUrl}"`).nodes
+    } else if (reference.type === "string") {
+      reference.value = localUrl
+      reference.quote = '"'
     }
   }
-  return result
+  return valueParser.stringify(parsed.nodes)
+}
+
+function simpleCssUrl(nodes: CssValueNode[]): string | undefined {
+  const values = nodes.filter(
+    (node) => node.type !== "space" && node.type !== "comment"
+  )
+  const value = values[0]
+  return values.length === 1 &&
+    (value?.type === "string" || value?.type === "word")
+    ? value.value
+    : undefined
+}
+
+async function captureCssReference(
+  value: string | undefined,
+  stylesheetUrl: string,
+  capture: (
+    url: string,
+    expectedContentType?: string
+  ) => Promise<string | undefined>,
+  expectedContentType?: string
+): Promise<string> {
+  if (!value || value.startsWith("data:") || value.startsWith("#"))
+    return value ?? "data:,"
+  try {
+    return (
+      (await capture(
+        new URL(value, stylesheetUrl).href,
+        expectedContentType
+      )) ?? "data:,"
+    )
+  } catch {
+    return "data:,"
+  }
+}
+
+function mediaTypeIs(value: string, expected: string): boolean {
+  return asciiLowercase(value.split(";", 1)[0]?.trim() ?? "") === expected
 }
 
 function sanitize(document: ReturnType<typeof parseHTML>["document"]): void {
   document
-    .querySelectorAll(
-      "script,noscript,iframe,object,embed,portal,meta[http-equiv='refresh'],link[rel~='modulepreload'],link[rel~='preload'],link[rel~='prefetch'],link[rel~='preconnect'],link[rel~='dns-prefetch']"
-    )
+    .querySelectorAll("script,noscript,iframe,object,embed,portal")
     .forEach((element: Element) => element.remove())
+  sanitizeLinkElements(document)
+  document.querySelectorAll("meta").forEach((element: Element) => {
+    const httpEquiv = asciiLowercase(
+      getHtmlAttribute(element, "http-equiv") ?? ""
+    )
+    const name = asciiLowercase(getHtmlAttribute(element, "name") ?? "")
+    if (
+      httpEquiv === "refresh" ||
+      name === "msapplication-tileimage" ||
+      name === "msapplication-config"
+    ) {
+      element.remove()
+    }
+  })
   document.querySelectorAll("*").forEach((element: Element) => {
     for (const attribute of Array.from(element.attributes) as Attr[]) {
-      if (attribute.name.toLowerCase().startsWith("on")) {
+      if (asciiLowercase(attribute.name).startsWith("on")) {
         element.removeAttribute(attribute.name)
       }
     }
-    element.removeAttribute("srcset")
+    for (const attribute of [
+      "background",
+      "crossorigin",
+      "imagesrcset",
+      "integrity",
+      "nonce",
+      "ping",
+      "srcset",
+      "xlink:href",
+    ]) {
+      removeHtmlAttribute(element, attribute)
+    }
   })
+}
+
+function sanitizeLinkElements(
+  document: ReturnType<typeof parseHTML>["document"]
+): void {
+  document.querySelectorAll("link").forEach((element: Element) => {
+    const relations = linkRelations(element)
+    if (relations.includes("stylesheet")) {
+      setHtmlAttribute(element, "rel", "stylesheet")
+      return
+    }
+    if (relations.some((relation) => DISABLED_LINK_RELATIONS.has(relation)))
+      element.remove()
+  })
+}
+
+function linkRelations(element: Element): string[] {
+  return spaceSeparatedTokens(getHtmlAttribute(element, "rel") ?? "").map(
+    asciiLowercase
+  )
+}
+
+function getHtmlAttribute(element: Element, name: string): string | null {
+  const target = asciiLowercase(name)
+  const attribute = Array.from(element.attributes).find(
+    (candidate) => asciiLowercase(candidate.name) === target
+  )
+  return attribute?.value ?? null
+}
+
+function removeHtmlAttribute(element: Element, name: string): void {
+  const target = asciiLowercase(name)
+  for (const attribute of Array.from(element.attributes)) {
+    if (asciiLowercase(attribute.name) === target)
+      element.removeAttribute(attribute.name)
+  }
+}
+
+function setHtmlAttribute(element: Element, name: string, value: string): void {
+  removeHtmlAttribute(element, name)
+  element.setAttribute(name, value)
+}
+
+function spaceSeparatedTokens(value: string): string[] {
+  const tokens: string[] = []
+  let token = ""
+  for (const character of value) {
+    if (
+      character === "\u0009" ||
+      character === "\u000a" ||
+      character === "\u000c" ||
+      character === "\u000d" ||
+      character === "\u0020"
+    ) {
+      if (token) tokens.push(token)
+      token = ""
+    } else {
+      token += character
+    }
+  }
+  if (token) tokens.push(token)
+  return tokens
+}
+
+function asciiLowercase(value: string): string {
+  let result = ""
+  for (const character of value) {
+    const code = character.charCodeAt(0)
+    result +=
+      code >= 0x41 && code <= 0x5a
+        ? String.fromCharCode(code + 0x20)
+        : character
+  }
+  return result
+}
+
+export function prepareArchivedReplay(body: Uint8Array): Uint8Array {
+  const { document } = parseHTML(new TextDecoder().decode(body))
+  sanitize(document)
+  document.querySelectorAll("meta").forEach((element: Element) => {
+    if (
+      asciiLowercase(getHtmlAttribute(element, "http-equiv") ?? "") ===
+      "content-security-policy"
+    ) {
+      element.remove()
+    }
+  })
+  return new TextEncoder().encode(document.toString())
 }
 
 function normalizeNavigation(
@@ -325,14 +715,16 @@ function extractMarkdown(html: string, sourceUrl: string): string {
   ].join("")
 }
 
-function addContentSecurityPolicy(html: string): string {
+function addContentSecurityPolicy(
+  document: ReturnType<typeof parseHTML>["document"]
+): string {
   const policy =
     "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'"
-  return html.replace(
-    /<head(?:\s[^>]*)?>/i,
-    (match) =>
-      `${match}<meta http-equiv="Content-Security-Policy" content="${policy}">`
-  )
+  const meta = document.createElement("meta")
+  meta.setAttribute("http-equiv", "Content-Security-Policy")
+  meta.setAttribute("content", policy)
+  document.head.insertBefore(meta, document.head.firstChild)
+  return document.toString()
 }
 
 function safeHeaders(headers: Headers): Record<string, string> {

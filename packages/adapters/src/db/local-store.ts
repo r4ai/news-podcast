@@ -345,25 +345,56 @@ export class LocalStore implements EpisodeJobRepository {
     }[]
   }): void {
     this.transaction(() => {
-      this.database
+      const existing = this.database
         .prepare(
-          `INSERT OR IGNORE INTO article_snapshots
+          `SELECT id FROM article_snapshots
+           WHERE feed_item_id = ? AND content_hash = ?`
+        )
+        .get(input.articleId, input.contentHash) as
+        | Record<string, unknown>
+        | undefined
+      const snapshotId = existing ? String(existing.id) : input.snapshotId
+      if (existing) {
+        this.database
+          .prepare(
+            `UPDATE article_snapshots SET source_url = ?, title = ?, fetched_at = ?,
+             raw_key = ?, replay_key = ?, markdown_key = ?, byte_length = ?
+             WHERE id = ?`
+          )
+          .run(
+            input.sourceUrl,
+            input.title,
+            new Date().toISOString(),
+            input.rawKey,
+            input.replayKey,
+            input.markdownKey,
+            input.byteLength,
+            snapshotId
+          )
+        this.database
+          .prepare("DELETE FROM archive_assets WHERE snapshot_id = ?")
+          .run(snapshotId)
+      } else {
+        this.database
+          .prepare(
+            `INSERT INTO article_snapshots
            (id, feed_item_id, source_url, title, fetched_at, content_hash,
             raw_key, replay_key, markdown_key, byte_length)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          input.snapshotId,
-          input.articleId,
-          input.sourceUrl,
-          input.title,
-          new Date().toISOString(),
-          input.contentHash,
-          input.rawKey,
-          input.replayKey,
-          input.markdownKey,
-          input.byteLength
-        )
+          )
+          .run(
+            snapshotId,
+            input.articleId,
+            input.sourceUrl,
+            input.title,
+            new Date().toISOString(),
+            input.contentHash,
+            input.rawKey,
+            input.replayKey,
+            input.markdownKey,
+            input.byteLength
+          )
+      }
       const insertAsset = this.database.prepare(
         `INSERT OR REPLACE INTO archive_assets
          (snapshot_id, asset_hash, original_url, object_key, content_type, byte_length)
@@ -371,7 +402,7 @@ export class LocalStore implements EpisodeJobRepository {
       )
       input.assets.forEach((asset) =>
         insertAsset.run(
-          input.snapshotId,
+          snapshotId,
           asset.hash,
           asset.originalUrl,
           asset.key,
@@ -384,7 +415,7 @@ export class LocalStore implements EpisodeJobRepository {
           `UPDATE feed_items SET archive_status = 'succeeded', archive_error = NULL,
            latest_snapshot_id = ? WHERE id = ?`
         )
-        .run(input.snapshotId, input.articleId)
+        .run(snapshotId, input.articleId)
     })
   }
 

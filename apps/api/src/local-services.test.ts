@@ -12,9 +12,12 @@ describe("createArticleAccess", () => {
     const objects = {
       get: () =>
         Promise.resolve({
-          body: new TextEncoder().encode(`<!doctype html><head>
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-ancestors 'self'">
-            <link rel="modulepreload" href="/entry.js">
+          body: new TextEncoder().encode(`<!doctype html><HTML><HEAD>
+            <META content="default-src 'none'; frame-ancestors 'self'" HTTP-EQUIV=CONTENT-SECURITY-POLICY>
+            <LiNk href=/entry.js REL=MODULEPRELOAD>
+            <link href=/keep.css rel=StyleSheet>
+            <link href="https://example.com/touch.png" rel="ICON apple-touch-icon">
+            <meta content="https://example.com/tile.png" NAME=MSAPPLICATION-TILEIMAGE>
             <title>Archive</title></head>`),
           byteLength: 200,
           contentType: "text/html; charset=utf-8",
@@ -31,8 +34,10 @@ describe("createArticleAccess", () => {
     expect(policy).toContain("script-src 'none'")
     expect(policy).toContain("connect-src 'none'")
     expect(policy).toContain("frame-ancestors 'self'")
-    await expect(response.text()).resolves.not.toMatch(
-      /frame-ancestors|modulepreload/
+    const html = await response.text()
+    expect(html).not.toMatch(
+      /frame-ancestors|modulepreload|touch\.png|tile\.png/i
     )
+    expect(html).toContain("/keep.css")
   })
 })

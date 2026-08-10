@@ -57,6 +57,34 @@ describe("LocalStore RSS reader", () => {
     })
     const article = store.listArticles(owner)[0]!
     expect(article.archiveStatus).toBe("succeeded")
+
+    store.completeArchive({
+      articleId: candidate.id,
+      snapshotId: "00000000-0000-4000-8000-000000000021",
+      sourceUrl: candidate.url,
+      title: candidate.title,
+      contentHash: "hash",
+      rawKey: "raw-refreshed",
+      replayKey: "replay-refreshed",
+      markdownKey: "markdown-refreshed",
+      byteLength: 20,
+      assets: [
+        {
+          hash: "asset-refreshed",
+          originalUrl: "https://example.com/style.css",
+          key: "asset-key-refreshed",
+          contentType: "text/css",
+          byteLength: 20,
+        },
+      ],
+    })
+    expect(store.getArticleObject(owner, article.id, "replay")).toEqual({
+      key: "replay-refreshed",
+      snapshotId: "00000000-0000-4000-8000-000000000020",
+    })
+    expect(store.getArticleAsset(owner, article.id, "asset-refreshed")).toEqual(
+      { key: "asset-key-refreshed", contentType: "text/css" }
+    )
     expect(
       store.setArticleState(owner, article.id, { read: true })
     ).toMatchObject({

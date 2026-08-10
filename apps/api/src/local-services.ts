@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto"
 import { readFile } from "node:fs/promises"
 
 import { LocalAudioStore } from "@news-podcast/adapters/audio/local"
+import { prepareArchivedReplay } from "@news-podcast/adapters/archive"
 import type { LocalStore } from "@news-podcast/adapters/db/local"
 import type { ObjectStore } from "@news-podcast/application"
 
@@ -198,24 +199,13 @@ export function createArticleAccess(input: {
             "sandbox allow-same-origin; default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
           "X-Content-Type-Options": "nosniff",
         },
-        prepareReplayBody
+        prepareArchivedReplay
       )
     },
     asset(ownerId: string, articleId: string, hash: string) {
       return responseFor(input.store.getArticleAsset(ownerId, articleId, hash))
     },
   }
-}
-
-function prepareReplayBody(body: Uint8Array): Uint8Array {
-  const html = new TextDecoder()
-    .decode(body)
-    .replace(/;\s*frame-ancestors\s+[^;"]*/gi, "")
-    .replace(
-      /<link\b(?=[^>]*\brel\s*=\s*["'][^"']*(?:modulepreload|preload|prefetch|preconnect|dns-prefetch)[^"']*["'])[^>]*>/gi,
-      ""
-    )
-  return new TextEncoder().encode(html)
 }
 
 function parseRange(value: string | undefined, length: number) {
