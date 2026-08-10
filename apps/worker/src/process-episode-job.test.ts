@@ -5,6 +5,11 @@ import { join } from "node:path"
 import { LocalStore } from "@news-podcast/adapters/db/local"
 import { VoicevoxProviderError } from "@news-podcast/adapters/voicevox"
 import type { AudioStore, ObjectStore } from "@news-podcast/application"
+import {
+  noopObservability,
+  type Observability,
+  type SpanOptions,
+} from "@news-podcast/observability"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -102,8 +107,23 @@ describe("bounded episode processing", () => {
 
   it("reuses the verified draft and completed WAV chunks after retry", async () => {
     vi.useFakeTimers({ now: new Date("2026-08-10T00:00:00.000Z") })
-    const { store, leased } = await createLeasedJob("resume-chunks")
+    const traceContext = {
+      traceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      traceState: "vendor=value",
+    }
+    const { store, leased } = await createLeasedJob(
+      "resume-chunks",
+      traceContext
+    )
     const objects = memoryObjectStore()
+    const rootSpanOptions: Array<SpanOptions | undefined> = []
+    const observability: Observability = {
+      ...noopObservability,
+      withSpan: async (name, _attributes, operation, options) => {
+        if (name === "episode.process") rootSpanOptions.push(options)
+        return operation()
+      },
+    }
     const agent = vi
       .fn()
       .mockResolvedValue(draft(`${"あ".repeat(500)}。${"い".repeat(100)}。`))
@@ -125,6 +145,7 @@ describe("bounded episode processing", () => {
         },
       },
       voice: { characterName: "ずんだもん" },
+      observability,
     })
 
     await processor.process(leased)
@@ -141,6 +162,10 @@ describe("bounded episode processing", () => {
       status: "succeeded",
       attempt: 2,
     })
+    expect(rootSpanOptions).toEqual([
+      { link: traceContext },
+      { link: traceContext },
+    ])
     store.close()
   })
 
@@ -177,7 +202,10 @@ describe("bounded episode processing", () => {
   })
 })
 
-async function createLeasedJob(key: string) {
+async function createLeasedJob(
+  key: string,
+  traceContext?: { readonly traceParent: string; readonly traceState?: string }
+) {
   const directory = mkdtempSync(join(tmpdir(), "bounded-processing-"))
   directories.push(directory)
   const store = new LocalStore(join(directory, "app.sqlite"))
@@ -187,6 +215,7 @@ async function createLeasedJob(key: string) {
     requestHash: key,
     trigger: "manual",
     feedIds: [],
+    ...(traceContext ? { traceContext } : {}),
   })
   return { store, leased: store.leaseNext(new Date())!, created }
 }

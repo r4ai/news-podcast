@@ -13,6 +13,7 @@ import {
 } from "./process-episode-job.js"
 import { LocalScheduler } from "./scheduler.js"
 import { RssArchiveWorker } from "./process-rss-archive.js"
+import { createObservedObjectStore } from "./observed-object-store.js"
 import {
   createNodeObservability,
   readNodeObservabilityConfig,
@@ -32,12 +33,13 @@ if (mode === "fake" && process.env.APP_ENV === "production") {
 
 const store = new LocalStore(databasePath)
 const objects = new S3ObjectStore(readS3Config(process.env))
+const observedObjects = createObservedObjectStore(objects, observability)
 const processor =
   mode === "fake"
     ? createFakeProcessor(store, required("AUDIO_DIRECTORY"), observability)
     : createLiveProcessor({
         store,
-        objects,
+        objects: observedObjects,
         openAi: readOpenAiConfig(process.env),
         voicevox: readVoicevoxConfig(process.env),
         observability,

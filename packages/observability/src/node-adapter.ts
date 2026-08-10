@@ -2,16 +2,24 @@ import {
   context,
   metrics,
   propagation,
+  SpanKind,
   SpanStatusCode,
   trace,
+  type Tracer,
 } from "@opentelemetry/api"
 import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
-import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs"
-import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics"
+import {
+  BatchLogRecordProcessor,
+  type LogRecordExporter,
+} from "@opentelemetry/sdk-logs"
+import {
+  PeriodicExportingMetricReader,
+  type PushMetricExporter,
+} from "@opentelemetry/sdk-metrics"
 import { NodeSDK } from "@opentelemetry/sdk-node"
 import {
   ParentBasedSampler,
@@ -47,6 +55,12 @@ export interface NodeObservabilityConfig {
   readonly traceSampleRate: number
 }
 
+export interface NodeObservabilityDependencies {
+  readonly tracer?: Tracer
+  readonly metricExporter?: PushMetricExporter
+  readonly logExporter?: LogRecordExporter
+}
+
 export function readNodeObservabilityConfig(
   environment: NodeJS.ProcessEnv,
   serviceName: string
@@ -80,7 +94,8 @@ export function readNodeObservabilityConfig(
 }
 
 export function createNodeObservability(
-  config: NodeObservabilityConfig
+  config: NodeObservabilityConfig,
+  dependencies: NodeObservabilityDependencies = {}
 ): Observability {
   if (!config.enabled || !config.endpoint) return noopObservability
 
@@ -98,18 +113,22 @@ export function createNodeObservability(
       headers,
     }),
     metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter({
-        url: signalUrl(config.endpoint, "metrics"),
-        headers,
-      }),
+      exporter:
+        dependencies.metricExporter ??
+        new OTLPMetricExporter({
+          url: signalUrl(config.endpoint, "metrics"),
+          headers,
+        }),
       exportIntervalMillis: 30_000,
     }),
     logRecordProcessors: [
       new BatchLogRecordProcessor({
-        exporter: new OTLPLogExporter({
-          url: signalUrl(config.endpoint, "logs"),
-          headers,
-        }),
+        exporter:
+          dependencies.logExporter ??
+          new OTLPLogExporter({
+            url: signalUrl(config.endpoint, "logs"),
+            headers,
+          }),
       }),
     ],
     sampler: new ParentBasedSampler({
@@ -118,7 +137,9 @@ export function createNodeObservability(
   })
   sdk.start()
 
-  const tracer = trace.getTracer(config.serviceName, config.serviceVersion)
+  const tracer =
+    dependencies.tracer ??
+    trace.getTracer(config.serviceName, config.serviceVersion)
   const logger = logs.getLogger(config.serviceName, config.serviceVersion)
   const meter = metrics.getMeter(config.serviceName, config.serviceVersion)
   const counters = new Map<MetricName, ReturnType<typeof meter.createCounter>>()
@@ -153,6 +174,8 @@ export function createNodeObservability(
         {
           attributes: sanitizeAttributes(attributes),
           links: link ? [{ context: link }] : [],
+          kind:
+            options?.kind === "client" ? SpanKind.CLIENT : SpanKind.INTERNAL,
         },
         parent,
         async (span) => {
@@ -225,3 +248,5 @@ function severityNumber(level: TelemetryEvent["level"]): SeverityNumber {
   if (level === "debug") return SeverityNumber.DEBUG
   return SeverityNumber.INFO
 }
+
+export * from "./node-client-fetch.js"

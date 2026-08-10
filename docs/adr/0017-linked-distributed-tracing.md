@@ -81,12 +81,12 @@ sequenceDiagram
 | 設計書 | 同期継続・非同期link・外部client spanを明記 | Done | `docs/design.md` |
 | ドメイン/ユースケース | N/A — trace contractはobservability境界に限定 | Done | application port変更なし |
 | OpenAPI/外部契約 | N/A — W3C標準headerの内部処理のみ | Done | schema変更なし |
-| コード/ポート | parent contextと安全なclient spanを追加 | Pending | API/Worker/observability |
+| コード/ポート | parent contextと安全なclient spanを追加 | Done | API/Worker/observability |
 | データ/ストレージ | N/A — 既存trace列を利用 | Done | migration 0004 |
-| 実行/配備 | Browser 20%、API 20%、Worker 100% | Pending | Web/API/Worker composition root |
-| 認証/セキュリティ | baggage拒否、外部伝播なし、属性allowlist維持 | Pending | privacy/client span tests |
-| フロント/品質保証 | Browser samplerとfetch伝播 | Pending | Web tests |
-| テスト/運用 | parent、link、retry、provider spanを検証 | Pending | unit/E2E、SigNoz smoke |
+| 実行/配備 | Browser 20%、API 20%、Worker 100% | Done | Web/API/Worker composition root |
+| 認証/セキュリティ | baggage拒否、外部伝播なし、属性allowlist維持 | Done | privacy/client span tests |
+| フロント/品質保証 | Browser samplerとfetch伝播 | Done | Web tests |
+| テスト/運用 | parent、link、retry、provider spanを検証 | Partial | unit/E2E完了、SigNoz smokeは実環境gate |
 
 ## 再検討条件
 

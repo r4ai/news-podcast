@@ -27,6 +27,7 @@ import {
   noopObservability,
   type Observability,
 } from "@news-podcast/observability"
+import { createTracedFetch } from "@news-podcast/observability/node"
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const
 export const EPISODE_EXECUTION_POLICY = {
@@ -560,6 +561,15 @@ export function createLiveProcessor(input: {
   readonly voicevox: ConstructorParameters<typeof VoicevoxSpeechSynthesizer>[0]
   readonly observability?: Observability
 }): EpisodeProcessor {
+  const observability = input.observability ?? noopObservability
+  const openAiFetch = createTracedFetch({
+    provider: "openai",
+    operation: "responses",
+  })
+  const voicevoxFetch = createTracedFetch({
+    provider: "voicevox",
+    operation: (url) => voicevoxOperation(url),
+  })
   return new EpisodeProcessor({
     store: input.store,
     audio: new ObjectAudioStore(input.objects),
@@ -615,9 +625,10 @@ export function createLiveProcessor(input: {
         tool: (value) => input.store.recordAgentToolCall(value),
         finish: (runId, failureCode) =>
           input.store.finishAgentRun(runId, failureCode),
-      }
+      },
+      openAiFetch
     ),
-    speech: new VoicevoxSpeechSynthesizer(input.voicevox),
+    speech: new VoicevoxSpeechSynthesizer(input.voicevox, voicevoxFetch),
     objects: input.objects,
     voice: {
       characterName: input.voicevox.characterName,
@@ -625,8 +636,20 @@ export function createLiveProcessor(input: {
         ? { styleName: input.voicevox.styleName }
         : {}),
     },
-    ...(input.observability ? { observability: input.observability } : {}),
+    observability,
   })
+}
+
+function voicevoxOperation(url: URL): string {
+  const operation = url.pathname.split("/").filter(Boolean).at(-1)
+  if (
+    operation === "speakers" ||
+    operation === "audio_query" ||
+    operation === "synthesis"
+  ) {
+    return operation
+  }
+  return "request"
 }
 
 export function createFakeProcessor(
