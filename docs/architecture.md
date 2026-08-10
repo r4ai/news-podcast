@@ -164,7 +164,7 @@ flowchart LR
   Store --> Commit["Episode・出典・Jobをcommit"]
 ```
 
-外部provider由来の一時障害は5秒、30秒、120秒のbackoffで再試行する。初回を含め最大4回試行し、それでも完了しなければ `failed` とする。DB leaseにより、停止したWorkerが保持していたjobも期限後に再取得できる。
+外部provider由来の一時障害は5秒、30秒、120秒のbackoffで再試行する。初回を含め最大4回試行し、DB制約も5回目のleaseを拒否する。60秒leaseは15秒ごとに更新し、全状態変更とEpisode確定をlease tokenでfenceする。停止したWorkerのjobは期限後に再取得し、検証済み台本とVOICEVOX chunkのcheckpointから再開する。台本、各provider request、stage、job全体、応答byteには上限を設ける。
 
 ### 4.3 ジョブ状態
 

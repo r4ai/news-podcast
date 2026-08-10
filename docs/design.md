@@ -56,8 +56,8 @@ flowchart LR
 1. 認証済みユーザーが `Idempotency-Key` 付きで生成ジョブを作成する。
 2. APIは `owner + method + canonical route + key` を一意に保存し、同一request hashなら同じreceiptを返す。異なるhashなら409にする。
 3. Workerはジョブをleaseして `queued -> running` へ遷移する。
-4. RSS取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にする。
-5. 成功時はEpisodeを関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
+4. RSS取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にし、検証済み台本と音声chunkから再開する。
+5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. D1からQueuesへの送信はoutboxで原子的に記録し、reconcilerで再送する。Queuesの重複配送はジョブleaseと段階冪等性で吸収する。
 
 ## 5. REST契約方針
