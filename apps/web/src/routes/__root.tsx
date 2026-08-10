@@ -1,8 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router"
 
-import { AppLoading } from "@/app/app-loading"
-import { RouteError } from "@/app/route-error"
+import { AppLoading } from "@/shared/components/app-loading"
+import { RouteError } from "@/shared/components/route-error"
 
 export interface RouterContext {
   readonly queryClient: QueryClient

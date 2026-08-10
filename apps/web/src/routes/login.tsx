@@ -25,17 +25,17 @@ import {
 import { Input } from "@workspace/ui/components/input"
 import { Spinner } from "@workspace/ui/components/spinner"
 
-import { loginForDevelopment } from "@/api/client"
-import { AppLoading } from "@/app/app-loading"
+import { loginForDevelopment } from "@/shared/api"
+import { AppLoading } from "@/shared/components/app-loading"
 import { queryClient } from "@/app/query-client"
 import {
   type AuthState,
   authStateQueryOptions,
   loginWithGoogle,
   safeRedirect,
-} from "@/auth/auth"
-import { ThemeToggle } from "@/components/theme-toggle"
-import { recordBrowserEvent } from "@/observability/events"
+} from "@/features/auth"
+import { ThemeToggle } from "@/features/theme"
+import { recordBrowserEvent } from "@/shared/observability/events"
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>) => ({

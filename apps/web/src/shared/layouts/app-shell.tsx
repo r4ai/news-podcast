@@ -6,13 +6,10 @@ import {
   Newspaper,
   Rss,
 } from "lucide-react"
-import type { PropsWithChildren } from "react"
+import type { ReactNode } from "react"
 
 import { Link, useMatchRoute } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
-import { Skeleton } from "@workspace/ui/components/skeleton"
-
-import { ThemeToggle } from "@/components/theme-toggle"
 
 const links = [
   { to: "/", label: "今日", icon: House },
@@ -68,20 +65,24 @@ function Navigation({ mobile = false }: { readonly mobile?: boolean }) {
   )
 }
 
-export function AppShell({ children }: PropsWithChildren) {
+type AppShellProps = {
+  /** ナビゲーション末尾へ差し込む操作。テーマ切替などをrouteから渡す。 */
+  readonly actions?: ReactNode
+  readonly children: ReactNode
+}
+
+export function AppShell({ actions, children }: AppShellProps) {
   return (
     <div className="min-h-svh bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6">
         <Brand />
         <Navigation />
-        <div className="mt-auto flex justify-end">
-          <ThemeToggle />
-        </div>
+        <div className="mt-auto flex justify-end">{actions}</div>
       </aside>
 
       <header className="sticky top-0 flex items-center justify-between border-b bg-background/95 px-4 py-2 backdrop-blur md:hidden">
         <Brand />
-        <ThemeToggle />
+        {actions}
       </header>
 
       <main className="pb-24 md:ml-56 md:pb-0">
@@ -93,16 +94,6 @@ export function AppShell({ children }: PropsWithChildren) {
       <div className="fixed inset-x-0 bottom-0 border-t bg-background/95 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
         <Navigation mobile />
       </div>
-    </div>
-  )
-}
-
-export function PanelSkeleton() {
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border p-4">
-      <Skeleton className="h-5 w-40" />
-      <Skeleton className="h-4 w-64 max-w-full" />
-      <Skeleton className="h-8 w-28" />
     </div>
   )
 }

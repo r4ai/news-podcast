@@ -1,10 +1,10 @@
 import { useEffect, useTransition } from "react"
 
-import { api } from "@/api/client"
+import { api } from "@/shared/api"
 import { queryClient } from "@/app/query-client"
 import { PodcastDashboard } from "@/features/dashboard/podcast-dashboard"
-import { failureMessage, stageLabel } from "./model"
-import { recordBrowserEvent } from "@/observability/events"
+import { failureMessage, stageLabel } from "@/features/jobs"
+import { recordBrowserEvent } from "@/shared/observability/events"
 
 const active = new Set(["queued", "running", "retrying"])
 const stageProgress = {

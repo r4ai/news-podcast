@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Web
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: `apps/web/src/routes`, `apps/web/src/features`
+- Related: ADR-0018、`apps/web/src/routes`, `apps/web/src/features`
 
 ## コンテキストと変更契機
 

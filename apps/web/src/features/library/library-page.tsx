@@ -26,9 +26,9 @@ import {
 import { Separator } from "@workspace/ui/components/separator"
 import { Spinner } from "@workspace/ui/components/spinner"
 
-import { api } from "@/api/client"
-import { PageHeader } from "@/app/page-header"
-import { recordBrowserEvent } from "@/observability/events"
+import { api } from "@/shared/api"
+import { PageHeader } from "@/shared/layouts/page-header"
+import { recordBrowserEvent } from "@/shared/observability/events"
 
 export function LibraryPage() {
   const episodes = api.useSuspenseQuery("get", "/v1/episodes")

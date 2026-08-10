@@ -11,9 +11,10 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 
-import { TelemetryPreference } from "@/observability/telemetry-preference"
+import { TelemetryPreference } from "@/shared/observability/telemetry-preference"
 
-import { type Theme, useTheme } from "./theme-provider"
+import { useTheme } from "../hooks/use-theme"
+import type { Theme } from "../model"
 
 const themes = [
   { value: "light", label: "ライト", icon: Sun },

@@ -32,10 +32,10 @@ import { Input } from "@workspace/ui/components/input"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { Switch } from "@workspace/ui/components/switch"
 
-import { api } from "@/api/client"
-import { PageHeader } from "@/app/page-header"
+import { api } from "@/shared/api"
+import { PageHeader } from "@/shared/layouts/page-header"
 import { queryClient } from "@/app/query-client"
-import { recordBrowserEvent } from "@/observability/events"
+import { recordBrowserEvent } from "@/shared/observability/events"
 
 function supportedTimeZones(current: string) {
   const supported = Intl.supportedValuesOf?.("timeZone") ?? []

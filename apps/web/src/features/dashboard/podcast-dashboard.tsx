@@ -34,7 +34,7 @@ import { Progress, ProgressLabel } from "@workspace/ui/components/progress"
 import { Separator } from "@workspace/ui/components/separator"
 import { Spinner } from "@workspace/ui/components/spinner"
 
-import { PageHeader } from "@/app/page-header"
+import { PageHeader } from "@/shared/layouts/page-header"
 
 export type DashboardState =
   | "ready"

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { api } from "@/api/client"
+import { api } from "@/shared/api"
 import { GenerationPage } from "@/features/generation/generation-page"
 
 export const Route = createFileRoute("/_authenticated/")({

@@ -4,7 +4,7 @@ import { Toaster } from "@workspace/ui/components/sonner"
 
 import { queryClient } from "@/app/query-client"
 import { router } from "@/app/router"
-import { useTheme } from "@/components/theme-provider"
+import { useTheme } from "@/features/theme"
 
 export function App() {
   const { theme } = useTheme()

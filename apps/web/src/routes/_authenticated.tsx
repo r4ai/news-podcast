@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
 
-import { AppShell } from "@/app/app-shell"
-import { authStateQueryOptions } from "@/auth/auth"
+import { authStateQueryOptions } from "@/features/auth"
+import { ThemeToggle } from "@/features/theme"
+import { AppShell } from "@/shared/layouts/app-shell"
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ context, location }) => {
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/_authenticated")({
     }
   },
   component: () => (
-    <AppShell>
+    <AppShell actions={<ThemeToggle />}>
       <Outlet />
     </AppShell>
   ),

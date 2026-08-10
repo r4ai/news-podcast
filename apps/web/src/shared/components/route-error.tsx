@@ -1,6 +1,6 @@
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useEffect } from "react"
-import { recordBrowserEvent } from "@/observability/events"
+import { recordBrowserEvent } from "@/shared/observability/events"
 import { AlertTriangle } from "lucide-react"
 
 import {

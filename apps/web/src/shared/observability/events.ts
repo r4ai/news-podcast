@@ -4,6 +4,7 @@ export type BrowserEventName =
   | "audio.started"
   | "episode.requested"
   | "login.result"
+  | "panel.error"
   | "route.error"
   | "schedule.changed"
   | "subscription.changed"

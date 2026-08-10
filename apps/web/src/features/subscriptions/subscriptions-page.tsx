@@ -55,10 +55,10 @@ import {
   FieldLabel,
 } from "@workspace/ui/components/field"
 
-import { api } from "@/api/client"
-import { PageHeader } from "@/app/page-header"
+import { api } from "@/shared/api"
+import { PageHeader } from "@/shared/layouts/page-header"
 import { queryClient } from "@/app/query-client"
-import { recordBrowserEvent } from "@/observability/events"
+import { recordBrowserEvent } from "@/shared/observability/events"
 
 type Subscription = components["schemas"]["FeedSubscription"]
 

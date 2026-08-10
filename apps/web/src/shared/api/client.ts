@@ -2,7 +2,7 @@ import type { paths } from "@news-podcast/contracts/openapi"
 import createFetchClient from "openapi-fetch"
 import createQueryClient from "openapi-react-query"
 
-import { currentPath } from "@/auth/auth"
+import { currentPath } from "@/shared/lib/location"
 
 export const fetchClient = createFetchClient<paths>({
   baseUrl: "",
