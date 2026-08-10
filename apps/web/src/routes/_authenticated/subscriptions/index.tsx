@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { api } from "@/shared/api"
 import { SubscriptionsPage } from "@/features/subscriptions/subscriptions-page"
 
-export const Route = createFileRoute("/_authenticated/subscriptions")({
+export const Route = createFileRoute("/_authenticated/subscriptions/")({
   loader: ({ context }) =>
     Promise.all([
       context.queryClient.ensureQueryData(

@@ -37,7 +37,7 @@ import {
 import { ThemeToggle } from "@/features/theme"
 import { recordBrowserEvent } from "@/shared/observability/events"
 
-export const Route = createFileRoute("/login")({
+export const Route = createFileRoute("/login/")({
   validateSearch: (search: Record<string, unknown>) => ({
     redirect: safeRedirect(search.redirect),
   }),

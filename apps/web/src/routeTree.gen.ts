@@ -9,101 +9,104 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated.index'
-import { Route as AuthenticatedArticlesRouteImport } from './routes/_authenticated.articles'
-import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated.library'
-import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated.schedule'
-import { Route as AuthenticatedSubscriptionsRouteImport } from './routes/_authenticated.subscriptions'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as LoginIndexRouteImport } from './routes/login/index'
+import { Route as AuthenticatedArticlesIndexRouteImport } from './routes/_authenticated/articles/index'
+import { Route as AuthenticatedLibraryIndexRouteImport } from './routes/_authenticated/library/index'
+import { Route as AuthenticatedScheduleIndexRouteImport } from './routes/_authenticated/schedule/index'
+import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
 
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedArticlesRoute = AuthenticatedArticlesRouteImport.update({
-  id: '/articles',
-  path: '/articles',
-  getParentRoute: () => AuthenticatedRoute,
+const LoginIndexRoute = LoginIndexRouteImport.update({
+  id: '/login/',
+  path: '/login/',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
-  id: '/library',
-  path: '/library',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedScheduleRoute = AuthenticatedScheduleRouteImport.update({
-  id: '/schedule',
-  path: '/schedule',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedSubscriptionsRoute =
-  AuthenticatedSubscriptionsRouteImport.update({
-    id: '/subscriptions',
-    path: '/subscriptions',
-    getParentRoute: () => AuthenticatedRoute,
+const AuthenticatedArticlesIndexRoute =
+  AuthenticatedArticlesIndexRouteImport.update({
+    id: '/articles/',
+    path: '/articles/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedLibraryIndexRoute =
+  AuthenticatedLibraryIndexRouteImport.update({
+    id: '/library/',
+    path: '/library/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedScheduleIndexRoute =
+  AuthenticatedScheduleIndexRouteImport.update({
+    id: '/schedule/',
+    path: '/schedule/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSubscriptionsIndexRoute =
+  AuthenticatedSubscriptionsIndexRouteImport.update({
+    id: '/subscriptions/',
+    path: '/subscriptions/',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
-  '/login': typeof LoginRoute
-  '/articles': typeof AuthenticatedArticlesRoute
-  '/library': typeof AuthenticatedLibraryRoute
-  '/schedule': typeof AuthenticatedScheduleRoute
-  '/subscriptions': typeof AuthenticatedSubscriptionsRoute
+  '/login/': typeof LoginIndexRoute
+  '/articles/': typeof AuthenticatedArticlesIndexRoute
+  '/library/': typeof AuthenticatedLibraryIndexRoute
+  '/schedule/': typeof AuthenticatedScheduleIndexRoute
+  '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
 }
 export interface FileRoutesByTo {
-  '/login': typeof LoginRoute
-  '/articles': typeof AuthenticatedArticlesRoute
-  '/library': typeof AuthenticatedLibraryRoute
-  '/schedule': typeof AuthenticatedScheduleRoute
-  '/subscriptions': typeof AuthenticatedSubscriptionsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/login': typeof LoginIndexRoute
+  '/articles': typeof AuthenticatedArticlesIndexRoute
+  '/library': typeof AuthenticatedLibraryIndexRoute
+  '/schedule': typeof AuthenticatedScheduleIndexRoute
+  '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_authenticated': typeof AuthenticatedRouteWithChildren
-  '/login': typeof LoginRoute
-  '/_authenticated/articles': typeof AuthenticatedArticlesRoute
-  '/_authenticated/library': typeof AuthenticatedLibraryRoute
-  '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
-  '/_authenticated/subscriptions': typeof AuthenticatedSubscriptionsRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/login/': typeof LoginIndexRoute
+  '/_authenticated/articles/': typeof AuthenticatedArticlesIndexRoute
+  '/_authenticated/library/': typeof AuthenticatedLibraryIndexRoute
+  '/_authenticated/schedule/': typeof AuthenticatedScheduleIndexRoute
+  '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/login'
-    | '/articles'
-    | '/library'
-    | '/schedule'
-    | '/subscriptions'
+    | '/login/'
+    | '/articles/'
+    | '/library/'
+    | '/schedule/'
+    | '/subscriptions/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/articles' | '/library' | '/schedule' | '/subscriptions' | '/'
+  to: '/' | '/login' | '/articles' | '/library' | '/schedule' | '/subscriptions'
   id:
     | '__root__'
     | '/_authenticated'
-    | '/login'
-    | '/_authenticated/articles'
-    | '/_authenticated/library'
-    | '/_authenticated/schedule'
-    | '/_authenticated/subscriptions'
     | '/_authenticated/'
+    | '/login/'
+    | '/_authenticated/articles/'
+    | '/_authenticated/library/'
+    | '/_authenticated/schedule/'
+    | '/_authenticated/subscriptions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
-  LoginRoute: typeof LoginRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  LoginIndexRoute: typeof LoginIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -112,14 +115,7 @@ declare module '@tanstack/react-router' {
       id: '/_authenticated'
       path: ''
       fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -127,62 +123,68 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/articles': {
-      id: '/_authenticated/articles'
+    '/login/': {
+      id: '/login/'
+      path: '/login'
+      fullPath: '/login/'
+      preLoaderRoute: typeof LoginIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/articles/': {
+      id: '/_authenticated/articles/'
       path: '/articles'
-      fullPath: '/articles'
-      preLoaderRoute: typeof AuthenticatedArticlesRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      fullPath: '/articles/'
+      preLoaderRoute: typeof AuthenticatedArticlesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/library': {
-      id: '/_authenticated/library'
+    '/_authenticated/library/': {
+      id: '/_authenticated/library/'
       path: '/library'
-      fullPath: '/library'
-      preLoaderRoute: typeof AuthenticatedLibraryRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      fullPath: '/library/'
+      preLoaderRoute: typeof AuthenticatedLibraryIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/schedule': {
-      id: '/_authenticated/schedule'
+    '/_authenticated/schedule/': {
+      id: '/_authenticated/schedule/'
       path: '/schedule'
-      fullPath: '/schedule'
-      preLoaderRoute: typeof AuthenticatedScheduleRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      fullPath: '/schedule/'
+      preLoaderRoute: typeof AuthenticatedScheduleIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/subscriptions': {
-      id: '/_authenticated/subscriptions'
+    '/_authenticated/subscriptions/': {
+      id: '/_authenticated/subscriptions/'
       path: '/subscriptions'
-      fullPath: '/subscriptions'
-      preLoaderRoute: typeof AuthenticatedSubscriptionsRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      fullPath: '/subscriptions/'
+      preLoaderRoute: typeof AuthenticatedSubscriptionsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
 
-interface AuthenticatedRouteChildren {
-  AuthenticatedArticlesRoute: typeof AuthenticatedArticlesRoute
-  AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
-  AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
-  AuthenticatedSubscriptionsRoute: typeof AuthenticatedSubscriptionsRoute
+interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedArticlesIndexRoute: typeof AuthenticatedArticlesIndexRoute
+  AuthenticatedLibraryIndexRoute: typeof AuthenticatedLibraryIndexRoute
+  AuthenticatedScheduleIndexRoute: typeof AuthenticatedScheduleIndexRoute
+  AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
 }
 
-const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedArticlesRoute: AuthenticatedArticlesRoute,
-  AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
-  AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
-  AuthenticatedSubscriptionsRoute: AuthenticatedSubscriptionsRoute,
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedArticlesIndexRoute: AuthenticatedArticlesIndexRoute,
+  AuthenticatedLibraryIndexRoute: AuthenticatedLibraryIndexRoute,
+  AuthenticatedScheduleIndexRoute: AuthenticatedScheduleIndexRoute,
+  AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
 }
 
-const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
-  AuthenticatedRouteChildren,
-)
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  AuthenticatedRoute: AuthenticatedRouteWithChildren,
-  LoginRoute: LoginRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  LoginIndexRoute: LoginIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
