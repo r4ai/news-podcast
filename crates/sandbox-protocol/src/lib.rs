@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+use std::path::{Component, Path};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -64,6 +66,8 @@ pub enum ValidationError {
     EmptyCommand,
     #[error("sandbox working directory must be under /workspace")]
     InvalidWorkingDirectory,
+    #[error("sandbox command timeout is outside the policy")]
+    InvalidTimeout,
     #[error("sandbox resource limits are outside the policy")]
     InvalidLimits,
 }
@@ -98,10 +102,15 @@ impl ExecRequest {
         if self.command.is_empty() || self.command[0].is_empty() {
             return Err(ValidationError::EmptyCommand);
         }
-        if self.working_directory != "/workspace"
-            && !self.working_directory.starts_with("/workspace/")
-        {
+        let working_directory = Path::new(&self.working_directory);
+        let has_unsafe_component = working_directory
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir));
+        if (!working_directory.starts_with("/workspace")) || has_unsafe_component {
             return Err(ValidationError::InvalidWorkingDirectory);
+        }
+        if self.timeout_seconds == 0 || self.timeout_seconds > 1800 {
+            return Err(ValidationError::InvalidTimeout);
         }
         Ok(())
     }
@@ -155,5 +164,14 @@ mod tests {
         exec.working_directory = "/workspace".into();
         exec.protocol_version = "v2".into();
         assert_eq!(exec.validate(), Err(ValidationError::UnsupportedVersion));
+        exec.protocol_version = PROTOCOL_VERSION.into();
+        exec.working_directory = "/workspace/../etc".into();
+        assert_eq!(
+            exec.validate(),
+            Err(ValidationError::InvalidWorkingDirectory)
+        );
+        exec.working_directory = "/workspace".into();
+        exec.timeout_seconds = 0;
+        assert_eq!(exec.validate(), Err(ValidationError::InvalidTimeout));
     }
 }

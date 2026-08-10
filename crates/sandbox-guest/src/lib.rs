@@ -43,11 +43,13 @@ pub async fn execute(
     .await
     .map_err(|_| GuestExecError::Timeout)?
     .map_err(|_| GuestExecError::Execution)?;
+    let stdout_length = output.stdout.len().min(output_limit);
+    let remaining = output_limit.saturating_sub(stdout_length);
     let total = output.stdout.len().saturating_add(output.stderr.len());
     Ok(ExecResponse {
         exit_code: output.status.code().unwrap_or(128),
-        stdout: truncate_utf8(&output.stdout, output_limit),
-        stderr: truncate_utf8(&output.stderr, output_limit),
+        stdout: truncate_utf8(&output.stdout, stdout_length),
+        stderr: truncate_utf8(&output.stderr, remaining),
         truncated: total > output_limit,
     })
 }
