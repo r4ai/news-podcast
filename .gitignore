@@ -41,6 +41,9 @@ news-podcast-app/
 # typescript
 *.tsbuildinfo
 
+# rust
+/target/
+
 # SigNoz Foundry generated deployment and local backups
 infra/observability/pours/
 infra/observability/casting.yaml.lock
