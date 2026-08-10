@@ -141,15 +141,15 @@ Agent orchestrationはTypeScriptのOpenAI Agents SDK adapterから開始する�
 
 | 対象 | 必要な変更 | 状態 | 証拠 |
 | --- | --- | --- | --- |
-| 設計書 | 配置、use case、Memory、retry | In progress | `docs/design.md` §8.4 |
-| ドメイン/ユースケース | AgentRun、Approval、Memory、cancel/retry | Pending | Domain/Application |
-| OpenAPI/外部契約 | run、approval、Memory、cancel/retry route | Pending | Hono schema / generated OpenAPI |
-| コード/ポート | Agent Engine、MCP、Sandbox、Memory ports | Pending | packages/application |
-| データ/ストレージ | run event、approval、Memory、checkpoint | Pending | migration 0006以降 |
-| 実行/配備 | Rust runner、guest、kernel/rootfs | Pending | `crates/`、`infra/sandbox/` |
-| 認証/セキュリティ | threat model、owner scope、Jailer | In progress | security document |
+| 設計書 | 配置、use case、Memory、retry | Implemented | `docs/design.md` §8.4 |
+| ドメイン/ユースケース | AgentRun、Approval、Memory、cancel/retry | Partial | Domain state、Application ports、job操作を実装。approval commandは未接続 |
+| OpenAPI/外部契約 | run、approval、Memory、cancel/retry route | Partial | run/event、Memory、cancel/retryを生成済み。approval routeは未実装 |
+| コード/ポート | Agent Engine、MCP、Sandbox、Memory ports | Partial | Agents SDK adapter、Sandbox/Memory portを実装。MCP brokerは未接続 |
+| データ/ストレージ | run event、approval、Memory、checkpoint | Implemented | migration 0006、0007 |
+| 実行/配備 | Rust runner、guest、kernel/rootfs | Partial | Rust protocol、認証API、guestを実装。Firecracker/Jailer artifactとboot backendは未実装 |
+| 認証/セキュリティ | threat model、owner scope、Jailer | Partial | owner/Agent scope、fail-closed runnerを実装。実Jailer検証は未完了 |
 | フロント/品質保証 | timeline、approval、Memory、cancel/retry | Pending | Web tests |
-| テスト/運用 | contract、KVM integration、isolation、eval | Pending | CI / KVM runner |
+| テスト/運用 | contract、KVM integration、isolation、eval | Partial | TS/Rust contract test済み。KVM integrationとevalは未実施 |
 
 ## 再検討条件
 
@@ -167,4 +167,9 @@ Agent orchestrationはTypeScriptのOpenAI Agents SDK adapterから開始する�
 ## 検証証拠
 
 - ADR承認: 本計画をユーザーが明示的に実装依頼した。
-- 実装・contract・security testの証拠は各sliceで追記する。
+- 出典自己修復: `5ce8464`。未観測sourceを同一runで最大2回修正する。
+- Domain/Memory永続化: `6608b8c`、`9c79067`。owner + Agent instance分離testを含む。
+- Agents SDK/Sandbox client: `29f9028`、`04859e5`。SDK checkpointとversion付きrunner APIをcontract化した。
+- Rust runner/guest: `9fa5d99`、`cfe0717`。認証、resource/path/timeout/output境界をRust testとClippyで検証した。
+- Job/公開API: `35bb107`、`282b63f`。cancel/retry、run/event、Memory lifecycleと生成OpenAPIを追加した。
+- 実Firecracker smokeはbinary、kernel、rootfsが未配置のため未実施。runnerはhost shellへfallbackせず503でfail closedする。
