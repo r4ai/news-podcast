@@ -66,9 +66,7 @@ export class OpenAiAgentsEngine implements AgentEngine {
           schemaVersion: 1,
           runId: input.runId,
           sequence: 0,
-          type: waitingForApproval
-            ? "run.waiting_approval"
-            : "run.completed",
+          type: waitingForApproval ? "run.waiting_approval" : "run.completed",
           occurredAt: this.now(),
           payload: waitingForApproval
             ? {
@@ -89,7 +87,9 @@ export class OpenAiAgentsEngine implements AgentEngine {
     checkpoint: AgentEngineCheckpoint
   ): Promise<RunState<unknown, Agent>> {
     if (checkpoint.engine !== ENGINE_ID) {
-      throw new Error(`Unsupported Agent Engine checkpoint: ${checkpoint.engine}`)
+      throw new Error(
+        `Unsupported Agent Engine checkpoint: ${checkpoint.engine}`
+      )
     }
     const serializedState = checkpoint.payload.serializedState
     if (typeof serializedState !== "string") {
@@ -113,4 +113,3 @@ function restoreSdkState(
 ): Promise<RunState<unknown, Agent>> {
   return RunState.fromString(agent, serialized)
 }
-

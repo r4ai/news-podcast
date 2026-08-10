@@ -76,11 +76,10 @@ describe("OpenAiAgentsEngine", () => {
       expect.objectContaining({ name: "Podcast Editor" }),
       "prior-state"
     )
-    expect(execute).toHaveBeenCalledWith(
-      expect.anything(),
-      restoredState,
-      { maxTurns: 8, signal }
-    )
+    expect(execute).toHaveBeenCalledWith(expect.anything(), restoredState, {
+      maxTurns: 8,
+      signal,
+    })
     expect(result.events[0]).toMatchObject({
       type: "run.waiting_approval",
       payload: {
@@ -115,4 +114,3 @@ describe("OpenAiAgentsEngine", () => {
     expect(execute).not.toHaveBeenCalled()
   })
 })
-

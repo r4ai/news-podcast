@@ -75,12 +75,14 @@ describe("FirecrackerSandboxClient", () => {
   })
 
   it("does not expose runner response bodies or credentials in errors", async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      Response.json(
-        { error: "internal path /srv/jailer", token: "secret" },
-        { status: 500 }
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: "internal path /srv/jailer", token: "secret" },
+          { status: 500 }
+        )
       )
-    )
     const client = new FirecrackerSandboxClient(
       {
         baseUrl: new URL("http://runner.internal"),

@@ -26,8 +26,16 @@ export interface Observability {
     operation: () => Promise<T>,
     options?: SpanOptions
   ): Promise<T>
-  count(name: MetricName, value?: number, attributes?: TelemetryAttributes): void
-  measure(name: MetricName, value: number, attributes?: TelemetryAttributes): void
+  count(
+    name: MetricName,
+    value?: number,
+    attributes?: TelemetryAttributes
+  ): void
+  measure(
+    name: MetricName,
+    value: number,
+    attributes?: TelemetryAttributes
+  ): void
   gauge(name: MetricName, value: number, attributes?: TelemetryAttributes): void
   captureContext(): TraceContext | undefined
   shutdown(): Promise<void>

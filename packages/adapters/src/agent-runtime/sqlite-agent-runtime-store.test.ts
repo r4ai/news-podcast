@@ -140,8 +140,7 @@ describe("SqliteAgentRuntimeStore", () => {
         .get(runId)
     ).toMatchObject({
       event_type: "run.retrying",
-      payload_json:
-        '{"schemaVersion":1,"reason":"provider_timeout"}',
+      payload_json: '{"schemaVersion":1,"reason":"provider_timeout"}',
     })
     store.close()
   })

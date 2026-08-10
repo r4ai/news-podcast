@@ -48,4 +48,3 @@ export function transitionAgentRun(
 export function isTerminalAgentRunStatus(status: AgentRunStatus): boolean {
   return allowedTargets[status].size === 0
 }
-

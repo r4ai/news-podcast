@@ -159,10 +159,7 @@ function emitHealthTelemetry(now: Date): void {
   for (const [status, value] of Object.entries(snapshot.jobs)) {
     observability.gauge("episode.jobs", value, { "job.status": status })
   }
-  observability.gauge(
-    "episode.queue.oldest.age",
-    snapshot.oldestQueueAgeMs
-  )
+  observability.gauge("episode.queue.oldest.age", snapshot.oldestQueueAgeMs)
   for (const [stage, value] of Object.entries(snapshot.oldestStageAgeMs)) {
     observability.gauge("episode.stage.oldest.age", value, {
       "operation.stage": stage,

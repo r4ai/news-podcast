@@ -100,7 +100,9 @@ export async function checkWatchdog(input: {
         subject: `[CRITICAL] News Podcast watchdog: ${Object.keys(failures).join(", ")}`,
         text: [
           `Detected at ${input.now.toISOString()}`,
-          ...Object.entries(failures).map(([name, reason]) => `${name}: ${reason}`),
+          ...Object.entries(failures).map(
+            ([name, reason]) => `${name}: ${reason}`
+          ),
           ...(recovered.length > 0
             ? [`Recovered in the same check: ${recovered.join(", ")}`]
             : []),
@@ -133,5 +135,7 @@ export function exportedPoints(metrics: string): number | undefined {
 
 function safeError(error: unknown): string {
   if (!(error instanceof Error)) return "request failed"
-  return error.name === "TimeoutError" ? "request timed out" : error.message.slice(0, 200)
+  return error.name === "TimeoutError"
+    ? "request timed out"
+    : error.message.slice(0, 200)
 }

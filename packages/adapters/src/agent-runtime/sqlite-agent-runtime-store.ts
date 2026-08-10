@@ -150,9 +150,7 @@ export class SqliteAgentRuntimeStore
     readonly expiresAt?: Date
   }): Promise<AgentMemoryRecord> {
     const instance = this.database
-      .prepare(
-        "SELECT 1 FROM agent_instances WHERE id = ? AND owner_id = ?"
-      )
+      .prepare("SELECT 1 FROM agent_instances WHERE id = ? AND owner_id = ?")
       .get(input.agentInstanceId, input.ownerId)
     if (!instance) {
       throw new Error("Agent instance not found")
@@ -282,7 +280,10 @@ export class SqliteAgentRuntimeStore
         event.runId,
         event.sequence,
         event.type,
-        JSON.stringify({ schemaVersion: event.schemaVersion, ...event.payload }),
+        JSON.stringify({
+          schemaVersion: event.schemaVersion,
+          ...event.payload,
+        }),
         event.occurredAt.toISOString()
       )
   }

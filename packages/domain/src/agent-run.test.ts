@@ -53,4 +53,3 @@ describe("agent run state", () => {
     expect(isTerminalAgentRunStatus(status)).toBe(expected)
   })
 })
-

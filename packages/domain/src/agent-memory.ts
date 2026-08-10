@@ -22,4 +22,3 @@ export function initialMemoryStatus(kind: AgentMemoryKind): AgentMemoryStatus {
 export function canAgentAutoActivateMemory(kind: AgentMemoryKind): boolean {
   return kind === "episode_history"
 }
-

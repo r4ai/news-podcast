@@ -5,15 +5,30 @@ import nodemailer from "nodemailer"
 
 import { checkWatchdog, type WatchdogState } from "./watchdog.js"
 
-const statePath = process.env.WATCHDOG_STATE_PATH ?? "/var/lib/news-podcast-watchdog/state.json"
+const statePath =
+  process.env.WATCHDOG_STATE_PATH ?? "/var/lib/news-podcast-watchdog/state.json"
 const intervalMs = readPositiveNumber("WATCHDOG_INTERVAL_MS", 60_000)
 const targets = [
-  { name: "api", url: process.env.WATCHDOG_API_URL ?? "http://127.0.0.1:3000/health" },
-  { name: "worker", url: process.env.WATCHDOG_WORKER_URL ?? "http://127.0.0.1:3001/health" },
-  { name: "voicevox", url: process.env.WATCHDOG_VOICEVOX_URL ?? "http://127.0.0.1:50021/version" },
-  { name: "signoz", url: process.env.WATCHDOG_SIGNOZ_URL ?? "http://127.0.0.1:8080/api/v1/health" },
+  {
+    name: "api",
+    url: process.env.WATCHDOG_API_URL ?? "http://127.0.0.1:3000/health",
+  },
+  {
+    name: "worker",
+    url: process.env.WATCHDOG_WORKER_URL ?? "http://127.0.0.1:3001/health",
+  },
+  {
+    name: "voicevox",
+    url: process.env.WATCHDOG_VOICEVOX_URL ?? "http://127.0.0.1:50021/version",
+  },
+  {
+    name: "signoz",
+    url:
+      process.env.WATCHDOG_SIGNOZ_URL ?? "http://127.0.0.1:8080/api/v1/health",
+  },
 ]
-const collectorMetricsUrl = process.env.WATCHDOG_COLLECTOR_METRICS_URL ?? "http://127.0.0.1:8888/metrics"
+const collectorMetricsUrl =
+  process.env.WATCHDOG_COLLECTOR_METRICS_URL ?? "http://127.0.0.1:8888/metrics"
 const transport = nodemailer.createTransport({
   host: required("WATCHDOG_SMTP_HOST"),
   port: readPositiveNumber("WATCHDOG_SMTP_PORT", 587),
@@ -77,7 +92,8 @@ async function loadState(): Promise<WatchdogState> {
   try {
     return JSON.parse(await readFile(statePath, "utf8")) as WatchdogState
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { failures: {} }
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      return { failures: {} }
     throw error
   }
 }
@@ -97,10 +113,13 @@ function required(key: string): string {
 
 function readPositiveNumber(key: string, fallback: number): number {
   const value = Number(process.env[key] ?? fallback)
-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${key} must be positive`)
+  if (!Number.isFinite(value) || value <= 0)
+    throw new Error(`${key} must be positive`)
   return value
 }
 
 function safeError(error: unknown): string {
-  return error instanceof Error ? error.message.slice(0, 200) : "unknown failure"
+  return error instanceof Error
+    ? error.message.slice(0, 200)
+    : "unknown failure"
 }

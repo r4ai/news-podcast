@@ -1127,10 +1127,7 @@ export class LocalStore implements EpisodeJobRepository {
       .all() as readonly Record<string, unknown>[]
     const oldestStageAgeMs: Partial<Record<JobStage, number>> = {}
     for (const row of stageRows) {
-      oldestStageAgeMs[String(row.stage) as JobStage] = ageMs(
-        row.oldest,
-        now
-      )
+      oldestStageAgeMs[String(row.stage) as JobStage] = ageMs(row.oldest, now)
     }
     const totals = this.database
       .prepare(

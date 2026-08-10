@@ -143,12 +143,7 @@ describe("episode job control", () => {
     await createJob(store, "owner-1", "health-running")
     const now = new Date("2026-08-10T00:00:00.000Z")
     const running = store.leaseNext(now)!
-    store.setJobStage(
-      running.id,
-      running.leaseToken,
-      "synthesizing_audio",
-      now
-    )
+    store.setJobStage(running.id, running.leaseToken, "synthesizing_audio", now)
 
     expect(
       store.getJobHealthSnapshot(new Date("2026-08-10T00:00:30.000Z"))
