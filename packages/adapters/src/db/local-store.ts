@@ -82,6 +82,11 @@ export interface JobDto {
   readonly failure?: JobFailureDto
 }
 
+export interface JobReconciliationResult {
+  readonly deadlineExceeded: number
+  readonly attemptLimitExceeded: number
+}
+
 export interface EpisodeSourceDto {
   readonly url: string
   readonly title: string
@@ -103,7 +108,17 @@ export interface WorkerJob {
   readonly ownerId: string
   readonly attempt: number
   readonly leaseToken: string
+  readonly leaseExpiresAt: Date
+  readonly deadlineAt: Date
+  readonly recovered: boolean
   readonly traceContext?: EpisodeTraceContext
+}
+
+export class LeaseLostError extends Error {
+  constructor(readonly jobId: string) {
+    super(`Episode job lease was lost: ${jobId}`)
+    this.name = "LeaseLostError"
+  }
 }
 
 export interface ScheduledOwner {
@@ -849,7 +864,8 @@ export class LocalStore implements EpisodeJobRepository {
         .prepare(
           `UPDATE episode_jobs SET status = 'canceled', finished_at = ?,
            stage = NULL, lease_token = NULL, lease_expires_at = NULL,
-           next_attempt_at = NULL WHERE id = ? AND owner_id = ?`
+           heartbeat_at = NULL, next_attempt_at = NULL
+           WHERE id = ? AND owner_id = ?`
         )
         .run(now, jobId, ownerId)
       this.database
@@ -921,34 +937,63 @@ export class LocalStore implements EpisodeJobRepository {
 
   leaseNext(now = new Date()): WorkerJob | undefined {
     return this.transaction(() => {
+      this.reconcileJobsWithinTransaction(now)
       const timestamp = now.toISOString()
       const row = this.database
         .prepare(
-          `SELECT id, owner_id, attempt, trace_parent, trace_state
+          `SELECT id, owner_id, status, attempt, deadline_at,
+                  trace_parent, trace_state
            FROM episode_jobs
-           WHERE (status = 'queued')
+           WHERE ((status = 'queued')
               OR (status = 'retrying' AND next_attempt_at <= ?)
-              OR (status = 'running' AND lease_expires_at <= ?)
+              OR (status = 'running' AND lease_expires_at <= ?))
+             AND attempt < 4
            ORDER BY created_at, id LIMIT 1`
         )
         .get(timestamp, timestamp) as Record<string, unknown> | undefined
       if (!row) return undefined
       const leaseToken = randomUUID()
       const leaseExpiresAt = new Date(now.getTime() + 60_000).toISOString()
+      const deadlineAt = row.deadline_at
+        ? String(row.deadline_at)
+        : new Date(now.getTime() + 30 * 60_000).toISOString()
       const attempt = Number(row.attempt) + 1
-      this.database
+      const recovered = String(row.status) === "running"
+      const result = this.database
         .prepare(
           `UPDATE episode_jobs SET status = 'running', attempt = ?,
            started_at = COALESCE(started_at, ?), lease_token = ?,
-           lease_expires_at = ?, next_attempt_at = NULL
-           WHERE id = ?`
+           lease_expires_at = ?, heartbeat_at = ?, deadline_at = ?,
+           last_progress_at = COALESCE(last_progress_at, ?),
+           next_attempt_at = NULL
+           WHERE id = ? AND attempt < 4`
         )
-        .run(attempt, timestamp, leaseToken, leaseExpiresAt, String(row.id))
+        .run(
+          attempt,
+          timestamp,
+          leaseToken,
+          leaseExpiresAt,
+          timestamp,
+          deadlineAt,
+          timestamp,
+          String(row.id)
+        )
+      if (result.changes !== 1) throw new LeaseLostError(String(row.id))
+      this.recordJobEvent(
+        String(row.id),
+        recovered ? "lease_recovered" : "lease_acquired",
+        attempt,
+        undefined,
+        timestamp
+      )
       return {
         id: String(row.id),
         ownerId: String(row.owner_id),
         attempt,
         leaseToken,
+        leaseExpiresAt: new Date(leaseExpiresAt),
+        deadlineAt: new Date(deadlineAt),
+        recovered,
         ...(row.trace_parent
           ? {
               traceContext: {
@@ -963,6 +1008,37 @@ export class LocalStore implements EpisodeJobRepository {
     })
   }
 
+  renewLease(
+    jobId: string,
+    leaseToken: string,
+    now = new Date(),
+    leaseSeconds = 60
+  ): Date {
+    const leaseExpiresAt = new Date(
+      now.getTime() + leaseSeconds * 1000
+    ).toISOString()
+    const result = this.database
+      .prepare(
+        `UPDATE episode_jobs SET lease_expires_at = ?, heartbeat_at = ?
+         WHERE id = ? AND status = 'running' AND lease_token = ?
+           AND lease_expires_at > ? AND deadline_at > ?`
+      )
+      .run(
+        leaseExpiresAt,
+        now.toISOString(),
+        jobId,
+        leaseToken,
+        now.toISOString(),
+        now.toISOString()
+      )
+    if (result.changes !== 1) throw new LeaseLostError(jobId)
+    return new Date(leaseExpiresAt)
+  }
+
+  reconcileJobs(now = new Date()): JobReconciliationResult {
+    return this.transaction(() => this.reconcileJobsWithinTransaction(now))
+  }
+
   getJobFeeds(jobId: string): readonly FeedDto[] {
     return this.database
       .prepare(
@@ -974,12 +1050,32 @@ export class LocalStore implements EpisodeJobRepository {
       .map(toFeed)
   }
 
-  setJobStage(jobId: string, leaseToken: string, stage: JobStage): void {
-    this.database
+  setJobStage(
+    jobId: string,
+    leaseToken: string,
+    stage: JobStage,
+    now = new Date()
+  ): void {
+    const timestamp = now.toISOString()
+    const result = this.database
       .prepare(
-        "UPDATE episode_jobs SET stage = ? WHERE id = ? AND lease_token = ?"
+        `UPDATE episode_jobs SET stage = ?,
+         stage_started_at = CASE WHEN stage IS ? THEN stage_started_at ELSE ? END,
+         last_progress_at = ?, progress_completed = NULL, progress_total = NULL
+         WHERE id = ? AND status = 'running' AND lease_token = ?
+           AND lease_expires_at > ? AND deadline_at > ?`
       )
-      .run(stage, jobId, leaseToken)
+      .run(
+        stage,
+        stage,
+        timestamp,
+        timestamp,
+        jobId,
+        leaseToken,
+        timestamp,
+        timestamp
+      )
+    if (result.changes !== 1) throw new LeaseLostError(jobId)
   }
 
   retryJob(
@@ -988,12 +1084,12 @@ export class LocalStore implements EpisodeJobRepository {
     nextAttemptAt: Date,
     failure: JobFailureDto
   ): void {
-    this.database
+    const result = this.database
       .prepare(
         `UPDATE episode_jobs SET status = 'retrying', next_attempt_at = ?,
          failure_code = ?, failure_message = ?, failure_retryable = 1,
-         lease_token = NULL, lease_expires_at = NULL
-         WHERE id = ? AND lease_token = ?`
+         lease_token = NULL, lease_expires_at = NULL, heartbeat_at = NULL
+         WHERE id = ? AND status = 'running' AND lease_token = ?`
       )
       .run(
         nextAttemptAt.toISOString(),
@@ -1002,15 +1098,16 @@ export class LocalStore implements EpisodeJobRepository {
         jobId,
         leaseToken
       )
+    if (result.changes !== 1) throw new LeaseLostError(jobId)
   }
 
   failJob(jobId: string, leaseToken: string, failure: JobFailureDto): void {
-    this.database
+    const result = this.database
       .prepare(
         `UPDATE episode_jobs SET status = 'failed', finished_at = ?,
          failure_code = ?, failure_message = ?, failure_retryable = ?,
-         lease_token = NULL, lease_expires_at = NULL
-         WHERE id = ? AND lease_token = ?`
+         lease_token = NULL, lease_expires_at = NULL, heartbeat_at = NULL
+         WHERE id = ? AND status = 'running' AND lease_token = ?`
       )
       .run(
         new Date().toISOString(),
@@ -1020,6 +1117,7 @@ export class LocalStore implements EpisodeJobRepository {
         jobId,
         leaseToken
       )
+    if (result.changes !== 1) throw new LeaseLostError(jobId)
   }
 
   completeJob(input: {
@@ -1071,12 +1169,78 @@ export class LocalStore implements EpisodeJobRepository {
         .prepare(
           `UPDATE episode_jobs SET status = 'succeeded', episode_id = ?,
            finished_at = ?, stage = NULL, lease_token = NULL,
-           lease_expires_at = NULL WHERE id = ? AND lease_token = ?`
+           lease_expires_at = NULL, heartbeat_at = NULL
+           WHERE id = ? AND status = 'running' AND lease_token = ?
+             AND lease_expires_at > ? AND deadline_at > ?`
         )
-        .run(episodeId, createdAt, input.jobId, input.leaseToken)
-      if (result.changes !== 1) throw new Error("job-lease-lost")
+        .run(
+          episodeId,
+          createdAt,
+          input.jobId,
+          input.leaseToken,
+          createdAt,
+          createdAt
+        )
+      if (result.changes !== 1) throw new LeaseLostError(input.jobId)
       return episodeId
     })
+  }
+
+  private reconcileJobsWithinTransaction(
+    now: Date
+  ): JobReconciliationResult {
+    const timestamp = now.toISOString()
+    const deadline = this.database
+      .prepare(
+        `UPDATE episode_jobs SET status = 'failed', finished_at = ?,
+         failure_code = 'job-deadline-exceeded',
+         failure_message = '生成処理が30分の上限を超えました。',
+         failure_retryable = 1, lease_token = NULL, lease_expires_at = NULL,
+         heartbeat_at = NULL, next_attempt_at = NULL
+         WHERE status IN ('queued', 'running', 'retrying')
+           AND deadline_at IS NOT NULL AND deadline_at <= ?`
+      )
+      .run(timestamp, timestamp)
+    const attempts = this.database
+      .prepare(
+        `UPDATE episode_jobs SET status = 'failed', finished_at = ?,
+         failure_code = 'attempt-limit-exceeded',
+         failure_message = '自動試行の上限4回に達しました。',
+         failure_retryable = 1, lease_token = NULL, lease_expires_at = NULL,
+         heartbeat_at = NULL, next_attempt_at = NULL
+         WHERE (status IN ('queued', 'retrying') AND attempt >= 4)
+            OR (status = 'running' AND attempt >= 4 AND lease_expires_at <= ?)`
+      )
+      .run(timestamp, timestamp)
+    return {
+      deadlineExceeded: Number(deadline.changes),
+      attemptLimitExceeded: Number(attempts.changes),
+    }
+  }
+
+  private recordJobEvent(
+    jobId: string,
+    eventType: string,
+    attempt: number,
+    stage: JobStage | undefined,
+    createdAt: string,
+    payload: Readonly<Record<string, unknown>> = {}
+  ): void {
+    this.database
+      .prepare(
+        `INSERT INTO episode_job_events
+         (id, job_id, event_type, attempt, stage, payload_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        randomUUID(),
+        jobId,
+        eventType,
+        attempt,
+        stage ?? null,
+        JSON.stringify(payload),
+        createdAt
+      )
   }
 
   listEpisodes(ownerId: string): readonly EpisodeDto[] {
