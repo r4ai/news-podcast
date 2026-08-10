@@ -1,4 +1,118 @@
-import type { JobStatus } from "@news-podcast/domain"
+import type {
+  AgentMemoryKind,
+  AgentMemoryStatus,
+  AgentRunStatus,
+  JobStatus,
+} from "@news-podcast/domain"
+
+export interface AgentEvent {
+  readonly schemaVersion: 1
+  readonly runId: string
+  readonly sequence: number
+  readonly type: string
+  readonly occurredAt: Date
+  readonly payload: Readonly<Record<string, unknown>>
+}
+
+export interface AgentEngineCheckpoint {
+  readonly schemaVersion: 1
+  readonly engine: string
+  readonly payload: Readonly<Record<string, unknown>>
+}
+
+export interface AgentEngine {
+  run(input: {
+    readonly runId: string
+    readonly goal: string
+    readonly checkpoint?: AgentEngineCheckpoint
+    readonly signal?: AbortSignal
+  }): Promise<{ readonly events: readonly AgentEvent[] }>
+}
+
+export interface SandboxLimits {
+  readonly vcpuCount: number
+  readonly memoryMib: number
+  readonly diskMib: number
+  readonly wallTimeSeconds: number
+  readonly outputBytes: number
+}
+
+export interface SandboxSession {
+  readonly id: string
+  readonly state: "ready" | "stopped"
+}
+
+export interface SandboxClient {
+  create(input: {
+    readonly runId: string
+    readonly profile: string
+    readonly limits: SandboxLimits
+  }): Promise<SandboxSession>
+  exec(input: {
+    readonly sessionId: string
+    readonly command: readonly string[]
+    readonly workingDirectory: string
+    readonly timeoutSeconds: number
+  }): Promise<{
+    readonly exitCode: number
+    readonly stdout: string
+    readonly stderr: string
+    readonly truncated: boolean
+  }>
+  checkpoint(sessionId: string): Promise<{ readonly objectKey: string }>
+  destroy(sessionId: string): Promise<void>
+}
+
+export interface AgentMemoryRecord {
+  readonly id: string
+  readonly ownerId: string
+  readonly agentInstanceId: string
+  readonly kind: AgentMemoryKind
+  readonly status: AgentMemoryStatus
+  readonly version: number
+  readonly content: Readonly<Record<string, unknown>>
+  readonly createdAt: Date
+  readonly expiresAt?: Date
+}
+
+export interface AgentMemoryRepository {
+  listActive(input: {
+    readonly ownerId: string
+    readonly agentInstanceId: string
+  }): Promise<readonly AgentMemoryRecord[]>
+  propose(input: {
+    readonly ownerId: string
+    readonly agentInstanceId: string
+    readonly kind: AgentMemoryKind
+    readonly content: Readonly<Record<string, unknown>>
+    readonly expiresAt?: Date
+  }): Promise<AgentMemoryRecord>
+  decide(input: {
+    readonly ownerId: string
+    readonly memoryId: string
+    readonly decision: "approve" | "reject"
+  }): Promise<AgentMemoryRecord | null>
+}
+
+export interface AgentRunRecord {
+  readonly id: string
+  readonly jobId: string
+  readonly ownerId: string
+  readonly status: AgentRunStatus
+  readonly policyHash: string
+  readonly createdAt: Date
+}
+
+export interface AgentRunRepository {
+  get(ownerId: string, runId: string): Promise<AgentRunRecord | null>
+  transition(input: {
+    readonly ownerId: string
+    readonly runId: string
+    readonly expected: AgentRunStatus
+    readonly next: AgentRunStatus
+  }): Promise<boolean>
+  appendEvent(event: AgentEvent): Promise<void>
+}
 
 export interface RssSourceItem {
   readonly sourceName: string
