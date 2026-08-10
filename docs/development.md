@@ -184,11 +184,50 @@ TELEMETRY_PROXY_TOKEN=news-podcast-local-observability
 
 開発用ComposeはWeb、API、SigNoz UI、OTLP endpoint、SeaweedFS、VOICEVOXをすべて`127.0.0.1`へbindする。LANやInternetへ直接公開せず、SSH先では必要なportだけをforwardする。
 
-SSH先で起動した場合、UIはローカルへforwardして閲覧する。
+#### SSH先で起動したサービスへ接続する
+
+通常利用ではWebアプリの4173番とSigNoz UIの8080番だけをforwardする。WebがAPIをproxyするため、APIの3000番を直接forwardする必要はない。
 
 ```bash
-ssh -N -L 8080:127.0.0.1:8080 user@ssh-host
+ssh -N \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -L 4173:127.0.0.1:4173 \
+  -L 8080:127.0.0.1:8080 \
+  user@ssh-host
 ```
+
+接続後はWebアプリを<http://localhost:4173>、SigNozを<http://localhost:8080>で開く。
+
+直接確認やデバッグが必要な場合だけ、次のportを追加でforwardする。
+
+| port | 用途 |
+| ---: | --- |
+| 3000 | API、health check、OpenAPI |
+| 8333 | SeaweedFS S3 API |
+| 9333 | SeaweedFS Master UI |
+| 50021 | VOICEVOX Engine |
+| 4317 | OTLP gRPC |
+| 4318 | OTLP HTTP |
+
+すべてをforwardする場合は次のコマンドを使う。
+
+```bash
+ssh -N \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -L 4173:127.0.0.1:4173 \
+  -L 3000:127.0.0.1:3000 \
+  -L 8080:127.0.0.1:8080 \
+  -L 8333:127.0.0.1:8333 \
+  -L 9333:127.0.0.1:9333 \
+  -L 50021:127.0.0.1:50021 \
+  -L 4317:127.0.0.1:4317 \
+  -L 4318:127.0.0.1:4318 \
+  user@ssh-host
+```
+
+OTLPは通常サーバー内のDocker networkで通信するため、ローカルPCからtelemetryを送らない限り4317番と4318番のforwardは不要である。
 
 終了時はアプリと監視基盤を個別に停止する。volumeは保持される。
 
