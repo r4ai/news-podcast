@@ -79,12 +79,12 @@ resource "signoz_rule" "canary_missing" {
   annotations    = { summary = "Telemetry canary missing", description = "${each.value} has not arrived for two minutes." }
   condition = {
     alert_on_absent = true
-    absent_for      = "2m"
+    absent_for      = 120
     composite_query = {
       panel_type = "graph"
       query_type = "builder"
       queries = [{ builder_query = { type = "builder_query", spec = { metrics = {
-        name = "A", signal = "metrics", aggregations = [{ metric_name = each.value, time_aggregation = "max", space_aggregation = "max" }]
+        name   = "A", signal = "metrics", aggregations = [{ metric_name = each.value, time_aggregation = "max", space_aggregation = "max" }]
         filter = { expression = "deployment.environment = '${var.alert_environment}'" }, step_interval = "60"
       } } } }]
     }
