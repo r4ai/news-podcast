@@ -48,3 +48,9 @@ news-podcast-app/
 infra/observability/pours/
 infra/observability/casting.yaml.lock
 infra/observability/backup/data/
+
+# Terraform local state and downloaded providers
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan

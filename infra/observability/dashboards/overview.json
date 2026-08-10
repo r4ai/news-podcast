@@ -1,1 +1,0 @@
-{"id":"overview","title":"Overview","panels":["request rate by service","HTTP 5xx ratio","p50/p95/p99 HTTP duration","generation success ratio","active grouped exceptions"]}

@@ -1,1 +1,0 @@
-{"id":"generation","title":"Generation","panels":["requested/succeeded/failed count","end-to-end p95 duration","stage p95 duration","retry count by error type","pipeline trace table"]}

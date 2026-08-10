@@ -1,3 +1,0 @@
-# Dashboard acceptance specifications
-
-4つのJSONはdashboardの安定した目的と必須panelを管理する受け入れ仕様である。SigNoz v0.135以降はDashboard V2/Persesへ移行中のため、稼働instanceで作成してexportしたversion固有JSONを同じ名前の`.signoz.json`として追加する。export後は各panelがservice、deployment environment、versionでfilterでき、traceへ遷移できることをsmoke testする。
