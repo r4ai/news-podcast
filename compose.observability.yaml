@@ -1,0 +1,15 @@
+services:
+  api:
+    networks:
+      - default
+      - signoz
+
+  worker:
+    networks:
+      - default
+      - signoz
+
+networks:
+  signoz:
+    external: true
+    name: signoz-network

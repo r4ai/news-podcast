@@ -7,7 +7,7 @@ services:
     environment:
       VITE_API_PROXY_TARGET: http://api:3000
     ports:
-      - "4173:4173"
+      - "127.0.0.1:4173:4173"
     depends_on:
       api:
         condition: service_healthy
@@ -22,7 +22,7 @@ services:
       - path: .env
         required: false
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - app-data:/app/data
       - audio-data:/app/audio:ro

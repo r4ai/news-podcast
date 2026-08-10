@@ -17,7 +17,10 @@
     "test:e2e": "pnpm --filter web test:e2e",
     "test:visual": "pnpm --filter web test:visual",
     "storybook:build": "pnpm --filter web build-storybook",
-    "setup:env": "node scripts/setup-env.mjs"
+    "setup:env": "node scripts/setup-env.mjs",
+    "observability:up": "bash scripts/observability-up.sh",
+    "observability:down": "docker compose -f infra/observability/pours/deployment/compose.yaml -f infra/observability/compose.local.yaml down",
+    "observability:app:up": "docker compose -f compose.yaml -f compose.observability.yaml up -d --build"
   },
   "devDependencies": {
     "oxfmt": "0.62.0",

@@ -153,6 +153,56 @@ Node SDKはAPI/Workerのcomposition rootでアプリ本体より先に初期化�
 
 セルフホスト手順、公開port、保持期間、dashboard、alert、backupは[`infra/observability/README.md`](../infra/observability/README.md)を参照する。Windowsの通常検証にSigNozは不要で、SigNoz smoke/restore試験はLinuxまたはWSL2内のnative Docker Engineで行う。
 
+### ローカルのSigNozを起動する
+
+初回だけFoundry CLIを導入する。
+
+```bash
+curl -fsSL https://signoz.io/foundry.sh | bash
+```
+
+リポジトリのルートで監視基盤を生成・起動する。生成されたComposeとデータはGit管理外に置かれる。
+
+```bash
+pnpm observability:up
+```
+
+`.env`ではNodeプロセスとbrowser telemetry proxyの送信先を、Docker hostで公開されたOTLP HTTP endpointへ向ける。
+
+```dotenv
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-ingester:4318
+TELEMETRY_PROXY_ORIGIN=http://signoz-ingester:4318
+TELEMETRY_PROXY_TOKEN=news-podcast-local-observability
+```
+
+その後、監視用Compose overrideでAPIとWorkerを`signoz-network`へ接続して起動し、SigNoz UIを開く。通常の`docker compose up`は監視基盤なしでも使える。
+
+```bash
+pnpm observability:app:up
+```
+
+| 接続先 | URL |
+| --- | --- |
+| SigNoz UI | <http://localhost:8080> |
+| OTLP gRPC | `localhost:4317` |
+| OTLP HTTP | `localhost:4318` |
+
+開発用ComposeはWeb、API、SigNoz UI、OTLP endpoint、SeaweedFS、VOICEVOXをすべて`127.0.0.1`へbindする。LANやInternetへ直接公開せず、SSH先では必要なportだけをforwardする。
+
+SSH先で起動した場合、UIはローカルへforwardして閲覧する。
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 user@ssh-host
+```
+
+終了時はアプリと監視基盤を個別に停止する。volumeは保持される。
+
+```bash
+docker compose down
+pnpm observability:down
+```
+
 ## シナリオ別の開発手順
 
 ### フロントエンドをホットリロードする
@@ -221,6 +271,9 @@ OpenAIの利用料金が発生し、RSS、OpenAI、VOICEVOXへのネットワー
 | --- | --- |
 | `pnpm install --frozen-lockfile` | lockfileを変更せずに依存関係を導入する |
 | `pnpm setup:env` | `.env` がない場合にローカル用シークレットを生成する |
+| `pnpm observability:up` | FoundryでSigNoz構成を生成し、監視基盤を起動する |
+| `pnpm observability:down` | SigNozコンテナを停止・削除する。volumeは残す |
+| `pnpm observability:app:up` | APIとWorkerをSigNozのnetworkへ接続してアプリを起動する |
 | `docker compose up --build` | ローカルの全サービスをビルドして起動する |
 | `docker compose down` | コンテナとネットワークを削除する。volumeは残す |
 | `pnpm dev` | 全ワークスペースの開発プロセスを起動する。環境変数と依存サービスは別途用意する |
