@@ -27,6 +27,7 @@ export class S3ObjectStore implements ObjectStore {
     readonly key: string
     readonly body: Uint8Array
     readonly contentType: string
+    readonly signal?: AbortSignal
   }): Promise<StoredObject> {
     await this.client.send(
       new PutObjectCommand({
@@ -35,7 +36,8 @@ export class S3ObjectStore implements ObjectStore {
         Body: input.body,
         ContentLength: input.body.byteLength,
         ContentType: input.contentType,
-      })
+      }),
+      input.signal ? { abortSignal: input.signal } : undefined
     )
     return {
       key: input.key,
@@ -44,10 +46,11 @@ export class S3ObjectStore implements ObjectStore {
     }
   }
 
-  async get(key: string) {
+  async get(key: string, signal?: AbortSignal) {
     try {
       const response = await this.client.send(
-        new GetObjectCommand({ Bucket: this.config.bucket, Key: key })
+        new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+        signal ? { abortSignal: signal } : undefined
       )
       if (!response.Body) return null
       const body = await response.Body.transformToByteArray()
@@ -64,9 +67,10 @@ export class S3ObjectStore implements ObjectStore {
     }
   }
 
-  async delete(key: string): Promise<void> {
+  async delete(key: string, signal?: AbortSignal): Promise<void> {
     await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key })
+      new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }),
+      signal ? { abortSignal: signal } : undefined
     )
   }
 }

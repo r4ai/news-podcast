@@ -111,7 +111,27 @@ export interface WorkerJob {
   readonly leaseExpiresAt: Date
   readonly deadlineAt: Date
   readonly recovered: boolean
+  readonly generationPolicyHash: string
   readonly traceContext?: EpisodeTraceContext
+}
+
+export interface DraftCheckpoint {
+  readonly inputHash: string
+  readonly title: string
+  readonly script: string
+  readonly sourceUrls: readonly URL[]
+}
+
+export interface AudioChunkCheckpoint {
+  readonly position: number
+  readonly objectKey: string
+  readonly contentHash: string
+  readonly byteLength: number
+}
+
+export interface ObjectCleanupCandidate {
+  readonly objectKey: string
+  readonly attempt: number
 }
 
 export class LeaseLostError extends Error {
@@ -853,13 +873,23 @@ export class LocalStore implements EpisodeJobRepository {
   ): "canceled" | "terminal" | "not_found" {
     return this.transaction(() => {
       const row = this.database
-        .prepare("SELECT status FROM episode_jobs WHERE owner_id = ? AND id = ?")
+        .prepare(
+          "SELECT status FROM episode_jobs WHERE owner_id = ? AND id = ?"
+        )
         .get(ownerId, jobId) as Record<string, unknown> | undefined
       if (!row) return "not_found"
       if (["succeeded", "failed", "canceled"].includes(String(row.status))) {
         return "terminal"
       }
       const now = new Date().toISOString()
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO object_cleanup_queue
+           (object_key, reason, next_attempt_at, created_at)
+           SELECT object_key, 'job-canceled', ?, ?
+           FROM episode_audio_chunks WHERE job_id = ?`
+        )
+        .run(now, now, jobId)
       this.database
         .prepare(
           `UPDATE episode_jobs SET status = 'canceled', finished_at = ?,
@@ -942,6 +972,7 @@ export class LocalStore implements EpisodeJobRepository {
       const row = this.database
         .prepare(
           `SELECT id, owner_id, status, attempt, deadline_at,
+                  generation_policy_hash,
                   trace_parent, trace_state
            FROM episode_jobs
            WHERE ((status = 'queued')
@@ -994,6 +1025,7 @@ export class LocalStore implements EpisodeJobRepository {
         leaseExpiresAt: new Date(leaseExpiresAt),
         deadlineAt: new Date(deadlineAt),
         recovered,
+        generationPolicyHash: String(row.generation_policy_hash),
         ...(row.trace_parent
           ? {
               traceContext: {
@@ -1033,6 +1065,18 @@ export class LocalStore implements EpisodeJobRepository {
       )
     if (result.changes !== 1) throw new LeaseLostError(jobId)
     return new Date(leaseExpiresAt)
+  }
+
+  hasActiveLease(jobId: string, leaseToken: string, now = new Date()): boolean {
+    return Boolean(
+      this.database
+        .prepare(
+          `SELECT 1 FROM episode_jobs
+           WHERE id = ? AND status = 'running' AND lease_token = ?
+             AND lease_expires_at > ? AND deadline_at > ?`
+        )
+        .get(jobId, leaseToken, now.toISOString(), now.toISOString())
+    )
   }
 
   reconcileJobs(now = new Date()): JobReconciliationResult {
@@ -1076,6 +1120,225 @@ export class LocalStore implements EpisodeJobRepository {
         timestamp
       )
     if (result.changes !== 1) throw new LeaseLostError(jobId)
+  }
+
+  setJobProgress(
+    jobId: string,
+    leaseToken: string,
+    completed: number,
+    total: number,
+    now = new Date()
+  ): void {
+    if (!Number.isInteger(completed) || !Number.isInteger(total)) {
+      throw new TypeError("Job progress must use integers")
+    }
+    if (completed < 0 || total < 1 || completed > total) {
+      throw new RangeError("Job progress is out of range")
+    }
+    const timestamp = now.toISOString()
+    const result = this.database
+      .prepare(
+        `UPDATE episode_jobs SET progress_completed = ?, progress_total = ?,
+         last_progress_at = ?
+         WHERE id = ? AND status = 'running' AND lease_token = ?
+           AND lease_expires_at > ? AND deadline_at > ?`
+      )
+      .run(completed, total, timestamp, jobId, leaseToken, timestamp, timestamp)
+    if (result.changes !== 1) throw new LeaseLostError(jobId)
+  }
+
+  getDraftCheckpoint(
+    jobId: string,
+    inputHash: string
+  ): DraftCheckpoint | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT input_hash, title, script, source_urls_json
+         FROM episode_job_drafts WHERE job_id = ? AND input_hash = ?`
+      )
+      .get(jobId, inputHash) as Record<string, unknown> | undefined
+    if (!row) return undefined
+    const urls = JSON.parse(String(row.source_urls_json)) as unknown
+    if (
+      !Array.isArray(urls) ||
+      !urls.every((value) => typeof value === "string")
+    ) {
+      throw new Error("checkpoint-corrupt")
+    }
+    return {
+      inputHash: String(row.input_hash),
+      title: String(row.title),
+      script: String(row.script),
+      sourceUrls: urls.map((value) => new URL(value)),
+    }
+  }
+
+  saveDraftCheckpoint(
+    jobId: string,
+    leaseToken: string,
+    checkpoint: DraftCheckpoint,
+    now = new Date()
+  ): void {
+    if (checkpoint.script.length > 6_000) {
+      throw new RangeError("Podcast script exceeds 6000 characters")
+    }
+    this.transaction(() => {
+      this.assertActiveLease(jobId, leaseToken, now)
+      this.database
+        .prepare(
+          `INSERT INTO episode_job_drafts
+           (job_id, input_hash, title, script, source_urls_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(job_id) DO UPDATE SET
+             input_hash = excluded.input_hash,
+             title = excluded.title,
+             script = excluded.script,
+             source_urls_json = excluded.source_urls_json,
+             created_at = excluded.created_at`
+        )
+        .run(
+          jobId,
+          checkpoint.inputHash,
+          checkpoint.title,
+          checkpoint.script,
+          JSON.stringify(checkpoint.sourceUrls.map((url) => url.href)),
+          now.toISOString()
+        )
+    })
+  }
+
+  listAudioChunkCheckpoints(
+    jobId: string,
+    inputHash: string
+  ): readonly AudioChunkCheckpoint[] {
+    return this.database
+      .prepare(
+        `SELECT position, object_key, content_hash, byte_length
+         FROM episode_audio_chunks
+         WHERE job_id = ? AND input_hash = ? ORDER BY position`
+      )
+      .all(jobId, inputHash)
+      .map((row) => {
+        const value = row as Record<string, unknown>
+        return {
+          position: Number(value.position),
+          objectKey: String(value.object_key),
+          contentHash: String(value.content_hash),
+          byteLength: Number(value.byte_length),
+        }
+      })
+  }
+
+  saveAudioChunkCheckpoint(
+    jobId: string,
+    leaseToken: string,
+    inputHash: string,
+    checkpoint: AudioChunkCheckpoint,
+    now = new Date()
+  ): void {
+    this.transaction(() => {
+      this.assertActiveLease(jobId, leaseToken, now)
+      this.database
+        .prepare(
+          `INSERT INTO episode_audio_chunks
+           (job_id, input_hash, position, object_key, content_hash,
+            byte_length, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(job_id, input_hash, position) DO UPDATE SET
+             object_key = excluded.object_key,
+             content_hash = excluded.content_hash,
+             byte_length = excluded.byte_length,
+             created_at = excluded.created_at`
+        )
+        .run(
+          jobId,
+          inputHash,
+          checkpoint.position,
+          checkpoint.objectKey,
+          checkpoint.contentHash,
+          checkpoint.byteLength,
+          now.toISOString()
+        )
+    })
+  }
+
+  enqueueAudioChunkCleanup(
+    jobId: string,
+    reason: string,
+    now = new Date()
+  ): number {
+    return this.transaction(() => {
+      const rows = this.database
+        .prepare("SELECT object_key FROM episode_audio_chunks WHERE job_id = ?")
+        .all(jobId) as readonly Record<string, unknown>[]
+      const insert = this.database.prepare(
+        `INSERT OR IGNORE INTO object_cleanup_queue
+         (object_key, reason, next_attempt_at, created_at) VALUES (?, ?, ?, ?)`
+      )
+      for (const row of rows) {
+        insert.run(
+          String(row.object_key),
+          reason,
+          now.toISOString(),
+          now.toISOString()
+        )
+      }
+      return rows.length
+    })
+  }
+
+  leaseObjectCleanup(now = new Date()): ObjectCleanupCandidate | undefined {
+    return this.transaction(() => {
+      const row = this.database
+        .prepare(
+          `SELECT object_key, attempt FROM object_cleanup_queue
+           WHERE next_attempt_at <= ? AND attempt < 20
+           ORDER BY created_at, object_key LIMIT 1`
+        )
+        .get(now.toISOString()) as Record<string, unknown> | undefined
+      if (!row) return undefined
+      this.database
+        .prepare(
+          `UPDATE object_cleanup_queue SET attempt = attempt + 1,
+           next_attempt_at = ? WHERE object_key = ?`
+        )
+        .run(
+          new Date(now.getTime() + 60_000).toISOString(),
+          String(row.object_key)
+        )
+      return {
+        objectKey: String(row.object_key),
+        attempt: Number(row.attempt) + 1,
+      }
+    })
+  }
+
+  completeObjectCleanup(objectKey: string): void {
+    this.transaction(() => {
+      this.database
+        .prepare("DELETE FROM episode_audio_chunks WHERE object_key = ?")
+        .run(objectKey)
+      this.database
+        .prepare("DELETE FROM object_cleanup_queue WHERE object_key = ?")
+        .run(objectKey)
+    })
+  }
+
+  failObjectCleanup(
+    objectKey: string,
+    message: string,
+    now = new Date()
+  ): void {
+    this.database
+      .prepare(
+        `UPDATE object_cleanup_queue SET last_error = ?, next_attempt_at = ?
+         WHERE object_key = ?`
+      )
+      .run(
+        message.slice(0, 500),
+        new Date(now.getTime() + 5 * 60_000).toISOString(),
+        objectKey
+      )
   }
 
   retryJob(
@@ -1186,9 +1449,7 @@ export class LocalStore implements EpisodeJobRepository {
     })
   }
 
-  private reconcileJobsWithinTransaction(
-    now: Date
-  ): JobReconciliationResult {
+  private reconcileJobsWithinTransaction(now: Date): JobReconciliationResult {
     const timestamp = now.toISOString()
     const deadline = this.database
       .prepare(
@@ -1241,6 +1502,16 @@ export class LocalStore implements EpisodeJobRepository {
         JSON.stringify(payload),
         createdAt
       )
+  }
+
+  private assertActiveLease(
+    jobId: string,
+    leaseToken: string,
+    now: Date
+  ): void {
+    if (!this.hasActiveLease(jobId, leaseToken, now)) {
+      throw new LeaseLostError(jobId)
+    }
   }
 
   listEpisodes(ownerId: string): readonly EpisodeDto[] {

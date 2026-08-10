@@ -71,7 +71,11 @@ describe("episode job control", () => {
     ).toBeUndefined()
 
     const recovered = store.leaseNext(new Date("2026-08-10T00:01:16.000Z"))!
-    expect(recovered).toMatchObject({ id: job.jobId, attempt: 2, recovered: true })
+    expect(recovered).toMatchObject({
+      id: job.jobId,
+      attempt: 2,
+      recovered: true,
+    })
     expect(() =>
       store.setJobStage(first.id, first.leaseToken, "synthesizing_audio")
     ).toThrow(LeaseLostError)
@@ -89,6 +93,20 @@ describe("episode job control", () => {
         retryable: true,
       })
     ).toThrow(LeaseLostError)
+    expect(() =>
+      store.completeJob({
+        jobId: first.id,
+        ownerId: first.ownerId,
+        leaseToken: first.leaseToken,
+        episodeId: "stale-episode",
+        title: "stale",
+        script: "stale",
+        audioKey: "stale.wav",
+        audioByteLength: 44,
+        sources: [],
+      })
+    ).toThrow(LeaseLostError)
+    expect(store.listEpisodes("owner-1")).toEqual([])
     store.close()
   })
 

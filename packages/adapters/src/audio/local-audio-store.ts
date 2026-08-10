@@ -9,8 +9,10 @@ export class LocalAudioStore implements AudioStore {
   async put(
     ownerId: string,
     episodeId: string,
-    audio: Uint8Array
+    audio: Uint8Array,
+    signal?: AbortSignal
   ): Promise<StoredAudio> {
+    signal?.throwIfAborted()
     const key = join(ownerId, `${episodeId}.wav`)
     const destination = join(this.directory, key)
     const temporary = `${destination}.tmp`

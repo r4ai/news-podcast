@@ -141,7 +141,7 @@ export interface SpeechRequest {
 }
 
 export interface SpeechSynthesizer {
-  synthesize(request: SpeechRequest): Promise<Uint8Array>
+  synthesize(request: SpeechRequest, signal?: AbortSignal): Promise<Uint8Array>
 }
 
 export interface StoredAudio {
@@ -160,13 +160,17 @@ export interface ObjectStore {
     readonly key: string
     readonly body: Uint8Array
     readonly contentType: string
+    readonly signal?: AbortSignal
   }): Promise<StoredObject>
-  get(key: string): Promise<{
+  get(
+    key: string,
+    signal?: AbortSignal
+  ): Promise<{
     readonly body: Uint8Array
     readonly contentType: string
     readonly byteLength: number
   } | null>
-  delete(key: string): Promise<void>
+  delete(key: string, signal?: AbortSignal): Promise<void>
 }
 
 export interface AgentArticle {
@@ -197,6 +201,7 @@ export interface PodcastAgentRunner {
     readonly jobId: string
     readonly ownerId: string
     readonly feedIds: readonly string[]
+    readonly signal?: AbortSignal
   }): Promise<EpisodeScriptDraft>
 }
 
@@ -204,7 +209,8 @@ export interface AudioStore {
   put(
     ownerId: string,
     episodeId: string,
-    audio: Uint8Array
+    audio: Uint8Array,
+    signal?: AbortSignal
   ): Promise<StoredAudio>
   createAccessUrl(
     ownerId: string,

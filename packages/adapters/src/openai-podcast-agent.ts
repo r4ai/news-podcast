@@ -10,6 +10,7 @@ import type { OpenAiConfig } from "./config.js"
 const MAX_TURNS = 8
 const MAX_TOOL_CALLS = 16
 const MAX_SOURCE_CORRECTIONS = 2
+const MAX_SCRIPT_LENGTH = 6_000
 
 type StrictFunctionParameter =
   | {
@@ -97,7 +98,7 @@ const PODCAST_AGENT_TOOLS = [
 
 const SubmitDraft = z.object({
   title: z.string().min(1).max(200),
-  script: z.string().min(100),
+  script: z.string().min(100).max(MAX_SCRIPT_LENGTH),
   source_urls: z.array(z.url()).min(1),
 })
 
@@ -151,6 +152,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     readonly jobId: string
     readonly ownerId: string
     readonly feedIds: readonly string[]
+    readonly signal?: AbortSignal
   }): Promise<EpisodeScriptDraft> {
     const runId = this.audit.start({
       jobId: input.jobId,
@@ -170,6 +172,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
         const response = await this.request({
           input: nextInput,
           ...(previousResponseId ? { previousResponseId } : {}),
+          ...(input.signal ? { signal: input.signal } : {}),
         })
         previousResponseId = response.id
         collectObservedWebUrls(response.output ?? [], observedWebUrls)
@@ -191,8 +194,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
             const urls = draft.source_urls.map((value) => new URL(value))
             const unobservedUrls = urls.filter(
               (url) =>
-                !allowedRssUrls.has(url.href) &&
-                !observedWebUrls.has(url.href)
+                !allowedRssUrls.has(url.href) && !observedWebUrls.has(url.href)
             )
             if (unobservedUrls.length > 0) {
               sourceCorrections += 1
@@ -310,6 +312,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
   private async request(input: {
     readonly input: unknown
     readonly previousResponseId?: string
+    readonly signal?: AbortSignal
   }): Promise<OpenAiResponse> {
     const response = await this.fetcher("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -317,7 +320,9 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
         Authorization: `Bearer ${this.config.apiKey}`,
         "Content-Type": "application/json",
       },
-      signal: AbortSignal.timeout(120_000),
+      signal: input.signal
+        ? AbortSignal.any([input.signal, AbortSignal.timeout(120_000)])
+        : AbortSignal.timeout(120_000),
       body: JSON.stringify({
         model: this.config.model,
         instructions:

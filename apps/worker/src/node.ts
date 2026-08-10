@@ -50,18 +50,50 @@ const rssArchive = new RssArchiveWorker(
 async function tick(): Promise<void> {
   await scheduler.run()
   await rssArchive.runOnce()
+  const cleanup = store.leaseObjectCleanup()
+  if (cleanup) {
+    try {
+      await objects.delete(cleanup.objectKey)
+      store.completeObjectCleanup(cleanup.objectKey)
+    } catch (error) {
+      store.failObjectCleanup(
+        cleanup.objectKey,
+        error instanceof Error ? error.message : "Object cleanup failed"
+      )
+    }
+  }
   const job = store.leaseNext()
   if (job) await processor.process(job)
 }
 
-const timer = setInterval(() => void tick(), 1_000)
-void tick()
+let stopping = false
+let timer: NodeJS.Timeout | undefined
+let activeTick: Promise<void> = Promise.resolve()
+
+function scheduleTick(delay = 0): void {
+  timer = setTimeout(() => {
+    activeTick = tick()
+      .catch((error) => {
+        console.error("Worker tick failed", error)
+      })
+      .finally(() => {
+        if (!stopping) scheduleTick(1_000)
+      })
+  }, delay)
+}
+
+scheduleTick()
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    clearInterval(timer)
-    store.close()
-    void observability.shutdown().finally(() => process.exit(0))
+    if (stopping) return
+    stopping = true
+    if (timer) clearTimeout(timer)
+    const grace = new Promise<void>((resolve) => setTimeout(resolve, 8_000))
+    void Promise.race([activeTick, grace]).finally(() => {
+      store.close()
+      void observability.shutdown().finally(() => process.exit(0))
+    })
   })
 }
 

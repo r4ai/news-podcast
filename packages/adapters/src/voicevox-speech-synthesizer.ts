@@ -15,6 +15,8 @@ interface VoicevoxSpeaker {
   readonly styles: readonly VoicevoxStyle[]
 }
 
+const MAX_CHUNK_BYTES = 16 * 1024 * 1024
+
 export class VoicevoxProviderError extends Error {
   constructor(message: string) {
     super(message)
@@ -28,27 +30,46 @@ export class VoicevoxSpeechSynthesizer implements SpeechSynthesizer {
     private readonly fetcher: typeof fetch = fetch
   ) {}
 
-  async synthesize(request: SpeechRequest): Promise<Uint8Array> {
-    const styleId = await this.resolveStyleId(
-      request.characterName || this.config.characterName,
-      request.styleName ?? this.config.styleName
-    )
-    const chunks = splitSpeech(request.text)
-    const waves = [] as Uint8Array[]
-    for (const chunk of chunks) {
-      waves.push(await this.synthesizeChunk(chunk, styleId))
+  async synthesize(
+    request: SpeechRequest,
+    signal?: AbortSignal
+  ): Promise<Uint8Array> {
+    try {
+      const styleId = await this.resolveStyleId(
+        request.characterName || this.config.characterName,
+        request.styleName ?? this.config.styleName,
+        signal
+      )
+      const chunks = splitSpeech(request.text)
+      const waves = [] as Uint8Array[]
+      for (const chunk of chunks) {
+        waves.push(await this.synthesizeChunk(chunk, styleId, signal))
+      }
+      return mergeWaves(waves)
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason
+      if (error instanceof VoicevoxProviderError) throw error
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new VoicevoxProviderError("VOICEVOX request timed out")
+      }
+      throw new VoicevoxProviderError(
+        error instanceof Error ? error.message : "VOICEVOX request failed"
+      )
     }
-    return mergeWaves(waves)
   }
 
   private async synthesizeChunk(
     text: string,
-    styleId: number
+    styleId: number,
+    signal?: AbortSignal
   ): Promise<Uint8Array> {
     const queryUrl = new URL("audio_query", this.config.baseUrl)
     queryUrl.searchParams.set("speaker", String(styleId))
     queryUrl.searchParams.set("text", text)
-    const queryResponse = await this.fetcher(queryUrl, { method: "POST" })
+    const queryResponse = await this.fetcher(queryUrl, {
+      method: "POST",
+      signal: boundedSignal(signal, 15_000),
+    })
     if (!queryResponse.ok) {
       throw new VoicevoxProviderError(
         `VOICEVOX audio_query failed with ${queryResponse.status}`
@@ -61,6 +82,7 @@ export class VoicevoxSpeechSynthesizer implements SpeechSynthesizer {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: await queryResponse.text(),
+      signal: boundedSignal(signal, 120_000),
     })
     if (!synthesisResponse.ok) {
       throw new VoicevoxProviderError(
@@ -68,15 +90,27 @@ export class VoicevoxSpeechSynthesizer implements SpeechSynthesizer {
       )
     }
 
-    return new Uint8Array(await synthesisResponse.arrayBuffer())
+    const length = Number(synthesisResponse.headers.get("Content-Length"))
+    if (Number.isFinite(length) && length > MAX_CHUNK_BYTES) {
+      throw new VoicevoxProviderError("VOICEVOX response exceeded 16 MiB")
+    }
+    const wave = new Uint8Array(await synthesisResponse.arrayBuffer())
+    if (wave.byteLength > MAX_CHUNK_BYTES) {
+      throw new VoicevoxProviderError("VOICEVOX response exceeded 16 MiB")
+    }
+    return wave
   }
 
   private async resolveStyleId(
     characterName: string,
-    styleName?: string
+    styleName?: string,
+    signal?: AbortSignal
   ): Promise<number> {
     const response = await this.fetcher(
-      new URL("speakers", this.config.baseUrl)
+      new URL("speakers", this.config.baseUrl),
+      {
+        signal: boundedSignal(signal, 10_000),
+      }
     )
     if (!response.ok) {
       throw new VoicevoxProviderError(
@@ -99,6 +133,11 @@ export class VoicevoxSpeechSynthesizer implements SpeechSynthesizer {
 
     return style.id
   }
+}
+
+function boundedSignal(parent: AbortSignal | undefined, timeoutMs: number) {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  return parent ? AbortSignal.any([parent, timeout]) : timeout
 }
 
 function splitSpeech(text: string, maximumLength = 500): readonly string[] {
