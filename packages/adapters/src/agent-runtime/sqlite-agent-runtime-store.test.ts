@@ -38,6 +38,7 @@ describe("SqliteAgentRuntimeStore", () => {
     await expect(
       runtime.decide({
         ownerId: "owner-2",
+        agentInstanceId: otherAgent.id,
         memoryId: preference.id,
         decision: "approve",
       })
@@ -45,6 +46,7 @@ describe("SqliteAgentRuntimeStore", () => {
     await expect(
       runtime.decide({
         ownerId: "owner-1",
+        agentInstanceId: ownerAgent.id,
         memoryId: preference.id,
         decision: "approve",
       })

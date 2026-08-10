@@ -103,6 +103,56 @@ export const JobReceiptSchema = JobSchema.pick({
   attempt: true,
 }).openapi("EpisodeJobReceipt")
 
+export const AgentRunSchema = z
+  .object({
+    id: IdSchema,
+    jobId: IdSchema,
+    status: z.enum([
+      "queued",
+      "running",
+      "waiting_approval",
+      "retrying",
+      "succeeded",
+      "failed",
+      "canceled",
+    ]),
+    policyHash: z.string(),
+    createdAt: z.iso.datetime(),
+  })
+  .openapi("AgentRun")
+
+export const AgentEventSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    runId: IdSchema,
+    sequence: z.number().int().nonnegative(),
+    type: z.string(),
+    occurredAt: z.iso.datetime(),
+    payload: z.record(z.string(), z.unknown()),
+  })
+  .openapi("AgentEvent")
+
+export const AgentInstanceSchema = z
+  .object({
+    id: IdSchema,
+    agentKey: z.string(),
+    createdAt: z.iso.datetime(),
+  })
+  .openapi("AgentInstance")
+
+export const AgentMemorySchema = z
+  .object({
+    id: IdSchema,
+    agentInstanceId: IdSchema,
+    kind: z.enum(["preference", "episode_history", "working_note"]),
+    status: z.enum(["proposed", "active", "rejected", "deleted"]),
+    version: z.number().int().min(1),
+    content: z.record(z.string(), z.unknown()),
+    createdAt: z.iso.datetime(),
+    expiresAt: z.iso.datetime().optional(),
+  })
+  .openapi("AgentMemory")
+
 const EpisodeSourceSchema = z
   .object({
     url: z.url(),

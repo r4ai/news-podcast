@@ -6,9 +6,18 @@ import {
 } from "@news-podcast/observability"
 
 import type { JobDto, LocalStore } from "@news-podcast/adapters/db/local"
+import type { SqliteAgentRuntimeStore } from "@news-podcast/adapters/agent-runtime/sqlite"
+import type {
+  AgentMemoryRecord,
+  AgentRunRecord,
+} from "@news-podcast/application"
 
 import {
   EpisodeSchema,
+  AgentEventSchema,
+  AgentInstanceSchema,
+  AgentMemorySchema,
+  AgentRunSchema,
   ArticleSchema,
   FeedSchema,
   IdSchema,
@@ -27,6 +36,7 @@ type TelemetrySignal = "logs" | "metrics" | "traces"
 
 export interface AppDependencies {
   readonly store?: LocalStore
+  readonly agentRuntimeStore?: SqliteAgentRuntimeStore
   readonly authHandler?: (request: Request) => Response | Promise<Response>
   readonly resolveOwner?: (request: Request) => Promise<string | null>
   readonly devLoginHandler?: (request: Request) => Promise<Response>
@@ -497,6 +507,126 @@ export function createApp(dependencies: AppDependencies = {}) {
     )
   })
 
+  app.openapi(getAgentRunRoute, async (context) => {
+    if (!dependencies.agentRuntimeStore) {
+      return context.json(unavailable(), 503)
+    }
+    const run = await dependencies.agentRuntimeStore.get(
+      context.get("ownerId"),
+      context.req.valid("param").runId
+    )
+    return run
+      ? context.json(toAgentRunResponse(run), 200)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
+  app.openapi(listAgentEventsRoute, (context) => {
+    if (!dependencies.agentRuntimeStore) {
+      return context.json(unavailable(), 503)
+    }
+    const events = dependencies.agentRuntimeStore.listEvents(
+      context.get("ownerId"),
+      context.req.valid("param").runId
+    )
+    return events
+      ? context.json(
+          {
+            items: events.map((event) => ({
+              ...event,
+              occurredAt: event.occurredAt.toISOString(),
+            })),
+            page: { hasMore: false as const },
+          },
+          200
+        )
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
+  app.openapi(listAgentInstancesRoute, (context) => {
+    if (!dependencies.agentRuntimeStore) {
+      return context.json(unavailable(), 503)
+    }
+    return context.json(
+      {
+        items: dependencies.agentRuntimeStore
+          .listInstances(context.get("ownerId"))
+          .map((instance) => ({
+            id: instance.id,
+            agentKey: instance.agentKey,
+            createdAt: instance.createdAt.toISOString(),
+          })),
+        page: { hasMore: false as const },
+      },
+      200
+    )
+  })
+
+  app.openapi(listAgentMemoriesRoute, (context) => {
+    if (!dependencies.agentRuntimeStore) {
+      return context.json(unavailable(), 503)
+    }
+    return context.json(
+      {
+        items: dependencies.agentRuntimeStore
+          .listMemories(
+            context.get("ownerId"),
+            context.req.valid("param").agentId
+          )
+          .map(toAgentMemoryResponse),
+        page: { hasMore: false as const },
+      },
+      200
+    )
+  })
+
+  app.openapi(createAgentMemoryRoute, async (context) => {
+    if (!dependencies.agentRuntimeStore) {
+      return context.json(unavailable(), 503)
+    }
+    try {
+      const body = context.req.valid("json")
+      const memory = await dependencies.agentRuntimeStore.propose({
+        ownerId: context.get("ownerId"),
+        agentInstanceId: context.req.valid("param").agentId,
+        kind: body.kind,
+        content: body.content,
+        ...(body.expiresAt ? { expiresAt: new Date(body.expiresAt) } : {}),
+      })
+      return context.json(toAgentMemoryResponse(memory), 201)
+    } catch {
+      return context.json(problem(404, "not-found", "Not found"), 404)
+    }
+  })
+
+  app.openapi(approveAgentMemoryRoute, async (context) => {
+    if (!dependencies.agentRuntimeStore) {
+      return context.json(unavailable(), 503)
+    }
+    const memory = await dependencies.agentRuntimeStore.decide({
+      ownerId: context.get("ownerId"),
+      agentInstanceId: context.req.valid("param").agentId,
+      memoryId: context.req.valid("param").memoryId,
+      decision: "approve",
+    })
+    return memory
+      ? context.json(toAgentMemoryResponse(memory), 200)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
+  app.openapi(deleteAgentMemoryRoute, (context) => {
+    if (!dependencies.agentRuntimeStore) {
+      return context.json(unavailable(), 503)
+    }
+    const deleted = dependencies.agentRuntimeStore.deleteMemory(
+      context.get("ownerId"),
+      context.req.valid("param").agentId,
+      context.req.valid("param").memoryId
+    )
+    return deleted
+      ? context.body(null, 204)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
   app.openapi(listEpisodesRoute, (context) => {
     if (!dependencies.store) return context.json(unavailable(), 503)
     return context.json(
@@ -560,6 +690,8 @@ export const documentConfig = {
     { name: "Articles", description: "Archived RSS articles and read state" },
     { name: "Settings", description: "Owner-scoped generation schedule" },
     { name: "Episode jobs", description: "Asynchronous generation jobs" },
+    { name: "Agent runtime", description: "Agent runs and safe timeline" },
+    { name: "Agent memory", description: "Owner-scoped durable Agent memory" },
     { name: "Episodes", description: "Completed episodes and audio access" },
   ],
   servers: [{ url: "http://localhost:4173", description: "Local development" }],
@@ -1006,6 +1138,131 @@ const retryJobRoute = createRoute({
   },
 })
 
+const runParams = z.object({
+  runId: IdSchema.openapi({ param: { name: "runId", in: "path" } }),
+})
+
+const getAgentRunRoute = createRoute({
+  method: "get",
+  path: "/v1/agent-runs/{runId}",
+  tags: ["Agent runtime"],
+  operationId: "getAgentRun",
+  description: "Return one owner-scoped Agent run without private reasoning.",
+  request: { params: runParams },
+  responses: {
+    200: jsonContent(AgentRunSchema, "Agent run"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const listAgentEventsRoute = createRoute({
+  method: "get",
+  path: "/v1/agent-runs/{runId}/events",
+  tags: ["Agent runtime"],
+  operationId: "listAgentRunEvents",
+  description: "List the sanitized, versioned event timeline for an Agent run.",
+  request: { params: runParams },
+  responses: {
+    200: jsonContent(page(AgentEventSchema), "Agent events"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const listAgentInstancesRoute = createRoute({
+  method: "get",
+  path: "/v1/agent-instances",
+  tags: ["Agent memory"],
+  operationId: "listAgentInstances",
+  description: "List durable Agent instances owned by the authenticated user.",
+  responses: {
+    200: jsonContent(page(AgentInstanceSchema), "Agent instances"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const agentParams = z.object({
+  agentId: IdSchema.openapi({ param: { name: "agentId", in: "path" } }),
+})
+const memoryParams = agentParams.extend({
+  memoryId: IdSchema.openapi({ param: { name: "memoryId", in: "path" } }),
+})
+const memoryInput = z.object({
+  kind: z.enum(["preference", "working_note"]),
+  content: z.record(z.string(), z.unknown()),
+  expiresAt: z.iso.datetime().optional(),
+})
+
+const listAgentMemoriesRoute = createRoute({
+  method: "get",
+  path: "/v1/agent-instances/{agentId}/memories",
+  tags: ["Agent memory"],
+  operationId: "listAgentMemories",
+  description: "List non-deleted Memory entries for one owned Agent instance.",
+  request: { params: agentParams },
+  responses: {
+    200: jsonContent(page(AgentMemorySchema), "Agent memories"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const createAgentMemoryRoute = createRoute({
+  method: "post",
+  path: "/v1/agent-instances/{agentId}/memories",
+  tags: ["Agent memory"],
+  operationId: "createAgentMemory",
+  description: "Propose a preference or working note for later approval.",
+  request: {
+    params: agentParams,
+    body: {
+      required: true,
+      content: { "application/json": { schema: memoryInput } },
+    },
+  },
+  responses: {
+    201: jsonContent(AgentMemorySchema, "Memory proposal"),
+    400: problemContent("Invalid"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const approveAgentMemoryRoute = createRoute({
+  method: "post",
+  path: "/v1/agent-instances/{agentId}/memories/{memoryId}/approve",
+  tags: ["Agent memory"],
+  operationId: "approveAgentMemory",
+  description: "Activate a proposed Memory within the same owner and Agent scope.",
+  request: { params: memoryParams },
+  responses: {
+    200: jsonContent(AgentMemorySchema, "Approved memory"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const deleteAgentMemoryRoute = createRoute({
+  method: "delete",
+  path: "/v1/agent-instances/{agentId}/memories/{memoryId}",
+  tags: ["Agent memory"],
+  operationId: "deleteAgentMemory",
+  description: "Soft-delete a Memory within the same owner and Agent scope.",
+  request: { params: memoryParams },
+  responses: {
+    204: { description: "Deleted" },
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
 const listEpisodesRoute = createRoute({
   method: "get",
   path: "/v1/episodes",
@@ -1089,6 +1346,31 @@ function problem(status: number, code: string, title: string) {
     title,
     status,
     code,
+  }
+}
+
+function toAgentRunResponse(run: AgentRunRecord) {
+  return {
+    id: run.id,
+    jobId: run.jobId,
+    status: run.status,
+    policyHash: run.policyHash,
+    createdAt: run.createdAt.toISOString(),
+  }
+}
+
+function toAgentMemoryResponse(memory: AgentMemoryRecord) {
+  return {
+    id: memory.id,
+    agentInstanceId: memory.agentInstanceId,
+    kind: memory.kind,
+    status: memory.status,
+    version: memory.version,
+    content: memory.content,
+    createdAt: memory.createdAt.toISOString(),
+    ...(memory.expiresAt
+      ? { expiresAt: memory.expiresAt.toISOString() }
+      : {}),
   }
 }
 

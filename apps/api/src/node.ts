@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server"
 import { createLocalAuth } from "@news-podcast/adapters/auth/local"
+import { SqliteAgentRuntimeStore } from "@news-podcast/adapters/agent-runtime/sqlite"
 import {
   readLocalAuthConfig,
   readS3Config,
@@ -26,6 +27,7 @@ const observability = createNodeObservability(
   readNodeObservabilityConfig(process.env, "news-podcast-api")
 )
 const store = new LocalStore(config.databasePath)
+const agentRuntimeStore = new SqliteAgentRuntimeStore(store.database)
 const objects = new S3ObjectStore(readS3Config(process.env))
 const auth = createLocalAuth(config)
 const appEnvironment = process.env.APP_ENV ?? "development"
@@ -53,6 +55,7 @@ const rss = new RssFeedReader(createSafeFetcher())
 
 const app = createApp({
   store,
+  agentRuntimeStore,
   authHandler: auth.handler,
   devLoginHandler: (request) => devAuth.login(request),
   devLogoutHandler: () => devAuth.logout(),

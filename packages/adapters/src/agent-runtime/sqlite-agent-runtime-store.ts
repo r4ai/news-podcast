@@ -49,6 +49,80 @@ export class SqliteAgentRuntimeStore
     return toAgentInstance(row)
   }
 
+  listInstances(ownerId: string): readonly AgentInstanceRecord[] {
+    return this.database
+      .prepare(
+        `SELECT id, owner_id, agent_key, created_at FROM agent_instances
+         WHERE owner_id = ? ORDER BY created_at, id`
+      )
+      .all(ownerId)
+      .map(toAgentInstance)
+  }
+
+  listMemories(
+    ownerId: string,
+    agentInstanceId: string
+  ): readonly AgentMemoryRecord[] {
+    return this.database
+      .prepare(
+        `SELECT m.*, v.content_json
+         FROM agent_memories m
+         JOIN agent_memory_versions v
+           ON v.memory_id = m.id AND v.version = m.current_version
+         WHERE m.owner_id = ? AND m.agent_instance_id = ?
+           AND m.status != 'deleted'
+         ORDER BY m.created_at, m.id`
+      )
+      .all(ownerId, agentInstanceId)
+      .map(toAgentMemory)
+  }
+
+  deleteMemory(
+    ownerId: string,
+    agentInstanceId: string,
+    memoryId: string
+  ): boolean {
+    return (
+      this.database
+        .prepare(
+          `UPDATE agent_memories SET status = 'deleted', updated_at = ?
+           WHERE id = ? AND owner_id = ? AND agent_instance_id = ?
+             AND status != 'deleted'`
+        )
+        .run(new Date().toISOString(), memoryId, ownerId, agentInstanceId)
+        .changes === 1
+    )
+  }
+
+  listEvents(ownerId: string, runId: string): readonly AgentEvent[] | null {
+    const run = this.database
+      .prepare("SELECT 1 FROM agent_runs WHERE id = ? AND owner_id = ?")
+      .get(runId, ownerId)
+    if (!run) return null
+    return this.database
+      .prepare(
+        `SELECT sequence, event_type, payload_json, occurred_at
+         FROM agent_events WHERE agent_run_id = ? ORDER BY sequence`
+      )
+      .all(runId)
+      .map((row) => {
+        const value = row as Record<string, unknown>
+        const payload = JSON.parse(String(value.payload_json)) as Record<
+          string,
+          unknown
+        >
+        delete payload.schemaVersion
+        return {
+          schemaVersion: 1 as const,
+          runId,
+          sequence: Number(value.sequence),
+          type: String(value.event_type),
+          occurredAt: new Date(String(value.occurred_at)),
+          payload,
+        }
+      })
+  }
+
   async listActive(input: {
     readonly ownerId: string
     readonly agentInstanceId: string
@@ -132,6 +206,7 @@ export class SqliteAgentRuntimeStore
 
   async decide(input: {
     readonly ownerId: string
+    readonly agentInstanceId: string
     readonly memoryId: string
     readonly decision: "approve" | "reject"
   }): Promise<AgentMemoryRecord | null> {
@@ -139,13 +214,15 @@ export class SqliteAgentRuntimeStore
     const result = this.database
       .prepare(
         `UPDATE agent_memories SET status = ?, updated_at = ?
-         WHERE id = ? AND owner_id = ? AND status = 'proposed'`
+         WHERE id = ? AND owner_id = ? AND agent_instance_id = ?
+           AND status = 'proposed'`
       )
       .run(
         status,
         new Date().toISOString(),
         input.memoryId,
-        input.ownerId
+        input.ownerId,
+        input.agentInstanceId
       )
     if (result.changes === 0) return null
     const row = this.database
@@ -154,9 +231,9 @@ export class SqliteAgentRuntimeStore
          FROM agent_memories m
          JOIN agent_memory_versions v
            ON v.memory_id = m.id AND v.version = m.current_version
-         WHERE m.id = ? AND m.owner_id = ?`
+         WHERE m.id = ? AND m.owner_id = ? AND m.agent_instance_id = ?`
       )
-      .get(input.memoryId, input.ownerId)
+      .get(input.memoryId, input.ownerId, input.agentInstanceId)
     return toAgentMemory(row)
   }
 

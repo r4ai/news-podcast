@@ -89,6 +89,7 @@ export interface AgentMemoryRepository {
   }): Promise<AgentMemoryRecord>
   decide(input: {
     readonly ownerId: string
+    readonly agentInstanceId: string
     readonly memoryId: string
     readonly decision: "approve" | "reject"
   }): Promise<AgentMemoryRecord | null>
