@@ -149,6 +149,35 @@ export function createApp(dependencies: AppDependencies = {}) {
   }
 
   app.use("/v1/*", async (context, next) => {
+    if (context.req.path.startsWith("/v1/telemetry/")) return next()
+    const startedAt = performance.now()
+    const parent = requestTraceContext(context.req.raw.headers)
+    await observability.withSpan(
+      "http.request",
+      { "http.request.method": context.req.method },
+      async () => {
+        try {
+          await next()
+        } finally {
+          observability.log({
+            name: "api.request",
+            attributes: {
+              "http.request.method": context.req.method,
+              "http.response.status_code": context.res.status,
+            },
+            level: context.res.status >= 500 ? "error" : "info",
+          })
+          observability.measure(
+            "http.server.duration",
+            performance.now() - startedAt
+          )
+        }
+      },
+      parent ? { parent } : undefined
+    )
+  })
+
+  app.use("/v1/*", async (context, next) => {
     if (context.req.path.startsWith("/v1/audio/")) return next()
     const ownerId = dependencies.resolveOwner
       ? await dependencies.resolveOwner(context.req.raw)
@@ -158,25 +187,6 @@ export function createApp(dependencies: AppDependencies = {}) {
     }
     context.set("ownerId", ownerId)
     return next()
-  })
-
-  app.use("/v1/*", async (context, next) => {
-    if (context.req.path.startsWith("/v1/telemetry/")) return next()
-    const startedAt = performance.now()
-    await observability.withSpan(
-      "http.request",
-      { "http.request.method": context.req.method },
-      next
-    )
-    observability.log({
-      name: "api.request",
-      attributes: {
-        "http.request.method": context.req.method,
-        "http.response.status_code": context.res.status,
-      },
-      level: context.res.status >= 500 ? "error" : "info",
-    })
-    observability.measure("http.server.duration", performance.now() - startedAt)
   })
 
   app.openapi(telemetryRoute, async (context) => {
@@ -676,6 +686,16 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.doc("/openapi.json", documentConfig)
   return app
+}
+
+function requestTraceContext(headers: Headers): TraceContext | undefined {
+  const traceParent = headers.get("traceparent")
+  if (!traceParent) return undefined
+  const traceState = headers.get("tracestate")
+  return {
+    traceParent,
+    ...(traceState ? { traceState } : {}),
+  }
 }
 
 export const documentConfig = {

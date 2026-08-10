@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest"
+import {
+  noopObservability,
+  type Observability,
+  type SpanOptions,
+} from "@news-podcast/observability"
 
 import { createApp } from "./app.js"
 
@@ -70,6 +75,35 @@ describe("API foundation", () => {
     expect(response.headers.get("Idempotency-Key")).toBe("test")
     await expect(response.json()).resolves.toMatchObject({
       status: "queued",
+    })
+  })
+
+  it("passes W3C request context to the API request span without baggage", async () => {
+    let spanOptions: SpanOptions | undefined
+    const observability: Observability = {
+      ...noopObservability,
+      withSpan: async (_name, _attributes, operation, options) => {
+        spanOptions = options
+        return operation()
+      },
+    }
+    const response = await createApp({
+      observability,
+      resolveOwner: async () => "owner-1",
+    }).request("/v1/feeds", {
+      headers: {
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        tracestate: "vendor=value",
+        baggage: "private=value",
+      },
+    })
+
+    expect(response.status).toBe(503)
+    expect(spanOptions).toEqual({
+      parent: {
+        traceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        traceState: "vendor=value",
+      },
     })
   })
 

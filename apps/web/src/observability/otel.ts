@@ -14,7 +14,11 @@ import {
   MeterProvider,
   PeriodicExportingMetricReader,
 } from "@opentelemetry/sdk-metrics"
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base"
+import {
+  BatchSpanProcessor,
+  ParentBasedSampler,
+  TraceIdRatioBasedSampler,
+} from "@opentelemetry/sdk-trace-base"
 import { WebTracerProvider } from "@opentelemetry/sdk-trace-web"
 import {
   ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
@@ -43,6 +47,9 @@ export function start(): void {
   })
   const tracerProvider = new WebTracerProvider({
     resource,
+    sampler: new ParentBasedSampler({
+      root: new TraceIdRatioBasedSampler(0.2),
+    }),
     spanProcessors: [
       new BatchSpanProcessor(
         new OTLPTraceExporter({ url: "/v1/telemetry/traces" })

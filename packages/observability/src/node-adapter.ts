@@ -4,7 +4,6 @@ import {
   propagation,
   SpanStatusCode,
   trace,
-  type SpanContext,
 } from "@opentelemetry/api"
 import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
@@ -36,6 +35,7 @@ import {
   sanitizeAttributes,
   sanitizeMetricAttributes,
 } from "./privacy.js"
+import { extractRemoteContext, extractRemoteSpanContext } from "./w3c.js"
 
 export interface NodeObservabilityConfig {
   readonly enabled: boolean
@@ -142,13 +142,19 @@ export function createNodeObservability(
       })
     },
     withSpan(name, attributes, operation, options) {
-      const link = options?.link ? spanContext(options.link) : undefined
+      const parent = options?.parent
+        ? extractRemoteContext(options.parent)
+        : context.active()
+      const link = options?.link
+        ? extractRemoteSpanContext(options.link)
+        : undefined
       return tracer.startActiveSpan(
         name,
         {
           attributes: sanitizeAttributes(attributes),
           links: link ? [{ context: link }] : [],
         },
+        parent,
         async (span) => {
           try {
             return await operation()
@@ -193,14 +199,6 @@ function captureContext(): TraceContext | undefined {
         ...(carrier.tracestate ? { traceState: carrier.tracestate } : {}),
       }
     : undefined
-}
-
-function spanContext(value: TraceContext): SpanContext | undefined {
-  const extracted = propagation.extract(context.active(), {
-    traceparent: value.traceParent,
-    ...(value.traceState ? { tracestate: value.traceState } : {}),
-  })
-  return trace.getSpanContext(extracted)
 }
 
 function signalUrl(endpoint: string, signal: "logs" | "metrics" | "traces") {
