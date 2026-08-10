@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: infra/Dockerfile.node
+      network: host
     command: ["pnpm", "--filter", "web", "dev", "--host", "0.0.0.0"]
     environment:
       VITE_API_PROXY_TARGET: http://api:3000
@@ -16,6 +17,7 @@ services:
     build:
       context: .
       dockerfile: infra/Dockerfile.node
+      network: host
     command: ["pnpm", "--filter", "@news-podcast/api", "dev"]
     env_file:
       - path: .env.example
@@ -45,6 +47,7 @@ services:
     build:
       context: .
       dockerfile: infra/Dockerfile.node
+      network: host
     command: ["pnpm", "--filter", "@news-podcast/worker", "start"]
     env_file:
       - path: .env.example

@@ -51,6 +51,14 @@ pnpm dev:up
 初回は依存パッケージとVOICEVOXイメージを取得するため、起動に時間がかかります。
 APIのヘルスチェックが通ると、Webアプリを開けます。
 
+Node imageはlockfileだけで依存取得layerを作り、BuildKitのpnpm storeを再利用する。通常のソース変更ではinstallをofflineで再利用するためregistryへ接続しない。Compose buildはruntime networkを変えず、build工程だけ`network: host`としてDocker bridgeのDNS遅延を回避する。Composeを使わず直接buildする場合も次のように指定する。
+
+```bash
+docker build --network=host -f infra/Dockerfile.node .
+```
+
+container内だけ名前解決が数秒以上遅い場合は、containerの`/etc/resolv.conf`に応答しないDNS serverが先頭登録されていないか確認する。host全体で直す場合はDocker daemonのDNS設定を正常なresolverへ変更してdaemonを再起動する必要があり、実行中containerへ影響するため運用者がmaintenanceとして行う。
+
 | 接続先 | URL |
 | --- | --- |
 | Webアプリ | <http://localhost:4173> |

@@ -31,6 +31,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/Dockerfile.node
+      network: host
     command: ["pnpm", "--filter", "@news-podcast/watchdog", "start"]
     network_mode: host
     restart: unless-stopped
