@@ -5,6 +5,10 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
+    "dev:up": "docker compose up -d --build",
+    "dev:down": "docker compose down",
+    "dev:up:observed": "pnpm observability:infra:up && docker compose -f compose.yaml -f compose.observability.yaml up -d --build",
+    "dev:down:observed": "docker compose -f compose.yaml -f compose.observability.yaml down && pnpm observability:infra:down",
     "lint": "oxlint && pnpm contract:lint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
@@ -18,9 +22,8 @@
     "test:visual": "pnpm --filter web test:visual",
     "storybook:build": "pnpm --filter web build-storybook",
     "setup:env": "node scripts/setup-env.mjs",
-    "observability:up": "bash scripts/observability-up.sh",
-    "observability:down": "docker compose -f infra/observability/pours/deployment/compose.yaml -f infra/observability/compose.local.yaml down",
-    "observability:app:up": "docker compose -f compose.yaml -f compose.observability.yaml up -d --build"
+    "observability:infra:up": "bash scripts/observability-up.sh",
+    "observability:infra:down": "docker compose -f infra/observability/pours/deployment/compose.yaml -f infra/observability/compose.local.yaml down"
   },
   "devDependencies": {
     "oxfmt": "0.62.0",

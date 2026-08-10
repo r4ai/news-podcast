@@ -45,7 +45,7 @@ pnpm setup:env
 ### 2. アプリ全体を起動する
 
 ```bash
-docker compose up --build
+pnpm dev:up
 ```
 
 初回は依存パッケージとVOICEVOXイメージを取得するため、起動に時間がかかります。
@@ -74,10 +74,8 @@ APIのヘルスチェックが通ると、Webアプリを開けます。
 
 ### 4. 終了する
 
-起動中のターミナルで `Ctrl+C` を押し、コンテナを削除します。
-
 ```bash
-docker compose down
+pnpm dev:down
 ```
 
 SQLiteデータ、記事アーカイブ、生成音声はDocker volumeに残ります。
@@ -161,10 +159,10 @@ Node SDKはAPI/Workerのcomposition rootでアプリ本体より先に初期化�
 curl -fsSL https://signoz.io/foundry.sh | bash
 ```
 
-リポジトリのルートで監視基盤を生成・起動する。生成されたComposeとデータはGit管理外に置かれる。
+リポジトリのルートで監視基盤とアプリをまとめて起動する。生成されたComposeとデータはGit管理外に置かれる。
 
 ```bash
-pnpm observability:up
+pnpm dev:up:observed
 ```
 
 `.env`ではNodeプロセスとbrowser telemetry proxyの送信先を、Docker hostで公開されたOTLP HTTP endpointへ向ける。
@@ -176,11 +174,7 @@ TELEMETRY_PROXY_ORIGIN=http://signoz-ingester:4318
 TELEMETRY_PROXY_TOKEN=news-podcast-local-observability
 ```
 
-その後、監視用Compose overrideでAPIとWorkerを`signoz-network`へ接続して起動し、SigNoz UIを開く。通常の`docker compose up`は監視基盤なしでも使える。
-
-```bash
-pnpm observability:app:up
-```
+このコマンドはFoundryで監視基盤を生成・起動した後、監視用Compose overrideでAPIとWorkerを`signoz-network`へ接続する。監視基盤なしの通常起動には`pnpm dev:up`を使う。
 
 | 接続先 | URL |
 | --- | --- |
@@ -199,9 +193,10 @@ ssh -N -L 8080:127.0.0.1:8080 user@ssh-host
 終了時はアプリと監視基盤を個別に停止する。volumeは保持される。
 
 ```bash
-docker compose down
-pnpm observability:down
+pnpm dev:down:observed
 ```
+
+監視基盤だけを操作する低レベルコマンドとして、`pnpm observability:infra:up`と`pnpm observability:infra:down`も利用できる。
 
 ## シナリオ別の開発手順
 
@@ -219,7 +214,7 @@ Webは既定で `http://localhost:3000` のAPIへプロキシします。
 終了時はWebのプロセスを `Ctrl+C` で止め、コンテナを削除します。
 
 ```bash
-docker compose down
+pnpm dev:down
 ```
 
 ### UIコンポーネントだけを確認する
@@ -255,7 +250,7 @@ OPENAI_API_KEY=your-api-key
 その後、アプリ全体を再ビルドして起動します。
 
 ```bash
-docker compose up --build
+pnpm dev:up
 ```
 
 liveモードでは、新着RSS記事を自動アーカイブします。Podcast Agentは保存済みMarkdownをtoolで読み、必要な場合はWeb検索で補足確認してから、台本を構造化して提出します。検証済み台本だけをVOICEVOXで音声化します。
@@ -271,11 +266,12 @@ OpenAIの利用料金が発生し、RSS、OpenAI、VOICEVOXへのネットワー
 | --- | --- |
 | `pnpm install --frozen-lockfile` | lockfileを変更せずに依存関係を導入する |
 | `pnpm setup:env` | `.env` がない場合にローカル用シークレットを生成する |
-| `pnpm observability:up` | FoundryでSigNoz構成を生成し、監視基盤を起動する |
-| `pnpm observability:down` | SigNozコンテナを停止・削除する。volumeは残す |
-| `pnpm observability:app:up` | APIとWorkerをSigNozのnetworkへ接続してアプリを起動する |
-| `docker compose up --build` | ローカルの全サービスをビルドして起動する |
-| `docker compose down` | コンテナとネットワークを削除する。volumeは残す |
+| `pnpm dev:up` | ローカルの全サービスをbuildしてバックグラウンド起動する |
+| `pnpm dev:down` | アプリのコンテナとnetworkを削除する。volumeは残す |
+| `pnpm dev:up:observed` | SigNozと、監視networkへ接続したアプリをまとめて起動する |
+| `pnpm dev:down:observed` | アプリとSigNozを停止・削除する。volumeは残す |
+| `pnpm observability:infra:up` | FoundryでSigNoz構成を生成し、監視基盤だけを起動する |
+| `pnpm observability:infra:down` | SigNozコンテナだけを停止・削除する。volumeは残す |
 | `pnpm dev` | 全ワークスペースの開発プロセスを起動する。環境変数と依存サービスは別途用意する |
 | `pnpm --filter web dev` | WebだけをViteで起動する |
 | `pnpm --filter web storybook` | Storybookを起動する |
@@ -361,7 +357,7 @@ ComposeではWebの `VITE_API_PROXY_TARGET` を `http://api:3000` に上書き�
 
 - `.env` の `DEV_AUTH_ENABLED` が `true` か確認します。
 - 画面へ入力した値が `.env` の `DEV_AUTH_PASSWORD` と一致するか確認します。
-- `.env` を変更した後は、`docker compose up --build` でコンテナを作り直します。
+- `.env` を変更した後は、`pnpm dev:up` でコンテナを作り直します。
 
 ### APIが起動しない
 
@@ -388,7 +384,7 @@ liveモードではOpenAI APIキー、RSSへの接続、VOICEVOXのヘルスチ�
 4173、3000、50021番ポートを使う別プロセスを終了するか、起動中のCompose環境を停止します。
 
 ```bash
-docker compose down
+pnpm dev:down
 ```
 
 ## 関連ドキュメント
