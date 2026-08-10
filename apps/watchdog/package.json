@@ -1,0 +1,23 @@
+{
+  "name": "@news-podcast/watchdog",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/node.ts",
+    "build": "tsc --noEmit",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "nodemailer": "7.0.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4",
+    "@types/nodemailer": "7.0.12",
+    "tsx": "4.23.11",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}
