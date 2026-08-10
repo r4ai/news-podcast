@@ -44,7 +44,7 @@ featureは技術レベルでdirectoryを切る(`api/`、`hooks/`、`components/`
 graph TD
   app["app/<br/>composition"]
   routes["routes/<br/>index.tsx + -hooks + -components"]
-  features["features/<br/>auth, theme, jobs, episodes"]
+  features["features/<br/>auth, theme, episodes,<br/>settings, subscriptions"]
   shared["shared/<br/>api, observability, layouts, components"]
   ui["@workspace/ui"]
   app --> routes
@@ -105,12 +105,14 @@ graph TD
 | 設計書 | UI構成節へ配置規則と表示境界を追記 | Pending | `docs/design.md` §7 |
 | ドメイン/ユースケース | N/A — Web層の構成のみ | Done | 変更なし |
 | OpenAPI/外部契約 | N/A — 契約とURLは不変 | Done | `packages/contracts` |
-| コード/ポート | `routes`/`features`/`shared`の三層へ再配置、`Panel`追加 | Pending | `apps/web/src` |
+| コード/ポート | `routes`/`features`/`shared`の三層へ再配置、`Panel`追加 | Done | `apps/web/src` |
 | データ/ストレージ | N/A — client側の構成のみ | Done | 変更なし |
 | 実行/配備 | N/A — build出力とportは不変 | Done | `apps/web/vite.config.ts` |
-| 認証/セキュリティ | `src/auth`を`features/auth`へ移設、認証gardは`_authenticated/route.tsx`で不変 | Pending | ADR-0005 |
-| フロント/品質保証 | hook単体テスト追加、viewのstory維持、screenshot baseline不変 | Pending | `apps/web/vitest.config.ts` |
-| テスト/運用 | lint/build/unit/visual/e2eで回帰を確認 | Pending | `pnpm --filter web build && pnpm --filter web test && pnpm --filter web test:e2e` |
+| 認証/セキュリティ | `src/auth`を`features/auth`へ移設、認証gardは`_authenticated/route.tsx`で不変 | Done | ADR-0005、`safeRedirect`のunit test |
+| フロント/品質保証 | jsdom Vitestを追加しhookを単体テスト、`components.json`のaliasを実在pathへ | Done | `apps/web/vitest.config.ts` |
+| テスト/運用 | lint/build/unit/e2eで回帰を確認。visual baselineはwin32のみで、Linux上の実行は本ADR以前から未整備 | Partial | `pnpm --filter web test`(33)、`pnpm --filter web test:e2e`(12) |
+
+共有featureは「二つ以上のrouteが参照する」規則の適用結果として`auth`、`theme`、`episodes`(`/`と`/library`)、`settings`(`/`と`/schedule`)、`subscriptions`(`/`と`/subscriptions`)となる。episode jobのqueryと表示modelは`/`からのみ参照するため`routes/_authenticated/-home/`へ置く。
 
 ## 再検討条件
 
@@ -121,8 +123,8 @@ graph TD
 
 ## 受け入れゲートと未決事項
 
-- URLとscreenshot baselineが不変であることをvisual/E2Eで確認する。
-- 未決事項なし。
+- URLが不変であることをE2Eで確認済み(12 passed)。
+- visual baselineは`*-win32.png`しか存在せず、Linux上の`test:visual`は本ADR以前から欠落snapshotで失敗する。Windows環境またはLinux baselineの追加で確認する。
 
 ## 検証証拠
 

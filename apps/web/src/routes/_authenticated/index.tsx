@@ -1,26 +1,32 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import { episodesQueryOptions } from "@/features/episodes"
+import { settingsQueryOptions } from "@/features/settings"
+import {
+  feedsQueryOptions,
+  subscriptionsQueryOptions,
+} from "@/features/subscriptions"
 import { api } from "@/shared/api"
-import { GenerationPage } from "@/features/generation/generation-page"
+import { Panel } from "@/shared/components/panel"
+import { GenerationDashboard } from "./-home/components/generation-dashboard"
 
 export const Route = createFileRoute("/_authenticated/")({
-  loader: ({ context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(
-        api.queryOptions("get", "/v1/episode-jobs")
-      ),
-      context.queryClient.ensureQueryData(
-        api.queryOptions("get", "/v1/episodes")
-      ),
-      context.queryClient.ensureQueryData(
-        api.queryOptions("get", "/v1/me/settings")
-      ),
-      context.queryClient.ensureQueryData(
-        api.queryOptions("get", "/v1/me/feed-subscriptions")
-      ),
-      context.queryClient.ensureQueryData(
-        api.queryOptions("get", "/v1/feeds", { params: { query: {} } })
-      ),
-    ]),
-  component: GenerationPage,
+  loader: ({ context }) => {
+    void context.queryClient.ensureQueryData(
+      api.queryOptions("get", "/v1/episode-jobs")
+    )
+    void context.queryClient.ensureQueryData(episodesQueryOptions)
+    void context.queryClient.ensureQueryData(settingsQueryOptions)
+    void context.queryClient.ensureQueryData(subscriptionsQueryOptions)
+    void context.queryClient.ensureQueryData(feedsQueryOptions)
+  },
+  component: HomeRoute,
 })
+
+function HomeRoute() {
+  return (
+    <Panel name="generation-dashboard">
+      <GenerationDashboard />
+    </Panel>
+  )
+}

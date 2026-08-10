@@ -7,6 +7,9 @@ import { currentPath } from "@/shared/lib/location"
 export const fetchClient = createFetchClient<paths>({
   baseUrl: "",
   credentials: "include",
+  // 生成時に固定せず呼び出しごとに解決するので、テストは globalThis.fetch を
+  // 差し替えるだけで全 query と mutation を制御できる。
+  fetch: (request) => globalThis.fetch(request),
 })
 
 fetchClient.use({
