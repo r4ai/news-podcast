@@ -9,6 +9,7 @@ import type { OpenAiConfig } from "./config.js"
 
 const MAX_TURNS = 8
 const MAX_TOOL_CALLS = 16
+const MAX_SOURCE_CORRECTIONS = 2
 
 type StrictFunctionParameter =
   | {
@@ -162,6 +163,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     let nextInput: unknown =
       "購読中のRSS記事から、今聴く価値のある日本語ニュースPodcastを制作してください。記事本文を読み、必要な場合だけWeb検索で補足確認し、完成したらsubmit_episode_draftを呼んでください。"
     let toolCalls = 0
+    let sourceCorrections = 0
 
     try {
       for (let turn = 0; turn < MAX_TURNS; turn += 1) {
@@ -170,7 +172,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
           ...(previousResponseId ? { previousResponseId } : {}),
         })
         previousResponseId = response.id
-        collectObservedUrls(response.output ?? [], observedWebUrls)
+        collectObservedWebUrls(response.output ?? [], observedWebUrls)
         const calls = (response.output ?? []).filter(isFunctionCall)
         if (calls.length === 0) {
           throw new PodcastAgentError(
@@ -187,17 +189,41 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
           if (call.name === "submit_episode_draft") {
             const draft = SubmitDraft.parse(JSON.parse(call.arguments))
             const urls = draft.source_urls.map((value) => new URL(value))
-            if (
-              urls.some(
-                (url) =>
-                  !allowedRssUrls.has(url.href) &&
-                  !observedWebUrls.has(url.href)
-              )
-            ) {
-              throw new PodcastAgentError(
-                "Agent referenced a source that was not read or searched",
-                false
-              )
+            const unobservedUrls = urls.filter(
+              (url) =>
+                !allowedRssUrls.has(url.href) &&
+                !observedWebUrls.has(url.href)
+            )
+            if (unobservedUrls.length > 0) {
+              sourceCorrections += 1
+              if (sourceCorrections > MAX_SOURCE_CORRECTIONS) {
+                throw new PodcastAgentError(
+                  "Agent output remained invalid after source correction limit",
+                  false
+                )
+              }
+              const correction = {
+                ok: false,
+                code: "source_not_observed",
+                invalid_source_urls: unobservedUrls.map((url) => url.href),
+                correction_attempt: sourceCorrections,
+                correction_limit: MAX_SOURCE_CORRECTIONS,
+                instruction:
+                  "Each source must first be observed through read_article or web_search. Read or search the missing sources, then submit the complete draft again.",
+              }
+              this.audit.tool({
+                runId,
+                position: toolCalls - 1,
+                name: call.name,
+                argumentsJson: call.arguments,
+                outputSummary: correction,
+              })
+              outputs.push({
+                type: "function_call_output",
+                call_id: call.call_id,
+                output: JSON.stringify(correction),
+              })
+              continue
             }
             this.audit.tool({
               runId,
@@ -301,6 +327,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
           ? { previous_response_id: input.previousResponseId }
           : {}),
         parallel_tool_calls: false,
+        include: ["web_search_call.action.sources"],
         tools: PODCAST_AGENT_TOOLS,
       }),
     })
@@ -345,23 +372,27 @@ function isFunctionCall(value: unknown): value is FunctionCall {
   )
 }
 
-function collectObservedUrls(value: unknown, output: Set<string>): void {
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectObservedUrls(item, output))
-    return
-  }
-  if (!value || typeof value !== "object") return
-  const item = value as Record<string, unknown>
-  if (item.type === "function_call") return
-  for (const [key, child] of Object.entries(item)) {
-    if ((key === "url" || key === "source_url") && typeof child === "string") {
+function collectObservedWebUrls(
+  responseOutput: readonly unknown[],
+  output: Set<string>
+): void {
+  for (const value of responseOutput) {
+    if (!value || typeof value !== "object") continue
+    const item = value as Record<string, unknown>
+    if (item.type !== "web_search_call") continue
+    const action = item.action
+    if (!action || typeof action !== "object") continue
+    const sources = (action as Record<string, unknown>).sources
+    if (!Array.isArray(sources)) continue
+    for (const source of sources) {
+      if (!source || typeof source !== "object") continue
+      const url = (source as Record<string, unknown>).url
+      if (typeof url !== "string") continue
       try {
-        output.add(new URL(child).href)
+        output.add(new URL(url).href)
       } catch {
-        // Ignore non-URL provider metadata.
+        // Ignore malformed provider metadata rather than trusting it as a source.
       }
-    } else {
-      collectObservedUrls(child, output)
     }
   }
 }

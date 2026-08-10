@@ -90,6 +90,7 @@ describe("OpenAiPodcastAgent", () => {
     expect(audit.finish).toHaveBeenCalledWith("run-1")
     const firstRequest = fetcherMock.mock.calls[0]?.[1]
     const body = JSON.parse(String(firstRequest?.body)) as {
+      include?: readonly string[]
       tools: readonly {
         name?: string
         parameters?: {
@@ -104,6 +105,146 @@ describe("OpenAiPodcastAgent", () => {
       type: "string",
     })
     expect(JSON.stringify(body.tools)).not.toContain('"format"')
+    expect(body.include).toEqual(["web_search_call.action.sources"])
+  })
+
+  it("accepts only URLs reported by the hosted web search source list", async () => {
+    const sourceUrl = "https://example.com/official-source"
+    const fetcherMock = vi.fn().mockResolvedValue(
+      Response.json({
+        id: "response-1",
+        output: [
+          {
+            type: "web_search_call",
+            id: "search-1",
+            action: {
+              type: "search",
+              query: "official source",
+              sources: [{ type: "url", url: sourceUrl }],
+            },
+          },
+          {
+            type: "function_call",
+            name: "submit_episode_draft",
+            arguments: JSON.stringify({
+              title: "検索ニュース",
+              script: "公式Web検索の結果を根拠にしたニュースです。".repeat(8),
+              source_urls: [sourceUrl],
+            }),
+            call_id: "call-1",
+          },
+        ],
+      })
+    )
+    const audit = {
+      start: vi.fn(() => "run-1"),
+      tool: vi.fn(),
+      finish: vi.fn(),
+    }
+    const agent = new OpenAiPodcastAgent(
+      { apiKey: "test", model: "test-model" },
+      { listArticles: vi.fn(), readArticle: vi.fn() },
+      audit,
+      fetcherMock as unknown as typeof fetch
+    )
+
+    await expect(
+      agent.run({ jobId: "job-1", ownerId: "owner", feedIds: [] })
+    ).resolves.toMatchObject({ sourceUrls: [new URL(sourceUrl)] })
+  })
+
+  it("returns a structured correction and accepts a repaired draft in the same run", async () => {
+    const missingUrl = "https://example.com/missing"
+    const fetcherMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "response-1",
+          output: [draftCall("call-1", missingUrl)],
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "response-2",
+          output: [
+            {
+              type: "web_search_call",
+              action: { sources: [{ url: missingUrl }] },
+            },
+            draftCall("call-2", missingUrl),
+          ],
+        })
+      )
+    const audit = {
+      start: vi.fn(() => "run-1"),
+      tool: vi.fn(),
+      finish: vi.fn(),
+    }
+    const agent = new OpenAiPodcastAgent(
+      { apiKey: "test", model: "test-model" },
+      { listArticles: vi.fn(), readArticle: vi.fn() },
+      audit,
+      fetcherMock as unknown as typeof fetch
+    )
+
+    await expect(
+      agent.run({ jobId: "job-1", ownerId: "owner", feedIds: [] })
+    ).resolves.toMatchObject({ sourceUrls: [new URL(missingUrl)] })
+
+    const secondRequest = fetcherMock.mock.calls[1]?.[1]
+    const body = JSON.parse(String(secondRequest?.body)) as {
+      input: { output: string }[]
+    }
+    expect(JSON.parse(body.input[0]?.output ?? "{}")).toMatchObject({
+      ok: false,
+      code: "source_not_observed",
+      invalid_source_urls: [missingUrl],
+      correction_attempt: 1,
+      correction_limit: 2,
+    })
+    expect(audit.finish).toHaveBeenCalledWith("run-1")
+  })
+
+  it("fails only after the source correction limit is exceeded", async () => {
+    const fetcherMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "response-1",
+          output: [draftCall("call-1", "https://example.com/one")],
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "response-2",
+          output: [draftCall("call-2", "https://example.com/two")],
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: "response-3",
+          output: [draftCall("call-3", "https://example.com/three")],
+        })
+      )
+    const audit = {
+      start: vi.fn(() => "run-1"),
+      tool: vi.fn(),
+      finish: vi.fn(),
+    }
+    const agent = new OpenAiPodcastAgent(
+      { apiKey: "test", model: "test-model" },
+      { listArticles: vi.fn(), readArticle: vi.fn() },
+      audit,
+      fetcherMock as unknown as typeof fetch
+    )
+
+    await expect(
+      agent.run({ jobId: "job-1", ownerId: "owner", feedIds: [] })
+    ).rejects.toThrow(
+      "Agent output remained invalid after source correction limit"
+    )
+    expect(fetcherMock).toHaveBeenCalledTimes(3)
+    expect(audit.finish).toHaveBeenCalledWith("run-1", "agent-run-failed")
   })
 
   it("includes OpenAI validation details in a failed request", async () => {
@@ -143,3 +284,16 @@ describe("OpenAiPodcastAgent", () => {
     expect(audit.finish).toHaveBeenCalledWith("run-1", "agent-run-failed")
   })
 })
+
+function draftCall(callId: string, sourceUrl: string) {
+  return {
+    type: "function_call",
+    name: "submit_episode_draft",
+    arguments: JSON.stringify({
+      title: "修正対象ニュース",
+      script: "出典を確認して制作したニュースです。".repeat(10),
+      source_urls: [sourceUrl],
+    }),
+    call_id: callId,
+  }
+}
