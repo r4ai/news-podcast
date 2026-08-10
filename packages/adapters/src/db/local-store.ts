@@ -832,6 +832,93 @@ export class LocalStore implements EpisodeJobRepository {
     return row ? toJob(row) : undefined
   }
 
+  cancelJob(
+    ownerId: string,
+    jobId: string
+  ): "canceled" | "terminal" | "not_found" {
+    return this.transaction(() => {
+      const row = this.database
+        .prepare("SELECT status FROM episode_jobs WHERE owner_id = ? AND id = ?")
+        .get(ownerId, jobId) as Record<string, unknown> | undefined
+      if (!row) return "not_found"
+      if (["succeeded", "failed", "canceled"].includes(String(row.status))) {
+        return "terminal"
+      }
+      const now = new Date().toISOString()
+      this.database
+        .prepare(
+          `UPDATE episode_jobs SET status = 'canceled', finished_at = ?,
+           stage = NULL, lease_token = NULL, lease_expires_at = NULL,
+           next_attempt_at = NULL WHERE id = ? AND owner_id = ?`
+        )
+        .run(now, jobId, ownerId)
+      this.database
+        .prepare(
+          `UPDATE agent_runs SET status = 'canceled', finished_at = ?
+           WHERE episode_job_id = ? AND owner_id = ?
+             AND status IN ('queued', 'running', 'waiting_approval', 'retrying')`
+        )
+        .run(now, jobId, ownerId)
+      this.database
+        .prepare(
+          `UPDATE sandbox_sessions SET state = 'stopped', stopped_at = ?
+           WHERE agent_run_id IN (
+             SELECT id FROM agent_runs WHERE episode_job_id = ? AND owner_id = ?
+           ) AND state IN ('creating', 'ready')`
+        )
+        .run(now, jobId, ownerId)
+      return "canceled"
+    })
+  }
+
+  retryFailedJob(ownerId: string, jobId: string): JobDto | undefined {
+    return this.transaction(() => {
+      const original = this.database
+        .prepare(
+          `SELECT * FROM episode_jobs
+           WHERE owner_id = ? AND id = ? AND status = 'failed'`
+        )
+        .get(ownerId, jobId) as Record<string, unknown> | undefined
+      if (!original) return undefined
+      const id = randomUUID()
+      const now = new Date().toISOString()
+      const receipt = JSON.stringify({ id, status: "queued", createdAt: now })
+      this.database
+        .prepare(
+          `INSERT INTO episode_jobs
+           (id, owner_id, idempotency_route, idempotency_key, request_hash,
+            status, receipt_json, available_at, created_at, trace_parent,
+            trace_state, retry_of_job_id, memory_version_id,
+            generation_policy_hash)
+           VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          id,
+          ownerId,
+          `/v1/episode-jobs/${jobId}/retry`,
+          id,
+          String(original.request_hash),
+          receipt,
+          now,
+          now,
+          original.trace_parent ? String(original.trace_parent) : null,
+          original.trace_state ? String(original.trace_state) : null,
+          jobId,
+          original.memory_version_id
+            ? String(original.memory_version_id)
+            : null,
+          String(original.generation_policy_hash)
+        )
+      this.database
+        .prepare(
+          `INSERT INTO episode_job_feeds (job_id, feed_id, position)
+           SELECT ?, feed_id, position FROM episode_job_feeds WHERE job_id = ?`
+        )
+        .run(id, jobId)
+      return this.getJob(ownerId, id)
+    })
+  }
+
   leaseNext(now = new Date()): WorkerJob | undefined {
     return this.transaction(() => {
       const timestamp = now.toISOString()
