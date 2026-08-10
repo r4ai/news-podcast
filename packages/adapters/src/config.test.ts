@@ -2,15 +2,37 @@ import { describe, expect, it } from "vitest"
 
 import {
   ConfigurationError,
+  DEFAULT_ARCHIVE_LIMITS,
   DEFAULT_OPENAI_MODEL,
   DEFAULT_VOICEVOX_CHARACTER,
   readLocalAuthConfig,
+  readArchiveLimits,
   readOpenAiConfig,
   readS3Config,
   readVoicevoxConfig,
 } from "./config.js"
 
 describe("runtime configuration", () => {
+  it("uses generous archive defaults and accepts explicit resource limits", () => {
+    expect(readArchiveLimits({})).toEqual(DEFAULT_ARCHIVE_LIMITS)
+    expect(
+      readArchiveLimits({
+        ARCHIVE_MAX_HTML_BYTES: "100",
+        ARCHIVE_MAX_ASSET_BYTES: "200",
+        ARCHIVE_MAX_TOTAL_ASSET_BYTES: "300",
+        ARCHIVE_MAX_ASSETS: "4",
+      })
+    ).toEqual({
+      maxHtmlBytes: 100,
+      maxAssetBytes: 200,
+      maxTotalAssetBytes: 300,
+      maxAssets: 4,
+    })
+    expect(() => readArchiveLimits({ ARCHIVE_MAX_ASSETS: "0" })).toThrow(
+      /positive integer/
+    )
+  })
+
   it("uses the confirmed OpenAI model default without requiring it in tests", () => {
     expect(readOpenAiConfig({ OPENAI_API_KEY: "test-key" })).toEqual({
       apiKey: "test-key",

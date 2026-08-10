@@ -7,12 +7,9 @@ import valueParser from "postcss-value-parser"
 import TurndownService from "turndown"
 
 import type { ObjectStore } from "@news-podcast/application"
+import { DEFAULT_ARCHIVE_LIMITS, type ArchiveLimits } from "../config.js"
 import { createSafeFetcher } from "../http/safe-fetch.js"
 
-const MAX_HTML_BYTES = 5 * 1024 * 1024
-const MAX_ASSET_BYTES = 10 * 1024 * 1024
-const MAX_ASSET_TOTAL_BYTES = 50 * 1024 * 1024
-const MAX_ASSETS = 80
 type CssValueNode = ReturnType<typeof valueParser>["nodes"][number]
 const DISABLED_LINK_RELATIONS = new Set([
   "apple-touch-icon",
@@ -51,7 +48,8 @@ export class ArticleArchiver {
 
   constructor(
     private readonly objects: ObjectStore,
-    fetcher: typeof fetch = fetch
+    fetcher: typeof fetch = fetch,
+    private readonly limits: ArchiveLimits = DEFAULT_ARCHIVE_LIMITS
   ) {
     this.fetcher = createSafeFetcher(fetcher)
   }
@@ -68,7 +66,7 @@ export class ArticleArchiver {
       throw new Error("Article response is not HTML")
     }
     const raw = new Uint8Array(await response.arrayBuffer())
-    if (raw.byteLength > MAX_HTML_BYTES)
+    if (raw.byteLength > this.limits.maxHtmlBytes)
       throw new Error("Article HTML is too large")
     const sourceUrl = response.url || urlValue
     const html = new TextDecoder().decode(raw)
@@ -187,6 +185,7 @@ export class ArticleArchiver {
       contentType: string
       byteLength: number
     }[] = []
+    const storedByHash = new Map<string, (typeof stored)[number]>()
     let totalStoredBytes = 0
     const capturedByUrl = new Map<
       string,
@@ -207,7 +206,6 @@ export class ArticleArchiver {
           return undefined
         return nested ? existing.hash : `assets/${existing.hash}`
       }
-      if (stored.length >= MAX_ASSETS) return undefined
       capturedByUrl.set(assetUrl, undefined)
       const response = await this.fetcher(assetUrl, {
         headers: { "User-Agent": "NewsPodcastArchive/0.1 (+self-hosted)" },
@@ -215,7 +213,7 @@ export class ArticleArchiver {
       })
       if (!response.ok) return undefined
       let body = new Uint8Array(await response.arrayBuffer())
-      if (body.byteLength > MAX_ASSET_BYTES) return undefined
+      if (body.byteLength > this.limits.maxAssetBytes) return undefined
       const assetType =
         response.headers.get("content-type") ?? "application/octet-stream"
       if (expectedContentType && !mediaTypeIs(assetType, expectedContentType))
@@ -236,21 +234,34 @@ export class ArticleArchiver {
         )
         body = new TextEncoder().encode(rewritten)
       }
-      if (totalStoredBytes + body.byteLength > MAX_ASSET_TOTAL_BYTES)
+      const assetHash = hash(body)
+      const duplicate = storedByHash.get(assetHash)
+      if (duplicate) {
+        capturedByUrl.set(assetUrl, {
+          hash: duplicate.hash,
+          contentType: assetType,
+        })
+        return nested ? duplicate.hash : `assets/${duplicate.hash}`
+      }
+      if (
+        stored.length >= this.limits.maxAssets ||
+        totalStoredBytes + body.byteLength > this.limits.maxTotalAssetBytes
+      )
         return undefined
 
-      const assetHash = hash(body)
       const key = `${prefix}/assets/${assetHash}${extension(assetType)}`
       await this.objects.put({ key, body, contentType: assetType })
       capturedByUrl.set(assetUrl, { hash: assetHash, contentType: assetType })
       totalStoredBytes += body.byteLength
-      stored.push({
+      const storedAsset = {
         hash: assetHash,
         originalUrl: assetUrl,
         key,
         contentType: assetType,
         byteLength: body.byteLength,
-      })
+      }
+      stored.push(storedAsset)
+      storedByHash.set(assetHash, storedAsset)
       return nested ? assetHash : `assets/${assetHash}`
     }
 
@@ -317,6 +328,12 @@ export class ArticleArchiver {
       )
     }
 
+    for (const element of Array.from(
+      document.querySelectorAll("img[srcset],source[srcset]")
+    )) {
+      await rewriteSrcset(element, sourceUrl, capture)
+    }
+
     for (const candidate of passiveAssetCandidates)
       await captureCandidate(candidate)
     return {
@@ -324,6 +341,83 @@ export class ArticleArchiver {
       missingStylesheets,
     }
   }
+}
+
+async function rewriteSrcset(
+  element: Element,
+  sourceUrl: string,
+  capture: (
+    url: string,
+    nested?: boolean,
+    expectedContentType?: string
+  ) => Promise<string | undefined>
+): Promise<void> {
+  const value = getHtmlAttribute(element, "srcset")
+  if (!value) return
+  const rewritten: string[] = []
+  for (const candidate of parseSrcset(value)) {
+    if (candidate.url.startsWith("data:")) {
+      rewritten.push(formatSrcsetCandidate(candidate))
+      continue
+    }
+    try {
+      const localUrl = await capture(new URL(candidate.url, sourceUrl).href)
+      if (localUrl)
+        rewritten.push(formatSrcsetCandidate({ ...candidate, url: localUrl }))
+    } catch {
+      // Omit an invalid or unavailable candidate from the offline replay.
+    }
+  }
+  if (rewritten.length > 0)
+    setHtmlAttribute(element, "srcset", rewritten.join(", "))
+  else removeHtmlAttribute(element, "srcset")
+}
+
+function parseSrcset(value: string): { url: string; descriptor: string }[] {
+  const candidates: { url: string; descriptor: string }[] = []
+  let position = 0
+  while (position < value.length) {
+    while (isHtmlSpace(value[position]) || value[position] === ",")
+      position += 1
+    if (position >= value.length) break
+
+    const urlStart = position
+    while (position < value.length && !isHtmlSpace(value[position]))
+      position += 1
+    let url = value.slice(urlStart, position)
+    const endedWithComma = url.endsWith(",")
+    if (endedWithComma) url = url.replace(/,+$/, "")
+
+    let descriptor = ""
+    if (!endedWithComma) {
+      while (isHtmlSpace(value[position])) position += 1
+      const descriptorStart = position
+      while (position < value.length && value[position] !== ",") position += 1
+      descriptor = value.slice(descriptorStart, position).trim()
+    }
+    if (position < value.length && value[position] === ",") position += 1
+    if (url) candidates.push({ url, descriptor })
+  }
+  return candidates
+}
+
+function formatSrcsetCandidate(candidate: {
+  url: string
+  descriptor: string
+}): string {
+  return candidate.descriptor
+    ? `${candidate.url} ${candidate.descriptor}`
+    : candidate.url
+}
+
+function isHtmlSpace(value: string | undefined): boolean {
+  return (
+    value === "\u0009" ||
+    value === "\u000a" ||
+    value === "\u000c" ||
+    value === "\u000d" ||
+    value === "\u0020"
+  )
 }
 
 function replaceWithReaderView(
@@ -568,7 +662,6 @@ function sanitize(document: ReturnType<typeof parseHTML>["document"]): void {
       "integrity",
       "nonce",
       "ping",
-      "srcset",
       "xlink:href",
     ]) {
       removeHtmlAttribute(element, attribute)
@@ -719,7 +812,7 @@ function addContentSecurityPolicy(
   document: ReturnType<typeof parseHTML>["document"]
 ): string {
   const policy =
-    "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'"
+    "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self' data:; form-action 'none'; base-uri 'none'"
   const meta = document.createElement("meta")
   meta.setAttribute("http-equiv", "Content-Security-Policy")
   meta.setAttribute("content", policy)

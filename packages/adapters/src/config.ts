@@ -1,5 +1,18 @@
 export const DEFAULT_OPENAI_MODEL = "gpt-5.6-luna"
 export const DEFAULT_VOICEVOX_CHARACTER = "ずんだもん"
+export const DEFAULT_ARCHIVE_LIMITS: ArchiveLimits = {
+  maxHtmlBytes: 5 * 1024 * 1024,
+  maxAssetBytes: 20 * 1024 * 1024,
+  maxTotalAssetBytes: 100 * 1024 * 1024,
+  maxAssets: 512,
+}
+
+export interface ArchiveLimits {
+  readonly maxHtmlBytes: number
+  readonly maxAssetBytes: number
+  readonly maxTotalAssetBytes: number
+  readonly maxAssets: number
+}
 
 export class ConfigurationError extends Error {
   constructor(readonly missingKeys: readonly string[]) {
@@ -19,6 +32,47 @@ export interface S3Config {
   readonly bucket: string
   readonly accessKeyId: string
   readonly secretAccessKey: string
+}
+
+export function readArchiveLimits(
+  env: Readonly<Record<string, string | undefined>>
+): ArchiveLimits {
+  return {
+    maxHtmlBytes: positiveInteger(
+      env,
+      "ARCHIVE_MAX_HTML_BYTES",
+      DEFAULT_ARCHIVE_LIMITS.maxHtmlBytes
+    ),
+    maxAssetBytes: positiveInteger(
+      env,
+      "ARCHIVE_MAX_ASSET_BYTES",
+      DEFAULT_ARCHIVE_LIMITS.maxAssetBytes
+    ),
+    maxTotalAssetBytes: positiveInteger(
+      env,
+      "ARCHIVE_MAX_TOTAL_ASSET_BYTES",
+      DEFAULT_ARCHIVE_LIMITS.maxTotalAssetBytes
+    ),
+    maxAssets: positiveInteger(
+      env,
+      "ARCHIVE_MAX_ASSETS",
+      DEFAULT_ARCHIVE_LIMITS.maxAssets
+    ),
+  }
+}
+
+function positiveInteger(
+  env: Readonly<Record<string, string | undefined>>,
+  key: string,
+  fallback: number
+): number {
+  const raw = env[key]?.trim()
+  if (!raw) return fallback
+  const value = Number(raw)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`Invalid configuration: ${key} must be a positive integer`)
+  }
+  return value
 }
 
 export function readS3Config(

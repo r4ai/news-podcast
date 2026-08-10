@@ -1,5 +1,6 @@
 import { LocalStore } from "@news-podcast/adapters/db/local"
 import {
+  readArchiveLimits,
   readOpenAiConfig,
   readS3Config,
   readVoicevoxConfig,
@@ -39,7 +40,12 @@ const processor =
         observability,
       })
 const scheduler = new LocalScheduler(store)
-const rssArchive = new RssArchiveWorker(store, objects, observability)
+const rssArchive = new RssArchiveWorker(
+  store,
+  objects,
+  observability,
+  readArchiveLimits(process.env)
+)
 
 async function tick(): Promise<void> {
   await scheduler.run()

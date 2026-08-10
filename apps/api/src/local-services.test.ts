@@ -33,6 +33,8 @@ describe("createArticleAccess", () => {
     expect(policy).toContain("sandbox allow-same-origin")
     expect(policy).toContain("script-src 'none'")
     expect(policy).toContain("connect-src 'none'")
+    expect(policy).toContain("font-src 'self' data:")
+    expect(policy).toContain("media-src 'self' data:")
     expect(policy).toContain("frame-ancestors 'self'")
     const html = await response.text()
     expect(html).not.toMatch(

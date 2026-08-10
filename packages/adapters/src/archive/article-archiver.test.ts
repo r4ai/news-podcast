@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { parseHTML } from "linkedom"
 
 import type { ObjectStore } from "@news-podcast/application"
+import { DEFAULT_ARCHIVE_LIMITS } from "../config.js"
 import { ArticleArchiver } from "./article-archiver.js"
 
 class MemoryObjects implements ObjectStore {
@@ -144,9 +145,10 @@ describe("ArticleArchiver", () => {
       })
     }) as typeof fetch
 
-    const result = await new ArticleArchiver(objects, fetcher).archive(
-      "https://93.184.216.34/article"
-    )
+    const result = await new ArticleArchiver(objects, fetcher, {
+      ...DEFAULT_ARCHIVE_LIMITS,
+      maxAssets: 80,
+    }).archive("https://93.184.216.34/article")
     const replay = new TextDecoder().decode(
       objects.values.get(result.replayKey)?.body
     )
@@ -155,6 +157,66 @@ describe("ArticleArchiver", () => {
     expect(stylesheet?.getAttribute("rel")).toBe("stylesheet")
     expect(stylesheet?.getAttribute("href")).toMatch(/^assets\/[a-f0-9]{64}$/)
     expect(result.assets).toHaveLength(80)
+  })
+
+  it("captures every srcset candidate including CDN URLs with commas", async () => {
+    const objects = new MemoryObjects()
+    const html = `<!doctype html><html><head><title>Responsive</title></head><body>
+      <picture><source srcset="/small.webp 480w, /large.webp 960w">
+      <img src="/fallback.png" srcset="/plain.png, /cdn,w_1200,c_limit.png 2x"></picture>
+      </body></html>`
+    const fetcher = (async (input: URL | RequestInfo) => {
+      const url = String(input)
+      if (url.endsWith("/article"))
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        })
+      return new Response(new TextEncoder().encode(url), {
+        headers: { "Content-Type": "image/webp" },
+      })
+    }) as typeof fetch
+
+    const result = await new ArticleArchiver(objects, fetcher).archive(
+      "https://93.184.216.34/article"
+    )
+    const replay = new TextDecoder().decode(
+      objects.values.get(result.replayKey)?.body
+    )
+    const document = parseHTML(replay).document
+
+    expect(document.querySelector("source")?.getAttribute("srcset")).toMatch(
+      /^assets\/[a-f0-9]{64} 480w, assets\/[a-f0-9]{64} 960w$/
+    )
+    expect(document.querySelector("img")?.getAttribute("srcset")).toMatch(
+      /^assets\/[a-f0-9]{64}, assets\/[a-f0-9]{64} 2x$/
+    )
+    expect(replay).not.toContain("cdn,w_1200,c_limit.png")
+    expect(result.assets).toHaveLength(5)
+  })
+
+  it("does not charge duplicate content against the asset count limit", async () => {
+    const objects = new MemoryObjects()
+    const html = `<!doctype html><html><head><title>Duplicates</title></head><body>
+      <img src="/one.png"><img src="/two.png"></body></html>`
+    const fetcher = (async (input: URL | RequestInfo) =>
+      String(input).endsWith("/article")
+        ? new Response(html, {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          })
+        : new Response(new Uint8Array([1, 2, 3]), {
+            headers: { "Content-Type": "image/png" },
+          })) as typeof fetch
+
+    const result = await new ArticleArchiver(objects, fetcher, {
+      ...DEFAULT_ARCHIVE_LIMITS,
+      maxAssets: 1,
+    }).archive("https://93.184.216.34/article")
+    const replay = new TextDecoder().decode(
+      objects.values.get(result.replayKey)?.body
+    )
+
+    expect(replay.match(/src="assets\/[a-f0-9]{64}"/g)).toHaveLength(2)
+    expect(result.assets).toHaveLength(1)
   })
 
   it("uses a safe reader layout when a site stylesheet cannot be captured", async () => {

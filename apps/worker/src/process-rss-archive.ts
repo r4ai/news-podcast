@@ -1,4 +1,5 @@
 import { ArticleArchiver } from "@news-podcast/adapters/archive"
+import type { ArchiveLimits } from "@news-podcast/adapters/config"
 import type { LocalStore } from "@news-podcast/adapters/db/local"
 import { createSafeFetcher } from "@news-podcast/adapters/http/safe"
 import { RssFeedReader } from "@news-podcast/adapters/rss"
@@ -15,9 +16,10 @@ export class RssArchiveWorker {
   constructor(
     private readonly store: LocalStore,
     objects: ObjectStore,
-    private readonly observability: Observability = noopObservability
+    private readonly observability: Observability = noopObservability,
+    limits?: ArchiveLimits
   ) {
-    this.archiver = new ArticleArchiver(objects)
+    this.archiver = new ArticleArchiver(objects, fetch, limits)
   }
 
   async runOnce(now = new Date()): Promise<void> {

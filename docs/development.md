@@ -383,6 +383,10 @@ APIのrouteやschemaを変更した場合は `pnpm contract:generate` を実行�
 | `S3_BUCKET` | `news-podcast` | API、Worker | 記事と音声を保存する非公開bucket |
 | `S3_ACCESS_KEY_ID` | 開発用値 | API、Worker、SeaweedFS | S3 access key |
 | `S3_SECRET_ACCESS_KEY` | 開発用値 | API、Worker、SeaweedFS | S3 secret key。本番では変更する |
+| `ARCHIVE_MAX_HTML_BYTES` | `5242880` | Worker | 元HTML 1件の最大byte数 |
+| `ARCHIVE_MAX_ASSET_BYTES` | `20971520` | Worker | 保存resource 1件の最大byte数 |
+| `ARCHIVE_MAX_TOTAL_ASSET_BYTES` | `104857600` | Worker | 1 snapshotに保存するresource合計の最大byte数 |
+| `ARCHIVE_MAX_ASSETS` | `512` | Worker | 1 snapshotに保存する重複除外後resourceの最大件数 |
 | `AUDIO_ACCESS_SECRET` | 自動生成 | API | 音声アクセス用トークンの署名に使う秘密値 |
 | `API_PORT` | `3000` | API | APIが待ち受けるポート |
 | `VITE_API_PROXY_TARGET` | `http://localhost:3000` | Web | Viteが `/api`、`/v1` などを転送するAPIのURL |

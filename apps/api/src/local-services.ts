@@ -196,7 +196,7 @@ export function createArticleAccess(input: {
         input.store.getArticleObject(ownerId, articleId, "replay"),
         {
           "Content-Security-Policy":
-            "sandbox allow-same-origin; default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
+            "sandbox allow-same-origin; default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self' data:; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
           "X-Content-Type-Options": "nosniff",
         },
         prepareArchivedReplay
