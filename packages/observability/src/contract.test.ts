@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { metricNames, telemetryEventNames } from "./contract.js"
+import { metricNames, metricUnits, telemetryEventNames } from "./contract.js"
 import { noopObservability } from "./noop-adapter.js"
 
 describe("observability contract", () => {
@@ -9,6 +9,7 @@ describe("observability contract", () => {
     expect(new Set(metricNames).size).toBe(metricNames.length)
     expect(telemetryEventNames).toContain("episode.failed")
     expect(metricNames).toContain("http.server.duration")
+    expect(Object.keys(metricUnits).sort()).toEqual([...metricNames].sort())
   })
 
   it("executes application work through the no-op adapter", async () => {
@@ -18,6 +19,7 @@ describe("observability contract", () => {
     ).resolves.toBe("completed")
     expect(operation).toHaveBeenCalledOnce()
     expect(noopObservability.captureContext()).toBeUndefined()
+    expect(noopObservability.gauge("episode.jobs", 0)).toBeUndefined()
     await expect(noopObservability.shutdown()).resolves.toBeUndefined()
   })
 })

@@ -137,6 +137,36 @@ describe("episode job control", () => {
     store.close()
   })
 
+  it("reports low-cardinality queue, stage, lease, and cleanup health", async () => {
+    const store = createStore()
+    await createJob(store, "owner-1", "health-queued")
+    await createJob(store, "owner-1", "health-running")
+    const now = new Date("2026-08-10T00:00:00.000Z")
+    const running = store.leaseNext(now)!
+    store.setJobStage(
+      running.id,
+      running.leaseToken,
+      "synthesizing_audio",
+      now
+    )
+
+    expect(
+      store.getJobHealthSnapshot(new Date("2026-08-10T00:00:30.000Z"))
+    ).toMatchObject({
+      jobs: { queued: 1, running: 1, retrying: 0 },
+      oldestQueueAgeMs: expect.any(Number),
+      oldestStageAgeMs: { synthesizing_audio: 30_000 },
+      expiredLeases: 0,
+      cleanupBacklog: 0,
+      stagingBytes: 0,
+    })
+    expect(
+      store.getJobHealthSnapshot(new Date("2026-08-10T00:01:01.000Z"))
+        .expiredLeases
+    ).toBe(1)
+    store.close()
+  })
+
   it("invalidates and audits unbounded jobs from the legacy schema", () => {
     const directory = mkdtempSync(join(tmpdir(), "job-control-legacy-"))
     directories.push(directory)

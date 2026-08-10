@@ -5,6 +5,7 @@ export const noopObservability: Observability = {
   withSpan: (_name, _attributes, operation) => operation(),
   count: () => undefined,
   measure: () => undefined,
+  gauge: () => undefined,
   captureContext: () => undefined,
   shutdown: () => Promise.resolve(),
 }

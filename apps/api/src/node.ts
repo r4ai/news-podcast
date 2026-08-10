@@ -119,8 +119,18 @@ const server = serve(
   }
 )
 
+const canaryTimer = setInterval(() => {
+  observability.gauge("api.heartbeat", 1)
+  observability.count("otlp.canary")
+  observability.log({ name: "api.heartbeat" })
+}, 30_000)
+canaryTimer.unref()
+observability.gauge("api.heartbeat", 1)
+observability.log({ name: "api.heartbeat" })
+
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
+    clearInterval(canaryTimer)
     server.close(() => {
       store.close()
       void observability.shutdown().finally(() => process.exit(0))

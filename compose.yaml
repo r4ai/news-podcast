@@ -50,6 +50,9 @@ services:
       - path: .env.example
       - path: .env
         required: false
+    environment:
+      OTEL_TRACE_SAMPLE_RATE: "1"
+      WORKER_HEALTH_PORT: "3001"
     volumes:
       - app-data:/app/data
       - audio-data:/app/audio
@@ -58,6 +61,17 @@ services:
         condition: service_healthy
       seaweedfs:
         condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   seaweedfs:
     image: chrislusf/seaweedfs:4.21

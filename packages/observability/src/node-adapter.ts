@@ -122,6 +122,7 @@ export function createNodeObservability(
     MetricName,
     ReturnType<typeof meter.createHistogram>
   >()
+  const gauges = new Map<MetricName, ReturnType<typeof meter.createGauge>>()
 
   return {
     log(event) {
@@ -132,7 +133,9 @@ export function createNodeObservability(
         body: event.name,
         attributes: sanitizeAttributes({
           ...(event.attributes ?? {}),
-          ...(error ? { "error.type": error.type } : {}),
+          ...(error
+            ? { "error.type": error.type, "error.message": error.message }
+            : {}),
         }),
       })
     },
@@ -159,15 +162,20 @@ export function createNodeObservability(
         }
       )
     },
-    count(name, value = 1) {
+    count(name, value = 1, attributes = {}) {
       const counter = counters.get(name) ?? meter.createCounter(name)
       counters.set(name, counter)
-      counter.add(value)
+      counter.add(value, sanitizeAttributes(attributes))
     },
-    measure(name, value) {
+    measure(name, value, attributes = {}) {
       const histogram = histograms.get(name) ?? meter.createHistogram(name)
       histograms.set(name, histogram)
-      histogram.record(value)
+      histogram.record(value, sanitizeAttributes(attributes))
+    },
+    gauge(name, value, attributes = {}) {
+      const gauge = gauges.get(name) ?? meter.createGauge(name)
+      gauges.set(name, gauge)
+      gauge.record(value, sanitizeAttributes(attributes))
     },
     captureContext,
     shutdown: () => sdk.shutdown(),

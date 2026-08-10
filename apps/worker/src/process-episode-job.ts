@@ -101,6 +101,15 @@ export class EpisodeProcessor {
         ) {
           store.renewLease(job.id, job.leaseToken, current)
           lastHeartbeatAt = current.getTime()
+          observability.count("episode.lease.renewed")
+          observability.log({
+            name: "episode.lease.renewed",
+            level: "debug",
+            attributes: {
+              ...jobAttributes(job),
+              "lease.result": "renewed",
+            },
+          })
         }
       } catch (error) {
         controller.abort(
@@ -114,12 +123,27 @@ export class EpisodeProcessor {
       Math.max(0, job.deadlineAt.getTime() - now.getTime())
     )
     deadlineTimer.unref()
-    observability.log({ name: "episode.started" })
+    observability.count("episode.started", 1, {
+      "job.attempt": job.attempt,
+      "job.max_attempts": 4,
+    })
+    observability.log({
+      name: "episode.started",
+      attributes: jobAttributes(job),
+    })
+    if (job.recovered) {
+      observability.count("episode.lease.recovered")
+      observability.log({
+        name: "episode.lease.recovered",
+        level: "warn",
+        attributes: { ...jobAttributes(job), "lease.result": "recovered" },
+      })
+    }
     try {
       await raceWithSignal(
         observability.withSpan(
           "episode.process",
-          {},
+          jobAttributes(job),
           () => this.runPipeline(job, observability, controller.signal),
           job.traceContext ? { link: job.traceContext } : undefined
         ),
@@ -132,14 +156,25 @@ export class EpisodeProcessor {
         ? controller.signal.reason
         : error
       if (effectiveError instanceof LeaseLostError) {
+        observability.count("episode.lease.lost")
         observability.log({
-          name: "episode.failed",
+          name: "episode.lease.lost",
           level: "warn",
+          attributes: { ...jobAttributes(job), "lease.result": "lost" },
           error: effectiveError,
         })
         return
       }
       const failure = classifyFailure(effectiveError)
+      if (failure.code === "job-deadline-exceeded") {
+        observability.count("episode.deadline.exceeded")
+        observability.log({
+          name: "episode.deadline.exceeded",
+          level: "error",
+          attributes: jobAttributes(job),
+          error: effectiveError,
+        })
+      }
       const delay = RETRY_DELAYS_MS[job.attempt - 1]
       const willRetry = failure.retryable && delay !== undefined
       try {
@@ -150,6 +185,10 @@ export class EpisodeProcessor {
             new Date(Date.now() + delay),
             failure
           )
+          observability.count("episode.retry", 1, {
+            "job.attempt": job.attempt,
+            "failure.code": failure.code,
+          })
         } else {
           store.failJob(job.id, job.leaseToken, failure)
           store.enqueueAudioChunkCleanup(job.id, "terminal-failure")
@@ -161,13 +200,19 @@ export class EpisodeProcessor {
       observability.log({
         name: willRetry ? "episode.retrying" : "episode.failed",
         level: willRetry ? "warn" : "error",
-        attributes: { "error.retryable": failure.retryable },
+        attributes: {
+          ...jobAttributes(job),
+          "error.retryable": failure.retryable,
+          "failure.code": failure.code,
+        },
         error: effectiveError,
       })
     } finally {
       clearInterval(leaseMonitor)
       clearTimeout(deadlineTimer)
-      observability.measure("episode.duration", performance.now() - startedAt)
+      observability.measure("episode.duration", performance.now() - startedAt, {
+        "job.attempt": job.attempt,
+      })
     }
   }
 
@@ -192,6 +237,18 @@ export class EpisodeProcessor {
       )
     }
     if (!draft) {
+      observability.count("episode.checkpoint", 1, {
+        "checkpoint.result": "miss",
+        "operation.stage": "generating_script",
+      })
+      observability.log({
+        name: "episode.checkpoint",
+        attributes: {
+          ...jobAttributes(job),
+          "checkpoint.result": "miss",
+          "operation.stage": "generating_script",
+        },
+      })
       draft = await this.stage(
         job,
         "researching_sources",
@@ -212,6 +269,19 @@ export class EpisodeProcessor {
           return { inputHash: draftInputHash, ...generated }
         }
       )
+    } else {
+      observability.count("episode.checkpoint", 1, {
+        "checkpoint.result": "hit",
+        "operation.stage": "generating_script",
+      })
+      observability.log({
+        name: "episode.checkpoint",
+        attributes: {
+          ...jobAttributes(job),
+          "checkpoint.result": "hit",
+          "operation.stage": "generating_script",
+        },
+      })
     }
     const sources = this.dependencies.store.resolveEpisodeSources(
       job.ownerId,
@@ -223,7 +293,8 @@ export class EpisodeProcessor {
       observability,
       signal,
       EPISODE_EXECUTION_POLICY.ttsDeadlineMs,
-      (stageSignal) => this.synthesizeWithCheckpoints(job, draft!, stageSignal)
+      (stageSignal) =>
+        this.synthesizeWithCheckpoints(job, draft!, observability, stageSignal)
     )
     await this.stage(
       job,
@@ -270,6 +341,7 @@ export class EpisodeProcessor {
   private async synthesizeWithCheckpoints(
     job: WorkerJob,
     draft: { readonly script: string; readonly inputHash: string },
+    observability: Observability,
     signal: AbortSignal
   ): Promise<Uint8Array> {
     const chunks = splitSpeech(draft.script)
@@ -288,6 +360,7 @@ export class EpisodeProcessor {
       signal.throwIfAborted()
       const checkpoint = saved.get(position)
       let wave: Uint8Array | undefined
+      let reused = false
       if (checkpoint && this.dependencies.objects) {
         const object = await this.dependencies.objects.get(
           checkpoint.objectKey,
@@ -300,13 +373,46 @@ export class EpisodeProcessor {
           isWave(object.body)
         ) {
           wave = object.body
+          reused = true
+          observability.count("episode.checkpoint", 1, {
+            "checkpoint.result": "hit",
+            "operation.stage": "synthesizing_audio",
+          })
         }
       }
       if (!wave) {
-        wave = await this.dependencies.speech.synthesize(
-          { text, ...this.dependencies.voice },
-          signal
-        )
+        observability.count("episode.checkpoint", 1, {
+          "checkpoint.result": checkpoint ? "corruption" : "miss",
+          "operation.stage": "synthesizing_audio",
+        })
+        const providerStartedAt = performance.now()
+        let providerOutcome = "succeeded"
+        try {
+          wave = await this.dependencies.speech.synthesize(
+            { text, ...this.dependencies.voice },
+            signal
+          )
+        } catch (error) {
+          providerOutcome = signal.aborted ? "timeout" : "error"
+          throw error
+        } finally {
+          const providerAttributes = {
+            "provider.name": "voicevox",
+            "provider.operation": "synthesis",
+            "provider.outcome": providerOutcome,
+          } as const
+          observability.count("provider.request", 1, providerAttributes)
+          observability.measure(
+            "provider.request.duration",
+            performance.now() - providerStartedAt,
+            providerAttributes
+          )
+          observability.log({
+            name: "provider.request",
+            level: providerOutcome === "succeeded" ? "info" : "error",
+            attributes: { ...jobAttributes(job), ...providerAttributes },
+          })
+        }
         if (
           wave.byteLength > EPISODE_EXECUTION_POLICY.maximumChunkBytes ||
           !isWave(wave)
@@ -342,6 +448,9 @@ export class EpisodeProcessor {
         }
       }
       waves.push(wave)
+      observability.count("episode.audio.chunk", 1, {
+        "checkpoint.result": reused ? "reused" : "generated",
+      })
       this.dependencies.store.setJobProgress(
         job.id,
         job.leaseToken,
@@ -371,7 +480,7 @@ export class EpisodeProcessor {
         (stageSignal) =>
           observability.withSpan(
             `episode.${stage}`,
-            { "operation.stage": stage },
+            { ...jobAttributes(job), "operation.stage": stage },
             () => operation(stageSignal)
           ),
         signal,
@@ -380,13 +489,14 @@ export class EpisodeProcessor {
       )
       observability.log({
         name: "episode.stage.completed",
-        attributes: { "operation.stage": stage },
+        attributes: { ...jobAttributes(job), "operation.stage": stage },
       })
       return result
     } finally {
       observability.measure(
         "episode.stage.duration",
-        performance.now() - startedAt
+        performance.now() - startedAt,
+        { "operation.stage": stage }
       )
     }
   }
@@ -511,6 +621,14 @@ export function createFakeProcessor(
     voice: { characterName: "ずんだもん" },
     observability,
   })
+}
+
+function jobAttributes(job: WorkerJob) {
+  return {
+    "job.id": job.id,
+    "job.attempt": job.attempt,
+    "job.max_attempts": 4,
+  } as const
 }
 
 function classifyFailure(error: unknown) {

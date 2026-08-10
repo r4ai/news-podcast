@@ -95,6 +95,15 @@ export interface JobReconciliationResult {
   readonly attemptLimitExceeded: number
 }
 
+export interface JobHealthSnapshot {
+  readonly jobs: Readonly<Record<"queued" | "running" | "retrying", number>>
+  readonly oldestQueueAgeMs: number
+  readonly oldestStageAgeMs: Readonly<Partial<Record<JobStage, number>>>
+  readonly expiredLeases: number
+  readonly cleanupBacklog: number
+  readonly stagingBytes: number
+}
+
 export interface EpisodeSourceDto {
   readonly url: string
   readonly title: string
@@ -1091,6 +1100,58 @@ export class LocalStore implements EpisodeJobRepository {
     return this.transaction(() => this.reconcileJobsWithinTransaction(now))
   }
 
+  getJobHealthSnapshot(now = new Date()): JobHealthSnapshot {
+    const timestamp = now.toISOString()
+    const statusRows = this.database
+      .prepare(
+        `SELECT status, COUNT(*) AS count FROM episode_jobs
+         WHERE status IN ('queued', 'running', 'retrying') GROUP BY status`
+      )
+      .all() as readonly Record<string, unknown>[]
+    const jobs = { queued: 0, running: 0, retrying: 0 }
+    for (const row of statusRows) {
+      const status = String(row.status) as keyof typeof jobs
+      jobs[status] = Number(row.count)
+    }
+    const queue = this.database
+      .prepare(
+        `SELECT MIN(created_at) AS oldest FROM episode_jobs
+         WHERE status IN ('queued', 'retrying')`
+      )
+      .get() as Record<string, unknown>
+    const stageRows = this.database
+      .prepare(
+        `SELECT stage, MIN(stage_started_at) AS oldest FROM episode_jobs
+         WHERE status = 'running' AND stage IS NOT NULL GROUP BY stage`
+      )
+      .all() as readonly Record<string, unknown>[]
+    const oldestStageAgeMs: Partial<Record<JobStage, number>> = {}
+    for (const row of stageRows) {
+      oldestStageAgeMs[String(row.stage) as JobStage] = ageMs(
+        row.oldest,
+        now
+      )
+    }
+    const totals = this.database
+      .prepare(
+        `SELECT
+          (SELECT COUNT(*) FROM episode_jobs WHERE status = 'running'
+            AND lease_expires_at <= ?) AS expired_leases,
+          (SELECT COUNT(*) FROM object_cleanup_queue) AS cleanup_backlog,
+          (SELECT COALESCE(SUM(byte_length), 0) FROM episode_audio_chunks)
+            AS staging_bytes`
+      )
+      .get(timestamp) as Record<string, unknown>
+    return {
+      jobs,
+      oldestQueueAgeMs: ageMs(queue.oldest, now),
+      oldestStageAgeMs,
+      expiredLeases: Number(totals.expired_leases),
+      cleanupBacklog: Number(totals.cleanup_backlog),
+      stagingBytes: Number(totals.staging_bytes),
+    }
+  }
+
   getJobFeeds(jobId: string): readonly FeedDto[] {
     return this.database
       .prepare(
@@ -1732,6 +1793,12 @@ function toSchedule(row: Record<string, unknown>): GenerationSchedule {
     localTime: String(row.schedule_local_time),
     timeZone: String(row.schedule_time_zone),
   }
+}
+
+function ageMs(value: unknown, now: Date): number {
+  if (!value) return 0
+  const timestamp = Date.parse(String(value))
+  return Number.isFinite(timestamp) ? Math.max(0, now.getTime() - timestamp) : 0
 }
 
 function toJob(row: unknown): JobDto {
