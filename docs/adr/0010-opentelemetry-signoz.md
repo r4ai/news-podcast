@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: `packages/observability`, `infra/observability`
+- Related: ADR-0017、`packages/observability`、`infra/observability`
 
 ## コンテキストと変更契機
 
