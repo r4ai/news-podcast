@@ -7,6 +7,7 @@ import { CodeBlock } from "./code-block/code-block"
 import { Code } from "./code"
 import { Details, Summary } from "./details"
 import { Image } from "./image"
+import { Input } from "./input"
 import { H1, H2, H3, H4, H5, H6 } from "./heading"
 import { ListItem, OrderedList, UnorderedList } from "./list"
 import { Mermaid } from "./mermaid/mermaid"
@@ -30,6 +31,7 @@ export const markdownComponents: Partial<Components> = {
   h5: H5,
   h6: H6,
   img: Image,
+  input: Input,
   li: ListItem,
   ol: OrderedList,
   p: Paragraph,

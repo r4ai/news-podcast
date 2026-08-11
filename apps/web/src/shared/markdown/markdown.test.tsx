@@ -36,7 +36,8 @@ describe("Markdown", () => {
     expect(tableWrapper?.className).toContain("overflow-x-auto")
     const checkboxes = screen.getAllByRole("checkbox")
     expect(checkboxes).toHaveLength(2)
-    expect((checkboxes[0] as HTMLInputElement).checked).toBe(true)
+    expect(checkboxes[0].getAttribute("aria-checked")).toBe("true")
+    expect(checkboxes[1].getAttribute("aria-checked")).toBe("false")
   })
 
   it("renders a GitHub-alert callout with the matching role and type", async () => {
