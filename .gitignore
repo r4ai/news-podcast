@@ -55,3 +55,6 @@ infra/observability/backup/data/
 *.tfstate
 *.tfstate.*
 *.tfplan
+
+# test
+coverage
