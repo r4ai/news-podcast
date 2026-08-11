@@ -72,7 +72,7 @@ describe("OpenAiRelevanceScorer", () => {
     expect(result.tokensOut).toBe(90)
   })
 
-  it("fixes temperature to 0 and instructs the reason to end with から for stability", async () => {
+  it("omits model-specific sampling parameters and instructs the reason to end with から", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
@@ -93,7 +93,7 @@ describe("OpenAiRelevanceScorer", () => {
     })
 
     const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
-    expect(body.temperature).toBe(0)
+    expect(body).not.toHaveProperty("temperature")
     const systemContent = body.input[0].content as string
     expect(systemContent).toContain("〜から」で終わらせて")
     expect(systemContent).toContain("80-100")
@@ -261,5 +261,35 @@ describe("OpenAiRelevanceScorer", () => {
       })
     ).rejects.toBeInstanceOf(ProviderRateLimitError)
     expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it("preserves the OpenAI error detail for an invalid request", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json(
+        {
+          error: {
+            message:
+              "Unsupported parameter: 'temperature' is not supported with this model.",
+            param: "temperature",
+          },
+        },
+        { status: 400 }
+      )
+    )
+    const scorer = new OpenAiRelevanceScorer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await expect(
+      scorer.score({
+        profile: { include: "", exclude: "" },
+        candidates,
+        tagVocabulary: [],
+      })
+    ).rejects.toThrow(
+      "Unsupported parameter: 'temperature' is not supported with this model."
+    )
   })
 })

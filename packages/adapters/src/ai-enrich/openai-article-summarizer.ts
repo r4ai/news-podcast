@@ -8,6 +8,10 @@ import type {
 
 import type { OpenAiConfig } from "../config.js"
 import {
+  createPortableStructuredResponseRequest,
+  readOpenAiErrorMessage,
+} from "./openai-responses.js"
+import {
   DEFAULT_RETRY_OPTIONS,
   fetchWithRetry,
   ProviderRateLimitError,
@@ -71,38 +75,40 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
             "Content-Type": "application/json",
           },
           signal: boundedSignal(signal),
-          body: JSON.stringify({
-            model: this.config.model,
-            input: [
-              {
-                role: "system",
-                content:
-                  "与えられた記事のタイトルと本文Markdownだけを根拠に、日本語のMarkdown要約を約300字で作成してください。英語の記事でも必ず日本語で要約してください。冒頭に記事が一番伝えたい結論・要点を簡潔に書き、その下にポイントを直感的に伝えるMermaidのフローチャートや、具体例・結果・表などを簡潔に添えてください。Mermaidは```mermaidのコードブロックで囲ってください。体言止め（名詞で文を終える）で書き、文末に「。」は付けないでください。根拠のない事実は追加しないでください。",
-              },
-              {
-                role: "user",
-                content: JSON.stringify({
-                  title: input.title,
-                  markdown,
-                }),
-              },
-            ],
-            text: {
-              format: {
-                type: "json_schema",
-                name: SUMMARY_SCHEMA_NAME,
-                strict: true,
-                schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["summary"],
-                  properties: {
-                    summary: { type: "string" },
+          body: JSON.stringify(
+            createPortableStructuredResponseRequest({
+              model: this.config.model,
+              input: [
+                {
+                  role: "system",
+                  content:
+                    "与えられた記事のタイトルと本文Markdownだけを根拠に、日本語のMarkdown要約を約300字で作成してください。英語の記事でも必ず日本語で要約してください。冒頭に記事が一番伝えたい結論・要点を簡潔に書き、その下にポイントを直感的に伝えるMermaidのフローチャートや、具体例・結果・表などを簡潔に添えてください。Mermaidは```mermaidのコードブロックで囲ってください。体言止め（名詞で文を終える）で書き、文末に「。」は付けないでください。根拠のない事実は追加しないでください。",
+                },
+                {
+                  role: "user",
+                  content: JSON.stringify({
+                    title: input.title,
+                    markdown,
+                  }),
+                },
+              ],
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: SUMMARY_SCHEMA_NAME,
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["summary"],
+                    properties: {
+                      summary: { type: "string" },
+                    },
                   },
                 },
               },
-            },
-          }),
+            })
+          ),
         },
         this.retry
       )
@@ -114,15 +120,9 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
       throw new ProviderRateLimitError()
     }
     if (!response.ok) {
-      let detail = ""
-      try {
-        const errorBody = (await response.json()) as Record<string, unknown>
-        detail = `: ${JSON.stringify(errorBody)}`
-      } catch {
-        // keep detail empty
-      }
+      const detail = await readOpenAiErrorMessage(response)
       throw new ArticleSummaryError(
-        `OpenAI request failed with ${response.status}${detail}`
+        `OpenAI request failed with ${response.status}${detail ? `: ${detail}` : ""}`
       )
     }
 

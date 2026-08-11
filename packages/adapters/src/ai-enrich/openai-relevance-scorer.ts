@@ -9,6 +9,10 @@ import type {
 
 import type { OpenAiConfig } from "../config.js"
 import {
+  createPortableStructuredResponseRequest,
+  readOpenAiErrorMessage,
+} from "./openai-responses.js"
+import {
   DEFAULT_RETRY_OPTIONS,
   fetchWithRetry,
   ProviderRateLimitError,
@@ -92,83 +96,87 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
             "Content-Type": "application/json",
           },
           signal: boundedSignal(signal),
-          body: JSON.stringify({
-            model: this.config.model,
-            // スコアのブレ（同じ記事でも実行ごとに変動）を抑えるため決定論化する。
-            temperature: 0,
-            input: [
-              {
-                role: "system",
-                content: hasVocabulary
-                  ? "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。理由は簡潔に1文で書き、「〜から」で終わらせてください（「〜ため」で終わらせないこと）。安定したスコア付けのために以下の基準を厳守してください：基準1＝includeのキーワードと意味的に一致する話題なら80-100、基準2＝includeに部分的・間接的に関連するなら50-79、基準3＝どちらでもなく中立なら30-49、基準4＝includeと無関係かexcludeに合致するなら0-29。入力に無いfeed_item_idを作らないでください。さらに、渡されたtag_vocabularyの中からその記事に合うタグを0件以上選んでtagsに入れてください（tag_vocabularyに無い語を作らないこと）。tag_vocabularyに無いが付けたいタグがあればsuggested_tagsに入れてください。"
-                  : "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。理由は簡潔に1文で書き、「〜から」で終わらせてください（「〜ため」で終わらせないこと）。安定したスコア付けのために以下の基準を厳守してください：基準1＝includeのキーワードと意味的に一致する話題なら80-100、基準2＝includeに部分的・間接的に関連するなら50-79、基準3＝どちらでもなく中立なら30-49、基準4＝includeと無関係かexcludeに合致するなら0-29。入力に無いfeed_item_idを作らないでください。",
-              },
-              {
-                role: "user",
-                content: JSON.stringify({
-                  profile: input.profile,
-                  ...(hasVocabulary
-                    ? { tag_vocabulary: input.tagVocabulary }
-                    : {}),
-                  articles: input.candidates.map((candidate) => ({
-                    feed_item_id: candidate.feedItemId,
-                    title: candidate.title,
-                    summary: candidate.summary,
-                  })),
-                }),
-              },
-            ],
-            text: {
-              format: {
-                type: "json_schema",
-                name: RELEVANCE_SCHEMA_NAME,
-                strict: true,
-                schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["scores"],
-                  properties: {
-                    scores: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        additionalProperties: false,
-                        required: hasVocabulary
-                          ? [
-                              "feed_item_id",
-                              "score",
-                              "reason",
-                              "tags",
-                              "suggested_tags",
-                            ]
-                          : ["feed_item_id", "score", "reason"],
-                        properties: {
-                          feed_item_id: { type: "string" },
-                          score: { type: "integer", minimum: 0, maximum: 100 },
-                          reason: { type: "string" },
-                          ...(hasVocabulary
-                            ? {
-                                tags: {
-                                  type: "array",
-                                  items: {
-                                    type: "string",
-                                    enum: [...input.tagVocabulary],
+          body: JSON.stringify(
+            createPortableStructuredResponseRequest({
+              model: this.config.model,
+              input: [
+                {
+                  role: "system",
+                  content: hasVocabulary
+                    ? "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。理由は簡潔に1文で書き、「〜から」で終わらせてください（「〜ため」で終わらせないこと）。安定したスコア付けのために以下の基準を厳守してください：基準1＝includeのキーワードと意味的に一致する話題なら80-100、基準2＝includeに部分的・間接的に関連するなら50-79、基準3＝どちらでもなく中立なら30-49、基準4＝includeと無関係かexcludeに合致するなら0-29。入力に無いfeed_item_idを作らないでください。さらに、渡されたtag_vocabularyの中からその記事に合うタグを0件以上選んでtagsに入れてください（tag_vocabularyに無い語を作らないこと）。tag_vocabularyに無いが付けたいタグがあればsuggested_tagsに入れてください。"
+                    : "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。理由は簡潔に1文で書き、「〜から」で終わらせてください（「〜ため」で終わらせないこと）。安定したスコア付けのために以下の基準を厳守してください：基準1＝includeのキーワードと意味的に一致する話題なら80-100、基準2＝includeに部分的・間接的に関連するなら50-79、基準3＝どちらでもなく中立なら30-49、基準4＝includeと無関係かexcludeに合致するなら0-29。入力に無いfeed_item_idを作らないでください。",
+                },
+                {
+                  role: "user",
+                  content: JSON.stringify({
+                    profile: input.profile,
+                    ...(hasVocabulary
+                      ? { tag_vocabulary: input.tagVocabulary }
+                      : {}),
+                    articles: input.candidates.map((candidate) => ({
+                      feed_item_id: candidate.feedItemId,
+                      title: candidate.title,
+                      summary: candidate.summary,
+                    })),
+                  }),
+                },
+              ],
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: RELEVANCE_SCHEMA_NAME,
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["scores"],
+                    properties: {
+                      scores: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          additionalProperties: false,
+                          required: hasVocabulary
+                            ? [
+                                "feed_item_id",
+                                "score",
+                                "reason",
+                                "tags",
+                                "suggested_tags",
+                              ]
+                            : ["feed_item_id", "score", "reason"],
+                          properties: {
+                            feed_item_id: { type: "string" },
+                            score: {
+                              type: "integer",
+                              minimum: 0,
+                              maximum: 100,
+                            },
+                            reason: { type: "string" },
+                            ...(hasVocabulary
+                              ? {
+                                  tags: {
+                                    type: "array",
+                                    items: {
+                                      type: "string",
+                                      enum: [...input.tagVocabulary],
+                                    },
                                   },
-                                },
-                                suggested_tags: {
-                                  type: "array",
-                                  items: { type: "string" },
-                                },
-                              }
-                            : {}),
+                                  suggested_tags: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                  },
+                                }
+                              : {}),
+                          },
                         },
                       },
                     },
                   },
                 },
               },
-            },
-          }),
+            })
+          ),
         },
         this.retry
       )
@@ -180,8 +188,9 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
       throw new ProviderRateLimitError()
     }
     if (!response.ok) {
+      const detail = await readOpenAiErrorMessage(response)
       throw new RelevanceScoreError(
-        `OpenAI request failed with ${response.status}`
+        `OpenAI request failed with ${response.status}${detail ? `: ${detail}` : ""}`
       )
     }
 
