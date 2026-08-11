@@ -41,38 +41,47 @@ export function RegisterFeedCardView({
 }: RegisterFeedCardViewProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2>RSS URLから追加</h2>
-        </CardTitle>
-        <CardDescription>
-          RSSまたはAtomのURLを確認し、そのまま購読へ追加します。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="feed-url">フィードURL</FieldLabel>
-            <Input
-              id="feed-url"
-              inputMode="url"
-              onChange={(event) => setFeedUrl(event.target.value)}
-              placeholder="https://example.com/feed.xml"
-              type="url"
-              value={feedUrl}
-            />
-            <FieldDescription>
-              登録後、新着記事は自動的にオフライン保存されます。
-            </FieldDescription>
-          </Field>
-        </FieldGroup>
-      </CardContent>
-      <CardFooter className="justify-end">
-        <Button disabled={!canSubmit} onClick={submit}>
-          {pending ? <Spinner data-icon="inline-start" /> : null}
-          URLから追加
-        </Button>
-      </CardFooter>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          submit()
+        }}
+      >
+        <CardHeader>
+          <CardTitle>
+            <h2>RSS URLから追加</h2>
+          </CardTitle>
+          <CardDescription>
+            RSSまたはAtomのURLを確認し、そのまま購読へ追加します。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="feed-url">フィードURL</FieldLabel>
+              <Input
+                disabled={pending}
+                id="feed-url"
+                inputMode="url"
+                onChange={(event) => setFeedUrl(event.target.value)}
+                placeholder="https://example.com/feed.xml"
+                required
+                type="url"
+                value={feedUrl}
+              />
+              <FieldDescription>
+                登録後、新着記事は自動的にオフライン保存されます。
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button disabled={!canSubmit} type="submit">
+            {pending ? <Spinner data-icon="inline-start" /> : null}
+            URLから追加
+          </Button>
+        </CardFooter>
+      </form>
     </Card>
   )
 }
