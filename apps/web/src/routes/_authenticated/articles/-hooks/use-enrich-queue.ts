@@ -17,16 +17,11 @@ export function useEnrichQueueDialog() {
   const [open, setOpen] = useState(false)
   const [streamConnected, setStreamConnected] = useState(false)
 
-  const statusQuery = api.useQuery(
-    "get",
-    "/v1/me/enrich/queue",
-    undefined,
-    {
-      enabled: open,
-      refetchInterval: (query) =>
-        open && query.state.data && !streamConnected ? 1_000 : false,
-    }
-  )
+  const statusQuery = api.useQuery("get", "/v1/me/enrich/queue", undefined, {
+    enabled: open,
+    refetchInterval: (query) =>
+      open && query.state.data && !streamConnected ? 1_000 : false,
+  })
 
   useEffect(() => {
     if (!open) {

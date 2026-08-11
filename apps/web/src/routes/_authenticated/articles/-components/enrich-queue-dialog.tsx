@@ -1,9 +1,17 @@
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { Progress } from "@workspace/ui/components/progress"
 
-import type { EnrichQueueItem, EnrichQueueStatus } from "@/features/enrich/queue"
+import type {
+  EnrichQueueItem,
+  EnrichQueueStatus,
+} from "@/features/enrich/queue"
 import type { EnrichQueueDialogState } from "../-hooks/use-enrich-queue"
 
 export type EnrichQueueDialogProps = {
@@ -32,7 +40,10 @@ export function EnrichQueueDialog({
                 className="flex size-2 items-center justify-center rounded-full bg-emerald-500"
               />
             ) : (
-              <RefreshCw aria-label="ポーリング中" className="size-3 animate-spin text-muted-foreground" />
+              <RefreshCw
+                aria-label="ポーリング中"
+                className="size-3 animate-spin text-muted-foreground"
+              />
             )}
           </DialogTitle>
         </DialogHeader>
@@ -40,21 +51,33 @@ export function EnrichQueueDialog({
         <DailyBudget daily={status?.daily} />
 
         <QueueSection
-          icon={<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />}
+          icon={
+            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          }
           label="処理中"
           items={status?.processing ?? []}
           showStatus={false}
         />
 
         <QueueSection
-          icon={<RefreshCw aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+          icon={
+            <RefreshCw
+              aria-hidden="true"
+              className="size-3.5 text-muted-foreground"
+            />
+          }
           label={`待ち ${status?.pending.count ?? 0}件`}
           items={status?.pending.items ?? []}
           showStatus={true}
         />
 
         <QueueSection
-          icon={<AlertTriangle aria-hidden="true" className="size-3.5 text-destructive" />}
+          icon={
+            <AlertTriangle
+              aria-hidden="true"
+              className="size-3.5 text-destructive"
+            />
+          }
           label={`失敗 ${status?.failed.count ?? 0}件`}
           items={status?.failed.items ?? []}
           showStatus={false}

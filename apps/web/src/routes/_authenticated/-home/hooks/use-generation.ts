@@ -164,9 +164,7 @@ export function useGeneration() {
   } as const
 }
 
-function messageFromSubmitError(
-  error: unknown
-): string {
+function messageFromSubmitError(error: unknown): string {
   if (
     typeof error === "object" &&
     error !== null &&

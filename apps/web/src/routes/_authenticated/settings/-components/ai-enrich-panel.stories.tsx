@@ -6,7 +6,9 @@ import {
   type AiEnrichPanelViewProps,
 } from "./ai-enrich-panel"
 
-function args(overrides: Partial<AiEnrichPanelViewProps>): AiEnrichPanelViewProps {
+function args(
+  overrides: Partial<AiEnrichPanelViewProps>
+): AiEnrichPanelViewProps {
   return {
     daily: { used: 12, limit: 200 },
     reprocessableCount: 321,

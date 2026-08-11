@@ -20,7 +20,10 @@ export function useAiEnrichPanel() {
 
   const statusQuery = useEnrichQueueStatus({ refetchInterval: 30_000 })
   const reprocessMutation = api.useMutation("post", "/v1/me/enrich/reprocess")
-  const resetDailyMutation = api.useMutation("post", "/v1/me/enrich/reset-daily")
+  const resetDailyMutation = api.useMutation(
+    "post",
+    "/v1/me/enrich/reset-daily"
+  )
 
   function requestReprocess() {
     setConfirmOpen(true)

@@ -126,9 +126,7 @@ export function InterestProfileFormView({
             <AlertDialogCancel onClick={cancelSave}>
               キャンセル
             </AlertDialogCancel>
-            <AlertDialogAction onClick={confirmSave}>
-              保存
-            </AlertDialogAction>
+            <AlertDialogAction onClick={confirmSave}>保存</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -33,8 +33,16 @@ const status: EnrichQueueStatus = {
   pending: {
     count: 3,
     items: [
-      item({ feedItemId: "pending-1", title: "SQLiteのFTS5で全文検索を高速化する", status: "queued" }),
-      item({ feedItemId: "pending-2", title: "VOICEVOXの新モデルを試す", status: "queued" }),
+      item({
+        feedItemId: "pending-1",
+        title: "SQLiteのFTS5で全文検索を高速化する",
+        status: "queued",
+      }),
+      item({
+        feedItemId: "pending-2",
+        title: "VOICEVOXの新モデルを試す",
+        status: "queued",
+      }),
     ],
   },
   failed: {
@@ -51,14 +59,28 @@ const status: EnrichQueueStatus = {
     ],
   },
   recent: [
-    item({ feedItemId: "r1", title: "成功した記事", status: "succeeded", completedAt: "2026-08-11T08:05:00.000Z" }),
-    item({ feedItemId: "r2", title: "失敗した記事", status: "failed", attempt: 1, error: "boom", completedAt: "2026-08-11T08:06:00.000Z" }),
+    item({
+      feedItemId: "r1",
+      title: "成功した記事",
+      status: "succeeded",
+      completedAt: "2026-08-11T08:05:00.000Z",
+    }),
+    item({
+      feedItemId: "r2",
+      title: "失敗した記事",
+      status: "failed",
+      attempt: 1,
+      error: "boom",
+      completedAt: "2026-08-11T08:06:00.000Z",
+    }),
   ],
   daily: { used: 42, limit: 200 },
   reprocessable: { count: 321 },
 }
 
-function args(overrides: Partial<EnrichQueueDialogProps>): EnrichQueueDialogProps {
+function args(
+  overrides: Partial<EnrichQueueDialogProps>
+): EnrichQueueDialogProps {
   return {
     open: true,
     onOpenChange: fn(),

@@ -110,9 +110,9 @@ describe("episode article selection", () => {
     ])
 
     // 1件だけアーカイブ完了にする（snapshot_id あり）
-    const article = store.listArticles("owner-1", { limit: 2 }).items.find(
-      (a) => a.id === succeededId
-    )!
+    const article = store
+      .listArticles("owner-1", { limit: 2 })
+      .items.find((a) => a.id === succeededId)!
     store.completeArchive({
       articleId: article.id,
       snapshotId: "00000000-0000-4000-8000-000000000051",

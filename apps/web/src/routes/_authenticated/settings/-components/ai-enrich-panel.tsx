@@ -85,7 +85,10 @@ export function AiEnrichPanelView({
               </span>
             ) : null}
           </div>
-          <Progress aria-label="本日の処理上限の使用率" value={percent ?? null} />
+          <Progress
+            aria-label="本日の処理上限の使用率"
+            value={percent ?? null}
+          />
         </div>
 
         {import.meta.env.DEV ? (
@@ -128,7 +131,8 @@ export function AiEnrichPanelView({
           <AlertDialogHeader>
             <AlertDialogTitle>全記事を再処理しますか</AlertDialogTitle>
             <AlertDialogDescription>
-              既に処理済みの{reprocessableCount ?? 0}件を再処理キューへ追加します。
+              既に処理済みの{reprocessableCount ?? 0}
+              件を再処理キューへ追加します。
               本日の処理上限に従って日をまたいで処理され、コストが発生します。
             </AlertDialogDescription>
           </AlertDialogHeader>

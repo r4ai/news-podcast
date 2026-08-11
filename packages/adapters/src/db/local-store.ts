@@ -1883,9 +1883,7 @@ export class LocalStore implements EpisodeJobRepository {
 
   resetEnrichProcessedToday(localDate: string): void {
     this.database
-      .prepare(
-        "DELETE FROM ai_enrich_daily_progress WHERE local_date = ?"
-      )
+      .prepare("DELETE FROM ai_enrich_daily_progress WHERE local_date = ?")
       .run(localDate)
   }
 
@@ -1968,10 +1966,7 @@ export class LocalStore implements EpisodeJobRepository {
              WHERE snapshot_id IN (${summaryPlaceholders})
              ORDER BY snapshot_id, created_at DESC`
           )
-          .all(...snapshotIds) as Record<
-          string,
-          unknown
-        >[])
+          .all(...snapshotIds) as Record<string, unknown>[])
       : []
     const seen = new Set<string>()
     const summaryMap = new Map<string, string>()
