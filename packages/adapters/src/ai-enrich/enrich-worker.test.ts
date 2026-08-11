@@ -290,7 +290,9 @@ describe("AiEnrichWorker.runOnce", () => {
     await worker.runOnce()
 
     expect(
-      events.some((event) => event.type === "relevance_failed" && event.rateLimited)
+      events.some(
+        (event) => event.type === "relevance_failed" && event.rateLimited
+      )
     ).toBe(true)
   })
 })
@@ -400,5 +402,39 @@ describe("AiEnrichWorker.enrichOne", () => {
 
     await expect(worker.enrichOne(owner, feedItemId)).resolves.toBe(true)
     expect(scorerCalls.length).toBe(2)
+  })
+
+  it("propagates an on-demand summary provider failure", async () => {
+    const store = openStore()
+    const owner = "owner-summary-failure"
+    const feedItemId = seedArchivedArticle(store, owner, "summary-failure")
+    const worker = new AiEnrichWorker(
+      store,
+      fakeObjects(),
+      { summarize: () => Promise.reject(new Error("summary unavailable")) },
+      fakeScorer([]),
+      "gpt-5.6-luna"
+    )
+
+    await expect(worker.enrichOne(owner, feedItemId)).rejects.toThrow(
+      "summary unavailable"
+    )
+  })
+
+  it("propagates an on-demand relevance provider failure", async () => {
+    const store = openStore()
+    const owner = "owner-relevance-failure"
+    const feedItemId = seedArchivedArticle(store, owner, "relevance-failure")
+    const worker = new AiEnrichWorker(
+      store,
+      fakeObjects(),
+      fakeSummarizer(),
+      { score: () => Promise.reject(new Error("scorer unavailable")) },
+      "gpt-5.6-luna"
+    )
+
+    await expect(worker.enrichOne(owner, feedItemId)).rejects.toThrow(
+      "scorer unavailable"
+    )
   })
 })

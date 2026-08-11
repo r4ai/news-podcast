@@ -142,6 +142,25 @@ describe("POST /v1/me/articles/{id}/enrich", () => {
     store.close()
   })
 
+  it("returns 503 when the AI provider fails", async () => {
+    const store = openStore()
+    const owner = "owner-enrich-provider-failure"
+    const id = seedArchivedArticle(store, owner, "provider-failure")
+    const app = createApp({
+      store,
+      resolveOwner: async () => owner,
+      enrichArticle: () => Promise.reject(new Error("provider secret detail")),
+    })
+
+    const response = await app.request(`/v1/me/articles/${id}/enrich`, {
+      method: "POST",
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.text()).not.toContain("provider secret detail")
+    store.close()
+  })
+
   it("returns 404 for another owner's article even if enrichArticle is wired", async () => {
     const store = openStore()
     const owner = "owner-enrich-a"
@@ -178,10 +197,9 @@ describe("POST /v1/me/articles/{id}/enrich", () => {
       enrichArticle: async () => false,
     })
 
-    const response = await app.request(
-      `/v1/me/articles/${pending.id}/enrich`,
-      { method: "POST" }
-    )
+    const response = await app.request(`/v1/me/articles/${pending.id}/enrich`, {
+      method: "POST",
+    })
     expect(response.status).toBe(409)
     store.close()
   })

@@ -222,9 +222,14 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.use("/v1/*", async (context, next) => {
     if (context.req.path.startsWith("/v1/audio/")) return next()
-    const ownerId = dependencies.resolveOwner
-      ? await dependencies.resolveOwner(context.req.raw)
-      : null
+    let ownerId: string | null
+    try {
+      ownerId = dependencies.resolveOwner
+        ? await dependencies.resolveOwner(context.req.raw)
+        : null
+    } catch {
+      return context.json(unavailable(), 503)
+    }
     if (!ownerId) {
       return context.json(problem(401, "unauthorized", "Unauthorized"), 401)
     }
@@ -446,7 +451,12 @@ export function createApp(dependencies: AppDependencies = {}) {
     const article = dependencies.store.getArticle(ownerId, articleId)
     if (!article)
       return context.json(problem(404, "not-found", "Not found"), 404)
-    const recomputed = await dependencies.enrichArticle(ownerId, articleId)
+    let recomputed: boolean
+    try {
+      recomputed = await dependencies.enrichArticle(ownerId, articleId)
+    } catch {
+      return context.json(unavailable(), 503)
+    }
     if (!recomputed) {
       return context.json(
         problem(409, "article-not-archived", "Article is not archived yet"),

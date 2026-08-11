@@ -28,8 +28,16 @@ interface EnrichCandidate {
 // （LocalStore/ArticleArchiverと同じ）。トークン計上や成否ログは呼び出し側
 // （apps/worker, apps/api）が持つObservabilityへ、このイベント通知経由で渡す。
 export type AiEnrichEvent =
-  | { readonly type: "summary_succeeded"; readonly tokensIn: number; readonly tokensOut: number }
-  | { readonly type: "summary_failed"; readonly error: unknown; readonly rateLimited: boolean }
+  | {
+      readonly type: "summary_succeeded"
+      readonly tokensIn: number
+      readonly tokensOut: number
+    }
+  | {
+      readonly type: "summary_failed"
+      readonly error: unknown
+      readonly rateLimited: boolean
+    }
   | {
       readonly type: "relevance_succeeded"
       readonly count: number
@@ -80,14 +88,15 @@ export class AiEnrichWorker {
     if (!target) return false
     const profile = this.store.getInterestProfile(ownerId)
     const profileHash = computeProfileHash(profile.include, profile.exclude)
-    const bullets = await this.ensureSummary(target)
+    const bullets = await this.ensureSummary(target, true)
     if (!bullets) return false
     const processed = await this.scoreBatch(
       ownerId,
       profile,
       profileHash,
       [target],
-      new Map([[target.feedItemId, bullets]])
+      new Map([[target.feedItemId, bullets]]),
+      true
     )
     return processed > 0
   }
@@ -132,7 +141,8 @@ export class AiEnrichWorker {
 
   // 既存の要約（現行prompt_version）があれば再利用し、無ければ1記事1コールで生成する。
   private async ensureSummary(
-    candidate: EnrichCandidate
+    candidate: EnrichCandidate,
+    rethrowFailure = false
   ): Promise<readonly string[] | undefined> {
     const existing = this.store.getArticleSummary(candidate.snapshotId)
     if (existing) return existing
@@ -162,6 +172,7 @@ export class AiEnrichWorker {
         error,
         rateLimited: error instanceof ProviderRateLimitError,
       })
+      if (rethrowFailure) throw error
       return undefined
     }
   }
@@ -172,7 +183,8 @@ export class AiEnrichWorker {
     profile: InterestProfile,
     profileHash: string,
     batch: readonly EnrichCandidate[],
-    bulletsByFeedItem: ReadonlyMap<string, readonly string[]>
+    bulletsByFeedItem: ReadonlyMap<string, readonly string[]>,
+    rethrowFailure = false
   ): Promise<number> {
     try {
       // タグ付与はこのスコア付けコールに相乗りさせる（新規コールは増やさない）。
@@ -241,6 +253,7 @@ export class AiEnrichWorker {
           error: message.slice(0, 500),
         })
       }
+      if (rethrowFailure) throw error
       return 0
     }
   }

@@ -61,6 +61,18 @@ describe("API foundation", () => {
     })
   })
 
+  it("returns a contract-shaped 503 when protected-route authentication fails", async () => {
+    const response = await createApp({
+      resolveOwner: () => Promise.reject(new Error("session store down")),
+    }).request("/v1/feeds")
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({
+      status: 503,
+      code: "service-unavailable",
+    })
+  })
+
   it("keeps authentication infrastructure failures distinct", async () => {
     const response = await createApp({
       resolveOwner: () => Promise.reject(new Error("session store down")),
@@ -298,9 +310,7 @@ describe("API foundation", () => {
     ])
     const app = createApp({ store, resolveOwner: async () => owner })
 
-    const searched = await app.request(
-      "/v1/me/articles?q=Market"
-    )
+    const searched = await app.request("/v1/me/articles?q=Market")
     const searchedBody = (await searched.json()) as {
       items: Array<{ title: string }>
     }
@@ -308,9 +318,7 @@ describe("API foundation", () => {
       "Market report",
     ])
 
-    const byFeed = await app.request(
-      `/v1/me/articles?feedIds=${feed.id}`
-    )
+    const byFeed = await app.request(`/v1/me/articles?feedIds=${feed.id}`)
     const byFeedBody = (await byFeed.json()) as { items: unknown[] }
     expect(byFeedBody.items).toHaveLength(2)
 
@@ -472,7 +480,11 @@ describe("API foundation", () => {
       feedUrl: "https://other.example.com/feed.xml",
     })
     store.upsertFeedItems(otherFeed.id, [
-      { externalId: "z", title: "Other owner", url: "https://other.example.com/z" },
+      {
+        externalId: "z",
+        title: "Other owner",
+        url: "https://other.example.com/z",
+      },
     ])
     const [firstArticle] = store.listArticles(owner).items
     store.setArticleState(owner, firstArticle!.id, { read: true })
