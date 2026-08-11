@@ -147,6 +147,7 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     article,
     isLoading: articleQuery.isLoading,
     isError: articleQuery.isError,
+    refetch: () => void articleQuery.refetch(),
     source,
     setSource: setUserSource,
     didAutoFallback,

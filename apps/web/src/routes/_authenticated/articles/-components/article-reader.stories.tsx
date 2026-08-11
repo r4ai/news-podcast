@@ -105,6 +105,7 @@ function readerArgs(
     article: baseArticle,
     isLoading: false,
     isError: false,
+    refetch: fn(),
     source: "markdown",
     setSource: fn(),
     didAutoFallback: false,

@@ -49,7 +49,7 @@ function EmptySelection() {
   )
 }
 
-function LoadFailure() {
+function LoadFailure({ onRetry }: { readonly onRetry: () => void }) {
   return (
     <Empty className="h-full w-full border border-dashed">
       <EmptyHeader>
@@ -61,6 +61,9 @@ function LoadFailure() {
           一覧へ戻ってもう一度お試しください。
         </EmptyDescription>
       </EmptyHeader>
+      <Button onClick={onRetry} size="sm" variant="outline">
+        再読み込み
+      </Button>
     </Empty>
   )
 }
@@ -82,11 +85,12 @@ export function ArticleReaderView({
   toggleSaved,
   toggleReadLater,
   toggleHidden,
+  refetch,
   onBack,
 }: ArticleReaderViewProps) {
   if (!articleId) return <EmptySelection />
   if (isLoading) return <ReaderSkeleton />
-  if (isError || !article) return <LoadFailure />
+  if (isError || !article) return <LoadFailure onRetry={refetch} />
 
   return (
     <div className="flex w-full flex-col gap-4 pb-20 lg:pb-4">
@@ -133,7 +137,7 @@ export function ArticleReaderView({
 
       <ArticleActions
         article={article}
-        className="fixed inset-x-0 bottom-0 z-10 justify-center border-t bg-background p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden"
+        className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-10 justify-center border-t bg-background p-3 lg:hidden"
         onToggleHidden={toggleHidden}
         onToggleReadLater={toggleReadLater}
         onToggleSaved={toggleSaved}

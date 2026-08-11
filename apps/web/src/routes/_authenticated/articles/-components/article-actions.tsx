@@ -66,6 +66,7 @@ export function ArticleActions({
         非表示
       </Button>
       <Button
+        nativeButton={false}
         render={<a href={article.url} rel="noreferrer" target="_blank" />}
         size="sm"
         variant="ghost"

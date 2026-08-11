@@ -233,15 +233,17 @@ test("RSS reader shows archived articles and persists saved state", async ({
     snapshotId: "00000000-0000-4000-8000-000000000021",
     read: false,
     saved: false,
+    readLater: false,
+    hidden: false,
+    usedInEpisode: false,
+    tags: [],
     archiveUrl: "/v1/me/articles/00000000-0000-4000-8000-000000000020/archive",
     markdownUrl:
       "/v1/me/articles/00000000-0000-4000-8000-000000000020/markdown",
   }
   const archiveErrors: string[] = []
-  page.context().on("page", (openedPage) => {
-    openedPage.on("console", (message) => {
-      if (message.type() === "error") archiveErrors.push(message.text())
-    })
+  page.on("console", (message) => {
+    if (message.type() === "error") archiveErrors.push(message.text())
   })
   await page.context().route(`**${article.archiveUrl}`, (route) =>
     route.fulfill({
@@ -259,23 +261,37 @@ test("RSS reader shows archived articles and persists saved state", async ({
       contentType: "text/css",
     })
   )
-  await page.route("**/v1/me/articles", (route) =>
-    route.fulfill({
-      body: JSON.stringify({ items: [article], page: { hasMore: false } }),
-      contentType: "application/json",
-    })
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles",
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({ items: [article], page: { hasMore: false } }),
+        contentType: "application/json",
+      })
   )
-  await page.route("**/v1/me/articles/*", async (route) => {
-    if (route.request().method() !== "PATCH") return route.continue()
-    const update = route.request().postDataJSON() as {
-      read?: boolean
-      saved?: boolean
+  await page.route(`**${article.markdownUrl}`, (route) =>
+    route.fulfill({ body: "", contentType: "text/markdown" })
+  )
+  await page.route(
+    (url) => url.pathname === `/v1/me/articles/${article.id}`,
+    async (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({
+          body: JSON.stringify(article),
+          contentType: "application/json",
+        })
+      }
+      if (route.request().method() !== "PATCH") return route.continue()
+      const update = route.request().postDataJSON() as {
+        read?: boolean
+        saved?: boolean
+      }
+      await route.fulfill({
+        body: JSON.stringify({ ...article, ...update }),
+        contentType: "application/json",
+      })
     }
-    await route.fulfill({
-      body: JSON.stringify({ ...article, ...update }),
-      contentType: "application/json",
-    })
-  })
+  )
 
   await page.goto("/articles")
   await page.getByLabel("開発パスワード").fill("e2e-password")
@@ -284,27 +300,36 @@ test("RSS reader shows archived articles and persists saved state", async ({
   await expect(
     page.getByRole("heading", { name: "記事", exact: true })
   ).toBeVisible()
+  await page.getByRole("button", { name: /保存された記事/ }).click()
   await expect(
     page.getByRole("heading", { name: "保存された記事" })
   ).toBeVisible()
+  const archiveFrame = page.frameLocator(`iframe[title="${article.title}"]`)
   await expect(
-    page.getByRole("link", { name: "アーカイブを読む" })
-  ).toHaveAttribute("href", article.archiveUrl)
-  const archivePagePromise = page.waitForEvent("popup")
-  await page.getByRole("link", { name: "アーカイブを読む" }).click()
-  const archivePage = await archivePagePromise
-  await expect(archivePage).toHaveTitle("保存された記事")
-  await expect(
-    archivePage.getByRole("heading", { name: "保存された記事" })
+    archiveFrame.getByRole("heading", { name: "保存された記事" })
   ).toHaveCSS("font-size", "32px")
-  await expect(archivePage.locator("body")).toHaveCSS(
+  await expect(archiveFrame.locator("body")).toHaveCSS(
     "background-color",
     "rgb(240, 244, 248)"
   )
   expect(archiveErrors).toEqual([])
-  await archivePage.close()
-  await page.getByRole("button", { name: "記事を保存" }).click()
-  await expect(page.getByRole("button", { name: "保存を解除" })).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const mobileNavigation = page.getByRole("navigation", {
+    name: "モバイルナビゲーション",
+  })
+  const saveButton = page.getByRole("button", { name: "保存", exact: true })
+  const [navigationBox, saveButtonBox] = await Promise.all([
+    mobileNavigation.boundingBox(),
+    saveButton.boundingBox(),
+  ])
+  expect(navigationBox).not.toBeNull()
+  expect(saveButtonBox).not.toBeNull()
+  expect(saveButtonBox!.y + saveButtonBox!.height).toBeLessThanOrEqual(
+    navigationBox!.y
+  )
+  await saveButton.click()
+  await expect(saveButton).toHaveAttribute("aria-pressed", "true")
 })
 
 test("development login to generated episode playback completes", async ({

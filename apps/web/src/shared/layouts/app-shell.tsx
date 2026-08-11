@@ -88,7 +88,7 @@ export function AppShell({ actions, children }: AppShellProps) {
         <div className="mt-auto flex justify-end">{actions}</div>
       </aside>
 
-      <header className="sticky top-0 flex items-center justify-between border-b bg-background/95 px-4 py-2 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background/95 px-4 py-2 backdrop-blur md:hidden">
         <Brand />
         {actions}
       </header>
@@ -104,7 +104,7 @@ export function AppShell({ actions, children }: AppShellProps) {
         </div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 border-t bg-background/95 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
         <Navigation mobile />
       </div>
     </div>
