@@ -251,7 +251,10 @@ export function ArticlePickerDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="flex max-h-[90dvh] w-[calc(100%-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        className="flex max-h-[90dvh] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0"
+        size="xl"
+      >
         <DialogHeader className="border-b p-4 pb-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
