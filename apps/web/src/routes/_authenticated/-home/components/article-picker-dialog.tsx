@@ -1,15 +1,17 @@
-import { Inbox, ListMusic, TriangleAlert } from "lucide-react"
+import { Inbox, ListMusic, Search, TriangleAlert } from "lucide-react"
+import { useDeferredValue, useEffect, useState } from "react"
 
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@workspace/ui/components/alert-dialog"
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
+import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
@@ -21,6 +23,7 @@ import {
 } from "@workspace/ui/components/empty"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
+import { Input } from "@workspace/ui/components/input"
 import { cn } from "@workspace/ui/lib/utils"
 
 import {
@@ -63,11 +66,12 @@ function PickerRow({
   readonly disabled: boolean
   readonly onToggle: (articleId: string) => void
 }) {
+  const snippet = article.summary
   return (
     <li>
       <label
         className={cn(
-          "flex min-h-14 cursor-pointer items-start gap-3 border-b px-3 py-2.5",
+          "flex min-h-16 cursor-pointer items-start gap-2.5 border-b px-3 py-2",
           "hover:bg-accent/50 has-focus-visible:bg-accent/50",
           checked && "bg-accent",
           disabled && "cursor-not-allowed opacity-50"
@@ -75,26 +79,34 @@ function PickerRow({
       >
         <Checkbox
           checked={checked}
-          className="mt-0.5 shrink-0"
+          className="mt-1 shrink-0"
           disabled={disabled}
           onCheckedChange={() => onToggle(article.id)}
         />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm font-medium">{article.title}</span>
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-            <span>{article.sourceName}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="line-clamp-2 text-sm leading-5 font-medium">
+            {article.title}
+          </span>
+          <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <span className="truncate">{article.sourceName}</span>
             <time dateTime={articleTimestamp(article)}>
               {publishedAtLabel(articleTimestamp(article))}
             </time>
             {typeof article.relevanceScore === "number" ? (
-              <span
+              <Badge
                 aria-label={`適合度スコア ${article.relevanceScore}`}
-                className="font-medium text-foreground"
+                className="ml-auto shrink-0 tabular-nums"
+                variant="outline"
               >
                 {article.relevanceScore}
-              </span>
+              </Badge>
             ) : null}
           </span>
+          {snippet ? (
+            <span className="line-clamp-1 text-xs text-muted-foreground">
+              {snippet}
+            </span>
+          ) : null}
         </span>
       </label>
     </li>
@@ -112,6 +124,7 @@ function PickerBody({
   onRetry,
   onToggle,
   selected,
+  hasUnfilteredArticles,
 }: Pick<
   ArticlePickerDialogProps,
   | "articles"
@@ -124,7 +137,7 @@ function PickerBody({
   | "onRetry"
   | "onToggle"
   | "selected"
->) {
+> & { readonly hasUnfilteredArticles: boolean }) {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-3 p-3">
@@ -161,10 +174,15 @@ function PickerBody({
           <EmptyMedia variant="icon">
             <Inbox aria-hidden="true" />
           </EmptyMedia>
-          <EmptyTitle>選べる記事がまだありません</EmptyTitle>
+          <EmptyTitle>
+            {hasUnfilteredArticles
+              ? "検索に一致する記事がありません"
+              : "選べる記事がまだありません"}
+          </EmptyTitle>
           <EmptyDescription>
-            本文の取り込みが完了した記事だけを番組にできます。少し待ってから
-            もう一度開いてください。
+            {hasUnfilteredArticles
+              ? "検索語を変えると、ほかの候補を表示できます。"
+              : "本文の取り込みが完了した記事だけを番組にできます。少し待ってからもう一度開いてください。"}
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -217,23 +235,58 @@ export function ArticlePickerDialog({
   submitError,
   ...body
 }: ArticlePickerDialogProps) {
+  const [query, setQuery] = useState("")
+  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("ja"))
+  const filteredArticles = deferredQuery
+    ? body.articles.filter((article) =>
+        [article.title, article.sourceName, ...article.tags].some((value) =>
+          value.toLocaleLowerCase("ja").includes(deferredQuery)
+        )
+      )
+    : body.articles
+
+  useEffect(() => {
+    if (!open) setQuery("")
+  }, [open])
+
   return (
-    <AlertDialog onOpenChange={onOpenChange} open={open}>
-      <AlertDialogContent className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-0 p-0">
-        <AlertDialogHeader className="border-b p-4">
-          <AlertDialogTitle>番組にする記事を選ぶ</AlertDialogTitle>
-          <AlertDialogDescription>
-            選んだ記事だけを題材にします。最大{MAX_SELECTED_ARTICLES}件まで、
-            おすすめ順に並んでいます。
-          </AlertDialogDescription>
-          <div className="flex flex-wrap items-center gap-2 pt-1">
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="flex max-h-[90dvh] w-[calc(100%-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4 pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <DialogTitle>番組にする記事を選ぶ</DialogTitle>
+              <DialogDescription>
+                選んだ記事だけを題材にします。最大{MAX_SELECTED_ARTICLES}
+                件まで、おすすめ順に並んでいます。
+              </DialogDescription>
+            </div>
+            <Badge className="shrink-0 tabular-nums" variant="secondary">
+              {selectedCount}/{MAX_SELECTED_ARTICLES}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                aria-label="候補記事を検索"
+                className="pl-8"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="タイトル・媒体・タグで絞り込み"
+                role="searchbox"
+                value={query}
+              />
+            </div>
             <Button
               disabled={body.articles.length === 0}
               onClick={onSelectTop}
               size="sm"
               variant="outline"
             >
-              上位{MAX_SELECTED_ARTICLES}件を選択
+              おすすめを一括選択
             </Button>
             <Button
               disabled={selectedCount === 0}
@@ -244,7 +297,7 @@ export function ArticlePickerDialog({
               選択を解除
             </Button>
           </div>
-        </AlertDialogHeader>
+        </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {submitError ? (
@@ -255,19 +308,26 @@ export function ArticlePickerDialog({
               </Alert>
             </div>
           ) : null}
-          <PickerBody {...body} />
+          <PickerBody
+            {...body}
+            articles={filteredArticles}
+            hasUnfilteredArticles={body.articles.length > 0}
+          />
         </div>
 
-        <AlertDialogFooter className="flex-row items-center justify-between gap-3 border-t p-4">
+        <DialogFooter className="m-0 flex-col gap-3 rounded-none border-t p-4 sm:flex-row sm:items-center sm:justify-between">
           <span
             aria-live="polite"
             className="text-sm tabular-nums text-muted-foreground"
           >
             {selectionLabel(selectedCount)}
           </span>
-          <div className="flex items-center gap-2">
-            <AlertDialogCancel disabled={pending}>キャンセル</AlertDialogCancel>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <DialogClose className="flex-1 sm:flex-none" disabled={pending}>
+              キャンセル
+            </DialogClose>
             <Button
+              className="flex-1 sm:flex-none"
               disabled={selectedCount === 0 || pending}
               onClick={onConfirm}
             >
@@ -279,8 +339,8 @@ export function ArticlePickerDialog({
               {pending ? "受付中…" : "この記事で生成"}
             </Button>
           </div>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
