@@ -8,7 +8,7 @@ import type {
 import type { OpenAiConfig } from "./config.js"
 
 const MAX_TURNS = 8
-const MAX_TOOL_CALLS = 16
+const MAX_TOOL_CALLS = 40
 const MAX_SOURCE_CORRECTIONS = 2
 const MAX_SCRIPT_LENGTH = 6_000
 /** 契約側の MAX_SELECTED_ARTICLES と揃える。 */
