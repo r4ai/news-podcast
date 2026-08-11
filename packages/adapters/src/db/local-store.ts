@@ -188,6 +188,15 @@ export interface JobDto {
   readonly failure?: JobFailureDto
 }
 
+export interface JobEventDto {
+  readonly sequence: number
+  readonly eventType: string
+  readonly attempt: number
+  readonly stage?: JobStage
+  readonly payload: Readonly<Record<string, unknown>>
+  readonly createdAt: string
+}
+
 export interface JobReconciliationResult {
   readonly deadlineExceeded: number
   readonly attemptLimitExceeded: number
@@ -590,7 +599,8 @@ export class LocalStore implements EpisodeJobRepository {
     // sort=relevanceまたはminScore指定時のみ、順序付け/絞り込みにarticle_relevanceを
     // 結合する（他の呼び出しでは無駄な結合を避ける）。
     const needsRelevanceJoin =
-      (options.sort ?? "newest") === "relevance" || options.minScore !== undefined
+      (options.sort ?? "newest") === "relevance" ||
+      options.minScore !== undefined
     const profileHash = needsRelevanceJoin
       ? computeProfileHash(
           this.getInterestProfile(ownerId).include,
@@ -601,7 +611,10 @@ export class LocalStore implements EpisodeJobRepository {
     const filters = this.articleFilterPredicate(options)
     const minScoreFilter =
       needsRelevanceJoin && options.minScore !== undefined
-        ? { sql: "COALESCE(rel.score, -1) >= CAST(? AS INTEGER)", params: [String(options.minScore)] }
+        ? {
+            sql: "COALESCE(rel.score, -1) >= CAST(? AS INTEGER)",
+            params: [String(options.minScore)],
+          }
         : undefined
     const cursorValues = options.cursor
       ? decodeArticleCursor(options.cursor)
@@ -741,7 +754,10 @@ export class LocalStore implements EpisodeJobRepository {
       | "tagIds"
     >
   ): { readonly sql: string; readonly params: readonly string[] } {
-    const predicates: { readonly sql: string; readonly params: readonly string[] }[] = [
+    const predicates: {
+      readonly sql: string
+      readonly params: readonly string[]
+    }[] = [
       { sql: "sub.enabled = 1", params: [] },
       articleSearchPredicate(options.q),
       { sql: articleStatePredicate(options.state), params: [] },
@@ -823,7 +839,9 @@ export class LocalStore implements EpisodeJobRepository {
   ): void {
     const nextHidden = resolveBooleanField(state.hidden, current?.hidden)
     const hiddenAt = nextHidden
-      ? (current?.hidden_at ? String(current.hidden_at) : now)
+      ? current?.hidden_at
+        ? String(current.hidden_at)
+        : now
       : null
     this.database
       .prepare(
@@ -957,9 +975,33 @@ export class LocalStore implements EpisodeJobRepository {
   listAgentArticles(
     ownerId: string,
     feedIds: readonly string[],
-    limit: number
+    limit: number,
+    articleIds?: readonly string[]
   ): readonly ArticleDto[] {
     if (feedIds.length === 0) return []
+    // 記事が明示選択されている場合は、それが唯一の候補集合になる。
+    // limit と新着順は無視し、ユーザーが並べた順で返す。
+    if (articleIds && articleIds.length > 0) {
+      const selected = articleIds.map(() => "?").join(",")
+      return this.database
+        .prepare(
+          `SELECT i.id, i.feed_id, f.name AS source_name, i.title, i.url,
+                  i.published_at, i.summary, i.discovered_at, i.archive_status,
+                  i.latest_snapshot_id, 0 AS read, 0 AS saved
+           FROM feed_items i
+           JOIN feed_catalog f ON f.id = i.feed_id
+           JOIN feed_subscriptions s
+             ON s.feed_id = i.feed_id AND s.owner_id = ? AND s.enabled = 1
+           JOIN episode_job_articles a ON a.feed_item_id = i.id
+           WHERE i.archive_status = 'succeeded'
+             AND i.latest_snapshot_id IS NOT NULL
+             AND i.id IN (${selected})
+           GROUP BY i.id
+           ORDER BY MIN(a.position)`
+        )
+        .all(ownerId, ...articleIds)
+        .map(toArticle)
+    }
     const placeholders = feedIds.map(() => "?").join(",")
     return this.database
       .prepare(
@@ -978,6 +1020,40 @@ export class LocalStore implements EpisodeJobRepository {
       )
       .all(ownerId, ...feedIds, limit)
       .map(toArticle)
+  }
+
+  /** ジョブに凍結された選択記事 ID を、選択順で返す。 */
+  listJobArticleIds(jobId: string): readonly string[] {
+    return this.database
+      .prepare(
+        `SELECT feed_item_id FROM episode_job_articles
+         WHERE job_id = ? ORDER BY position`
+      )
+      .all(jobId)
+      .map((row) => String((row as Record<string, unknown>).feed_item_id))
+  }
+
+  /**
+   * 生成対象として選べる記事 ID だけを返す。`listAgentArticles` と同じ条件
+   * （購読中・有効・アーカイブ済み）を使い、他人の記事や未アーカイブ記事を弾く。
+   */
+  filterSelectableArticleIds(
+    ownerId: string,
+    articleIds: readonly string[]
+  ): readonly string[] {
+    if (articleIds.length === 0) return []
+    const placeholders = articleIds.map(() => "?").join(",")
+    return this.database
+      .prepare(
+        `SELECT i.id FROM feed_items i
+         JOIN feed_subscriptions s
+           ON s.feed_id = i.feed_id AND s.owner_id = ? AND s.enabled = 1
+         WHERE i.archive_status = 'succeeded'
+           AND i.latest_snapshot_id IS NOT NULL
+           AND i.id IN (${placeholders})`
+      )
+      .all(ownerId, ...articleIds)
+      .map((row) => String((row as Record<string, unknown>).id))
   }
 
   startAgentRun(input: {
@@ -1199,10 +1275,16 @@ export class LocalStore implements EpisodeJobRepository {
   // 同名タグが既にあれば既存を返す（べき等）。
   createTag(ownerId: string, name: string): TagDto {
     const existing = this.database
-      .prepare("SELECT id, name, created_at FROM tags WHERE owner_id = ? AND name = ?")
+      .prepare(
+        "SELECT id, name, created_at FROM tags WHERE owner_id = ? AND name = ?"
+      )
       .get(ownerId, name) as Record<string, unknown> | undefined
     if (existing) return toTag(existing)
-    const tag: TagDto = { id: randomUUID(), name, createdAt: new Date().toISOString() }
+    const tag: TagDto = {
+      id: randomUUID(),
+      name,
+      createdAt: new Date().toISOString(),
+    }
     this.database
       .prepare(
         "INSERT INTO tags (id, owner_id, name, created_at) VALUES (?, ?, ?, ?)"
@@ -1303,9 +1385,7 @@ export class LocalStore implements EpisodeJobRepository {
   // 提案からタグ語彙へ昇格させる。作成後は提案行を消す。
   promoteTagSuggestion(ownerId: string, name: string): TagDto | undefined {
     const suggestion = this.database
-      .prepare(
-        "SELECT 1 FROM tag_suggestions WHERE owner_id = ? AND name = ?"
-      )
+      .prepare("SELECT 1 FROM tag_suggestions WHERE owner_id = ? AND name = ?")
       .get(ownerId, name)
     if (!suggestion) return undefined
     return this.transaction(() => {
@@ -1657,7 +1737,9 @@ export class LocalStore implements EpisodeJobRepository {
 
     return rows.map((row) => {
       const relevance = relevanceMap.get(row.id)
-      const summary = row.snapshotId ? summaryMap.get(row.snapshotId) : undefined
+      const summary = row.snapshotId
+        ? summaryMap.get(row.snapshotId)
+        : undefined
       return {
         ...row,
         ...(relevance
@@ -1690,6 +1772,7 @@ export class LocalStore implements EpisodeJobRepository {
     readonly requestHash: string
     readonly trigger: "manual" | "scheduled"
     readonly feedIds: readonly string[]
+    readonly articleIds?: readonly string[]
     readonly traceContext?: EpisodeTraceContext
   }): Promise<EpisodeJobRecord> {
     const existing = this.database
@@ -1741,6 +1824,13 @@ export class LocalStore implements EpisodeJobRepository {
       )
       input.feedIds.forEach((feedId, index) =>
         insertFeed.run(jobId, feedId, index)
+      )
+      const insertArticle = this.database.prepare(
+        `INSERT INTO episode_job_articles (job_id, feed_item_id, position)
+         VALUES (?, ?, ?)`
+      )
+      input.articleIds?.forEach((articleId, index) =>
+        insertArticle.run(jobId, articleId, index)
       )
     })
     return Promise.resolve({
@@ -1814,6 +1904,13 @@ export class LocalStore implements EpisodeJobRepository {
            ) AND state IN ('creating', 'ready')`
         )
         .run(now, jobId, ownerId)
+      this.recordJobEvent(
+        jobId,
+        "job.canceled",
+        this.currentAttempt(jobId),
+        undefined,
+        now
+      )
       return "canceled"
     })
   }
@@ -1860,6 +1957,14 @@ export class LocalStore implements EpisodeJobRepository {
         .prepare(
           `INSERT INTO episode_job_feeds (job_id, feed_id, position)
            SELECT ?, feed_id, position FROM episode_job_feeds WHERE job_id = ?`
+        )
+        .run(id, jobId)
+      // 再試行で生成対象が変わってはいけないので、選択記事も同じく引き継ぐ。
+      this.database
+        .prepare(
+          `INSERT INTO episode_job_articles (job_id, feed_item_id, position)
+           SELECT ?, feed_item_id, position
+           FROM episode_job_articles WHERE job_id = ?`
         )
         .run(id, jobId)
       return this.getJob(ownerId, id)
@@ -2297,40 +2402,76 @@ export class LocalStore implements EpisodeJobRepository {
     nextAttemptAt: Date,
     failure: JobFailureDto
   ): void {
-    const result = this.database
-      .prepare(
-        `UPDATE episode_jobs SET status = 'retrying', next_attempt_at = ?,
-         failure_code = ?, failure_message = ?, failure_retryable = 1,
-         lease_token = NULL, lease_expires_at = NULL, heartbeat_at = NULL
-         WHERE id = ? AND status = 'running' AND lease_token = ?`
-      )
-      .run(
-        nextAttemptAt.toISOString(),
-        failure.code,
-        failure.message,
+    this.transaction(() => {
+      const result = this.database
+        .prepare(
+          `UPDATE episode_jobs SET status = 'retrying', next_attempt_at = ?,
+           failure_code = ?, failure_message = ?, failure_retryable = 1,
+           lease_token = NULL, lease_expires_at = NULL, heartbeat_at = NULL
+           WHERE id = ? AND status = 'running' AND lease_token = ?`
+        )
+        .run(
+          nextAttemptAt.toISOString(),
+          failure.code,
+          failure.message,
+          jobId,
+          leaseToken
+        )
+      if (result.changes !== 1) throw new LeaseLostError(jobId)
+      this.recordJobEvent(
         jobId,
-        leaseToken
+        "job.retrying",
+        this.currentAttempt(jobId),
+        undefined,
+        new Date().toISOString(),
+        {
+          code: failure.code,
+          message: failure.message,
+          nextAttemptAt: nextAttemptAt.toISOString(),
+        }
       )
-    if (result.changes !== 1) throw new LeaseLostError(jobId)
+    })
   }
 
   failJob(jobId: string, leaseToken: string, failure: JobFailureDto): void {
-    const result = this.database
-      .prepare(
-        `UPDATE episode_jobs SET status = 'failed', finished_at = ?,
-         failure_code = ?, failure_message = ?, failure_retryable = ?,
-         lease_token = NULL, lease_expires_at = NULL, heartbeat_at = NULL
-         WHERE id = ? AND status = 'running' AND lease_token = ?`
-      )
-      .run(
-        new Date().toISOString(),
-        failure.code,
-        failure.message,
-        failure.retryable ? 1 : 0,
+    this.transaction(() => {
+      const finishedAt = new Date().toISOString()
+      const result = this.database
+        .prepare(
+          `UPDATE episode_jobs SET status = 'failed', finished_at = ?,
+           failure_code = ?, failure_message = ?, failure_retryable = ?,
+           lease_token = NULL, lease_expires_at = NULL, heartbeat_at = NULL
+           WHERE id = ? AND status = 'running' AND lease_token = ?`
+        )
+        .run(
+          finishedAt,
+          failure.code,
+          failure.message,
+          failure.retryable ? 1 : 0,
+          jobId,
+          leaseToken
+        )
+      if (result.changes !== 1) throw new LeaseLostError(jobId)
+      this.recordJobEvent(
         jobId,
-        leaseToken
+        "job.failed",
+        this.currentAttempt(jobId),
+        undefined,
+        finishedAt,
+        {
+          code: failure.code,
+          message: failure.message,
+          retryable: failure.retryable,
+        }
       )
-    if (result.changes !== 1) throw new LeaseLostError(jobId)
+    })
+  }
+
+  private currentAttempt(jobId: string): number {
+    const row = this.database
+      .prepare("SELECT attempt FROM episode_jobs WHERE id = ?")
+      .get(jobId) as Record<string, unknown> | undefined
+    return row ? Number(row.attempt) : 0
   }
 
   completeJob(input: {
@@ -2395,6 +2536,18 @@ export class LocalStore implements EpisodeJobRepository {
           createdAt
         )
       if (result.changes !== 1) throw new LeaseLostError(input.jobId)
+      this.recordJobEvent(
+        input.jobId,
+        "job.succeeded",
+        this.currentAttempt(input.jobId),
+        undefined,
+        createdAt,
+        {
+          episodeId,
+          title: input.title,
+          sourceCount: input.sources.length,
+        }
+      )
       return episodeId
     })
   }
@@ -2437,11 +2590,16 @@ export class LocalStore implements EpisodeJobRepository {
     createdAt: string,
     payload: Readonly<Record<string, unknown>> = {}
   ): void {
+    // sequence は SSE の Last-Event-ID カーソル。採番と挿入が同じ
+    // トランザクションに乗っている必要があるため、ここで一括して行う。
     this.database
       .prepare(
         `INSERT INTO episode_job_events
-         (id, job_id, event_type, attempt, stage, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (id, job_id, event_type, attempt, stage, payload_json, created_at,
+          sequence)
+         VALUES (?, ?, ?, ?, ?, ?, ?,
+           (SELECT COALESCE(MAX(sequence), 0) + 1
+            FROM episode_job_events WHERE job_id = ?))`
       )
       .run(
         randomUUID(),
@@ -2450,8 +2608,67 @@ export class LocalStore implements EpisodeJobRepository {
         attempt,
         stage ?? null,
         JSON.stringify(payload),
-        createdAt
+        createdAt,
+        jobId
       )
+  }
+
+  /**
+   * ワーカー側から任意のパイプラインイベントを追記する。進捗ストリームの
+   * 発生源であり、`recordJobEvent` と同じ sequence 空間を共有する。
+   */
+  appendJobEvent(input: {
+    readonly jobId: string
+    readonly eventType: string
+    /** 省略時はジョブの現在の試行回数を使う。 */
+    readonly attempt?: number
+    readonly stage?: JobStage
+    readonly payload?: Readonly<Record<string, unknown>>
+  }): void {
+    this.recordJobEvent(
+      input.jobId,
+      input.eventType,
+      input.attempt ?? this.currentAttempt(input.jobId),
+      input.stage,
+      new Date().toISOString(),
+      input.payload ?? {}
+    )
+  }
+
+  /**
+   * `sequence` より後のイベントを古い順に返す。SSE の tail とリプレイの両方が
+   * この 1 つのクエリを使う。
+   */
+  listJobEventsAfter(input: {
+    readonly ownerId: string
+    readonly jobId: string
+    readonly afterSequence: number
+    readonly limit?: number
+  }): readonly JobEventDto[] {
+    return this.database
+      .prepare(
+        `SELECT e.sequence, e.event_type, e.attempt, e.stage, e.payload_json,
+                e.created_at
+         FROM episode_job_events e
+         JOIN episode_jobs j ON j.id = e.job_id
+         WHERE e.job_id = ? AND j.owner_id = ? AND e.sequence > ?
+         ORDER BY e.sequence
+         LIMIT ?`
+      )
+      .all(input.jobId, input.ownerId, input.afterSequence, input.limit ?? 500)
+      .map((row) => {
+        const record = row as Record<string, unknown>
+        return {
+          sequence: Number(record.sequence),
+          eventType: String(record.event_type),
+          attempt: Number(record.attempt),
+          ...(record.stage ? { stage: String(record.stage) as JobStage } : {}),
+          payload: JSON.parse(String(record.payload_json)) as Readonly<
+            Record<string, unknown>
+          >,
+          createdAt: String(record.created_at),
+        }
+      })
   }
 
   private assertActiveLease(
@@ -2676,7 +2893,9 @@ interface ArticleSortColumn {
 
 // ソートモードごとのORDER BY列。末尾に必ずi.id（一意）を含めることで
 // keysetページネーションの境界で重複・欠落が起きないようにする。
-function articleSortColumns(sort: ArticleListSort): readonly ArticleSortColumn[] {
+function articleSortColumns(
+  sort: ArticleListSort
+): readonly ArticleSortColumn[] {
   if (sort === "oldest") {
     return [
       { expr: ARTICLE_SORT_KEY, alias: "sort_key", direction: "ASC" },
@@ -2744,9 +2963,7 @@ function encodeCursorFor(
   row: Record<string, unknown> | undefined
 ): string | undefined {
   if (!row) return undefined
-  return encodeArticleCursor(
-    columns.map((column) => String(row[column.alias]))
-  )
+  return encodeArticleCursor(columns.map((column) => String(row[column.alias])))
 }
 
 // keyset述語: (c1, c2, ..., cn) の辞書式比較をOR連鎖で表現する。
@@ -2764,7 +2981,9 @@ function keysetPredicate(
       params.push(cursorValues[j]!)
     }
     const cmp = columns[i]!.direction === "DESC" ? "<" : ">"
-    clauses.push(`(${[...eqParts, `${columns[i]!.expr} ${cmp} ?`].join(" AND ")})`)
+    clauses.push(
+      `(${[...eqParts, `${columns[i]!.expr} ${cmp} ?`].join(" AND ")})`
+    )
     params.push(cursorValues[i]!)
   }
   return { sql: `(${clauses.join(" OR ")})`, params }
@@ -2773,9 +2992,10 @@ function keysetPredicate(
 // FTS5(trigram)ベースの検索述語。ソース名(f.name)はfeed_items_ftsに無いため、
 // 常にLIKEで別枠に足す（フィード数は少なくコストは無視できる）。
 // trigramは3文字未満のクエリにマッチしないため、短いクエリはLIKEへフォールバックする。
-function articleSearchPredicate(
-  q: string | undefined
-): { readonly sql: string; readonly params: readonly string[] } {
+function articleSearchPredicate(q: string | undefined): {
+  readonly sql: string
+  readonly params: readonly string[]
+} {
   if (!q) return { sql: "1=1", params: [] }
   const trimmed = q.trim()
   if (!trimmed) return { sql: "1=1", params: [] }
@@ -2819,9 +3039,10 @@ function articleHiddenPredicate(includeHidden: boolean | undefined): string {
   return includeHidden ? "1=1" : "COALESCE(s.hidden, 0) = 0"
 }
 
-function articleFeedIdsPredicate(
-  feedIds: readonly string[] | undefined
-): { readonly sql: string; readonly params: readonly string[] } {
+function articleFeedIdsPredicate(feedIds: readonly string[] | undefined): {
+  readonly sql: string
+  readonly params: readonly string[]
+} {
   if (!feedIds || feedIds.length === 0) return { sql: "1=1", params: [] }
   return {
     sql: `i.feed_id IN (${feedIds.map(() => "?").join(",")})`,
@@ -2831,9 +3052,10 @@ function articleFeedIdsPredicate(
 
 // タグ絞り込み。複数指定時はOR（いずれか1つでも付いていれば一致）。
 // article_tagsは1記事に複数行あり得るためJOINではなくEXISTSで絞り込む（重複行を防ぐ）。
-function articleTagsPredicate(
-  tagIds: readonly string[] | undefined
-): { readonly sql: string; readonly params: readonly string[] } {
+function articleTagsPredicate(tagIds: readonly string[] | undefined): {
+  readonly sql: string
+  readonly params: readonly string[]
+} {
   if (!tagIds || tagIds.length === 0) return { sql: "1=1", params: [] }
   return {
     sql: `EXISTS (
@@ -2877,9 +3099,10 @@ function articleArchiveStatusPredicate(
   }
 }
 
-function articleUsedInEpisodePredicate(
-  usedInEpisode: boolean | undefined
-): { readonly sql: string; readonly params: readonly string[] } {
+function articleUsedInEpisodePredicate(usedInEpisode: boolean | undefined): {
+  readonly sql: string
+  readonly params: readonly string[]
+} {
   if (usedInEpisode === undefined) return { sql: "1=1", params: [] }
   return {
     sql: usedInEpisode

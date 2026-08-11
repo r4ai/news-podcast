@@ -131,7 +131,9 @@ test("a protected API 401 clears the visible app and preserves the return path",
       status: 200,
     })
   })
-  await page.route("**/v1/episode-jobs", async (route) => {
+  // 「番組を生成」は記事選択ダイアログを開き、そこで候補を取りにいく。
+  // その保護APIが401を返したときにアプリが消えて復帰先が保たれることを見る。
+  await page.route("**/v1/me/articles**", async (route) => {
     expired = true
     await route.fulfill({
       body: JSON.stringify({ error: "session expired" }),
@@ -323,6 +325,9 @@ test("development login to generated episode playback completes", async ({
 
   await page.getByRole("link", { name: "今日" }).click()
   await page.getByRole("button", { name: "番組を生成" }).click()
+  // 生成前に対象記事を選ぶ（選択フロー自体は専用テストで検証する）。
+  await page.getByRole("checkbox").first().click()
+  await page.getByRole("button", { name: "この記事で生成" }).click()
   await expect(page.getByText("完成", { exact: true })).toBeVisible({
     timeout: 15_000,
   })
@@ -338,4 +343,57 @@ test("development login to generated episode playback completes", async ({
   await expect(
     page.getByRole("link", { name: "ローカルE2Eニュース" })
   ).toHaveAttribute("href", "https://example.com/local-news")
+})
+
+test("selecting articles generates an episode and streams the agent's work", async ({
+  page,
+}) => {
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+
+  // 生成前に対象記事を選ばせる。未選択では生成できない。
+  await page.getByRole("button", { name: "番組を生成" }).click()
+  await expect(
+    page.getByRole("heading", { name: "番組にする記事を選ぶ" })
+  ).toBeVisible()
+  const generate = page.getByRole("button", { name: "この記事で生成" })
+  await expect(generate).toBeDisabled()
+
+  const checkboxes = page.getByRole("checkbox")
+  await checkboxes.first().click()
+  await checkboxes.nth(1).click()
+  await expect(page.getByText("2/20件を選択中")).toBeVisible()
+
+  const jobRequest = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/v1/episode-jobs") && request.method() === "POST"
+  )
+  await generate.click()
+
+  // 選んだ2件がそのままリクエストに乗る。
+  const body = (await jobRequest).postDataJSON() as {
+    trigger: string
+    articleIds: string[]
+  }
+  expect(body.trigger).toBe("manual")
+  expect(body.articleIds).toHaveLength(2)
+
+  // SSEでエージェントの作業が実況され、採用記事が並ぶ。
+  await expect(
+    page.getByRole("heading", { name: "エージェントの作業" })
+  ).toBeVisible()
+  await expect(page.getByText("記事を読む")).toBeVisible()
+  await expect(page.getByText(/採用した記事 \d+件/)).toBeVisible()
+
+  // 最後まで通って番組が完成する。
+  await expect(page.getByText("完成", { exact: true })).toBeVisible({
+    timeout: 20_000,
+  })
+  await expect(
+    page.getByText("今日の開発ニュース", { exact: true })
+  ).toBeVisible()
 })

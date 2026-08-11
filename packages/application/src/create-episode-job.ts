@@ -12,6 +12,8 @@ export interface CreateEpisodeJobCommand {
   readonly ownerId: string
   readonly idempotencyKey: string
   readonly trigger: "manual" | "scheduled"
+  /** 明示選択された記事。省略時は購読フィード全体からの全自動選択。 */
+  readonly articleIds?: readonly string[]
   readonly traceContext?: EpisodeTraceContext
 }
 
@@ -25,13 +27,21 @@ export class CreateEpisodeJob {
   async execute(command: CreateEpisodeJobCommand): Promise<EpisodeJobRecord> {
     const idempotencyKey = validateIdempotencyKey(command.idempotencyKey)
     const feedIds = await this.subscriptions.listEnabledFeedIds(command.ownerId)
-    const requestHash = JSON.stringify({ trigger: command.trigger, feedIds })
+    // 選択記事は生成結果を決定づけるので requestHash に含める。含めないと、
+    // 同じ冪等キーで別の選択を投げたときに黙って前回のジョブが返ってしまう。
+    const articleIds = command.articleIds ? [...command.articleIds].sort() : []
+    const requestHash = JSON.stringify({
+      trigger: command.trigger,
+      feedIds,
+      articleIds,
+    })
     const record = await this.jobs.create({
       ownerId: command.ownerId,
       idempotencyKey,
       requestHash,
       trigger: command.trigger,
       feedIds,
+      ...(command.articleIds ? { articleIds: command.articleIds } : {}),
       ...(command.traceContext ? { traceContext: command.traceContext } : {}),
     })
 

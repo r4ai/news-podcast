@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./openapi": "./src/generated/openapi.ts"
+    "./openapi": "./src/generated/openapi.ts",
+    "./agui": "./src/agui.ts"
   },
   "scripts": {
     "build": "pnpm generate",

@@ -38,6 +38,9 @@ importers:
       '@news-podcast/application':
         specifier: workspace:*
         version: link:../../packages/application
+      '@news-podcast/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@news-podcast/observability':
         specifier: workspace:*
         version: link:../../packages/observability

@@ -36,6 +36,9 @@ import { Spinner } from "@workspace/ui/components/spinner"
 
 import { PageHeader } from "@/shared/layouts/page-header"
 
+import type { AdoptedArticle, TimelineEntry } from "../model"
+import { AgentTimeline } from "./agent-timeline"
+
 export type DashboardState =
   | "ready"
   | "queued"
@@ -71,6 +74,9 @@ export type PodcastDashboardProps = {
     readonly timeZone: string
   }
   readonly subscriptionNames?: readonly string[]
+  readonly timeline?: readonly TimelineEntry[]
+  readonly adoptedArticles?: readonly AdoptedArticle[]
+  readonly streaming?: boolean
   readonly onGenerate?: () => void
   readonly onCancel?: () => void
   readonly onRetry?: () => void
@@ -87,7 +93,7 @@ const statusCopy: Record<
   ready: {
     label: "準備完了",
     title: "番組を生成できます",
-    description: "現在の購読内容をスナップショットして生成を開始します。",
+    description: "題材にする記事を選んでから生成を開始します。",
   },
   queued: {
     label: "待機中",
@@ -434,6 +440,11 @@ export function PodcastDashboard(props: PodcastDashboardProps) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.8fr)] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">
           <GenerationStatus {...props} />
+          <AgentTimeline
+            adoptedArticles={props.adoptedArticles ?? []}
+            streaming={props.streaming}
+            timeline={props.timeline ?? []}
+          />
           <LatestEpisode episode={props.episode} />
         </div>
         <SettingsSummary

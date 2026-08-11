@@ -14,6 +14,12 @@ export const JobStageSchema = z
   ])
   .openapi("JobStage")
 
+/**
+ * 1エピソードで扱える選択記事の上限。台本の上限6000文字に対して、
+ * 1記事あたり最低でも数百文字は割かないと紹介にならないため。
+ */
+export const MAX_SELECTED_ARTICLES = 20
+
 export const ProblemSchema = z
   .object({
     type: z.string(),

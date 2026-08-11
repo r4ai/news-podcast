@@ -2802,6 +2802,15 @@
                     "enum": [
                       "manual"
                     ]
+                  },
+                  "articleIds": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Id"
+                    },
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "description": "Restrict the episode to these archived articles. Omit for fully automatic selection."
                   }
                 },
                 "required": [
@@ -2844,6 +2853,16 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unselectable articles",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3047,6 +3066,85 @@
           },
           "409": {
             "description": "Job is not failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/episode-jobs/{jobId}/events": {
+      "get": {
+        "tags": [
+          "Episode jobs"
+        ],
+        "operationId": "streamEpisodeJobEvents",
+        "description": "Stream generation progress as AG-UI events over SSE. The first event is always STATE_SNAPSHOT; pass Last-Event-ID to resume without gaps or duplicates.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "jobId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            },
+            "required": false,
+            "name": "lastEventId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "Last-Event-ID",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "AG-UI event stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/problem+json": {
                 "schema": {

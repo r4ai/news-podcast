@@ -12,6 +12,7 @@ import {
   OpenAiPodcastAgent,
   PodcastAgentError,
 } from "@news-podcast/adapters/openai-agent"
+import type { AgentAudit } from "@news-podcast/adapters/openai-agent"
 import {
   VoicevoxProviderError,
   VoicevoxSpeechSynthesizer,
@@ -247,8 +248,12 @@ export class EpisodeProcessor {
     const feedIds = this.dependencies.store
       .getJobFeeds(job.id)
       .map((feed) => feed.id)
+    // 選択記事は台本の中身を決めるので、チェックポイントの入力ハッシュに
+    // 含めないと選択違いのジョブが他人のドラフトを誤ってヒットさせる。
+    const articleIds = this.dependencies.store.listJobArticleIds(job.id)
     const draftInputHash = hashJson({
       feedIds,
+      articleIds,
       generationPolicyHash: job.generationPolicyHash,
     })
     let draft
@@ -290,6 +295,7 @@ export class EpisodeProcessor {
                 jobId: job.id,
                 ownerId: job.ownerId,
                 feedIds,
+                ...(articleIds.length > 0 ? { articleIds } : {}),
                 signal: stageSignal,
               })
           )
@@ -509,6 +515,13 @@ export class EpisodeProcessor {
         position + 1,
         chunks.length
       )
+      this.dependencies.store.appendJobEvent({
+        jobId: job.id,
+        eventType: "tts.progress",
+        attempt: job.attempt,
+        stage: "synthesizing_audio",
+        payload: { completed: position + 1, total: chunks.length },
+      })
     }
     const merged = mergeWaves(waves)
     if (merged.byteLength > EPISODE_EXECUTION_POLICY.maximumAudioBytes) {
@@ -526,6 +539,12 @@ export class EpisodeProcessor {
     operation: (signal: AbortSignal) => Promise<T>
   ): Promise<T> {
     this.dependencies.store.setJobStage(job.id, job.leaseToken, stage)
+    this.dependencies.store.appendJobEvent({
+      jobId: job.id,
+      eventType: "stage.started",
+      attempt: job.attempt,
+      stage,
+    })
     const startedAt = performance.now()
     try {
       const result = await withDeadline(
@@ -543,6 +562,18 @@ export class EpisodeProcessor {
         name: "episode.stage.completed",
         attributes: { ...jobAttributes(job), "operation.stage": stage },
       })
+      // storing_episode の本体で completeJob が走るので、この時点で既に
+      // job.succeeded を追記済みのことがある。終端イベントの後に
+      // stage.finished を流すとクライアントの「完了」判定より後ろに
+      // イベントが続いてしまうため、終端後は追記しない。
+      if (!this.isTerminal(job)) {
+        this.dependencies.store.appendJobEvent({
+          jobId: job.id,
+          eventType: "stage.finished",
+          attempt: job.attempt,
+          stage,
+        })
+      }
       return result
     } finally {
       observability.measure(
@@ -551,6 +582,68 @@ export class EpisodeProcessor {
         { "operation.stage": stage }
       )
     }
+  }
+
+  private isTerminal(job: WorkerJob): boolean {
+    const status = this.dependencies.store.getJob(job.ownerId, job.id)?.status
+    return (
+      status === "succeeded" || status === "failed" || status === "canceled"
+    )
+  }
+}
+
+/**
+ * 監査（agent_runs / agent_tool_calls）と進捗ストリーム（episode_job_events）の
+ * 両方に書く AgentAudit。ツール呼び出し時点では runId しか渡ってこないので、
+ * start で受け取ったジョブの情報をここで保持する。
+ */
+function createAgentAudit(store: LocalStore): AgentAudit {
+  const runs = new Map<string, { jobId: string; attempt: number }>()
+  const append = (
+    runId: string,
+    eventType: string,
+    payload: Readonly<Record<string, unknown>>
+  ): void => {
+    const run = runs.get(runId)
+    if (!run) return
+    store.appendJobEvent({
+      jobId: run.jobId,
+      eventType,
+      attempt: run.attempt,
+      stage: "researching_sources",
+      payload,
+    })
+  }
+  return {
+    start: (value) => {
+      const runId = store.startAgentRun(value)
+      runs.set(runId, {
+        jobId: value.jobId,
+        attempt: store.getJob(value.ownerId, value.jobId)?.attempt ?? 0,
+      })
+      return runId
+    },
+    tool: (value) => {
+      store.recordAgentToolCall(value)
+      append(value.runId, "agent.tool_call", {
+        position: value.position,
+        name: value.name,
+        arguments: value.argumentsJson,
+        outputSummary: value.outputSummary,
+      })
+    },
+    articleAdopted: (value) => {
+      append(value.runId, "agent.article_adopted", {
+        articleId: value.articleId,
+        title: value.title,
+        url: value.url,
+        sourceName: value.sourceName,
+      })
+    },
+    finish: (runId, failureCode) => {
+      store.finishAgentRun(runId, failureCode)
+      runs.delete(runId)
+    },
   }
 }
 
@@ -576,10 +669,10 @@ export function createLiveProcessor(input: {
     agent: new OpenAiPodcastAgent(
       input.openAi,
       {
-        listArticles: ({ ownerId, feedIds, limit }) =>
+        listArticles: ({ ownerId, feedIds, limit, articleIds }) =>
           Promise.resolve(
             input.store
-              .listAgentArticles(ownerId, feedIds, limit)
+              .listAgentArticles(ownerId, feedIds, limit, articleIds)
               .map((item) => ({
                 id: item.id,
                 snapshotId: item.snapshotId!,
@@ -620,12 +713,7 @@ export function createLiveProcessor(input: {
           }
         },
       },
-      {
-        start: (value) => input.store.startAgentRun(value),
-        tool: (value) => input.store.recordAgentToolCall(value),
-        finish: (runId, failureCode) =>
-          input.store.finishAgentRun(runId, failureCode),
-      },
+      createAgentAudit(input.store),
       openAiFetch
     ),
     speech: new VoicevoxSpeechSynthesizer(input.voicevox, voicevoxFetch),
@@ -668,7 +756,7 @@ export function createFakeProcessor(
     store,
     audio: new LocalAudioStore(audioDirectory),
     agent: {
-      run: ({ feedIds }) => {
+      run: ({ jobId, feedIds }) => {
         const feedId = feedIds[0]
         if (feedId) {
           store.upsertFeedItems(feedId, [
@@ -683,6 +771,41 @@ export function createFakeProcessor(
             },
           ])
         }
+        // 実行列を本番と揃える。揃えないと e2e とストーリーが実物と乖離する。
+        const emit = (
+          eventType: string,
+          payload: Readonly<Record<string, unknown>>
+        ) =>
+          store.appendJobEvent({
+            jobId,
+            eventType,
+            stage: "researching_sources",
+            payload,
+          })
+        emit("agent.tool_call", {
+          position: 0,
+          name: "list_rss_articles",
+          arguments: JSON.stringify({ limit: 20 }),
+          outputSummary: { count: 1 },
+        })
+        emit("agent.tool_call", {
+          position: 1,
+          name: "read_article",
+          arguments: JSON.stringify({ article_id: "local-e2e-news" }),
+          outputSummary: { title: item.title },
+        })
+        emit("agent.article_adopted", {
+          articleId: "local-e2e-news",
+          title: item.title,
+          url: item.url.href,
+          sourceName: item.sourceName,
+        })
+        emit("agent.tool_call", {
+          position: 2,
+          name: "submit_episode_draft",
+          arguments: JSON.stringify({ title: "今日の開発ニュース" }),
+          outputSummary: { sourceCount: 1 },
+        })
         return Promise.resolve({
           title: "今日の開発ニュース",
           script:

@@ -1,4 +1,10 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi"
+import { streamSSE } from "hono/streaming"
+import {
+  encodeSse,
+  toAgUiEvents,
+  type EpisodeJobState,
+} from "@news-podcast/contracts/agui"
 import {
   noopObservability,
   type Observability,
@@ -28,6 +34,7 @@ import {
   JobReceiptSchema,
   JobSchema,
   jsonContent,
+  MAX_SELECTED_ARTICLES,
   page,
   problemContent,
   ScheduleSchema,
@@ -55,6 +62,7 @@ export interface AppDependencies {
   readonly createEpisodeJob?: (input: {
     readonly ownerId: string
     readonly idempotencyKey: string
+    readonly articleIds?: readonly string[]
     readonly traceContext?: TraceContext
   }) => Promise<JobDto>
   readonly observability?: Observability
@@ -108,6 +116,29 @@ export interface AppDependencies {
 
 const unavailable = () =>
   problem(503, "service-unavailable", "Service unavailable")
+
+const JOB_STREAM_POLL_MS = 500
+const JOB_STREAM_HEARTBEAT_MS = 15_000
+/** ジョブ自体の上限30分より長くしておき、正常終了を打ち切らないようにする。 */
+const JOB_STREAM_MAX_MS = 35 * 60_000
+const TERMINAL_JOB_STATUSES = new Set(["succeeded", "failed", "canceled"])
+
+function toJobStateSnapshot(job: JobDto): EpisodeJobState {
+  return {
+    jobId: job.id,
+    status: job.status,
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    // 履歴は後続のイベント再生で積み上がるので、ここでは空から始める。
+    adoptedArticles: [],
+    ...(job.stage ? { stage: job.stage } : {}),
+    ...(job.stageProgress ? { progress: job.stageProgress } : {}),
+    ...(job.failure
+      ? { failure: { code: job.failure.code, message: job.failure.message } }
+      : {}),
+    ...(job.episodeId ? { episodeId: job.episodeId } : {}),
+  }
+}
 
 export function createApp(dependencies: AppDependencies = {}) {
   const observability = dependencies.observability ?? noopObservability
@@ -296,9 +327,7 @@ export function createApp(dependencies: AppDependencies = {}) {
         ? { usedInEpisode: query.usedInEpisode }
         : {}),
       ...(query.minScore !== undefined ? { minScore: query.minScore } : {}),
-      ...(query.publishedAfter
-        ? { publishedAfter: query.publishedAfter }
-        : {}),
+      ...(query.publishedAfter ? { publishedAfter: query.publishedAfter } : {}),
       ...(query.publishedBefore
         ? { publishedBefore: query.publishedBefore }
         : {}),
@@ -376,9 +405,7 @@ export function createApp(dependencies: AppDependencies = {}) {
         ...(body.includeHidden !== undefined
           ? { includeHidden: body.includeHidden }
           : {}),
-        ...(body.publishedAfter
-          ? { publishedAfter: body.publishedAfter }
-          : {}),
+        ...(body.publishedAfter ? { publishedAfter: body.publishedAfter } : {}),
         ...(body.publishedBefore
           ? { publishedBefore: body.publishedBefore }
           : {}),
@@ -387,9 +414,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       {
         ...(body.read !== undefined ? { read: body.read } : {}),
         ...(body.saved !== undefined ? { saved: body.saved } : {}),
-        ...(body.readLater !== undefined
-          ? { readLater: body.readLater }
-          : {}),
+        ...(body.readLater !== undefined ? { readLater: body.readLater } : {}),
         ...(body.hidden !== undefined ? { hidden: body.hidden } : {}),
       }
     )
@@ -419,7 +444,8 @@ export function createApp(dependencies: AppDependencies = {}) {
     const ownerId = context.get("ownerId")
     const articleId = context.req.valid("param").articleId
     const article = dependencies.store.getArticle(ownerId, articleId)
-    if (!article) return context.json(problem(404, "not-found", "Not found"), 404)
+    if (!article)
+      return context.json(problem(404, "not-found", "Not found"), 404)
     const recomputed = await dependencies.enrichArticle(ownerId, articleId)
     if (!recomputed) {
       return context.json(
@@ -617,11 +643,33 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.openapi(createJobRoute, async (context) => {
     if (!dependencies.createEpisodeJob) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const articleIds: readonly string[] | undefined =
+      context.req.valid("json").articleIds
+    if (articleIds && dependencies.store) {
+      // 他人の記事・購読停止中のフィード・アーカイブ未完了の記事を弾く。
+      // エージェントは選択記事しか読めないので、ここを通すと必ず失敗する。
+      const selectable = new Set(
+        dependencies.store.filterSelectableArticleIds(ownerId, articleIds)
+      )
+      const rejected = articleIds.filter((id) => !selectable.has(id))
+      if (rejected.length > 0) {
+        return context.json(
+          problem(
+            422,
+            "unselectable-articles",
+            `Not available for generation: ${rejected.join(", ")}`
+          ),
+          422
+        )
+      }
+    }
     try {
       const traceContext = observability.captureContext()
       const job = await dependencies.createEpisodeJob({
-        ownerId: context.get("ownerId"),
+        ownerId,
         idempotencyKey: context.req.valid("header")["Idempotency-Key"],
+        ...(articleIds ? { articleIds } : {}),
         ...(traceContext ? { traceContext } : {}),
       })
       observability.count("episode.requested")
@@ -709,6 +757,77 @@ export function createApp(dependencies: AppDependencies = {}) {
       },
       202
     )
+  })
+
+  app.openapi(jobEventsRoute, (context) => {
+    const store = dependencies.store
+    if (!store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const jobId = context.req.valid("param").jobId
+    const job = store.getJob(ownerId, jobId)
+    if (!job) return context.json(problem(404, "not-found", "Not found"), 404)
+
+    // EventSource は Last-Event-ID ヘッダを、fetch ベースのクライアントは
+    // どちらでも送れる。ヘッダを優先する。
+    const headerId = Number(context.req.valid("header")["Last-Event-ID"])
+    const resumeFrom = Number.isFinite(headerId)
+      ? headerId
+      : (context.req.valid("query").lastEventId ?? 0)
+
+    return streamSSE(context, async (stream) => {
+      let aborted = false
+      stream.onAbort(() => {
+        aborted = true
+      })
+      let cursor = resumeFrom
+      let lastWriteAt = Date.now()
+      const write = async (chunk: string) => {
+        await stream.write(chunk)
+        lastWriteAt = Date.now()
+      }
+
+      // 再開時にスナップショットを送ると、クライアントが積み上げた
+      // adoptedArticles を空で上書きしてしまう。新規接続のときだけ送る。
+      if (cursor === 0) {
+        await write(
+          encodeSse({
+            event: {
+              type: "STATE_SNAPSHOT",
+              timestamp: Date.now(),
+              snapshot: toJobStateSnapshot(job),
+            },
+          })
+        )
+      }
+
+      const startedAt = Date.now()
+      while (!aborted && Date.now() - startedAt < JOB_STREAM_MAX_MS) {
+        const rows = store.listJobEventsAfter({
+          ownerId,
+          jobId,
+          afterSequence: cursor,
+        })
+        for (const row of rows) {
+          for (const event of toAgUiEvents(jobId, row)) {
+            await write(encodeSse({ id: row.sequence, event }))
+          }
+          cursor = row.sequence
+        }
+        // 残イベントを流し切ってから終端を判定する。順序を逆にすると
+        // 最後の RUN_FINISHED を送る前に閉じてしまう。
+        const current = store.getJob(ownerId, jobId)
+        if (
+          rows.length === 0 &&
+          (!current || TERMINAL_JOB_STATUSES.has(current.status))
+        ) {
+          return
+        }
+        if (Date.now() - lastWriteAt >= JOB_STREAM_HEARTBEAT_MS) {
+          await write(": heartbeat\n\n")
+        }
+        await stream.sleep(JOB_STREAM_POLL_MS)
+      }
+    })
   })
 
   app.openapi(getAgentRunRoute, async (context) => {
@@ -902,7 +1021,10 @@ export const documentConfig = {
     { name: "Feeds", description: "RSS feed catalog" },
     { name: "Subscriptions", description: "Owner-scoped RSS subscriptions" },
     { name: "Articles", description: "Archived RSS articles and read state" },
-    { name: "Tags", description: "Owner-defined tag vocabulary and AI tag suggestions" },
+    {
+      name: "Tags",
+      description: "Owner-defined tag vocabulary and AI tag suggestions",
+    },
     { name: "Settings", description: "Owner-scoped generation schedule" },
     { name: "Episode jobs", description: "Asynchronous generation jobs" },
     { name: "Agent runtime", description: "Agent runs and safe timeline" },
@@ -1135,13 +1257,16 @@ const patchArticleRoute = createRoute({
   path: "/v1/me/articles/{articleId}",
   tags: ["Articles"],
   operationId: "updateArticleState",
-  description: "Update read, saved, readLater, or hidden state for one article.",
+  description:
+    "Update read, saved, readLater, or hidden state for one article.",
   request: {
     params: articleParams,
     body: {
       required: true,
       content: {
-        "application/json": { schema: articleStateBody.refine(hasAnyArticleStateFlag) },
+        "application/json": {
+          schema: articleStateBody.refine(hasAnyArticleStateFlag),
+        },
       },
     },
   },
@@ -1180,7 +1305,10 @@ const bulkArticleStateRoute = createRoute({
     },
   },
   responses: {
-    200: jsonContent(BulkArticleStateResultSchema, "Number of articles updated"),
+    200: jsonContent(
+      BulkArticleStateResultSchema,
+      "Number of articles updated"
+    ),
     401: problemContent("Unauthorized"),
     503: problemContent("Unavailable"),
   },
@@ -1539,7 +1667,18 @@ const createJobRoute = createRoute({
       required: true,
       content: {
         "application/json": {
-          schema: z.object({ trigger: z.literal("manual") }),
+          schema: z.object({
+            trigger: z.literal("manual"),
+            articleIds: z
+              .array(IdSchema)
+              .min(1)
+              .max(MAX_SELECTED_ARTICLES)
+              .optional()
+              .openapi({
+                description:
+                  "Restrict the episode to these archived articles. Omit for fully automatic selection.",
+              }),
+          }),
         },
       },
     },
@@ -1549,6 +1688,7 @@ const createJobRoute = createRoute({
     400: problemContent("Invalid"),
     401: problemContent("Unauthorized"),
     409: problemContent("Conflict"),
+    422: problemContent("Unselectable articles"),
     503: problemContent("Unavailable"),
   },
 })
@@ -1601,6 +1741,41 @@ const retryJobRoute = createRoute({
     401: problemContent("Unauthorized"),
     404: problemContent("Not found"),
     409: problemContent("Job is not failed"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const jobEventsRoute = createRoute({
+  method: "get",
+  path: "/v1/episode-jobs/{jobId}/events",
+  tags: ["Episode jobs"],
+  operationId: "streamEpisodeJobEvents",
+  description:
+    "Stream generation progress as AG-UI events over SSE. The first event is always STATE_SNAPSHOT; pass Last-Event-ID to resume without gaps or duplicates.",
+  request: {
+    params: jobParams,
+    query: z.object({
+      lastEventId: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .openapi({ param: { name: "lastEventId", in: "query" } }),
+    }),
+    headers: z.object({
+      "Last-Event-ID": z
+        .string()
+        .optional()
+        .openapi({ param: { name: "Last-Event-ID", in: "header" } }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "AG-UI event stream",
+      content: { "text/event-stream": { schema: z.string() } },
+    },
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
     503: problemContent("Unavailable"),
   },
 })

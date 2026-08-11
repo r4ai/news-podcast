@@ -69,19 +69,25 @@ const aiEnrich = ((): AiEnrichWorker | undefined => {
       openAiConfig.model,
       undefined,
       (event) => {
-        if (event.type === "summary_succeeded" || event.type === "relevance_succeeded") {
-          observability.count(
-            "article.enrich.tokens",
-            event.tokensIn,
-            { "enrich.step": event.type === "summary_succeeded" ? "summary" : "relevance", "token.kind": "in" }
-          )
-          observability.count(
-            "article.enrich.tokens",
-            event.tokensOut,
-            { "enrich.step": event.type === "summary_succeeded" ? "summary" : "relevance", "token.kind": "out" }
-          )
+        if (
+          event.type === "summary_succeeded" ||
+          event.type === "relevance_succeeded"
+        ) {
+          observability.count("article.enrich.tokens", event.tokensIn, {
+            "enrich.step":
+              event.type === "summary_succeeded" ? "summary" : "relevance",
+            "token.kind": "in",
+          })
+          observability.count("article.enrich.tokens", event.tokensOut, {
+            "enrich.step":
+              event.type === "summary_succeeded" ? "summary" : "relevance",
+            "token.kind": "out",
+          })
         }
-        if (event.type === "summary_failed" || event.type === "relevance_failed") {
+        if (
+          event.type === "summary_failed" ||
+          event.type === "relevance_failed"
+        ) {
           observability.log({
             name:
               event.type === "summary_failed"
@@ -132,7 +138,12 @@ const app = createApp({
     store.ensureDefaultSubscriptions(session.user.id)
     return session.user.id
   },
-  createEpisodeJob: async ({ ownerId, idempotencyKey, traceContext }) => {
+  createEpisodeJob: async ({
+    ownerId,
+    idempotencyKey,
+    articleIds,
+    traceContext,
+  }) => {
     const command = new CreateEpisodeJob(store, store, {
       dispatch: () => Promise.resolve(),
     })
@@ -140,6 +151,7 @@ const app = createApp({
       ownerId,
       idempotencyKey,
       trigger: "manual",
+      ...(articleIds ? { articleIds } : {}),
       ...(traceContext ? { traceContext } : {}),
     })
     return store.getJob(ownerId, record.jobId)!

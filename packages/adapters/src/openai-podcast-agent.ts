@@ -11,6 +11,8 @@ const MAX_TURNS = 8
 const MAX_TOOL_CALLS = 16
 const MAX_SOURCE_CORRECTIONS = 2
 const MAX_SCRIPT_LENGTH = 6_000
+/** 契約側の MAX_SELECTED_ARTICLES と揃える。 */
+const MAX_SELECTED_ARTICLES = 20
 
 type StrictFunctionParameter =
   | {
@@ -127,6 +129,17 @@ export interface AgentAudit {
     readonly argumentsJson: string
     readonly outputSummary: unknown
   }): void
+  /**
+   * エージェントが実際に本文を読んだ記事。「採用記事のライブ表示」の
+   * 実データになる。監査だけを行う実装は省略してよい。
+   */
+  articleAdopted?(input: {
+    readonly runId: string
+    readonly articleId: string
+    readonly title: string
+    readonly url: string
+    readonly sourceName: string
+  }): void
   finish(runId: string, failureCode?: string): void
 }
 
@@ -152,6 +165,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     readonly jobId: string
     readonly ownerId: string
     readonly feedIds: readonly string[]
+    readonly articleIds?: readonly string[]
     readonly signal?: AbortSignal
   }): Promise<EpisodeScriptDraft> {
     const runId = this.audit.start({
@@ -159,11 +173,13 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
       ownerId: input.ownerId,
       model: this.config.model,
     })
+    const selectedArticleIds = new Set(input.articleIds ?? [])
     const allowedRssUrls = new Set<string>()
     const observedWebUrls = new Set<string>()
     let previousResponseId: string | undefined
-    let nextInput: unknown =
-      "購読中のRSS記事から、今聴く価値のある日本語ニュースPodcastを制作してください。記事本文を読み、必要な場合だけWeb検索で補足確認し、完成したらsubmit_episode_draftを呼んでください。"
+    let nextInput: unknown = selectedArticleIds.size
+      ? await this.buildSelectedArticlesPrompt(input)
+      : "購読中のRSS記事から、今聴く価値のある日本語ニュースPodcastを制作してください。記事本文を読み、必要な場合だけWeb検索で補足確認し、完成したらsubmit_episode_draftを呼んでください。"
     let toolCalls = 0
     let sourceCorrections = 0
 
@@ -241,7 +257,13 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
               sourceUrls: urls,
             }
           }
-          const result = await this.executeTool(call, input, allowedRssUrls)
+          const result = await this.executeTool(
+            call,
+            input,
+            allowedRssUrls,
+            selectedArticleIds,
+            runId
+          )
           this.audit.tool({
             runId,
             position: toolCalls - 1,
@@ -267,13 +289,48 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     }
   }
 
+  /**
+   * ユーザーが記事を明示選択した場合の初期指示。選択記事を全件列挙し、
+   * これ以外を主題にしないことを明示する。
+   */
+  private async buildSelectedArticlesPrompt(input: {
+    readonly ownerId: string
+    readonly feedIds: readonly string[]
+    readonly articleIds?: readonly string[]
+  }): Promise<string> {
+    const articles = await this.context.listArticles({
+      ownerId: input.ownerId,
+      feedIds: input.feedIds,
+      limit: MAX_SELECTED_ARTICLES,
+      ...(input.articleIds ? { articleIds: input.articleIds } : {}),
+    })
+    const list = articles
+      .map(
+        (article, index) =>
+          `${index + 1}. [${article.id}] ${article.title}（${article.sourceName}）`
+      )
+      .join("\n")
+    return [
+      "ユーザーが次の記事を番組の対象として明示的に選びました。",
+      list,
+      "",
+      "これら全ての記事をread_articleで読み、全てを番組で扱ってください。",
+      "選択されていない記事を主題にしてはいけません。web_searchは選択記事の",
+      "裏取りと補足確認にのみ使ってください。完成したらsubmit_episode_draftを",
+      "呼んでください。",
+    ].join("\n")
+  }
+
   private async executeTool(
     call: FunctionCall,
     input: {
       readonly ownerId: string
       readonly feedIds: readonly string[]
+      readonly articleIds?: readonly string[]
     },
-    allowedRssUrls: Set<string>
+    allowedRssUrls: Set<string>,
+    selectedArticleIds: ReadonlySet<string>,
+    runId: string
   ): Promise<unknown> {
     const args = JSON.parse(call.arguments) as Record<string, unknown>
     if (call.name === "list_rss_articles") {
@@ -282,6 +339,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
         ownerId: input.ownerId,
         feedIds: input.feedIds,
         limit,
+        ...(input.articleIds ? { articleIds: input.articleIds } : {}),
       })
       return articles.map((article) => ({
         id: article.id,
@@ -294,11 +352,29 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     }
     if (call.name === "read_article") {
       const articleId = z.string().uuid().parse(args.article_id)
+      // 選択がある場合はその外側を読ませない。ハードエラーではなくツール結果と
+      // して返し、エージェントが自己修正できるようにする。
+      if (selectedArticleIds.size > 0 && !selectedArticleIds.has(articleId)) {
+        return {
+          ok: false,
+          code: "article_not_selected",
+          selected_article_ids: [...selectedArticleIds],
+          instruction:
+            "This episode is restricted to the articles the user selected. Read only those.",
+        }
+      }
       const value = await this.context.readArticle({
         ownerId: input.ownerId,
         articleId,
       })
       allowedRssUrls.add(value.article.url.href)
+      this.audit.articleAdopted?.({
+        runId,
+        articleId: value.article.id,
+        title: value.article.title,
+        url: value.article.url.href,
+        sourceName: value.article.sourceName,
+      })
       return {
         id: value.article.id,
         title: value.article.title,

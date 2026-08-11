@@ -402,6 +402,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/episode-jobs/{jobId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Stream generation progress as AG-UI events over SSE. The first event is always STATE_SNAPSHOT; pass Last-Event-ID to resume without gaps or duplicates. */
+        get: operations["streamEpisodeJobEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-runs/{runId}": {
         parameters: {
             query?: never;
@@ -2103,6 +2120,8 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     trigger: "manual";
+                    /** @description Restrict the episode to these archived articles. Omit for fully automatic selection. */
+                    articleIds?: components["schemas"]["Id"][];
                 };
             };
         };
@@ -2136,6 +2155,15 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unselectable articles */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2301,6 +2329,59 @@ export interface operations {
             };
             /** @description Job is not failed */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    streamEpisodeJobEvents: {
+        parameters: {
+            query?: {
+                lastEventId?: number | null;
+            };
+            header?: {
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                jobId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AG-UI event stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

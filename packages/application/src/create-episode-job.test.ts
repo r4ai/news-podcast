@@ -29,6 +29,7 @@ describe("CreateEpisodeJob", () => {
       requestHash: JSON.stringify({
         trigger: "manual",
         feedIds: ["feed-a", "feed-b"],
+        articleIds: [],
       }),
       trigger: "manual",
       feedIds: ["feed-a", "feed-b"],

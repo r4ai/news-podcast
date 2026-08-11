@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -37,13 +38,60 @@ const audio = createAudioAccess({
 const processor = createFakeProcessor(store, join(directory, "audio"))
 const scheduler = new LocalScheduler(store)
 
+await seedArchivedArticles()
+
+/**
+ * 生成前の記事選択ダイアログは「アーカイブ済み」記事しか候補にしないので、
+ * fakeモードでも実際に選べる記事を用意しておく。これが無いとダイアログは
+ * 常に空状態になり、選択フローをe2eでもローカルでも確認できない。
+ */
+async function seedArchivedArticles() {
+  store.ensureDefaultSubscriptions(ownerId)
+  const feedId = (await store.listEnabledFeedIds(ownerId))[0]
+  if (!feedId) return
+  const seeds = [
+    { externalId: "seed-1", title: "Durable Objectsが東京リージョンに対応" },
+    { externalId: "seed-2", title: "TypeScript 6.0のリリース候補が公開" },
+    { externalId: "seed-3", title: "SQLiteのWALモードと本番運用の勘所" },
+  ]
+  store.upsertFeedItems(
+    feedId,
+    seeds.map((seed) => ({
+      externalId: seed.externalId,
+      title: seed.title,
+      url: `https://zenn.dev/${seed.externalId}`,
+      publishedAt: new Date().toISOString(),
+      summary: `${seed.title}の要約です。`,
+    }))
+  )
+  for (const article of store.listArticles(ownerId, { limit: 50 }).items) {
+    if (!article.url.startsWith("https://zenn.dev/seed-")) continue
+    store.completeArchive({
+      articleId: article.id,
+      snapshotId: randomUUID(),
+      sourceUrl: article.url,
+      title: article.title,
+      contentHash: `hash-${article.id}`,
+      rawKey: `articles/${article.id}/raw.html`,
+      replayKey: `articles/${article.id}/replay.html`,
+      markdownKey: `articles/${article.id}/body.md`,
+      byteLength: 1024,
+      assets: [],
+    })
+  }
+}
+
 const app = createApp({
   store,
   resolveOwner: async (request) => devAuth.owner(request),
   devLoginHandler: (request) => devAuth.login(request),
   devLogoutHandler: () => devAuth.logout(),
   loginMethods: { development: true, google: false },
-  createEpisodeJob: async ({ ownerId: requestedOwner, idempotencyKey }) => {
+  createEpisodeJob: async ({
+    ownerId: requestedOwner,
+    idempotencyKey,
+    articleIds,
+  }) => {
     const useCase = new CreateEpisodeJob(store, store, {
       dispatch: () => Promise.resolve(),
     })
@@ -51,6 +99,7 @@ const app = createApp({
       ownerId: requestedOwner,
       idempotencyKey,
       trigger: "manual",
+      ...(articleIds ? { articleIds } : {}),
     })
     return store.getJob(requestedOwner, record.jobId)!
   },

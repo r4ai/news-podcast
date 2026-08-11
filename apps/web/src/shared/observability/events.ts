@@ -3,6 +3,8 @@ export type BrowserEventName =
   | "audio.error"
   | "audio.started"
   | "episode.requested"
+  | "episode.stream_connected"
+  | "episode.stream_fallback"
   | "interest_profile.changed"
   | "login.result"
   | "panel.error"

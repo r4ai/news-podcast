@@ -189,6 +189,8 @@ export interface PodcastAgentContext {
     readonly ownerId: string
     readonly feedIds: readonly string[]
     readonly limit: number
+    /** 指定時はこの記事だけが候補になり、limit と新着順は無視される。 */
+    readonly articleIds?: readonly string[]
   }): Promise<readonly AgentArticle[]>
   readArticle(input: {
     readonly ownerId: string
@@ -201,6 +203,8 @@ export interface PodcastAgentRunner {
     readonly jobId: string
     readonly ownerId: string
     readonly feedIds: readonly string[]
+    /** ユーザーが明示選択した記事。空なら全自動選択。 */
+    readonly articleIds?: readonly string[]
     readonly signal?: AbortSignal
   }): Promise<EpisodeScriptDraft>
 }
@@ -261,6 +265,7 @@ export interface EpisodeJobRepository {
     readonly requestHash: string
     readonly trigger: "manual" | "scheduled"
     readonly feedIds: readonly string[]
+    readonly articleIds?: readonly string[]
     readonly traceContext?: EpisodeTraceContext
   }): Promise<EpisodeJobRecord>
 }

@@ -1,6 +1,12 @@
 import type { components } from "@news-podcast/contracts/openapi"
 
-export type Article = components["schemas"]["Article"]
+import {
+  articleTimestamp,
+  publishedAtLabel,
+  type Article,
+} from "@/features/articles"
+
+export type { Article }
 export type ArticleFacets = components["schemas"]["ArticleFacets"]
 export type Tag = components["schemas"]["Tag"]
 export type TagSuggestion = components["schemas"]["TagSuggestion"]
@@ -153,17 +159,7 @@ export function archiveMetaLabel(
     : null
 }
 
-export function publishedAtLabel(publishedAt: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(publishedAt))
-}
-
-/** 一覧・グループ化・並び替えの基準時刻。公開日時が無ければ発見日時を使う。 */
-export function articleTimestamp(article: Article): string {
-  return article.publishedAt ?? article.discoveredAt
-}
+export { articleTimestamp, publishedAtLabel }
 
 export type DateGroupKey = "today" | "yesterday" | "thisWeek" | "older"
 

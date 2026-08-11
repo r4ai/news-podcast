@@ -1,4 +1,6 @@
+import { useArticlePicker } from "../hooks/use-article-picker"
 import { useGeneration } from "../hooks/use-generation"
+import { ArticlePickerDialog } from "./article-picker-dialog"
 import { PodcastDashboard } from "./podcast-dashboard"
 
 /**
@@ -6,6 +8,33 @@ import { PodcastDashboard } from "./podcast-dashboard"
  * `PodcastDashboard` 側はpropsのみなのでStorybookでそのまま検証できる。
  */
 export function GenerationDashboard() {
-  const generation = useGeneration()
-  return <PodcastDashboard {...generation} />
+  const { pickerOpen, onPickerOpenChange, onConfirmGenerate, ...generation } =
+    useGeneration()
+  // 候補の取得はダイアログを開くまで走らせない。
+  const picker = useArticlePicker(pickerOpen)
+
+  return (
+    <>
+      <PodcastDashboard {...generation} />
+      <ArticlePickerDialog
+        articles={picker.articles}
+        atLimit={picker.atLimit}
+        hasNextPage={picker.hasNextPage}
+        isError={picker.isError}
+        isFetchingNextPage={picker.isFetchingNextPage}
+        isLoading={picker.isLoading}
+        onClear={picker.onClear}
+        onConfirm={() => onConfirmGenerate(picker.selectedIds)}
+        onLoadMore={picker.onLoadMore}
+        onOpenChange={onPickerOpenChange}
+        onRetry={picker.onRetry}
+        onSelectTop={picker.onSelectTop}
+        onToggle={picker.onToggle}
+        open={pickerOpen}
+        pending={generation.pending}
+        selected={picker.selected}
+        selectedCount={picker.selectedIds.length}
+      />
+    </>
+  )
 }
