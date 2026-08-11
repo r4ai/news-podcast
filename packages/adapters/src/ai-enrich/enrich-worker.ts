@@ -91,14 +91,14 @@ export class AiEnrichWorker {
     if (!target) return false
     const profile = this.store.getInterestProfile(ownerId)
     const profileHash = computeProfileHash(profile.include, profile.exclude)
-    const bullets = await this.ensureSummary(target, true)
-    if (!bullets) return false
+    const summary = await this.ensureSummary(target, true)
+    if (!summary) return false
     const result = await this.scoreBatch(
       ownerId,
       profile,
       profileHash,
       [target],
-      new Map([[target.feedItemId, bullets]]),
+      new Map([[target.feedItemId, summary]]),
       true
     )
     if (result.succeeded.length > 0) {
@@ -124,13 +124,13 @@ export class AiEnrichWorker {
     const batch = this.store.leaseEnrichBatch(ownerId, limit, now)
     if (batch.length === 0) return 0
 
-    const bulletsByFeedItem = new Map<string, readonly string[]>()
+    const summaryByFeedItem = new Map<string, string>()
     const failed: { readonly feedItemId: string; readonly error: string }[] = []
     for (const candidate of batch) {
       try {
-        const bullets = await this.ensureSummary(candidate)
-        if (bullets) {
-          bulletsByFeedItem.set(candidate.feedItemId, bullets)
+        const summary = await this.ensureSummary(candidate)
+        if (summary) {
+          summaryByFeedItem.set(candidate.feedItemId, summary)
         } else {
           failed.push({
             feedItemId: candidate.feedItemId,
@@ -140,13 +140,12 @@ export class AiEnrichWorker {
       } catch (error) {
         failed.push({
           feedItemId: candidate.feedItemId,
-          error:
-            error instanceof Error ? error.message : "summary-failed",
+          error: error instanceof Error ? error.message : "summary-failed",
         })
       }
     }
     const scorable = batch.filter((candidate) =>
-      bulletsByFeedItem.has(candidate.feedItemId)
+      summaryByFeedItem.has(candidate.feedItemId)
     )
 
     const succeeded: string[] = []
@@ -156,16 +155,12 @@ export class AiEnrichWorker {
         profile,
         profileHash,
         batchItem,
-        bulletsByFeedItem
+        summaryByFeedItem
       )
       succeeded.push(...result.succeeded)
       failed.push(...result.failed)
     }
-    this.store.completeEnrichBatch(
-      ownerId,
-      { succeeded, failed },
-      now
-    )
+    this.store.completeEnrichBatch(ownerId, { succeeded, failed }, now)
     if (succeeded.length > 0) {
       this.store.incrementEnrichProcessed(localDate, succeeded.length)
     }
@@ -176,7 +171,7 @@ export class AiEnrichWorker {
   private async ensureSummary(
     candidate: EnrichCandidate,
     rethrowFailure = false
-  ): Promise<readonly string[] | undefined> {
+  ): Promise<string | undefined> {
     const existing = this.store.getArticleSummary(candidate.snapshotId)
     if (existing) return existing
     try {
@@ -189,7 +184,7 @@ export class AiEnrichWorker {
       this.store.saveArticleSummary({
         snapshotId: candidate.snapshotId,
         model: this.model,
-        bullets: result.bullets,
+        markdown: result.markdown,
         tokensIn: result.tokensIn,
         tokensOut: result.tokensOut,
       })
@@ -198,7 +193,7 @@ export class AiEnrichWorker {
         tokensIn: result.tokensIn,
         tokensOut: result.tokensOut,
       })
-      return result.bullets
+      return result.markdown
     } catch (error) {
       this.onEvent({
         type: "summary_failed",
@@ -218,11 +213,14 @@ export class AiEnrichWorker {
     profile: InterestProfile,
     profileHash: string,
     batch: readonly EnrichCandidate[],
-    bulletsByFeedItem: ReadonlyMap<string, readonly string[]>,
+    summaryByFeedItem: ReadonlyMap<string, string>,
     rethrowFailure = false
   ): Promise<{
     readonly succeeded: readonly string[]
-    readonly failed: readonly { readonly feedItemId: string; readonly error: string }[]
+    readonly failed: readonly {
+      readonly feedItemId: string
+      readonly error: string
+    }[]
   }> {
     try {
       // タグ付与はこのスコア付けコールに相乗りさせる（新規コールは増やさない）。
@@ -234,7 +232,7 @@ export class AiEnrichWorker {
         candidates: batch.map((candidate) => ({
           feedItemId: candidate.feedItemId,
           title: candidate.title,
-          bullets: bulletsByFeedItem.get(candidate.feedItemId) ?? [],
+          summary: summaryByFeedItem.get(candidate.feedItemId) ?? "",
         })),
         tagVocabulary,
       })

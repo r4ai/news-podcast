@@ -67,8 +67,8 @@ export interface ArticleDto {
   readonly hidden: boolean
   readonly hiddenAt?: string
   readonly usedInEpisode: boolean
-  // 日本語箇条書き3点。要約が未生成、または現行prompt_versionと不一致なら未設定。
-  readonly aiSummary?: readonly string[]
+  // 日本語のMarkdown要約（約300字）。要約が未生成、または現行prompt_versionと不一致なら未設定。
+  readonly aiSummary?: string
   // 0-100。現行profile_hash/prompt_versionに一致する行が無ければ未設定（=未処理）。
   readonly relevanceScore?: number
   readonly relevanceReason?: string
@@ -141,11 +141,7 @@ export interface ArticleFacets {
   readonly aiPending: number
 }
 
-export type EnrichQueueStatus =
-  | "queued"
-  | "processing"
-  | "succeeded"
-  | "failed"
+export type EnrichQueueStatus = "queued" | "processing" | "succeeded" | "failed"
 
 // enrich_queue の1行を記事タイトル等と結合した表示用DTO。
 export interface EnrichQueueItem {
@@ -1545,7 +1541,10 @@ export class LocalStore implements EpisodeJobRepository {
     ownerId: string,
     input: {
       readonly succeeded: readonly string[]
-      readonly failed: readonly { readonly feedItemId: string; readonly error: string }[]
+      readonly failed: readonly {
+        readonly feedItemId: string
+        readonly error: string
+      }[]
     },
     now: Date = new Date()
   ): void {
@@ -1567,7 +1566,12 @@ export class LocalStore implements EpisodeJobRepository {
          WHERE owner_id = ? AND feed_item_id = ?`
       )
       for (const item of input.failed) {
-        fail.run(now.toISOString(), item.error.slice(0, 500), ownerId, item.feedItemId)
+        fail.run(
+          now.toISOString(),
+          item.error.slice(0, 500),
+          ownerId,
+          item.feedItemId
+        )
       }
     })
   }
@@ -1620,9 +1624,7 @@ export class LocalStore implements EpisodeJobRepository {
       used: this.getEnrichProcessedToday(toLocalDate(now)),
       limit: dailyLimit,
     }
-    const queueRow = (
-      row: Record<string, unknown>
-    ): EnrichQueueItem => ({
+    const queueRow = (row: Record<string, unknown>): EnrichQueueItem => ({
       feedItemId: String(row.feed_item_id),
       title: String(row.title),
       sourceName: String(row.source_name ?? ""),
@@ -1631,9 +1633,7 @@ export class LocalStore implements EpisodeJobRepository {
       status: String(row.status) as EnrichQueueStatus,
       attempt: Number(row.attempt ?? 0),
       ...(row.error ? { error: String(row.error) } : {}),
-      ...(row.published_at
-        ? { publishedAt: String(row.published_at) }
-        : {}),
+      ...(row.published_at ? { publishedAt: String(row.published_at) } : {}),
       createdAt: String(row.created_at),
       ...(row.started_at ? { startedAt: String(row.started_at) } : {}),
       ...(row.completed_at ? { completedAt: String(row.completed_at) } : {}),
@@ -1739,8 +1739,8 @@ export class LocalStore implements EpisodeJobRepository {
     return Number(row.pending ?? 0)
   }
 
-  // 現行prompt_versionの要約があれば箇条書きを返す。無ければundefined。
-  getArticleSummary(snapshotId: string): readonly string[] | undefined {
+  // 現行prompt_versionの要約があればMarkdown文字列を返す。無ければundefined。
+  getArticleSummary(snapshotId: string): string | undefined {
     const row = this.database
       .prepare(
         `SELECT summary_json FROM article_summaries
@@ -1751,13 +1751,13 @@ export class LocalStore implements EpisodeJobRepository {
       | undefined
     if (!row) return undefined
     const parsed = JSON.parse(String(row.summary_json)) as unknown
-    return Array.isArray(parsed) ? parsed.map(String) : undefined
+    return typeof parsed === "string" ? parsed : undefined
   }
 
   saveArticleSummary(input: {
     readonly snapshotId: string
     readonly model: string
-    readonly bullets: readonly string[]
+    readonly markdown: string
     readonly tokensIn: number
     readonly tokensOut: number
   }): void {
@@ -1775,7 +1775,7 @@ export class LocalStore implements EpisodeJobRepository {
         input.snapshotId,
         input.model,
         SUMMARY_PROMPT_VERSION,
-        JSON.stringify(input.bullets),
+        JSON.stringify(input.markdown),
         input.tokensIn,
         input.tokensOut,
         new Date().toISOString()
@@ -1963,10 +1963,10 @@ export class LocalStore implements EpisodeJobRepository {
           unknown
         >[])
       : []
-    const summaryMap = new Map(
+    const summaryMap = new Map<string, string>(
       summaryRows.map((row) => [
         String(row.snapshot_id),
-        (JSON.parse(String(row.summary_json)) as unknown[]).map(String),
+        String(JSON.parse(String(row.summary_json))),
       ])
     )
 

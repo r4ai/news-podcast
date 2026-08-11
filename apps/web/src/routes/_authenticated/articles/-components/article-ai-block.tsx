@@ -4,6 +4,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Progress } from "@workspace/ui/components/progress"
 import { toast } from "@workspace/ui/components/sonner"
 import { Spinner } from "@workspace/ui/components/spinner"
+import { Markdown } from "@/shared/markdown"
 
 import { hasAiEnrichment, type Article } from "../-model"
 
@@ -14,7 +15,7 @@ export type ArticleAiBlockProps = {
   readonly isRecalculating: boolean
 }
 
-/** 要約3点 + 理由 + 適合度。未処理の記事(フィールドが無い)では何も出さない。 */
+/** Markdown要約 + 理由 + 適合度。未処理の記事(フィールドが無い)では何も出さない。 */
 export function ArticleAiBlock({
   article,
   onRecalculate,
@@ -41,16 +42,9 @@ export function ArticleAiBlock({
         </div>
       </div>
 
-      <ul className="flex flex-col gap-1 text-sm">
-        {article.aiSummary?.map((point, index) => (
-          <li className="flex gap-2" key={index}>
-            <span aria-hidden="true" className="text-muted-foreground">
-              •
-            </span>
-            <span>{point}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="text-sm">
+        <Markdown markdown={article.aiSummary!} />
+      </div>
 
       {article.relevanceReason ? (
         <p className="text-xs text-muted-foreground">

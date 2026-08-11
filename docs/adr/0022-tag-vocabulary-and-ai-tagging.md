@@ -49,7 +49,7 @@ ADR-0021のコスト設計（スコアは`RELEVANCE_BATCH_SIZE`件/コール）�
 
 ### AI結果の一覧統合（web）
 
-- 一覧行のスニペットは`articleSnippet()`（`aiSummary[0]` → `summary`の順でフォールバック）に統一した。未処理記事でも空行にならない。
+- 一覧行のスニペットは`articleSnippet()`（AI要約のMarkdown冒頭の平文抽出`aiSummarySnippet()` → `summary`の順でフォールバック）に統一した。未処理記事でも空行にならない。
 - 並べ替えに`sort=relevance`（既存のADR-0021実装）を「おすすめ順」ラベルで公開し、`shouldShowRelevanceScore(sort)`で**おすすめ順のときだけ**行にスコア数値を出す。他の並び順では出さない（確定仕様）。
 - `article-toolbar.tsx`の空き位置に選択中タグのチップ（クリックで解除）を表示し、`article-filter-popover.tsx`に全タグのチェックボックス一覧を追加した（媒体絞り込みと同型のUI）。
 - 「AI処理待ちN件」は新規エンドポイントを増やさず、`ArticleFacets`に`aiPending`（`LocalStore.countEnrichPending`、絞り込み条件に依存しない購読全体の未処理件数）を1フィールド足して既存の`/v1/me/articles/facets`から配信する。

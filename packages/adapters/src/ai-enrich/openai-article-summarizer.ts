@@ -33,7 +33,7 @@ interface OpenAiResponse {
 }
 
 const SummaryPayload = z.object({
-  bullets: z.array(z.string().min(1)).length(3),
+  summary: z.string().min(1),
 })
 
 export class ArticleSummaryError extends Error {
@@ -76,7 +76,7 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
               {
                 role: "system",
                 content:
-                  "与えられた記事のタイトルと本文Markdownだけを根拠に、日本語で3点の箇条書き要約を作成してください。英語の記事でも必ず日本語で要約してください。各箇条書きは1文、根拠のない事実を追加しないでください。",
+                  "与えられた記事のタイトルと本文Markdownだけを根拠に、日本語のMarkdown要約を約300字で作成してください。英語の記事でも必ず日本語で要約してください。冒頭に記事が一番伝えたい結論・要点を簡潔に書き、その下にポイントを直感的に伝えるMermaidのフローチャートや、具体例・結果・表などを簡潔に添えてください。Mermaidは```mermaidのコードブロックで囲ってください。体言止め（名詞で文を終える）で書き、文末に「。」は付けないでください。根拠のない事実は追加しないでください。",
               },
               {
                 role: "user",
@@ -94,14 +94,9 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
                 schema: {
                   type: "object",
                   additionalProperties: false,
-                  required: ["bullets"],
+                  required: ["summary"],
                   properties: {
-                    bullets: {
-                      type: "array",
-                      minItems: 3,
-                      maxItems: 3,
-                      items: { type: "string" },
-                    },
+                    summary: { type: "string" },
                   },
                 },
               },
@@ -135,7 +130,7 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
     }
 
     return {
-      bullets: parseSummaryPayload(outputText).bullets,
+      markdown: parseSummaryPayload(outputText).summary,
       ...readUsage(providerResponse.usage),
     }
   }
@@ -147,7 +142,7 @@ function boundedSignal(parent?: AbortSignal): AbortSignal {
 }
 
 function parseSummaryPayload(outputText: string): {
-  bullets: readonly string[]
+  summary: string
 } {
   let raw: unknown
   try {
@@ -162,7 +157,7 @@ function parseSummaryPayload(outputText: string): {
       false
     )
   }
-  return { bullets: parsed.data.bullets }
+  return { summary: parsed.data.summary }
 }
 
 function readUsage(usage: OpenAiUsage | undefined): {

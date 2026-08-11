@@ -211,10 +211,7 @@
             "type": "string"
           },
           "aiSummary": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "type": "string"
           },
           "relevanceScore": {
             "type": "integer",

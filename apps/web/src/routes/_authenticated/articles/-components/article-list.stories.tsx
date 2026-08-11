@@ -212,11 +212,8 @@ export const WithTagsAndAiSummary: Story = {
         id: "tagged",
         title: "React Compilerの内部実装を読む",
         summary: "RSS由来の要約（AI要約が無い場合のフォールバック確認用）。",
-        aiSummary: [
-          "React CompilerはメモをコンパイラがJSXから自動生成する。",
-          "既存のuseMemo/useCallbackは段階的に不要になる。",
-          "導入は既存コードの書き換えなしに進められる。",
-        ],
+        aiSummary:
+          "**React Compilerはメモ化をコンパイラがJSXから自動生成する。**\n\n- 既存のuseMemo/useCallbackは段階的に不要\n- 既存コードの書き換えなしで導入可能",
         relevanceScore: 82,
         tags: ["AI", "React"],
       }),
@@ -229,11 +226,8 @@ export const WithTagsAndAiSummary: Story = {
           article({
             id: "tagged",
             title: "React Compilerの内部実装を読む",
-            aiSummary: [
-              "React CompilerはメモをコンパイラがJSXから自動生成する。",
-              "既存のuseMemo/useCallbackは段階的に不要になる。",
-              "導入は既存コードの書き換えなしに進められる。",
-            ],
+            aiSummary:
+              "React Compilerはメモ化をコンパイラがJSXから自動生成する。",
             relevanceScore: 82,
             tags: ["AI", "React"],
           }),
@@ -245,7 +239,7 @@ export const WithTagsAndAiSummary: Story = {
     const canvas = within(canvasElement)
     await expect(
       canvas.getByText(
-        "React CompilerはメモをコンパイラがJSXから自動生成する。"
+        "React Compilerはメモ化をコンパイラがJSXから自動生成する。"
       )
     ).toBeVisible()
     await expect(canvas.getByText("AI")).toBeVisible()

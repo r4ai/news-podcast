@@ -163,11 +163,8 @@ export const NoContentAvailable: Story = {
 export const WithAiBlock: Story = {
   args: readerArgs({
     article: article({
-      aiSummary: [
-        "SuspenseとuseでUIの読み込み境界を宣言的に扱える",
-        "トランジションを使うと重い更新でも応答性を保てる",
-        "既存コードへは一覧などの重い箇所から段階導入できる",
-      ],
+      aiSummary:
+        "## 結論\nSuspenseとuseでUIの読み込み境界を宣言的に扱える。\n\n```mermaid\nflowchart LR\nA[読み込み] --> B[Suspenseで表示]\n```\n\n- トランジションで重い更新でも応答性を維持\n- 既存コードでは一覧などの重い箇所から段階導入",
       relevanceScore: 82,
       relevanceReason: "フロントエンドの並行レンダリングに関する実装記録のため",
     }),

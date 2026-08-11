@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  aiSummarySnippet,
   applyClientFilters,
   archiveLabel,
   archiveMetaLabel,
@@ -254,31 +255,63 @@ describe("shouldFallbackToArchive", () => {
 
 describe("hasAiEnrichment", () => {
   it("requires both a non-empty summary and a relevance score", () => {
-    expect(hasAiEnrichment({ aiSummary: ["point"], relevanceScore: 80 })).toBe(
-      true
-    )
+    expect(
+      hasAiEnrichment({ aiSummary: "## 結論\n要約", relevanceScore: 80 })
+    ).toBe(true)
     expect(hasAiEnrichment({ aiSummary: undefined, relevanceScore: 80 })).toBe(
       false
     )
-    expect(hasAiEnrichment({ aiSummary: [], relevanceScore: 80 })).toBe(false)
+    expect(hasAiEnrichment({ aiSummary: "", relevanceScore: 80 })).toBe(false)
     expect(
-      hasAiEnrichment({ aiSummary: ["point"], relevanceScore: undefined })
+      hasAiEnrichment({
+        aiSummary: "## 結論\n要約",
+        relevanceScore: undefined,
+      })
     ).toBe(false)
   })
 })
 
-describe("articleSnippet", () => {
-  it("prefers the first line of the AI summary when available", () => {
+describe("aiSummarySnippet", () => {
+  it("skips the heading label and extracts the first plain-text line", () => {
     expect(
-      articleSnippet({ aiSummary: ["AIの要点", "2点目"], summary: "RSS要約" })
-    ).toBe("AIの要点")
+      aiSummarySnippet(
+        "## 結論\nSuspenseで実装が簡潔になる。\n\n```mermaid\nflowchart LR\na-->b\n```"
+      )
+    ).toBe("Suspenseで実装が簡潔になる。")
+  })
+
+  it("strips emphasis on the first line", () => {
+    expect(aiSummarySnippet("- **要点1**\n- 要点2")).toBe("要点1")
+    expect(aiSummarySnippet("[リンク](https://example.com)")).toBe("リンク")
+  })
+
+  it("caps the snippet at 200 characters", () => {
+    const long = "a".repeat(300)
+    expect(aiSummarySnippet(long).length).toBe(200)
+  })
+
+  it("returns an empty string when the markdown has no text lines", () => {
+    expect(aiSummarySnippet("## 結論")).toBe("")
+    expect(aiSummarySnippet("```mermaid\nflowchart\n```")).toBe("")
+    expect(aiSummarySnippet("")).toBe("")
+  })
+})
+
+describe("articleSnippet", () => {
+  it("prefers the AI Markdown summary when available", () => {
+    expect(
+      articleSnippet({
+        aiSummary: "## 結論\nAIの要点。\n\n図付き。",
+        summary: "RSS要約",
+      })
+    ).toBe("AIの要点。")
   })
 
   it("falls back to the RSS summary when AI summary is unprocessed", () => {
     expect(articleSnippet({ aiSummary: undefined, summary: "RSS要約" })).toBe(
       "RSS要約"
     )
-    expect(articleSnippet({ aiSummary: [], summary: "RSS要約" })).toBe(
+    expect(articleSnippet({ aiSummary: "", summary: "RSS要約" })).toBe(
       "RSS要約"
     )
   })

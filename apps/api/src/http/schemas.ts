@@ -76,7 +76,7 @@ export const ArticleSchema = z
     usedInEpisode: z.boolean(),
     archiveUrl: z.string().optional(),
     markdownUrl: z.string().optional(),
-    aiSummary: z.array(z.string()).length(3).optional(),
+    aiSummary: z.string().optional(),
     relevanceScore: z.number().int().min(0).max(100).optional(),
     relevanceReason: z.string().optional(),
     // 手動+AI付与タグ名の和集合。未付与なら空配列。

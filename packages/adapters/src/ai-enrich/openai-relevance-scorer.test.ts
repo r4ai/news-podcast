@@ -27,16 +27,16 @@ function jsonSchemaResponse(scores: unknown) {
 }
 
 const candidates = [
-  { feedItemId: "a", title: "記事A", bullets: ["1", "2", "3"] },
-  { feedItemId: "b", title: "記事B", bullets: ["1", "2", "3"] },
+  { feedItemId: "a", title: "記事A", summary: "要約A" },
+  { feedItemId: "b", title: "記事B", summary: "要約B" },
 ]
 
 describe("OpenAiRelevanceScorer", () => {
   it("scores every candidate in a single batched call", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       jsonSchemaResponse([
-        { feed_item_id: "a", score: 80, reason: "興味に合致" },
-        { feed_item_id: "b", score: 10, reason: "除外対象に近い" },
+        { feed_item_id: "a", score: 80, reason: "includeに合致するから" },
+        { feed_item_id: "b", score: 10, reason: "excludeに合致するから" },
       ])
     )
     const scorer = new OpenAiRelevanceScorer(
@@ -56,20 +56,53 @@ describe("OpenAiRelevanceScorer", () => {
       {
         feedItemId: "a",
         score: 80,
-        reason: "興味に合致",
+        reason: "includeに合致するから",
         tags: [],
         suggestedTags: [],
       },
       {
         feedItemId: "b",
         score: 10,
-        reason: "除外対象に近い",
+        reason: "excludeに合致するから",
         tags: [],
         suggestedTags: [],
       },
     ])
     expect(result.tokensIn).toBe(300)
     expect(result.tokensOut).toBe(90)
+  })
+
+  it("fixes temperature to 0 and instructs the reason to end with から for stability", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonSchemaResponse([
+          { feed_item_id: "a", score: 50, reason: "中立だから" },
+        ])
+      )
+    const scorer = new OpenAiRelevanceScorer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await scorer.score({
+      profile: { include: "AI", exclude: "" },
+      candidates: [candidates[0]!],
+      tagVocabulary: [],
+    })
+
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
+    expect(body.temperature).toBe(0)
+    const systemContent = body.input[0].content as string
+    expect(systemContent).toContain("〜から」で終わらせて")
+    expect(systemContent).toContain("80-100")
+    const articles = JSON.parse(body.input[1].content).articles as unknown[]
+    expect(articles[0]).toEqual({
+      feed_item_id: "a",
+      title: "記事A",
+      summary: "要約A",
+    })
   })
 
   it("filters out scores for feed_item_ids that were not in the request", async () => {

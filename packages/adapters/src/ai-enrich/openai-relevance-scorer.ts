@@ -93,12 +93,14 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
           signal: boundedSignal(signal),
           body: JSON.stringify({
             model: this.config.model,
+            // スコアのブレ（同じ記事でも実行ごとに変動）を抑えるため決定論化する。
+            temperature: 0,
             input: [
               {
                 role: "system",
                 content: hasVocabulary
-                  ? "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。入力に無いfeed_item_idを作らないでください。さらに、渡されたtag_vocabularyの中からその記事に合うタグを0件以上選んでtagsに入れてください（tag_vocabularyに無い語を作らないこと）。tag_vocabularyに無いが付けたいタグがあればsuggested_tagsに入れてください。"
-                  : "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。入力に無いfeed_item_idを作らないでください。",
+                  ? "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。理由は簡潔に1文で書き、「〜から」で終わらせてください（「〜ため」で終わらせないこと）。安定したスコア付けのために以下の基準を厳守してください：基準1＝includeのキーワードと意味的に一致する話題なら80-100、基準2＝includeに部分的・間接的に関連するなら50-79、基準3＝どちらでもなく中立なら30-49、基準4＝includeと無関係かexcludeに合致するなら0-29。入力に無いfeed_item_idを作らないでください。さらに、渡されたtag_vocabularyの中からその記事に合うタグを0件以上選んでtagsに入れてください（tag_vocabularyに無い語を作らないこと）。tag_vocabularyに無いが付けたいタグがあればsuggested_tagsに入れてください。"
+                  : "利用者の興味プロフィール（含めたい話題include、除きたい話題exclude）と、記事のタイトル・要約の一覧を渡します。各記事について0から100の適合度スコアと、日本語1行の理由を付けてください。excludeに合致する記事は低いスコアにしてください。理由は簡潔に1文で書き、「〜から」で終わらせてください（「〜ため」で終わらせないこと）。安定したスコア付けのために以下の基準を厳守してください：基準1＝includeのキーワードと意味的に一致する話題なら80-100、基準2＝includeに部分的・間接的に関連するなら50-79、基準3＝どちらでもなく中立なら30-49、基準4＝includeと無関係かexcludeに合致するなら0-29。入力に無いfeed_item_idを作らないでください。",
               },
               {
                 role: "user",
@@ -110,7 +112,7 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
                   articles: input.candidates.map((candidate) => ({
                     feed_item_id: candidate.feedItemId,
                     title: candidate.title,
-                    bullets: candidate.bullets,
+                    summary: candidate.summary,
                   })),
                 }),
               },

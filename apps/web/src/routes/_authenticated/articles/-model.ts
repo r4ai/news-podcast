@@ -308,18 +308,44 @@ export function hasAiEnrichment(
   article: Pick<Article, "aiSummary" | "relevanceScore">
 ): boolean {
   return (
-    Array.isArray(article.aiSummary) &&
-    article.aiSummary.length > 0 &&
+    typeof article.aiSummary === "string" &&
+    article.aiSummary.trim().length > 0 &&
     typeof article.relevanceScore === "number"
   )
 }
 
-/** 一覧行のスニペット。AI要約の1行目を優先し、未処理ならRSSのsummaryへフォールバックする。 */
+// 一覧行のスニペット用に、Markdownから最初の見出し・結論行を平文として抽出する。
+// 見出しラベル（例: `## 結論`）やMermaid図、```コードブロック```は飛ばし、
+// 本文の最初の行を取り200文字に切る。
+export function aiSummarySnippet(markdown: string): string {
+  let inCodeBlock = false
+  for (const rawLine of markdown.split("\n")) {
+    const line = rawLine.trim()
+    if (line.startsWith("```")) {
+      inCodeBlock = !inCodeBlock
+      continue
+    }
+    if (inCodeBlock || line.length === 0 || line.startsWith("#")) continue
+    const stripped = line
+      .replace(/^[-*+]\s+/, "")
+      .replace(/[*_>]/g, "")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .trim()
+    if (stripped.length === 0) continue
+    return stripped.slice(0, 200)
+  }
+  return ""
+}
+
+/** 一覧行のスニペット。AI要約の冒頭を優先し、未処理ならRSSのsummaryへフォールバックする。 */
 export function articleSnippet(
   article: Pick<Article, "aiSummary" | "summary">
 ): string | undefined {
-  const firstBullet = article.aiSummary?.[0]
-  return firstBullet ?? article.summary
+  if (typeof article.aiSummary === "string" && article.aiSummary.length > 0) {
+    return aiSummarySnippet(article.aiSummary)
+  }
+  return article.summary
 }
 
 /** おすすめ順のときだけ行にスコアを数値表示する。他の並び順では出さない。 */

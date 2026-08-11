@@ -85,7 +85,7 @@ function fakeSummarizer(tokensIn = 100, tokensOut = 30): ArticleSummarizer {
   return {
     summarize: () =>
       Promise.resolve({
-        bullets: ["要点1", "要点2", "要点3"],
+        markdown: "## 結論\n要点。",
         tokensIn,
         tokensOut,
       }),
@@ -334,9 +334,7 @@ describe("AiEnrichWorker.runOnce", () => {
       "gpt-5.6-luna"
     )
     await worker.runOnce()
-    expect(
-      store.getArticle(owner, feedItemId)?.relevanceScore
-    ).toBeUndefined()
+    expect(store.getArticle(owner, feedItemId)?.relevanceScore).toBeUndefined()
 
     await worker.runOnce()
     expect(store.getArticle(owner, feedItemId)?.relevanceScore).toBe(42)

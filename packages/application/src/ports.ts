@@ -285,8 +285,8 @@ export interface ArticleSummaryInput {
 }
 
 export interface ArticleSummaryResult extends ProviderUsage {
-  // 日本語の箇条書き3点。
-  readonly bullets: readonly string[]
+  // 日本語のMarkdown要約（約300字。結論→図・具体例・結果の順）。
+  readonly markdown: string
 }
 
 export interface ArticleSummarizer {
@@ -304,7 +304,8 @@ export interface InterestProfile {
 export interface RelevanceCandidate {
   readonly feedItemId: string
   readonly title: string
-  readonly bullets: readonly string[]
+  // スコアリングに使う要約のMarkdown（英語記事でも日本語要約が入る）。
+  readonly summary: string
 }
 
 export interface RelevanceScore {

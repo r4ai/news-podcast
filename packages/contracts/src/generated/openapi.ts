@@ -693,7 +693,7 @@ export interface components {
             usedInEpisode: boolean;
             archiveUrl?: string;
             markdownUrl?: string;
-            aiSummary?: string[];
+            aiSummary?: string;
             relevanceScore?: number;
             relevanceReason?: string;
             tags: string[];

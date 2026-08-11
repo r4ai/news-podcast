@@ -11,13 +11,13 @@ const noSleepRetry = {
   sleep: () => Promise.resolve(),
 }
 
-function jsonSchemaResponse(bullets: unknown) {
+function jsonSchemaResponse(summary: unknown) {
   return new Response(
     JSON.stringify({
       output: [
         {
           type: "message",
-          content: [{ type: "output_text", text: JSON.stringify({ bullets }) }],
+          content: [{ type: "output_text", text: JSON.stringify({ summary }) }],
         },
       ],
       usage: { input_tokens: 120, output_tokens: 40 },
@@ -27,10 +27,14 @@ function jsonSchemaResponse(bullets: unknown) {
 }
 
 describe("OpenAiArticleSummarizer", () => {
-  it("returns 3 Japanese bullets and token usage on a valid structured response", async () => {
+  it("returns a Japanese Markdown summary and token usage on a valid structured response", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonSchemaResponse(["要点1", "要点2", "要点3"]))
+      .mockResolvedValue(
+        jsonSchemaResponse(
+          "## 結論\nSuspeiseとuseで実装が簡潔になる。\n\n```mermaid\nflowchart LR\na-->b\n```"
+        )
+      )
     const summarizer = new OpenAiArticleSummarizer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
       fetcher,
@@ -40,7 +44,8 @@ describe("OpenAiArticleSummarizer", () => {
     await expect(
       summarizer.summarize({ title: "タイトル", markdown: "本文" })
     ).resolves.toEqual({
-      bullets: ["要点1", "要点2", "要点3"],
+      markdown:
+        "## 結論\nSuspeiseとuseで実装が簡潔になる。\n\n```mermaid\nflowchart LR\na-->b\n```",
       tokensIn: 120,
       tokensOut: 40,
     })
@@ -49,7 +54,7 @@ describe("OpenAiArticleSummarizer", () => {
   it("truncates markdown to the configured max length before sending", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonSchemaResponse(["a", "b", "c"]))
+      .mockResolvedValue(jsonSchemaResponse("要約です。"))
     const summarizer = new OpenAiArticleSummarizer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
       fetcher,
@@ -64,10 +69,10 @@ describe("OpenAiArticleSummarizer", () => {
     expect(sentMarkdown.length).toBeLessThan(10_000)
   })
 
-  it("rejects a response that violates the summary schema (not exactly 3 bullets)", async () => {
+  it("rejects a response that violates the summary schema", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonSchemaResponse(["only-one"]))
+      .mockResolvedValue(jsonSchemaResponse({ unexpected: true }))
     const summarizer = new OpenAiArticleSummarizer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
       fetcher,

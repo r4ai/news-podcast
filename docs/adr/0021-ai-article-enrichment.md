@@ -13,8 +13,8 @@
 
 - 興味の源泉は明示的な興味プロフィール（`interestProfile.include`/`exclude`の自由記述）のみ。行動からの自動学習はしない。
 - AI処理は新着のみ・日次バッチ・件数上限つき。全件処理もオンデマンド専用もしない。
-- 成果物は3つ: 日本語箇条書き3点の要約 / 適合度スコア(0-100)と理由1行 / タグ自動付与（タグは別スコープとして本ADRでは要約・スコアのみ扱う）。
-- 要約は常に日本語（英語記事も日本語で要約する）。
+- 成果物は3つ: 日本語Markdown要約（約300字） / 適合度スコア(0-100)と理由1行 / タグ自動付与（タグは別スコープとして本ADRでは要約・スコアのみ扱う）。
+- 要約は常に日本語（英語記事も日本語で要約する）。冒頭に結論を置き、その下にMermaid図・具体例・結果を添える。体言止めで文末の「。」は付けない。
 - スコアは並べ替え軸の一つ。既定は新着順のまま。低スコアを隠したりはしない。
 
 既存資産: `openai-summary-generator.ts`の`text.format = {type:"json_schema", strict:true}`パターン、`openai-podcast-agent.ts`の生fetch+zod検証+`providerOperation()`計装、`config.ts`の`readOpenAiConfig`、`local-store.ts`の述語ビルダー方式（`ARTICLE_SELECT`/`ARTICLE_FROM`/`articleSearchPredicate()`）、`apps/worker/src/process-rss-archive.ts`の「`runOnce()`が毎tick小さく進める」パターン。
@@ -49,7 +49,7 @@
 対象は`archive_status='succeeded'`の新着のうち、現行`profile_hash`/`prompt_version`で未処理のものを新しい順に、環境変数`AI_ENRICH_DAILY_LIMIT`（既定200）で上限を切る。
 
 - **要約は1記事1コール**。本文Markdownをオブジェクトストアから取得し、先頭`SUMMARY_MAX_MARKDOWN_CHARS`（6,000字）へ切り詰めてから送る。既に現行`prompt_version`の要約があれば再利用し、コールしない。
-- **スコアは`RELEVANCE_BATCH_SIZE`（8件、5〜10件の範囲）でまとめて1コール**。タイトルと要約の箇条書きだけを渡す。ここがコストの主眼——記事数が増えてもコール数は`N/8`で増える。
+- **スコアは`RELEVANCE_BATCH_SIZE`（8件、5〜10件の範囲）でまとめて1コール**。タイトルと要約のMarkdownだけを渡す。ここがコストの主眼——記事数が増えてもコール数は`N/8`で増える。スコアのブレを抑えるため`temperature: 0`で決定論化し、プロンプトに明示的なスコア基準（include直合致80-100 / 部分関連50-79 / 中立30-49 / 無関係・exclude合致0-29）を持たせる。
 - 1ownerあたり1tickで処理する候補数を`RELEVANCE_BATCH_SIZE`に揃えることで、1tickの作業が高々1バッチ分に収まり、特定ownerが日次上限を独占しない。複数ownerがいる環境では、tickごとに全owner分の候補が少しずつ進む。
 - トークン使用量（Responses APIの`usage.input_tokens`/`output_tokens`）を要約は`article_summaries`に、スコアはバッチ内で均等割り（端数は最後の記事へ寄せる）した上で`article_relevance`の各行に記録する。同時にOTelカウンタ`article.enrich.tokens`（属性`enrich.step`/`token.kind`）へも計上する。バッチの合算値を素朴に均等割りする設計であり、記事ごとの正確な内訳ではないが、コスト監視には十分な近似とする。
 
@@ -63,7 +63,7 @@ Responses APIへの全リクエストを`fetchWithRetry()`でラップし、`429
 
 ### API
 
-- `Article`に`aiSummary?: string[]`（3件固定）/`relevanceScore?: number`(0-100)/`relevanceReason?: string`を追加。
+- `Article`に`aiSummary?: string`（Markdown要約）/`relevanceScore?: number`(0-100)/`relevanceReason?: string`を追加。
 - `GET /v1/me/articles`に`sort=relevance`と`minScore`を追加。
 - `POST /v1/me/articles/{id}/enrich`でオンデマンド再計算（日次上限の対象外——利用者の明示的な単発要求のため）。アーカイブ未完了なら409。
 - `GET`/`PATCH /v1/me/settings`に`interestProfile`を追加（`generationSchedule`と同居、両方省略可能な部分更新）。
