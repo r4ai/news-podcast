@@ -297,9 +297,7 @@ test("RSS reader shows archived articles and persists saved state", async ({
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  await expect(
-    page.getByRole("heading", { name: "記事", exact: true })
-  ).toBeVisible()
+  await expect(page.getByLabel("記事を検索")).toBeVisible()
   await page.getByRole("button", { name: /保存された記事/ }).click()
   await expect(
     page.getByRole("heading", { name: "保存された記事" })

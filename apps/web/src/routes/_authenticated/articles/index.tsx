@@ -3,7 +3,6 @@ import { cn } from "@workspace/ui/lib/utils"
 
 import { api } from "@/shared/api"
 import { Panel } from "@/shared/components/panel"
-import { PageHeader } from "@/shared/layouts/page-header"
 import { ArticleList } from "./-components/article-list"
 import { ArticleReaderView } from "./-components/article-reader"
 import { EnrichQueueDialog } from "./-components/enrich-queue-dialog"
@@ -71,12 +70,6 @@ function ArticlesRoute() {
 
   return (
     <div className="flex flex-col gap-4 lg:h-[calc(100dvh-4rem)] lg:gap-6 lg:bg-gradient-to-b lg:from-muted/30 lg:to-transparent">
-      <PageHeader
-        className="lg:rounded-2xl lg:border lg:border-border/70 lg:bg-background/60 lg:px-4 lg:py-2 lg:backdrop-blur-md"
-        compact
-        description="購読フィードの記事を走査し、絞り込み、読みます。"
-        title="記事"
-      />
       <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch lg:gap-6">
         <div
           className={cn(
