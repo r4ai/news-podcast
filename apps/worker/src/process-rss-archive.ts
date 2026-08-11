@@ -38,20 +38,33 @@ export class RssArchiveWorker {
   // 戻り値は実際に処理した件数（0なら残作業なし）。
   async backfillSearchBody(limit: number): Promise<number> {
     const pending = this.store.listArticlesPendingBodyIndex(limit)
+    let indexed = 0
     for (const article of pending) {
-      await this.indexArticleBody(article.id, article.markdownKey)
+      if (await this.indexArticleBody(article.id, article.markdownKey)) {
+        indexed += 1
+      }
     }
-    return pending.length
+    return indexed
   }
 
   private async indexArticleBody(
     articleId: string,
     markdownKey: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const object = await this.objects.get(markdownKey)
-      const body = object ? new TextDecoder().decode(object.body) : ""
-      this.store.setArticleSearchBody(articleId, body)
+      if (!object) {
+        this.observability.log({
+          name: "article.search_body.object_missing",
+          level: "warn",
+        })
+        return false
+      }
+      this.store.setArticleSearchBody(
+        articleId,
+        new TextDecoder().decode(object.body)
+      )
+      return true
     } catch (error) {
       // 索引投入の失敗はアーカイブ自体の成否に影響させない。次回のバックフィルで再試行される。
       this.observability.log({
@@ -59,6 +72,7 @@ export class RssArchiveWorker {
         level: "warn",
         error,
       })
+      return false
     }
   }
 

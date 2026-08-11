@@ -138,15 +138,17 @@ describe("RssArchiveWorker.backfillSearchBody", () => {
     store.close()
   })
 
-  it("marks an article as indexed with an empty body when the object is missing, without throwing", async () => {
+  it("keeps an article pending when its markdown object is temporarily missing", async () => {
     const store = openStore()
     const objects = new MemoryObjects()
     // 敢えてset()を呼ばず、オブジェクトストアに実体が無い状態を作る。
     seedArchivedArticle(store, "missing-object", "missing/markdown/article.md")
     const worker = new RssArchiveWorker(store, objects)
 
-    await expect(worker.backfillSearchBody(10)).resolves.toBe(1)
-    // 空bodyで投入済みとしてマークされるため、二度目は対象が残らない。
+    await expect(worker.backfillSearchBody(10)).resolves.toBe(0)
+
+    objects.set("missing/markdown/article.md", "後から利用可能になった記事本文。")
+    expect(await worker.backfillSearchBody(10)).toBe(1)
     expect(await worker.backfillSearchBody(10)).toBe(0)
     store.close()
   })
