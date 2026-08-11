@@ -19,7 +19,20 @@ export interface NodeSafeFetcher {
   close(): Promise<void>
 }
 
+export interface NodeSafeFetcherOptions {
+  /**
+   * 宛先URLごとにトレース伝播を制御するフック。
+   * observabilityのcomposition rootが、allowlist外のURLへW3C Trace Contextが
+   * 漏れないよう注入する（ADR-0017）。未指定なら常に素通し。
+   */
+  readonly propagate?: (
+    url: URL,
+    execute: () => Promise<Response>
+  ) => Promise<Response>
+}
+
 export function createNodeSafeFetcher(
+  options: NodeSafeFetcherOptions = {},
   resolver: AddressResolver = resolveAddresses
 ): NodeSafeFetcher {
   const pins = createPinnedLookup()
@@ -38,10 +51,11 @@ export function createNodeSafeFetcher(
           dispatcher,
           redirect: "manual",
         }
-        response = (await undiciFetch(
-          resolved.url,
-          requestInit
-        )) as unknown as Response
+        const execute = () =>
+          undiciFetch(resolved.url, requestInit) as unknown as Promise<Response>
+        response = options.propagate
+          ? await options.propagate(resolved.url, execute)
+          : await execute()
       } finally {
         releasePin()
       }

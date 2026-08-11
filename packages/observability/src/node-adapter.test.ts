@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest"
-import { SpanKind } from "@opentelemetry/api"
+import { describe, expect, it, beforeEach } from "vitest"
+import { SpanKind, SpanStatusCode, metrics, trace } from "@opentelemetry/api"
+import { logs } from "@opentelemetry/api-logs"
 import { InMemoryLogRecordExporter } from "@opentelemetry/sdk-logs"
 import {
   AggregationTemporality,
   InMemoryMetricExporter,
+  PeriodicExportingMetricReader,
 } from "@opentelemetry/sdk-metrics"
 import {
   InMemorySpanExporter,
@@ -16,7 +18,16 @@ import {
   readNodeObservabilityConfig,
 } from "./node-adapter.js"
 
+// OTelのsetGlobal*Providerは「先勝ち」（既に登録済みなら無視）のため、
+// 同一プロセス内で複数アダプタを作るテストでは都度グローバルをリセットする。
+function resetGlobalProviders(): void {
+  logs.disable()
+  metrics.disable()
+  trace.disable()
+}
+
 describe("Node observability configuration", () => {
+  beforeEach(resetGlobalProviders)
   it("keeps telemetry disabled without requiring an endpoint", () => {
     expect(readNodeObservabilityConfig({}, "api")).toMatchObject({
       enabled: false,
@@ -54,6 +65,8 @@ describe("Node observability configuration", () => {
         serviceVersion: "test",
         environment: "test",
         traceSampleRate: 1,
+        autoInstrumentation: false,
+        propagationAllowlist: new Set<string>(),
       },
       {
         tracer: tracerProvider.getTracer("test"),
@@ -122,6 +135,154 @@ describe("Node observability configuration", () => {
       workerSpan.spanContext().spanId
     )
     expect(providerSpan.kind).toBe(SpanKind.CLIENT)
+    await tracerProvider.shutdown()
+    await observability.shutdown()
+  })
+
+  it("emits the redacted error message on logs and failing spans", async () => {
+    const traceExporter = new InMemorySpanExporter()
+    const tracerProvider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(traceExporter)],
+    })
+    const logExporter = new InMemoryLogRecordExporter()
+    const observability = createNodeObservability(
+      {
+        enabled: true,
+        endpoint: "http://unused.test",
+        serviceName: "test",
+        serviceVersion: "test",
+        environment: "test",
+        traceSampleRate: 1,
+        autoInstrumentation: false,
+        propagationAllowlist: new Set<string>(),
+      },
+      {
+        tracer: tracerProvider.getTracer("test"),
+        logExporter,
+      }
+    )
+
+    await expect(
+      observability.withSpan("episode.process", {}, async () => {
+        throw new TypeError("request https://private.example failed")
+      })
+    ).rejects.toThrow("request https://private.example failed")
+    observability.log({
+      name: "episode.failed",
+      level: "error",
+      error: new Error("boom https://private.example"),
+    })
+    await (
+      logs.getLoggerProvider() as unknown as {
+        forceFlush(): Promise<void>
+      }
+    ).forceFlush()
+
+    const [span] = traceExporter.getFinishedSpans()
+    expect(span).toMatchObject({
+      name: "episode.process",
+      status: { code: SpanStatusCode.ERROR },
+      attributes: {
+        "error.type": "TypeError",
+        "error.message": "request [url] failed",
+      },
+    })
+    const [log] = logExporter.getFinishedLogRecords()
+    expect(log.body).toBe("episode.failed")
+    expect(log.attributes).toMatchObject({
+      "error.type": "Error",
+      "error.message": "boom [url]",
+    })
+    expect(log.attributes).not.toHaveProperty("error.stack")
+    await tracerProvider.shutdown()
+    await observability.shutdown()
+  })
+
+  it("guarantees a root span for non-HTTP entry points and reuses active parents", async () => {
+    const traceExporter = new InMemorySpanExporter()
+    const tracerProvider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(traceExporter)],
+    })
+    const metricExporter = new InMemoryMetricExporter(
+      AggregationTemporality.CUMULATIVE
+    )
+    const metricReader = new PeriodicExportingMetricReader({
+      exporter: metricExporter,
+      exportIntervalMillis: 60_000,
+    })
+    const observability = createNodeObservability(
+      {
+        enabled: true,
+        endpoint: "http://unused.test",
+        serviceName: "test",
+        serviceVersion: "test",
+        environment: "test",
+        traceSampleRate: 1,
+        autoInstrumentation: false,
+        propagationAllowlist: new Set<string>(),
+      },
+      {
+        tracer: tracerProvider.getTracer("test"),
+        metricReader,
+      }
+    )
+
+    await observability.withGuaranteedSpan("worker.tick", async () => {
+      await observability.withGuaranteedSpan("rss.sync", async () => undefined)
+    })
+
+    const spans = traceExporter.getFinishedSpans()
+    const root = spans.find((span) => span.name === "worker.tick")!
+    const child = spans.find((span) => span.name === "rss.sync")!
+    expect(root).toMatchObject({
+      attributes: { "trace.entry.synthesized": true },
+    })
+    expect(child.parentSpanContext?.spanId).toBe(root.spanContext().spanId)
+    expect(child.attributes).not.toHaveProperty("trace.entry.synthesized")
+
+    await metricReader.collect()
+    const synthesized = metricExporter
+      .getMetrics()
+      .flatMap((metric) =>
+        metric.scopeMetrics.flatMap(({ metrics }) => metrics)
+      )
+      .find((metric) => metric.descriptor.name === "trace.entry.synthesized")
+    expect(synthesized).toBeUndefined()
+    const collected = await metricReader.collect()
+    const collectedSynthesized = collected.resourceMetrics.scopeMetrics
+      .flatMap(({ metrics }) => metrics)
+      .find((metric) => metric.descriptor.name === "trace.entry.synthesized")
+    expect(collectedSynthesized).toBeDefined()
+    await metricReader.shutdown()
+    await tracerProvider.shutdown()
+    await observability.shutdown()
+  })
+
+  it("asserts an active span exists when instrumentation is loaded", async () => {
+    const traceExporter = new InMemorySpanExporter()
+    const tracerProvider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(traceExporter)],
+    })
+    const observability = createNodeObservability(
+      {
+        enabled: true,
+        endpoint: "http://unused.test",
+        serviceName: "test",
+        serviceVersion: "test",
+        environment: "test",
+        traceSampleRate: 1,
+        autoInstrumentation: false,
+        propagationAllowlist: new Set<string>(),
+      },
+      { tracer: tracerProvider.getTracer("test") }
+    )
+
+    expect(() => observability.assertActiveSpan("http.request")).toThrow(
+      /No active span/
+    )
+    await observability.withSpan("http.request", {}, async () => {
+      expect(() => observability.assertActiveSpan("http.request")).not.toThrow()
+    })
     await tracerProvider.shutdown()
     await observability.shutdown()
   })

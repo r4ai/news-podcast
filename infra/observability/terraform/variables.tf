@@ -9,3 +9,9 @@ variable "alert_environment" {
   type        = string
   default     = "production"
 }
+
+variable "otlp_domain" {
+  description = "Public OTLP ingress domain used in alert trace links."
+  type        = string
+  default     = "signoz.example.com"
+}

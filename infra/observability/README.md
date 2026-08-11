@@ -33,6 +33,15 @@ terraform -chdir=terraform apply signoz.tfplan
 
 `SIGNOZ_ACCESS_TOKEN`、SMTP password、宛先はrepository・tfvars・stateへ保存しない。channelは`send_resolved=true`、critical ruleは1分ごとに評価し、firing中は30分ごとに再通知する。Generation dashboardはservice、environment、version、stage filter、source/grain/freshness、100%収集されたWorker traceへの導線を持つ。
 
+## トレース保証（自動計装）
+
+Node API/Workerは`@news-podcast/observability/node/register`を最初にimportして自動計装（http/undici）を登録する。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）は手動計装なしでspanが自動生成される。W3C trace headerの注入先はallowlistで制御し、既定は`api.openai.com`・`localhost`・`127.0.0.1`。環境変数`OTEL_PROPAGATION_ALLOWLIST`にカンマ区切りのhostnameで拡張できる。allowlist外（任意RSSサイト等）への注入は抑止されるが、span自体は記録され続ける。詳細は[ADR-0025](../docs/adr/0025-automatic-instrumentation-and-trace-guarantee.md)。
+
+- `trace.entry.synthesized` — 非HTTP入口（Worker tick）の保証root合成を計数。未計装の入口はruleで通知する。
+- `http.server.error` — APIの5xx応答を計数。dashboard panelとruleの対象。
+- `process.error` — uncaughtException/unhandledRejectionを計数。クラッシュは構造化log（`process.uncaught_exception` / `process.unhandled_rejection`）とともにflush後にexit(1)する。
+- `error.message`はredact済みでlogs/tracesにのみ記録され、metric属性には含まれない（高cardinality回避）。障害調査はtraceまたはlogから行う。
+
 watchdogはSigNozと同じホスト上の独立processで、API、Worker、VOICEVOX、SigNoz、Collector exporterの進捗を60秒ごとに確認する。異常はSigNozを経由せずSMTPへ直接送り、30分再通知と復旧通知を行う。状態は`watchdog-data` volumeに保存する。ホスト全停止とネットワーク全断はこの構成では通知できないため、別ホスト監視を追加するまで残余リスクとして扱う。
 
 適用後は次を合格証拠として保存する。

@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   noopObservability,
   type Observability,
-  type SpanOptions,
 } from "@news-podcast/observability"
 import { LocalStore } from "@news-podcast/adapters/db/local"
 
@@ -109,33 +108,36 @@ describe("API foundation", () => {
     })
   })
 
-  it("passes W3C request context to the API request span without baggage", async () => {
-    let spanOptions: SpanOptions | undefined
+  it("logs api.request with the HTTP route and counts server errors", async () => {
+    const logs: Array<{ name: string; level: string; attributes?: unknown }> =
+      []
+    const counts: string[] = []
     const observability: Observability = {
       ...noopObservability,
-      withSpan: async (_name, _attributes, operation, options) => {
-        spanOptions = options
-        return operation()
-      },
+      log: (event) =>
+        logs.push({
+          name: event.name,
+          level: event.level ?? "info",
+          attributes: event.attributes,
+        }),
+      count: (name) => counts.push(name),
     }
     const response = await createApp({
       observability,
       resolveOwner: async () => "owner-1",
-    }).request("/v1/feeds", {
-      headers: {
-        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-        tracestate: "vendor=value",
-        baggage: "private=value",
-      },
-    })
+    }).request("/v1/feeds")
 
     expect(response.status).toBe(503)
-    expect(spanOptions).toEqual({
-      parent: {
-        traceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-        traceState: "vendor=value",
+    const requestLog = logs.find((event) => event.name === "api.request")
+    expect(requestLog).toMatchObject({
+      level: "error",
+      attributes: {
+        "http.request.method": "GET",
+        "http.response.status_code": 503,
+        "http.route": "/v1/feeds",
       },
     })
+    expect(counts).toContain("http.server.error")
   })
 
   it("discovers and subscribes to an arbitrary RSS URL", async () => {

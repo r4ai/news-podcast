@@ -2,11 +2,14 @@ import type { TelemetryAttributes } from "./contract.js"
 
 const allowedAttributes = new Set([
   "deployment.environment",
+  "error.message",
   "error.retryable",
+  "error.source",
   "error.type",
   "failure.code",
   "http.request.method",
   "http.response.status_code",
+  "http.route",
   "operation.stage",
   "job.id",
   "job.attempt",
@@ -21,15 +24,18 @@ const allowedAttributes = new Set([
   "service.name",
   "service.version",
   "telemetry.schema.version",
+  "trace.entry.synthesized",
   "trigger",
 ])
 
 const allowedMetricAttributes = new Set([
   "deployment.environment",
   "error.retryable",
+  "error.source",
   "failure.code",
   "http.request.method",
   "http.response.status_code",
+  "http.route",
   "operation.stage",
   "job.attempt",
   "job.max_attempts",
@@ -42,6 +48,7 @@ const allowedMetricAttributes = new Set([
   "provider.outcome",
   "service.name",
   "service.version",
+  "trace.entry.synthesized",
   "trigger",
 ])
 

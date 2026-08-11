@@ -1,6 +1,6 @@
 # システムアーキテクチャ
 
-- 更新日: 2026-08-10
+- 更新日: 2026-08-11
 - 対象: 現在のリポジトリ実装
 - 関連文書: [詳細設計](design.md) / [ADR](adr/) / [開発ガイド](development.md)
 
@@ -246,9 +246,9 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 | 認証 | Better Authのsession cookie。Google OIDCはログイン上流であり、Google tokenをAPI bearerとして扱わない |
 | 認可 | 全 `/v1` resourceをowner scopeで検索し、他人のIDと存在しないIDをともに404へ正規化 |
 | API契約 | Hono/Zod code-first OpenAPI、RFC 9457 Problem Details、生成型の差分検査 |
-| 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、Collector経由でSigNozへ送る |
+| 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、Collector経由でSigNozへ送る。自動計装（http/undici）を正本とし、入り口HTTPと全outbound HTTP（OpenAI・VOICEVOX・RSS・archive・AI enrich・S3）をspan自動生成する。W3C trace headerの注入はallowlist（既定api.openai.com・localhost・127.0.0.1、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは送らない。非HTTP入口（Worker定期処理）は保証root spanでtraceを合成し、`trace.entry.synthesized`で監視する |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
-| 障害分離 | telemetry障害でAPIや生成処理を停止しない。外部provider障害はjob retryへ変換する |
+| 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |
 
 ## 8. 現状評価と設計上の注意点
@@ -281,3 +281,4 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
 - [ADR-0015: Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)
+- [ADR-0025: 自動計装を正本とするトレース保証](adr/0025-automatic-instrumentation-and-trace-guarantee.md)

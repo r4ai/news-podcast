@@ -1,7 +1,7 @@
 # RSSニュース・ポッドキャスト 設計書
 
 - 状態: RSS Reader・記事アーカイブ・Agent生成 Accepted、実装中
-- 更新日: 2026-08-10
+- 更新日: 2026-08-11
 - 契約の正本: `apps/api/src/app.ts` のHono/Zod route schema
 - 生成契約: `packages/contracts/openapi/openapi.json`
 - 判断記録: `docs/adr/`
@@ -106,6 +106,8 @@ flowchart LR
 Cloudflareへのアプリ配備とLinux上の監視基盤は独立させる。Domain/Applicationは監視実装を知らず、appsとadapterだけが`packages/observability`を使う。BrowserからAPIまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Workerは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はWorker trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
 Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Dashboard、rule、routingは公式SigNoz Terraform providerで管理し、watchdogはSigNoz停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0010](adr/0010-opentelemetry-signoz.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
+
+計装は呼び出しごとの手動spanではなく、**自動計装（`instrumentation-http` + `instrumentation-undici`）を正本**にする。`@news-podcast/observability/node/register`をNodeのcomposition rootで最初にimportして`node:http`をpatchし、入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）へspanを自動生成する。W3C trace headerの注入はallowlist（既定`api.openai.com`・`localhost`・`127.0.0.1`、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは注入しない（ADR-0017の「外部へ送らない」方針を部分改訂）。span自体は生成・記録され続け、受信は常にW3Cで継続する。非HTTP入口（Workerのtick）は`withGuaranteedSpan`でroot spanを合成して`trace.entry.synthesized`を計数し、本番はmetric/ruleで、非本番は`assertActiveSpan`で計装欠落を検出する。エラー詳細はredact済み`error.message`・`error.type`をlogs/spansへ記録し、metric属性は低cardinalityに限定する（高cardinalityの`error.message`はmetricsへ入れない）。詳細は[ADR-0025](adr/0025-automatic-instrumentation-and-trace-guarantee.md)を正本とする。
 
 ## 7. 品質戦略
 
@@ -278,3 +280,4 @@ flowchart TD
 - [ADR-0015 Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)
 - [ADR-0016 Episode生成を有界leaseと永続checkpointで実行する](adr/0016-bounded-observable-episode-execution.md)
 - [ADR-0017 同期HTTPを継続し非同期生成をSpan Linkで相関する](adr/0017-linked-distributed-tracing.md)
+- [ADR-0025 自動計装を正本とするトレース保証](adr/0025-automatic-instrumentation-and-trace-guarantee.md)

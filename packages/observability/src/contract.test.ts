@@ -8,7 +8,11 @@ describe("observability contract", () => {
     expect(new Set(telemetryEventNames).size).toBe(telemetryEventNames.length)
     expect(new Set(metricNames).size).toBe(metricNames.length)
     expect(telemetryEventNames).toContain("episode.failed")
+    expect(telemetryEventNames).toContain("process.uncaught_exception")
     expect(metricNames).toContain("http.server.duration")
+    expect(metricNames).toContain("trace.entry.synthesized")
+    expect(metricNames).toContain("http.server.error")
+    expect(metricNames).toContain("process.error")
     expect(Object.keys(metricUnits).sort()).toEqual([...metricNames].sort())
   })
 
@@ -20,6 +24,10 @@ describe("observability contract", () => {
     expect(operation).toHaveBeenCalledOnce()
     expect(noopObservability.captureContext()).toBeUndefined()
     expect(noopObservability.gauge("episode.jobs", 0)).toBeUndefined()
+    await expect(
+      noopObservability.withGuaranteedSpan("worker.tick", operation)
+    ).resolves.toBe("completed")
+    expect(noopObservability.assertActiveSpan("http.request")).toBeUndefined()
     await expect(noopObservability.shutdown()).resolves.toBeUndefined()
   })
 })

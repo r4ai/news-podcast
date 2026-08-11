@@ -28,6 +28,17 @@ export interface Observability {
     operation: () => Promise<T>,
     options?: SpanOptions
   ): Promise<T>
+  /**
+   * 非HTTP入口（定期処理など）で必ずspanが存在することを保証する。
+   * active spanが無ければroot spanを合成し、`trace.entry.synthesized` を計数する。
+   */
+  withGuaranteedSpan<T>(
+    name: string,
+    operation: () => Promise<T>,
+    attributes?: TelemetryAttributes
+  ): Promise<T>
+  /** 計装が有効な環境でactive spanが無ければthrowし、計装の欠落を開発時に検出する。 */
+  assertActiveSpan(name: string): void
   count(
     name: MetricName,
     value?: number,
@@ -73,6 +84,8 @@ export const telemetryEventNames = [
   "article.enrich.relevance.succeeded",
   "article.enrich.relevance.failed",
   "article.enrich.rate_limited",
+  "process.uncaught_exception",
+  "process.unhandled_rejection",
 ] as const
 
 export type TelemetryEventName = (typeof telemetryEventNames)[number]
@@ -108,6 +121,9 @@ export const metricNames = [
   "http.server.duration",
   "article.enrich.processed",
   "article.enrich.tokens",
+  "trace.entry.synthesized",
+  "http.server.error",
+  "process.error",
 ] as const
 
 export type MetricName = (typeof metricNames)[number]
@@ -143,4 +159,7 @@ export const metricUnits: Readonly<Record<MetricName, string>> = {
   "http.server.duration": "ms",
   "article.enrich.processed": "{article}",
   "article.enrich.tokens": "{token}",
+  "trace.entry.synthesized": "{span}",
+  "http.server.error": "{error}",
+  "process.error": "{error}",
 }

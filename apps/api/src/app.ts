@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi"
+import { trace } from "@opentelemetry/api"
 import { streamSSE } from "hono/streaming"
 import {
   encodeSse,
@@ -200,30 +201,37 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use("/v1/*", async (context, next) => {
     if (context.req.path.startsWith("/v1/telemetry/")) return next()
     const startedAt = performance.now()
-    const parent = requestTraceContext(context.req.raw.headers)
-    await observability.withSpan(
-      "http.request",
-      { "http.request.method": context.req.method },
-      async () => {
-        try {
-          await next()
-        } finally {
-          observability.log({
-            name: "api.request",
-            attributes: {
-              "http.request.method": context.req.method,
-              "http.response.status_code": context.res.status,
-            },
-            level: context.res.status >= 500 ? "error" : "info",
-          })
-          observability.measure(
-            "http.server.duration",
-            performance.now() - startedAt
-          )
-        }
-      },
-      parent ? { parent } : undefined
-    )
+    // 自動計装（instrumentation-http）が生成したserver spanの欠落を開発時に検出する。
+    observability.assertActiveSpan("http.request")
+    try {
+      await next()
+    } finally {
+      // routePathはルーティング完了後のnext()後に確定する（例: /v1/feeds）。
+      const route = context.req.routePath
+      const span = trace.getActiveSpan()
+      if (span) span.setAttribute("http.route", route)
+      const status = context.res.status
+      observability.log({
+        name: "api.request",
+        attributes: {
+          "http.request.method": context.req.method,
+          "http.response.status_code": status,
+          "http.route": route,
+        },
+        level: status >= 500 ? "error" : "info",
+      })
+      if (status >= 500) {
+        observability.count("http.server.error", 1, {
+          "http.request.method": context.req.method,
+          "http.response.status_code": status,
+          "http.route": route,
+        })
+      }
+      observability.measure(
+        "http.server.duration",
+        performance.now() - startedAt
+      )
+    }
   })
 
   app.use("/v1/*", async (context, next) => {
@@ -1070,16 +1078,6 @@ export function createApp(dependencies: AppDependencies = {}) {
   return app
 }
 
-function requestTraceContext(headers: Headers): TraceContext | undefined {
-  const traceParent = headers.get("traceparent")
-  if (!traceParent) return undefined
-  const traceState = headers.get("tracestate")
-  return {
-    traceParent,
-    ...(traceState ? { traceState } : {}),
-  }
-}
-
 export const documentConfig = {
   openapi: "3.1.0",
   info: {
@@ -1501,10 +1499,7 @@ const enrichResetDailyRoute = createRoute({
   description:
     "Reset the daily AI enrichment usage counter for development convenience.",
   responses: {
-    200: jsonContent(
-      z.object({ message: z.string() }),
-      "Confirmation message"
-    ),
+    200: jsonContent(z.object({ message: z.string() }), "Confirmation message"),
     401: problemContent("Unauthorized"),
     503: problemContent("Unavailable"),
   },

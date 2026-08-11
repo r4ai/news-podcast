@@ -34,12 +34,6 @@ export function createTracedFetch(
     const method = (
       init?.method ?? (input instanceof Request ? input.method : "GET")
     ).toUpperCase()
-    const headers = new Headers(
-      init?.headers ?? (input instanceof Request ? input.headers : undefined)
-    )
-    headers.delete("traceparent")
-    headers.delete("tracestate")
-    headers.delete("baggage")
 
     return tracer.startActiveSpan(
       `provider.${config.provider}.${operation}`,
@@ -53,7 +47,7 @@ export function createTracedFetch(
       },
       async (span) => {
         try {
-          const response = await fetcher(input, { ...init, headers })
+          const response = await fetcher(input, init)
           span.setAttribute("http.response.status_code", response.status)
           span.setAttribute(
             "provider.outcome",

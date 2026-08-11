@@ -16,6 +16,32 @@ locals {
     store_stage_age  = { alert = "Storage stage at 80 percent deadline", metric = "episode.stage.oldest.age", target = 96000, window = "2m", op = "above", aggregation = "max", filter = "deployment.environment = '${var.alert_environment}' AND operation.stage = 'storing_episode'" }
     exporter_failure = { alert = "SigNoz exporter failure", metric = "otelcol_exporter_send_failed_metric_points", target = 0, window = "2m", op = "above", aggregation = "increase", filter = "" }
     disk_high        = { alert = "SigNoz host disk above 80 percent", metric = "system.filesystem.utilization", target = 0.8, window = "5m", op = "above", aggregation = "max", filter = "state = 'used'" }
+    api_5xx          = { alert = "API 5xx responses", metric = "http.server.error", target = 0, window = "5m", op = "above", aggregation = "increase", filter = "deployment.environment = '${var.alert_environment}'" }
+    synthesized_root = { alert = "Uninstrumented entry detected", metric = "trace.entry.synthesized", target = 0, window = "15m", op = "above", aggregation = "increase", filter = "deployment.environment = '${var.alert_environment}'" }
+    process_errors   = { alert = "Process-level errors", metric = "process.error", target = 0, window = "5m", op = "above", aggregation = "increase", filter = "deployment.environment = '${var.alert_environment}'" }
+  }
+  log_based_rules = {
+    rss_sync_failures = {
+      alert    = "Repeated RSS sync failures"
+      log_attr = "body"
+      window   = "15m"
+      target   = 3
+      query    = "SELECT toFloat64(count()) FROM signoz_logs.distributed_logs WHERE body = 'rss.sync.failed' AND resources_string['deployment.environment'] = '${var.alert_environment}'"
+    }
+    archive_failures = {
+      alert    = "Repeated article archive failures"
+      log_attr = "body"
+      window   = "15m"
+      target   = 3
+      query    = "SELECT toFloat64(count()) FROM signoz_logs.distributed_logs WHERE body = 'article.archive.failed' AND resources_string['deployment.environment'] = '${var.alert_environment}'"
+    }
+    ai_enrich_failures = {
+      alert    = "Repeated AI enrichment failures"
+      log_attr = "body"
+      window   = "15m"
+      target   = 3
+      query    = "SELECT toFloat64(count()) FROM signoz_logs.distributed_logs WHERE body IN ('article.enrich.summary.failed','article.enrich.relevance.failed') AND resources_string['deployment.environment'] = '${var.alert_environment}'"
+    }
   }
 }
 
@@ -27,7 +53,7 @@ resource "signoz_rule" "immediate" {
   schema_version = "v2alpha1"
   description    = "Invariant violation in bounded episode generation. Notify in one evaluation interval."
   labels         = { severity = "critical", service = "news-podcast", environment = var.alert_environment }
-  annotations    = { summary = each.value.alert, description = "${each.value.metric} is non-zero; inspect the Generation dashboard and linked trace." }
+  annotations    = { summary = each.value.alert, description = "${each.value.metric} is non-zero; inspect the Generation dashboard and linked trace; open the linked trace for per-job investigation.", trace = "Traces Explorer: https://${var.otlp_domain}/traces-explorer?service.name=news-podcast&deployment.environment=${var.alert_environment}" }
   condition = {
     composite_query = {
       panel_type = "graph"
@@ -52,7 +78,7 @@ resource "signoz_rule" "threshold" {
   schema_version = "v2alpha1"
   description    = "Generation health threshold managed by Terraform."
   labels         = { severity = "critical", service = "news-podcast", environment = var.alert_environment }
-  annotations    = { summary = each.value.alert, description = "${each.value.metric} breached its bounded execution threshold." }
+  annotations    = { summary = each.value.alert, description = "${each.value.metric} breached its bounded execution threshold; open the linked trace for per-job investigation.", trace = "Traces Explorer: https://${var.otlp_domain}/traces-explorer?service.name=news-podcast&deployment.environment=${var.alert_environment}" }
   condition = {
     composite_query = {
       panel_type = "graph"
@@ -76,7 +102,7 @@ resource "signoz_rule" "canary_missing" {
   rule_type      = "threshold_rule"
   schema_version = "v2alpha1"
   labels         = { severity = "critical", service = "news-podcast", environment = var.alert_environment }
-  annotations    = { summary = "Telemetry canary missing", description = "${each.value} has not arrived for two minutes." }
+  annotations    = { summary = "Telemetry canary missing", description = "${each.value} has not arrived for two minutes; open the linked trace for per-job investigation.", trace = "Traces Explorer: https://${var.otlp_domain}/traces-explorer?service.name=news-podcast&deployment.environment=${var.alert_environment}" }
   condition = {
     alert_on_absent = true
     absent_for      = 120
@@ -92,6 +118,28 @@ resource "signoz_rule" "canary_missing" {
     thresholds          = { basic = { kind = "basic", spec = [{ name = "critical", op = "below", match_type = "at_least_once", target = 0.5, channels = [var.smtp_channel_name] }] } }
   }
   evaluation            = { rolling = { kind = "rolling", spec = { eval_window = "2m", frequency = "1m" } } }
+  notification_settings = { group_by = ["alertname"], renotify = { enabled = true, interval = "30m", alert_states = ["firing"] } }
+}
+
+resource "signoz_rule" "log_based" {
+  for_each       = local.log_based_rules
+  alert          = each.value.alert
+  alert_type     = "METRIC_BASED_ALERT"
+  rule_type      = "threshold_rule"
+  schema_version = "v2alpha1"
+  description    = "Repeated background failure detected from logs, counted over the evaluation window."
+  labels         = { severity = "critical", service = "news-podcast", environment = var.alert_environment }
+  annotations    = { summary = each.value.alert, description = "${each.value.log_attr} breached its repeated-failure threshold; open the linked trace for per-job investigation.", trace = "Traces Explorer: https://${var.otlp_domain}/traces-explorer?service.name=news-podcast&deployment.environment=${var.alert_environment}" }
+  condition = {
+    composite_query = {
+      panel_type = "graph"
+      query_type = "clickhouse_sql"
+      queries    = [{ clickhouse_sql = { type = "clickhouse_sql", spec = { name = "A", query = each.value.query } } }]
+    }
+    selected_query_name = "A"
+    thresholds          = { basic = { kind = "basic", spec = [{ name = "critical", op = "above", match_type = "at_least_once", target = each.value.target, channels = [var.smtp_channel_name] }] } }
+  }
+  evaluation            = { rolling = { kind = "rolling", spec = { eval_window = each.value.window, frequency = "1m" } } }
   notification_settings = { group_by = ["alertname"], renotify = { enabled = true, interval = "30m", alert_states = ["firing"] } }
 }
 

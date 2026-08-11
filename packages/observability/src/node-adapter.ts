@@ -2,6 +2,8 @@ import {
   context,
   metrics,
   propagation,
+  type Counter,
+  type Span,
   SpanKind,
   SpanStatusCode,
   trace,
@@ -11,12 +13,15 @@ import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
+import { HttpInstrumentation } from "@opentelemetry/instrumentation-http"
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import {
   BatchLogRecordProcessor,
   type LogRecordExporter,
 } from "@opentelemetry/sdk-logs"
 import {
+  type MetricReader,
   PeriodicExportingMetricReader,
   type PushMetricExporter,
 } from "@opentelemetry/sdk-metrics"
@@ -30,6 +35,7 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions"
+import type { RequestOptions } from "node:http"
 
 import type {
   MetricName,
@@ -43,6 +49,11 @@ import {
   sanitizeAttributes,
   sanitizeMetricAttributes,
 } from "./privacy.js"
+import {
+  AllowlistTextMapPropagator,
+  installPropagationGate,
+  readPropagationAllowlist,
+} from "./propagation.js"
 import { extractRemoteContext, extractRemoteSpanContext } from "./w3c.js"
 
 export interface NodeObservabilityConfig {
@@ -53,12 +64,18 @@ export interface NodeObservabilityConfig {
   readonly serviceVersion: string
   readonly environment: string
   readonly traceSampleRate: number
+  /** HTTP/undiciの自動計装とallowlist伝播ゲートを有効化する（既定 true）。 */
+  readonly autoInstrumentation: boolean
+  /** 自動計装の伝播先allowlist。環境変数 OTEL_PROPAGATION_ALLOWLIST から読む。 */
+  readonly propagationAllowlist: ReadonlySet<string>
 }
 
 export interface NodeObservabilityDependencies {
   readonly tracer?: Tracer
   readonly metricExporter?: PushMetricExporter
   readonly logExporter?: LogRecordExporter
+  /** テスト用の注入シーム。指定時はPeriodicExportingMetricReaderの代わりに使う。 */
+  readonly metricReader?: MetricReader
 }
 
 export function readNodeObservabilityConfig(
@@ -90,6 +107,8 @@ export function readNodeObservabilityConfig(
     serviceVersion: environment.OTEL_SERVICE_VERSION ?? "development",
     environment: environment.APP_ENV ?? "development",
     traceSampleRate,
+    autoInstrumentation: environment.OTEL_AUTO_INSTRUMENTATION !== "false",
+    propagationAllowlist: readPropagationAllowlist(environment),
   }
 }
 
@@ -106,21 +125,30 @@ export function createNodeObservability(
     [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: config.environment,
     "telemetry.schema.version": "1",
   })
+  const instrumentations = config.autoInstrumentation
+    ? [createHttpInstrumentation(config), new UndiciInstrumentation({})]
+    : []
   const sdk = new NodeSDK({
     resource,
+    instrumentations,
+    ...(config.autoInstrumentation
+      ? { textMapPropagator: new AllowlistTextMapPropagator() }
+      : {}),
     traceExporter: new OTLPTraceExporter({
       url: signalUrl(config.endpoint, "traces"),
       headers,
     }),
-    metricReader: new PeriodicExportingMetricReader({
-      exporter:
-        dependencies.metricExporter ??
-        new OTLPMetricExporter({
-          url: signalUrl(config.endpoint, "metrics"),
-          headers,
-        }),
-      exportIntervalMillis: 30_000,
-    }),
+    metricReader:
+      dependencies.metricReader ??
+      new PeriodicExportingMetricReader({
+        exporter:
+          dependencies.metricExporter ??
+          new OTLPMetricExporter({
+            url: signalUrl(config.endpoint, "metrics"),
+            headers,
+          }),
+        exportIntervalMillis: 30_000,
+      }),
     logRecordProcessors: [
       new BatchLogRecordProcessor({
         exporter:
@@ -137,12 +165,17 @@ export function createNodeObservability(
   })
   sdk.start()
 
+  if (config.autoInstrumentation) {
+    // 自動計装がpatchした後のグローバルを包み、非allowlist宛先では注入を止める。
+    installPropagationGate(config.propagationAllowlist)
+  }
+
   const tracer =
     dependencies.tracer ??
     trace.getTracer(config.serviceName, config.serviceVersion)
   const logger = logs.getLogger(config.serviceName, config.serviceVersion)
   const meter = metrics.getMeter(config.serviceName, config.serviceVersion)
-  const counters = new Map<MetricName, ReturnType<typeof meter.createCounter>>()
+  const counters = new Map<MetricName, Counter>()
   const histograms = new Map<
     MetricName,
     ReturnType<typeof meter.createHistogram>
@@ -158,7 +191,9 @@ export function createNodeObservability(
         body: event.name,
         attributes: sanitizeAttributes({
           ...(event.attributes ?? {}),
-          ...(error ? { "error.type": error.type } : {}),
+          ...(error
+            ? { "error.type": error.type, "error.message": error.message }
+            : {}),
         }),
       })
     },
@@ -182,16 +217,57 @@ export function createNodeObservability(
           try {
             return await operation()
           } catch (error) {
-            const normalized = normalizedError(error)
-            span.recordException(new Error(normalized.type))
-            span.setAttribute("error.type", normalized.type)
-            span.setStatus({ code: SpanStatusCode.ERROR })
+            recordErrorOnSpan(span, error)
             throw error
           } finally {
             span.end()
           }
         }
       )
+    },
+    withGuaranteedSpan(name, operation, attributes = {}) {
+      const synthesized = trace.getActiveSpan() === undefined
+      if (synthesized) {
+        const metricCounter =
+          counters.get("trace.entry.synthesized") ??
+          meter.createCounter("trace.entry.synthesized")
+        counters.set("trace.entry.synthesized", metricCounter)
+        metricCounter.add(
+          1,
+          sanitizeMetricAttributes({
+            "trace.entry.synthesized": true,
+            "operation.stage": name,
+          })
+        )
+      }
+      return tracer.startActiveSpan(
+        name,
+        {
+          attributes: sanitizeAttributes({
+            ...attributes,
+            ...(synthesized ? { "trace.entry.synthesized": true } : {}),
+          }),
+        },
+        async (span) => {
+          try {
+            return await operation()
+          } catch (error) {
+            recordErrorOnSpan(span, error)
+            throw error
+          } finally {
+            span.end()
+          }
+        }
+      )
+    },
+    assertActiveSpan(name) {
+      // 本番では欠落をエラーで妨げず、synthesizedカウンタとruleで監視する。
+      if (config.environment === "production") return
+      if (trace.getActiveSpan() === undefined) {
+        throw new Error(
+          `No active span for ${name}: automatic instrumentation is not loaded`
+        )
+      }
     },
     count(name, value = 1, attributes = {}) {
       const counter = counters.get(name) ?? meter.createCounter(name)
@@ -211,6 +287,35 @@ export function createNodeObservability(
     captureContext,
     shutdown: () => sdk.shutdown(),
   }
+}
+
+function createHttpInstrumentation(
+  config: NodeObservabilityConfig
+): HttpInstrumentation {
+  const endpoint = config.endpoint ? new URL(config.endpoint) : undefined
+  const isOtlpExport = (options: RequestOptions): boolean => {
+    if (!endpoint) return false
+    const host = (options.host ?? options.hostname ?? "")
+      .split(":", 1)[0]!
+      .toLowerCase()
+    const path = options.path ?? ""
+    return host === endpoint.hostname && path.startsWith("/v1/")
+  }
+  return new HttpInstrumentation({
+    // Browser telemetryの再転送はserver spanにしない（ノイズ抑制）。
+    ignoreIncomingRequestHook: (request) =>
+      request.url?.startsWith("/v1/telemetry") ?? false,
+    // telemetry自身のexportはclient spanにしない（自己計装の回避）。
+    ignoreOutgoingRequestHook: isOtlpExport,
+  })
+}
+
+function recordErrorOnSpan(span: Span, error: unknown): void {
+  const normalized = normalizedError(error)
+  span.recordException(new Error(normalized.message))
+  span.setAttribute("error.type", normalized.type)
+  span.setAttribute("error.message", normalized.message)
+  span.setStatus({ code: SpanStatusCode.ERROR })
 }
 
 function captureContext(): TraceContext | undefined {

@@ -1,3 +1,8 @@
+// 自動計装を先に起動するため、registerを最初にimportする。
+import {
+  createPropagationHook,
+  getNodeObservability,
+} from "@news-podcast/observability/node/register"
 import { LocalStore } from "@news-podcast/adapters/db/local"
 import {
   readArchiveLimits,
@@ -19,19 +24,13 @@ import {
 import { LocalScheduler } from "./scheduler.js"
 import { RssArchiveWorker } from "./process-rss-archive.js"
 import { createObservedObjectStore } from "./observed-object-store.js"
-import {
-  createNodeObservability,
-  readNodeObservabilityConfig,
-} from "@news-podcast/observability/node"
 
 const databasePath = required("DATABASE_PATH")
 const mode = process.env.PROVIDER_MODE ?? "live"
-const observability = createNodeObservability(
-  readNodeObservabilityConfig(
-    { ...process.env, OTEL_TRACE_SAMPLE_RATE: "1" },
-    "news-podcast-worker"
-  )
-)
+const observability = getNodeObservability({
+  serviceName: "news-podcast-worker",
+  traceSampleRate: 1,
+})
 if (mode === "fake" && process.env.APP_ENV === "production") {
   throw new Error("Fake providers are forbidden in production")
 }
@@ -50,7 +49,7 @@ const processor =
         observability,
       })
 const scheduler = new LocalScheduler(store)
-const safeHttp = createNodeSafeFetcher()
+const safeHttp = createNodeSafeFetcher({ propagate: createPropagationHook() })
 const rssArchive = new RssArchiveWorker(
   store,
   objects,
@@ -140,51 +139,53 @@ healthServer.listen(healthPort, "0.0.0.0")
 let lastTelemetryAt = 0
 
 async function tick(): Promise<void> {
-  const now = new Date()
-  if (now.getTime() - lastTelemetryAt >= 30_000) {
-    emitHealthTelemetry(now)
-    lastTelemetryAt = now.getTime()
-  }
-  const reconciliation = store.reconcileJobs(now)
-  if (reconciliation.deadlineExceeded > 0) {
-    observability.count(
-      "episode.deadline.exceeded",
-      reconciliation.deadlineExceeded
-    )
-  }
-  if (reconciliation.attemptLimitExceeded > 0) {
-    observability.count(
-      "episode.attempt_limit.exceeded",
-      reconciliation.attemptLimitExceeded
-    )
-  }
-  await scheduler.run()
-  await rssArchive.runOnce()
-  if (aiEnrich) await aiEnrich.runOnce(now)
-  const cleanup = store.leaseObjectCleanup()
-  if (cleanup) {
-    try {
-      await objects.delete(cleanup.objectKey)
-      store.completeObjectCleanup(cleanup.objectKey)
-      observability.count("object.cleanup", 1, {
-        "cleanup.result": "succeeded",
-      })
-      observability.log({ name: "object.cleanup.succeeded" })
-    } catch (error) {
-      store.failObjectCleanup(
-        cleanup.objectKey,
-        error instanceof Error ? error.message : "Object cleanup failed"
-      )
-      observability.log({
-        name: "object.cleanup.failed",
-        level: "error",
-        error,
-      })
-      observability.count("object.cleanup", 1, { "cleanup.result": "failed" })
+  await observability.withGuaranteedSpan("worker.tick", async () => {
+    const now = new Date()
+    if (now.getTime() - lastTelemetryAt >= 30_000) {
+      emitHealthTelemetry(now)
+      lastTelemetryAt = now.getTime()
     }
-  }
-  const job = store.leaseNext()
-  if (job) await processor.process(job)
+    const reconciliation = store.reconcileJobs(now)
+    if (reconciliation.deadlineExceeded > 0) {
+      observability.count(
+        "episode.deadline.exceeded",
+        reconciliation.deadlineExceeded
+      )
+    }
+    if (reconciliation.attemptLimitExceeded > 0) {
+      observability.count(
+        "episode.attempt_limit.exceeded",
+        reconciliation.attemptLimitExceeded
+      )
+    }
+    await scheduler.run()
+    await rssArchive.runOnce()
+    if (aiEnrich) await aiEnrich.runOnce(now)
+    const cleanup = store.leaseObjectCleanup()
+    if (cleanup) {
+      try {
+        await objects.delete(cleanup.objectKey)
+        store.completeObjectCleanup(cleanup.objectKey)
+        observability.count("object.cleanup", 1, {
+          "cleanup.result": "succeeded",
+        })
+        observability.log({ name: "object.cleanup.succeeded" })
+      } catch (error) {
+        store.failObjectCleanup(
+          cleanup.objectKey,
+          error instanceof Error ? error.message : "Object cleanup failed"
+        )
+        observability.log({
+          name: "object.cleanup.failed",
+          level: "error",
+          error,
+        })
+        observability.count("object.cleanup", 1, { "cleanup.result": "failed" })
+      }
+    }
+    const job = store.leaseNext()
+    if (job) await processor.process(job)
+  })
 }
 
 let stopping = false

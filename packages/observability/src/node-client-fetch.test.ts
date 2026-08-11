@@ -39,7 +39,7 @@ describe("traced provider fetch", () => {
     await provider.shutdown()
   })
 
-  it("records allowlisted client attributes without propagating context", async () => {
+  it("records allowlisted client attributes and preserves caller headers", async () => {
     const exporter = new InMemorySpanExporter()
     const provider = new BasicTracerProvider({
       spanProcessors: [new SimpleSpanProcessor(exporter)],
@@ -60,19 +60,11 @@ describe("traced provider fetch", () => {
 
     const response = await tracedFetch("https://api.openai.com/v1/responses", {
       method: "POST",
-      headers: {
-        Authorization: "Bearer private",
-        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-        tracestate: "vendor=value",
-        baggage: "private=value",
-      },
+      headers: { Authorization: "Bearer private" },
     })
 
     expect(response.status).toBe(503)
     expect(sentHeaders?.get("authorization")).toBe("Bearer private")
-    expect(sentHeaders?.has("traceparent")).toBe(false)
-    expect(sentHeaders?.has("tracestate")).toBe(false)
-    expect(sentHeaders?.has("baggage")).toBe(false)
     const [span] = exporter.getFinishedSpans()
     expect(span).toMatchObject({
       name: "provider.openai.responses",

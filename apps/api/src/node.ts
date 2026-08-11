@@ -1,3 +1,9 @@
+// 自動計装を先に起動するため、registerを最初にimportする（@hono/node-server が
+// node:http を静的キャプチャする前に計装を登録する）。
+import {
+  createPropagationHook,
+  getNodeObservability,
+} from "@news-podcast/observability/node/register"
 import { serve } from "@hono/node-server"
 import { createLocalAuth } from "@news-podcast/adapters/auth/local"
 import { SqliteAgentRuntimeStore } from "@news-podcast/adapters/agent-runtime/sqlite"
@@ -15,10 +21,6 @@ import { OpenAiRelevanceScorer } from "@news-podcast/adapters/ai-enrich/scorer"
 import { AiEnrichWorker } from "@news-podcast/adapters/ai-enrich/worker"
 import { DEFAULT_AI_ENRICH_DAILY_LIMIT } from "@news-podcast/adapters/ai-enrich/shared"
 import { CreateEpisodeJob } from "@news-podcast/application"
-import {
-  createNodeObservability,
-  readNodeObservabilityConfig,
-} from "@news-podcast/observability/node"
 
 import { createApp } from "./app.js"
 import {
@@ -28,9 +30,9 @@ import {
 } from "./local-services.js"
 
 const config = readLocalAuthConfig(process.env)
-const observability = createNodeObservability(
-  readNodeObservabilityConfig(process.env, "news-podcast-api")
-)
+const observability = getNodeObservability({
+  serviceName: "news-podcast-api",
+})
 const store = new LocalStore(config.databasePath)
 const agentRuntimeStore = new SqliteAgentRuntimeStore(store.database)
 const objects = new S3ObjectStore(readS3Config(process.env))
@@ -56,7 +58,7 @@ const audio = createAudioAccess({
   directory: required("AUDIO_DIRECTORY"),
 })
 const articles = createArticleAccess({ store, objects })
-const safeHttp = createNodeSafeFetcher()
+const safeHttp = createNodeSafeFetcher({ propagate: createPropagationHook() })
 const rss = new RssFeedReader(safeHttp.fetch)
 // AI補助のオンデマンド再計算 (POST /v1/me/articles/{id}/enrich)。
 // OpenAI設定が無い環境（ローカルのfakeモード等）ではエンドポイントを503にする。

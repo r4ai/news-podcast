@@ -89,6 +89,30 @@ locals {
       aggregation = "max"
       group_by    = ""
     }
+    "13-error-events" = {
+      title       = "13. Process errors"
+      description = "Source: process.error counter; grain: source/5m. Uncaught exceptions and unhandled rejections carry trace ids."
+      metric      = "process.error"
+      unit        = "ops"
+      aggregation = "increase"
+      group_by    = "error.source"
+    }
+    "14-synthesized-root" = {
+      title       = "14. Uninstrumented entries"
+      description = "Source: trace.entry.synthesized counter; grain: /15m. Non-zero means an entry had no automatic span; the registered worker.tick root is the only expected source."
+      metric      = "trace.entry.synthesized"
+      unit        = "ops"
+      aggregation = "increase"
+      group_by    = ""
+    }
+    "15-api-5xx" = {
+      title       = "15. API 5xx"
+      description = "Source: http.server.error counter; grain: route/5m."
+      metric      = "http.server.error"
+      unit        = "ops"
+      aggregation = "increase"
+      group_by    = "http.route"
+    }
   }
 }
 
