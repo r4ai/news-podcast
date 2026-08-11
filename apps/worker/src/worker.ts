@@ -18,7 +18,11 @@ export function createPollingWorker(
         return "idle"
       }
 
-      await processor.process({ ownerId: job.ownerId, jobId: job.jobId })
+      await processor.process({
+        ownerId: job.ownerId,
+        jobId: job.jobId,
+        ...(job.traceContext ? { traceContext: job.traceContext } : {}),
+      })
       return "processed"
     },
   }
