@@ -303,14 +303,12 @@ export function shouldFallbackToArchive(params: {
   return trimmed.length < MARKDOWN_FALLBACK_MIN_LENGTH
 }
 
-/** AIブロックを出すかどうか。未処理(フィールドが無い)記事では出さない。 */
+/** AI要約ブロックを出すかどうか。関連度の成否とは独立に判定する。 */
 export function hasAiEnrichment(
   article: Pick<Article, "aiSummary" | "relevanceScore">
 ): boolean {
   return (
-    typeof article.aiSummary === "string" &&
-    article.aiSummary.trim().length > 0 &&
-    typeof article.relevanceScore === "number"
+    typeof article.aiSummary === "string" && article.aiSummary.trim().length > 0
   )
 }
 

@@ -15,7 +15,7 @@ export type ArticleAiBlockProps = {
   readonly isRecalculating: boolean
 }
 
-/** Markdown要約 + 理由 + 適合度。未処理の記事(フィールドが無い)では何も出さない。 */
+/** Markdown要約を表示し、関連度が生成済みの場合だけスコアと理由を添える。 */
 export function ArticleAiBlock({
   article,
   onRecalculate,
@@ -30,16 +30,20 @@ export function ArticleAiBlock({
           <Sparkles aria-hidden="true" className="size-3.5" />
           AI要約
         </div>
-        <div className="flex items-center gap-2">
-          <Progress
-            aria-label="適合度"
-            className="w-20"
-            value={article.relevanceScore ?? null}
-          />
-          <span className="text-xs text-muted-foreground">
-            {article.relevanceScore}
-          </span>
-        </div>
+        {typeof article.relevanceScore === "number" ? (
+          <div className="flex items-center gap-2">
+            <Progress
+              aria-label="適合度"
+              className="w-20"
+              value={article.relevanceScore}
+            />
+            <span className="text-xs text-muted-foreground">
+              {article.relevanceScore}
+            </span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">適合度未計算</span>
+        )}
       </div>
 
       <div className="text-sm">

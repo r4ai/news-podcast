@@ -254,7 +254,7 @@ describe("shouldFallbackToArchive", () => {
 })
 
 describe("hasAiEnrichment", () => {
-  it("requires both a non-empty summary and a relevance score", () => {
+  it("shows a non-empty summary even while relevance is unavailable", () => {
     expect(
       hasAiEnrichment({ aiSummary: "## 結論\n要約", relevanceScore: 80 })
     ).toBe(true)
@@ -267,7 +267,7 @@ describe("hasAiEnrichment", () => {
         aiSummary: "## 結論\n要約",
         relevanceScore: undefined,
       })
-    ).toBe(false)
+    ).toBe(true)
   })
 })
 
