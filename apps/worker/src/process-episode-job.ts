@@ -888,9 +888,14 @@ function classifyFailure(error: unknown) {
       retryable: true,
     }
   }
-  const retryable =
-    (error instanceof PodcastAgentError && error.retryable) ||
-    error instanceof VoicevoxProviderError
+  if (error instanceof PodcastAgentError) {
+    return {
+      code: error.retryable ? "provider-unavailable" : "pipeline-input-invalid",
+      message: "Podcast generation failed",
+      retryable: error.retryable,
+    }
+  }
+  const retryable = error instanceof VoicevoxProviderError
   return {
     code: retryable ? "provider-unavailable" : "pipeline-input-invalid",
     message: error instanceof Error ? error.message : "Unknown pipeline error",

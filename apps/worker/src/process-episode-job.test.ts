@@ -4,6 +4,7 @@ import { join } from "node:path"
 
 import { LocalStore } from "@news-podcast/adapters/db/local"
 import { VoicevoxProviderError } from "@news-podcast/adapters/voicevox"
+import { PodcastAgentError } from "@news-podcast/adapters/openai-agent"
 import type { AudioStore, ObjectStore } from "@news-podcast/application"
 import {
   noopObservability,
@@ -198,6 +199,40 @@ describe("bounded episode processing", () => {
       failure: { code: "attempt-limit-exceeded" },
     })
     expect(store.leaseNext(new Date())).toBeUndefined()
+    store.close()
+  })
+
+  it("does not persist OpenAI provider details in the public job failure", async () => {
+    const { store, leased } = await createLeasedJob("sanitize-agent-error")
+    const processor = new EpisodeProcessor({
+      store,
+      audio: memoryAudioStore(),
+      agent: {
+        run: () =>
+          Promise.reject(
+            new PodcastAgentError(
+              "OpenAI rejected field secret_provider_detail",
+              false
+            )
+          ),
+      },
+      speech: { synthesize: () => Promise.resolve(wave()) },
+      voice: { characterName: "ずんだもん" },
+    })
+
+    await processor.process(leased)
+
+    expect(store.getJob("owner-1", leased.id)).toMatchObject({
+      status: "failed",
+      failure: {
+        code: "pipeline-input-invalid",
+        message: "Podcast generation failed",
+        retryable: false,
+      },
+    })
+    expect(JSON.stringify(store.getJob("owner-1", leased.id))).not.toContain(
+      "secret_provider_detail"
+    )
     store.close()
   })
 })
