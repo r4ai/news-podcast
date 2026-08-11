@@ -27,4 +27,16 @@ describe("subscription display model", () => {
       "feed-missing",
     ])
   })
+
+  it("sorts feed names deterministically instead of preserving API order", () => {
+    expect(
+      enabledFeedNames(
+        [
+          { id: "sub-2", feedId: "feed-2", enabled: true },
+          { id: "sub-1", feedId: "feed-1", enabled: true },
+        ] as unknown as Subscription[],
+        feeds
+      )
+    ).toEqual(["Hacker News", "Zenn"])
+  })
 })

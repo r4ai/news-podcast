@@ -16,6 +16,7 @@ import {
 import { ItemGroup } from "@workspace/ui/components/item"
 
 import {
+  compareFeedNames,
   feedNameResolver,
   feedsQueryOptions,
   type Feed,
@@ -56,6 +57,9 @@ export function SubscriptionListView({
   subscriptions,
 }: SubscriptionListViewProps) {
   const feedName = feedNameResolver(feeds)
+  const sortedSubscriptions = subscriptions.toSorted((left, right) =>
+    compareFeedNames(feedName(left.feedId), feedName(right.feedId))
+  )
 
   return (
     <Card>
@@ -70,7 +74,7 @@ export function SubscriptionListView({
       <CardContent>
         {subscriptions.length > 0 ? (
           <ItemGroup>
-            {subscriptions.map((subscription) => (
+            {sortedSubscriptions.map((subscription) => (
               <SubscriptionItem
                 disabled={pending}
                 feedName={feedName(subscription.feedId)}

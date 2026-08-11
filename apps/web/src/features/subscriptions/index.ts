@@ -3,6 +3,7 @@ export {
   subscriptionsQueryOptions,
 } from "./api/subscription-queries"
 export {
+  compareFeedNames,
   enabledFeedNames,
   feedNameResolver,
   type Feed,
