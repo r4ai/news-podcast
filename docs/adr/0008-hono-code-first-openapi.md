@@ -5,7 +5,7 @@
 - Decision owners: Product owner / API
 - Supersedes: ADR-0002の「YAMLを契約の正本とする」部分
 - Superseded by: N/A
-- Related: `apps/api/src/app.ts`, `packages/contracts/openapi/openapi.json`
+- Related: `apps/api/src/routes/`, `apps/api/src/app.ts`, `packages/contracts/openapi/openapi.json`
 
 ## コンテキストと変更契機
 

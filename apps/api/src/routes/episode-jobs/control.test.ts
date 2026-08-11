@@ -3,10 +3,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { afterEach, describe, expect, it } from "vitest"
-
 import { LocalStore } from "@news-podcast/adapters/db/local"
 
-import { createApp } from "./app.js"
+import { createApp } from "../../app.js"
 
 const directories: string[] = []
 

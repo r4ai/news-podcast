@@ -2,7 +2,7 @@
 
 - 状態: RSS Reader・記事アーカイブ・Agent生成 Accepted、実装中
 - 更新日: 2026-08-11
-- 契約の正本: `apps/api/src/app.ts` のHono/Zod route schema
+- 契約の正本: `apps/api/src/routes/**` のHono/Zod route schema
 - 生成契約: `packages/contracts/openapi/openapi.json`
 - 判断記録: `docs/adr/`
 

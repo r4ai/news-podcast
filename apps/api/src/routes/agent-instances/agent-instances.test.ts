@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { SqliteAgentRuntimeStore } from "@news-podcast/adapters/agent-runtime/sqlite"
 import { LocalStore } from "@news-podcast/adapters/db/local"
 
-import { createApp } from "./app.js"
+import { createApp } from "../../app.js"
 
 const directories: string[] = []
 

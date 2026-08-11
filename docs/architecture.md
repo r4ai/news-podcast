@@ -118,7 +118,33 @@ flowchart LR
   Application --> Domain
 ```
 
-`apps/api/src/app.ts` のHono/Zod route schemaがHTTP契約の正本であり、そこから `openapi.json` とWeb用TypeScript型を生成する。Webはサーバー実装やDomain型ではなく、公開契約だけに依存する。
+`apps/api/src/routes/**` のHono/Zod route schemaがHTTP契約の正本であり、そこから `openapi.json` とWeb用TypeScript型を生成する。Webはサーバー実装やDomain型ではなく、公開契約だけに依存する。
+
+### 3.4 apps/api内部構成
+
+`apps/api/src` はルーティングに沿ってディレクトリを分けている（ADR-0018のcolocationルールをAPI側にも適用）。
+
+```
+apps/api/src/
+  app.ts              createApp(): ミドルウェア登録 + registerRoutes呼び出しのみ
+  dependencies.ts      AppDependencies（中核依存/任意依存）
+  node.ts / cloudflare.ts   composition root（Node/Workers）
+  http/
+    schemas.ts          Zod/OpenAPIスキーマの正本
+    problem.ts           RFC 7807 Problem Detailsヘルパ
+    context.ts            Variables/ApiApp/RouteRegistrar型
+    sse.ts                 SSEのポーリング+ハートビートループ共通化
+    middleware/            observability・authentication
+  routes/
+    index.ts             全ルートの登録順を決める唯一の場所
+    <resource>/           1リソース1ディレクトリ、1ルート1ファイル
+      <verb>.ts             createRoute定義とhandlerを併置
+      presenter.ts           DTO変換（複数ルートから使う場合）
+  testing/
+    fixtures.ts          テスト用一時SQLite・JSONヘルパ
+```
+
+`routes/<resource>/<verb>.ts` は `createRoute` 定義と `app.openapi(route, handler)` を同一ファイルに持つ。ルート定義がHono route(=契約)である以上、契約とその実装を分けて別ファイルに置くと差分の把握がかえって難しくなるため、意図して併置している。
 
 ## 4. 主要なシステムフロー
 

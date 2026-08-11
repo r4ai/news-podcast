@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { LocalStore } from "@news-podcast/adapters/db/local"
 import type { AgUiEvent } from "@news-podcast/contracts/agui"
 
-import { createApp } from "./app.js"
+import { createApp } from "../../app.js"
 
 const directories: string[] = []
 

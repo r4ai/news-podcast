@@ -1,29 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { describe, expect, it } from "vitest"
 
-import { afterEach, describe, expect, it } from "vitest"
-import { LocalStore } from "@news-podcast/adapters/db/local"
+import { createApp } from "../../app.js"
+import { json, useTemporaryStore } from "../../testing/fixtures.js"
 
-import { createApp } from "./app.js"
-
-const directories: string[] = []
-
-afterEach(() => {
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true })
-  }
-})
-
-function openStore(): LocalStore {
-  const directory = mkdtempSync(join(tmpdir(), "news-podcast-api-tags-"))
-  directories.push(directory)
-  return new LocalStore(join(directory, "app.sqlite"))
-}
-
-async function json<T>(response: Response): Promise<T> {
-  return (await response.json()) as T
-}
+const openStore = useTemporaryStore("news-podcast-api-tags-")
 
 describe("タグAPI", () => {
   it("creates, lists, and deletes a tag for the authenticated owner", async () => {
