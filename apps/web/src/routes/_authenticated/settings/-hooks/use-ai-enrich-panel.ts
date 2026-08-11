@@ -20,6 +20,7 @@ export function useAiEnrichPanel() {
 
   const statusQuery = useEnrichQueueStatus({ refetchInterval: 30_000 })
   const reprocessMutation = api.useMutation("post", "/v1/me/enrich/reprocess")
+  const resetDailyMutation = api.useMutation("post", "/v1/me/enrich/reset-daily")
 
   function requestReprocess() {
     setConfirmOpen(true)
@@ -54,6 +55,20 @@ export function useAiEnrichPanel() {
     })
   }
 
+  function resetDaily() {
+    startTransition(async () => {
+      try {
+        await resetDailyMutation.mutateAsync({})
+        await queryClient.invalidateQueries({
+          queryKey: ENRICH_QUEUE_QUERY_KEY,
+        })
+        toast.success("本日の処理上限をリセットしました")
+      } catch {
+        toast.error("上限のリセットに失敗しました")
+      }
+    })
+  }
+
   return {
     status: statusQuery.data,
     pending: reprocessMutation.isPending,
@@ -61,6 +76,7 @@ export function useAiEnrichPanel() {
     requestReprocess,
     cancelReprocess,
     confirmReprocess,
+    resetDaily,
   } as const
 }
 

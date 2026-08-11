@@ -1881,6 +1881,14 @@ export class LocalStore implements EpisodeJobRepository {
       .run(localDate, by)
   }
 
+  resetEnrichProcessedToday(localDate: string): void {
+    this.database
+      .prepare(
+        "DELETE FROM ai_enrich_daily_progress WHERE local_date = ?"
+      )
+      .run(localDate)
+  }
+
   // 記事1件を対象にした即時（オンデマンド）再処理用に、現行の候補情報を返す。
   // 既に処理済み(現行profile_hash/prompt_version一致)でも強制的に返す
   // （呼び出し側のPOST /enrichは常に再実行なため）。
@@ -1952,23 +1960,31 @@ export class LocalStore implements EpisodeJobRepository {
     )
 
     const summaryPlaceholders = snapshotIds.map(() => "?").join(",")
+    // 表示目的ではバージョン不問で最新の要約を使う（v1配列→Markdown変換）。
     const summaryRows = snapshotIds.length
       ? (this.database
           .prepare(
             `SELECT snapshot_id, summary_json FROM article_summaries
-             WHERE prompt_version = ? AND snapshot_id IN (${summaryPlaceholders})`
+             WHERE snapshot_id IN (${summaryPlaceholders})
+             ORDER BY snapshot_id, created_at DESC`
           )
-          .all(SUMMARY_PROMPT_VERSION, ...snapshotIds) as Record<
+          .all(...snapshotIds) as Record<
           string,
           unknown
         >[])
       : []
-    const summaryMap = new Map<string, string>(
-      summaryRows.map((row) => [
-        String(row.snapshot_id),
-        String(JSON.parse(String(row.summary_json))),
-      ])
-    )
+    const seen = new Set<string>()
+    const summaryMap = new Map<string, string>()
+    for (const row of summaryRows) {
+      const sid = String(row.snapshot_id)
+      if (seen.has(sid)) continue
+      seen.add(sid)
+      const parsed = JSON.parse(String(row.summary_json)) as unknown
+      const markdown = Array.isArray(parsed)
+        ? parsed.map((item: unknown) => `- ${String(item)}`).join("\n")
+        : String(parsed)
+      summaryMap.set(sid, markdown)
+    }
 
     const tagPlaceholders = feedItemIds.map(() => "?").join(",")
     const tagRows = feedItemIds.length

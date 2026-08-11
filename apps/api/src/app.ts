@@ -517,6 +517,19 @@ export function createApp(dependencies: AppDependencies = {}) {
     const enqueued = dependencies.store.enqueueReprocess(ownerId)
     return context.json({ enqueued }, 200)
   })
+  app.openapi(enrichResetDailyRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    if (process.env.NODE_ENV === "production") {
+      return context.json(
+        problem(503, "unavailable", "Only available in development"),
+        503
+      )
+    }
+    dependencies.store.resetEnrichProcessedToday(
+      new Date().toISOString().slice(0, 10)
+    )
+    return context.json({ message: "Daily limit reset" }, 200)
+  })
   app.openapi(articleAssetRoute, (context) =>
     dependencies.serveArticleAsset
       ? dependencies.serveArticleAsset(
@@ -1474,6 +1487,23 @@ const enrichReprocessRoute = createRoute({
     200: jsonContent(
       z.object({ enqueued: z.number().int().nonnegative() }),
       "Number of enqueued articles"
+    ),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const enrichResetDailyRoute = createRoute({
+  method: "post",
+  path: "/v1/me/enrich/reset-daily",
+  tags: ["AI enrichment"],
+  operationId: "enrichResetDaily",
+  description:
+    "Reset the daily AI enrichment usage counter for development convenience.",
+  responses: {
+    200: jsonContent(
+      z.object({ message: z.string() }),
+      "Confirmation message"
     ),
     401: problemContent("Unauthorized"),
     503: problemContent("Unavailable"),

@@ -2160,6 +2160,55 @@
         }
       }
     },
+    "/v1/me/enrich/reset-daily": {
+      "post": {
+        "tags": [
+          "AI enrichment"
+        ],
+        "operationId": "enrichResetDaily",
+        "description": "Reset the daily AI enrichment usage counter for development convenience.",
+        "responses": {
+          "200": {
+            "description": "Confirmation message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/articles/{articleId}/assets/{hash}": {
       "get": {
         "tags": [

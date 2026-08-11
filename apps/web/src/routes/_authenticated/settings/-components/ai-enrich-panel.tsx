@@ -34,6 +34,7 @@ export function AiEnrichPanel() {
       pending={panel.pending}
       reprocessableCount={panel.status?.reprocessable.count}
       requestReprocess={panel.requestReprocess}
+      resetDaily={panel.resetDaily}
     />
   )
 }
@@ -46,6 +47,7 @@ export type AiEnrichPanelViewProps = {
   readonly requestReprocess: () => void
   readonly cancelReprocess: () => void
   readonly confirmReprocess: () => void
+  readonly resetDaily: () => void
 }
 
 export function AiEnrichPanelView({
@@ -56,6 +58,7 @@ export function AiEnrichPanelView({
   requestReprocess,
   cancelReprocess,
   confirmReprocess,
+  resetDaily,
 }: AiEnrichPanelViewProps) {
   const percent = daily
     ? Math.min(100, Math.round((daily.used / daily.limit) * 100))
@@ -84,6 +87,17 @@ export function AiEnrichPanelView({
           </div>
           <Progress aria-label="本日の処理上限の使用率" value={percent ?? null} />
         </div>
+
+        {import.meta.env.DEV ? (
+          <div className="flex items-center justify-between rounded-md border border-dashed border-muted-foreground/20 p-3">
+            <span className="text-xs text-muted-foreground">
+              開発用：日次上限をリセット
+            </span>
+            <Button onClick={resetDaily} size="sm" variant="outline">
+              リセット
+            </Button>
+          </div>
+        ) : null}
 
         {reprocessableCount === 0 ? (
           <p className="text-sm text-muted-foreground">

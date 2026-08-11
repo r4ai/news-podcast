@@ -15,6 +15,7 @@ function args(overrides: Partial<AiEnrichPanelViewProps>): AiEnrichPanelViewProp
     requestReprocess: fn(),
     cancelReprocess: fn(),
     confirmReprocess: fn(),
+    resetDaily: fn(),
     ...overrides,
   }
 }
