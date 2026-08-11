@@ -30,6 +30,7 @@ export function useGeneration() {
   const [pickerInitialArticleIds, setPickerInitialArticleIds] = useState<
     readonly string[]
   >([])
+  const [submitError, setSubmitError] = useState<string>()
   const [streamConnected, setStreamConnected] = useState(false)
   const jobs = api.useSuspenseQuery("get", "/v1/episode-jobs", undefined, {
     // 進行中のジョブがある間だけ追従し、静止したら止める。SSEが生きている
@@ -106,7 +107,7 @@ export function useGeneration() {
         })
       } catch (error) {
         recordBrowserEvent("episode.requested", { result: "failed" })
-        throw error
+        setSubmitError(messageFromSubmitError(error))
       }
     })
   }
@@ -142,6 +143,7 @@ export function useGeneration() {
     pickerInitialArticleIds,
     // 生成は記事選択が前提なので、ボタンは即発火ではなくダイアログを開く。
     onGenerate: () => {
+      setSubmitError(undefined)
       setPickerInitialArticleIds([])
       setPickerOpen(true)
     },
@@ -153,8 +155,26 @@ export function useGeneration() {
         cancelJob.mutateAsync({ params: { path: { jobId: latestJob.id } } })
       ),
     onRetry: () => {
+      setSubmitError(undefined)
       setPickerInitialArticleIds(latestJob?.articleIds ?? [])
       setPickerOpen(true)
     },
+    submitError,
+    onDismissSubmitError: () => setSubmitError(undefined),
   } as const
+}
+
+function messageFromSubmitError(
+  error: unknown
+): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as Record<string, unknown>).code === "unselectable-articles"
+  ) {
+    return "選択した記事の一部が現在は利用できません。一覧に表示されている記事だけを選び直してください。"
+  }
+  if (error instanceof Error) return error.message
+  return "生成を開始できませんでした。もう一度お試しください。"
 }

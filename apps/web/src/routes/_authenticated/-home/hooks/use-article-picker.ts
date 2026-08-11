@@ -63,6 +63,22 @@ export function useArticlePicker(
   const selected = useMemo(() => new Set(selectedIds), [selectedIds])
   const atLimit = selectedIds.length >= MAX_SELECTED_ARTICLES
 
+  // 候補一覧を読み切った時点で、どのページにも現れなかった選択IDを外す。
+  // 購読停止やアーカイブ失敗で選べなくなった記事を再生成対象に送る事故を防ぐ。
+  const loadedIds = useMemo(
+    () => new Set(articles.map((article) => article.id)),
+    [articles]
+  )
+  useEffect(() => {
+    if (!enabled) return
+    if (listQuery.isLoading) return
+    if (listQuery.hasNextPage !== false) return
+    setSelectedIds((current) => {
+      const filtered = current.filter((id) => loadedIds.has(id))
+      return filtered.length !== current.length ? filtered : current
+    })
+  }, [enabled, loadedIds, listQuery.isLoading, listQuery.hasNextPage])
+
   const toggle = useCallback(
     (articleId: string) => {
       setSelectedIds((current) =>

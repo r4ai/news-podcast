@@ -13,6 +13,7 @@ export function GenerationDashboard() {
     pickerOpen,
     onPickerOpenChange,
     onConfirmGenerate,
+    submitError,
     ...generation
   } = useGeneration()
   // 候補の取得はダイアログを開くまで走らせない。
@@ -39,6 +40,7 @@ export function GenerationDashboard() {
         pending={generation.pending}
         selected={picker.selected}
         selectedCount={picker.selectedIds.length}
+        submitError={submitError}
       />
     </>
   )

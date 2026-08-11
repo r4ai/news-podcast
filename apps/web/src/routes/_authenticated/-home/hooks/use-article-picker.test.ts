@@ -103,4 +103,28 @@ describe("useArticlePicker", () => {
     act(() => result.current.onClear())
     expect(result.current.selectedIds).toEqual([])
   })
+
+  it("drops initial selection IDs not present in the candidate list", async () => {
+    // 購読停止やアーカイブ失敗で選べなくなった記事を再生成時に送らない
+    // ように、候補一覧を読み切った時点で実在しないIDを選択から外す。
+    stubArticles(3) // a0, a1, a2 だけが選べる
+    const { result } = renderHookWithProviders(() =>
+      useArticlePicker(true, ["a1", "nonexistent"])
+    )
+
+    await waitFor(() => expect(result.current.articles).toHaveLength(3))
+    expect(result.current.selectedIds).toEqual(["a1"])
+  })
+
+  it("keeps initial selection that matches loaded candidates", async () => {
+    // 実在する候補だけを残し、一覧が読み切られるまで再生成時に
+    // 有効な事前選択を誤って落とさないこと。
+    stubArticles(5) // a0-a4
+    const { result } = renderHookWithProviders(() =>
+      useArticlePicker(true, ["a0", "a2", "a4"])
+    )
+
+    await waitFor(() => expect(result.current.articles).toHaveLength(5))
+    expect(result.current.selectedIds).toEqual(["a0", "a2", "a4"])
+  })
 })

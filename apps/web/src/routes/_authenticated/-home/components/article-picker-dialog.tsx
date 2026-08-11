@@ -9,6 +9,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@workspace/ui/components/alert-dialog"
+import {
+  Alert,
+  AlertDescription,
+} from "@workspace/ui/components/alert"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
@@ -41,6 +45,7 @@ export type ArticlePickerDialogProps = {
   readonly hasNextPage?: boolean
   readonly isFetchingNextPage?: boolean
   readonly pending?: boolean
+  readonly submitError?: string
   readonly onOpenChange: (open: boolean) => void
   readonly onToggle: (articleId: string) => void
   readonly onSelectTop: () => void
@@ -212,6 +217,7 @@ export function ArticlePickerDialog({
   open,
   pending,
   selectedCount,
+  submitError,
   ...body
 }: ArticlePickerDialogProps) {
   return (
@@ -244,6 +250,14 @@ export function ArticlePickerDialog({
         </AlertDialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {submitError ? (
+            <div className="p-3">
+              <Alert variant="destructive">
+                <TriangleAlert aria-hidden="true" />
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
+            </div>
+          ) : null}
           <PickerBody {...body} />
         </div>
 
