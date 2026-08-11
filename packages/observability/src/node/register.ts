@@ -18,7 +18,7 @@ export interface RegisterOptions {
 let instance: Observability | undefined
 
 /**
- * 自動計装を正本とするNodeエントリ。**最初のimport**で評価されることで、
+ * 自動計装を正本とするNodeエントリ。アプリ本体を動的importするbootstrapから呼び、
  * `@hono/node-server`等が `node:http` を静的キャプチャする前に計装を登録する。
  * これにより入り口HTTP・AWS SDK・fetchの全てでトレース欠落が物理的に起こり得ない。
  */

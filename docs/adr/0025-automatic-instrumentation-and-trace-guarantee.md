@@ -24,7 +24,7 @@
 | 設計 | 内容 |
 | --- | --- |
 | 自動計装のbaseline化 | `createNodeObservability`が`OTEL_ENABLED=true`でhttp/undici計装を登録。undiciは`diagnostics_channel`を使うため、グローバル`fetch`・`undici.fetch`・`node:http`の全outboundと、APIの全inboundが自動spanになる |
-| register-first entry | `@news-podcast/observability/node/register`の`getNodeObservability`を**最初のimport**で評価し、`@hono/node-server`やAWS SDKが`node:http`を静的キャプチャする前に計装をpatchする。同時に`installProcessErrorListeners`（uncaughtException/unhandledRejection → 構造化log + `process.error` + flush + exit(1)）を登録する |
+| bootstrap-first entry | API bootstrapが`getNodeObservability`を呼んだ後にcomposition rootを動的importし、`@hono/node-server`やAWS SDKが`node:http`を静的キャプチャする前に計装をpatchする。静的importの記述順には依存しない。同時に`installProcessErrorListeners`（uncaughtException/unhandledRejection → 構造化log + `process.error` + flush + exit(1)）を登録する |
 | Allowlist伝播ゲート | ADR-0017の「管理外serviceへtrace headerを送らない」を**部分改訂**して一般化。`AllowlistTextMapPropagator`が`propagationDisabledKey`付きcontextではW3C Trace Contextの注入をスキップ。`installPropagationGate`がグローバルfetchと`node:http/https`をラップし、非allowlist宛先（任意RSSサイト等）への注入だけを止める。span自体は自動計装が生成し続け、トレース欠落は発生しない。allowlist既定は`api.openai.com`・`127.0.0.1`・`localhost`で、`OTEL_PROPAGATION_ALLOWLIST`で拡張できる。`createNodeSafeFetcher`は任意の`propagate`フックを持ち、composition rootが`createPropagationHook()`を渡すことでDNS pin経路も同じ契約を守る。extract（受信）は常にW3C |
 | 保証root | `withGuaranteedSpan(name, op)`がactive span無しのときroot spanを合成し、`trace.entry.synthesized`を計数する。Workerは`tick()`全体を`withGuaranteedSpan("worker.tick", ...)`で包み、scheduler・RSS同期・archive・AI enrich・cleanup・job処理が常にtrace IDを持つ。`assertActiveSpan(name)`は非本番でspan欠落をthrow（fail-fast）、本番では計装欠落をエラーにせずmetricとruleで監視する |
 | エラー詳細 | 失敗logとspanにredact済み`error.message`（URL・email・secret置換、500文字cap）と`error.type`を記録し、呼び出し元は`failure.code`・`error.retryable`・`http.route`・`operation.stage`を付与する。`error.message`は高cardinalityのため**metric属性へは入れない** |
@@ -115,15 +115,15 @@ sequenceDiagram
 
 | 対象 | 必要な変更 | 状態 | 証拠 |
 | --- | --- | --- | --- |
-| 設計書 | 自動計装baseline、register-first、伝播ゲート、保証root、error.message方針を追記 | Done | `docs/design.md` §6.1、`docs/architecture.md` §7 |
+| 設計書 | 自動計装baseline、bootstrap-first、伝播ゲート、保証root、error.message方針を追記 | Done | `docs/design.md` §6.1、`docs/architecture.md` §7 |
 | ドメイン/ユースケース | N/A — trace契約はobservability境界に限定 | Done | application port変更なし |
 | OpenAPI/外部契約 | N/A — W3C標準headerの内部処理のみ | Done | schema変更なし |
-| コード/ポート | http/undici自動計装、register-first entry、伝播ゲート、`withGuaranteedSpan`/`assertActiveSpan`、error.message redaction | Done | `packages/observability` |
+| コード/ポート | http/undici自動計装、bootstrap-first entry、伝播ゲート、`withGuaranteedSpan`/`assertActiveSpan`、error.message redaction | Done | `apps/api/src/bootstrap.ts`、`packages/observability` |
 | データ/ストレージ | N/A — 既存trace列を利用 | Done | migration変更なし |
-| 実行/配備 | API/Workerでregisterを最初にimport、`createPropagationHook()`をsafe fetchへ注入 | Done | `apps/api/src/node.ts`、`apps/worker/src/node.ts` |
+| 実行/配備 | APIはbootstrap後にcomposition rootを動的import、Workerは非HTTP入口を保証root化し、`createPropagationHook()`をsafe fetchへ注入 | Done | `apps/api/src/bootstrap.ts`、`apps/api/src/node.ts`、`apps/worker/src/node.ts` |
 | 認証/セキュリティ | allowlist伝播、`error.message`のredaction、metric属性の低cardinality維持 | Done | `packages/observability/src/propagation.ts`、`privacy.ts` |
 | フロント/品質保証 | N/A — Browser側契約はADR-0017のまま不変 | Done | Web契約変更なし |
-| テスト/運用 | register-first、伝播gate、synthesized、process error、API middlewareのunit test | Partial | automated tests。SigNoz smokeは実環境gate |
+| テスト/運用 | bootstrap評価順、伝播gate、synthesized、process error、API middlewareのunit test | Partial | automated tests。SigNoz smokeは実環境gate |
 | 監視 | `trace.entry.synthesized`・`http.server.error`・`process.error`のrule、API 5xx / 未計装入口 / process errorのdashboard panel、log-based rule（`rss.sync.failed`・`article.archive.failed`・AI enrich失敗） | Partial | `infra/observability/terraform`（rule/dashboard適用は実環境gateに残る） |
 
 ## 再検討条件
