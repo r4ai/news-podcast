@@ -133,14 +133,49 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     [article, addDraft, patchMutation, invalidate]
   )
 
-  const markedReadRef = useRef<string | undefined>(undefined)
+  const pendingReadRef = useRef<ReadonlyMap<string, Article>>(new Map())
+
+  // flushはref経由で最新を参照する。依存にpatchMutationを入れると毎renderで
+  // callbackが作り直され、flush effectが不要な再実行を起こすため。
+  const flushPendingReadsRef = useRef<() => void>(() => {})
+  flushPendingReadsRef.current = useCallback(() => {
+    const pending = pendingReadRef.current
+    if (pending.size === 0) return
+    pendingReadRef.current = new Map()
+    void Promise.allSettled(
+      [...pending.values()].map((target) =>
+        patchMutation
+          .mutateAsync({
+            params: { path: { articleId: target.id } },
+            body: { read: true },
+          })
+          .catch(() => toast.error("既読にできませんでした"))
+      )
+    ).then(() => void invalidate())
+  }, [patchMutation, invalidate])
+
+  // 記事を離れる瞬間 (切り替え・一覧へ戻る・unmount) に、開いていた未読記事を既読へフラッシュする。
+  useEffect(() => {
+    return () => flushPendingReadsRef.current()
+  }, [articleId])
+
+  // 開いた未読記事をpendingへ記録する。読み込みが終わるまでフラッシュしない。
   useEffect(() => {
     if (!article || article.read) return
-    if (markedReadRef.current === article.id) return
-    markedReadRef.current = article.id
-    update({ read: true }, "既読にできませんでした")
-    // ref guardが選択された記事ごとに1回だけ実行することを保証する。
-  }, [article, update])
+    pendingReadRef.current = new Map(pendingReadRef.current).set(
+      article.id,
+      article
+    )
+  }, [article])
+
+  // タブを閉じる・別ページへ移動する場合も、既読へフラッシュする。
+  useEffect(() => {
+    function onPageHide() {
+      flushPendingReadsRef.current()
+    }
+    window.addEventListener("pagehide", onPageHide)
+    return () => window.removeEventListener("pagehide", onPageHide)
+  }, [])
 
   return {
     articleId,

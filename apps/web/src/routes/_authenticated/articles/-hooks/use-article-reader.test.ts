@@ -73,8 +73,18 @@ describe("useArticleReader", () => {
     )
   })
 
-  it("marks an unread article as read once, automatically, when it is opened", async () => {
-    const { calls } = render([
+  it("does not mark an unread article as read while it is open", async () => {
+    const { result, calls } = render([
+      { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
+      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+    ])
+
+    await waitFor(() => expect(result.current.article).toBeDefined())
+    expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(0)
+  })
+
+  it("marks an unread article as read when switching to another article", async () => {
+    const rendered = render([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
       {
@@ -84,10 +94,61 @@ describe("useArticleReader", () => {
       },
     ])
 
+    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
+
+    await act(async () => rendered.rerender({ articleId: "b" }))
+
     await waitFor(() =>
-      expect(calls.some((call) => call.method === "PATCH")).toBe(true)
+      expect(rendered.calls.some((call) => call.method === "PATCH")).toBe(true)
     )
-    const patch = calls.find((call) => call.method === "PATCH")
+    const patch = rendered.calls.find((call) => call.method === "PATCH")
+    expect(patch?.url).toBe("/v1/me/articles/a")
+    expect(patch?.body).toEqual({ read: true })
+  })
+
+  it("marks pending unread articles as read when the reader unmounts", async () => {
+    const rendered = render([
+      { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
+      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      {
+        method: "PATCH",
+        path: "/v1/me/articles/a",
+        body: makeArticle({ read: true }),
+      },
+    ])
+
+    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
+
+    await act(async () => rendered.unmount())
+
+    await waitFor(() =>
+      expect(rendered.calls.some((call) => call.method === "PATCH")).toBe(true)
+    )
+    const patch = rendered.calls.find((call) => call.method === "PATCH")
+    expect(patch?.body).toEqual({ read: true })
+  })
+
+  it("marks pending unread articles as read on pagehide", async () => {
+    const rendered = render([
+      { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
+      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      {
+        method: "PATCH",
+        path: "/v1/me/articles/a",
+        body: makeArticle({ read: true }),
+      },
+    ])
+
+    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"))
+    })
+
+    await waitFor(() =>
+      expect(rendered.calls.some((call) => call.method === "PATCH")).toBe(true)
+    )
+    const patch = rendered.calls.find((call) => call.method === "PATCH")
     expect(patch?.body).toEqual({ read: true })
   })
 
