@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     process::Stdio,
     sync::{
         Arc,
@@ -35,13 +35,15 @@ pub async fn execute(
     output_limit: usize,
 ) -> Result<ExecResponse, GuestExecError> {
     request.validate()?;
-    if !Path::new(&request.working_directory).is_dir() {
-        return Err(GuestExecError::WorkingDirectoryUnavailable);
-    }
+    let working_directory = resolve_working_directory(
+        Path::new("/workspace"),
+        Path::new(&request.working_directory),
+    )
+    .await?;
     let mut command = Command::new(&request.command[0]);
     command
         .args(&request.command[1..])
-        .current_dir(&request.working_directory)
+        .current_dir(working_directory)
         .env_clear()
         .env("PATH", "/usr/local/bin:/usr/bin:/bin")
         .stdin(Stdio::null())
@@ -73,6 +75,22 @@ pub async fn execute(
         stderr: String::from_utf8_lossy(&stderr.bytes).into_owned(),
         truncated: stdout.total.saturating_add(stderr.total) > output_limit,
     })
+}
+
+async fn resolve_working_directory(
+    workspace: &Path,
+    requested: &Path,
+) -> Result<PathBuf, GuestExecError> {
+    let workspace = tokio::fs::canonicalize(workspace)
+        .await
+        .map_err(|_| GuestExecError::WorkingDirectoryUnavailable)?;
+    let requested = tokio::fs::canonicalize(requested)
+        .await
+        .map_err(|_| GuestExecError::WorkingDirectoryUnavailable)?;
+    if !requested.starts_with(workspace) {
+        return Err(ValidationError::InvalidWorkingDirectory.into());
+    }
+    Ok(requested)
 }
 
 struct CapturedOutput {
@@ -118,6 +136,8 @@ async fn capture_output(
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, time::SystemTime};
+
     use sandbox_protocol::PROTOCOL_VERSION;
     use tokio::io::AsyncWriteExt;
 
@@ -160,5 +180,37 @@ mod tests {
         assert_eq!(stdout.total, 11);
         assert_eq!(stderr.total, 11);
         assert_eq!(stdout.bytes.len() + stderr.bytes.len(), 7);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rejects_a_workspace_symlink_that_resolves_outside_the_root() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!(
+            "sandbox-guest-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let workspace = root.join("workspace");
+        let outside = root.join("outside");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let escape = workspace.join("escape");
+        symlink(&outside, &escape).unwrap();
+
+        let result = resolve_working_directory(&workspace, &escape).await;
+
+        assert!(matches!(
+            result,
+            Err(GuestExecError::InvalidRequest(
+                ValidationError::InvalidWorkingDirectory
+            ))
+        ));
+        fs::remove_dir_all(root).unwrap();
     }
 }
