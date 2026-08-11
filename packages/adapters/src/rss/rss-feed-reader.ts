@@ -2,6 +2,8 @@ import { XMLParser } from "fast-xml-parser"
 
 import type { RssSourceItem } from "@news-podcast/application"
 
+const MAX_FEED_BYTES = 5 * 1024 * 1024
+
 export interface RssFeed {
   readonly name: string
   readonly feedUrl: string
@@ -34,35 +36,39 @@ export class RssFeedReader {
   }
 
   async discover(feedUrl: string): Promise<DiscoveredFeed> {
-    const response = await this.fetch(feedUrl, "RSS feed")
-    const document = this.parse(await response.text())
+    const document = this.parse(await this.fetchText(feedUrl, "RSS feed"))
     const rss = document.rss as Record<string, unknown> | undefined
     const channel = rss?.channel as Record<string, unknown> | undefined
     const atom = document.feed as Record<string, unknown> | undefined
     const name =
       text(channel?.title ?? atom?.title) ?? new URL(feedUrl).hostname
     const siteUrl =
-      atomLink(channel?.link ?? atom?.link) ??
-      text(channel?.link ?? atom?.link) ??
-      new URL(feedUrl).origin
+      httpUrl(
+        atomLink(channel?.link ?? atom?.link) ??
+          text(channel?.link ?? atom?.link),
+        feedUrl
+      )?.href ?? new URL(feedUrl).origin
     return {
       name,
       feedUrl,
       siteUrl,
-      items: parseItems(document, name),
+      items: parseItems(document, name, feedUrl),
     }
   }
 
   private async readOne(feed: RssFeed): Promise<readonly RssSourceItem[]> {
-    const response = await this.fetch(feed.feedUrl, feed.name)
-    return parseItems(this.parse(await response.text()), feed.name)
+    return parseItems(
+      this.parse(await this.fetchText(feed.feedUrl, feed.name)),
+      feed.name,
+      feed.feedUrl
+    )
   }
 
   private parse(value: string): Record<string, unknown> {
     return this.parser.parse(value) as Record<string, unknown>
   }
 
-  private async fetch(url: string, name: string): Promise<Response> {
+  private async fetchText(url: string, name: string): Promise<string> {
     let response: Response
     try {
       response = await this.fetcher(url, {
@@ -77,19 +83,29 @@ export class RssFeedReader {
         `RSS request failed for ${name} with ${response.status}`
       )
     }
-    return response
+    const declaredLength = Number(response.headers.get("Content-Length"))
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_FEED_BYTES) {
+      throw new RssProviderError(`RSS response exceeded 5 MiB for ${name}`)
+    }
+    try {
+      return await readBoundedText(response, MAX_FEED_BYTES)
+    } catch (error) {
+      if (error instanceof RssProviderError) throw error
+      throw new RssProviderError(`RSS response failed for ${name}: ${error}`)
+    }
   }
 }
 
 function parseItems(
   document: Record<string, unknown>,
-  sourceName: string
+  sourceName: string,
+  feedUrl: string
 ): readonly RssSourceItem[] {
   const rawItems = rssItems(document)
   return rawItems.flatMap((raw) => {
     const item = raw as Record<string, unknown>
     const title = text(item.title)
-    const link = atomLink(item.link) ?? text(item.link)
+    const link = httpUrl(atomLink(item.link) ?? text(item.link), feedUrl)
     if (!title || !link) return []
     try {
       const publishedAt = date(item.pubDate ?? item.published ?? item.updated)
@@ -98,7 +114,7 @@ function parseItems(
         {
           sourceName,
           title,
-          url: new URL(link),
+          url: link,
           ...(publishedAt ? { publishedAt } : {}),
           ...(description ? { description: stripMarkup(description) } : {}),
           ...(text(item.guid ?? item.id)
@@ -110,6 +126,45 @@ function parseItems(
       return []
     }
   })
+}
+
+function httpUrl(value: string | undefined, base: string): URL | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value, base)
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readBoundedText(
+  response: Response,
+  maximumBytes: number
+): Promise<string> {
+  if (!response.body) return ""
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let length = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    length += value.byteLength
+    if (length > maximumBytes) {
+      await reader.cancel()
+      throw new RssProviderError("RSS response exceeded 5 MiB")
+    }
+    chunks.push(value)
+  }
+  const body = new Uint8Array(length)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(body)
 }
 
 function rssItems(document: Record<string, unknown>): readonly unknown[] {
