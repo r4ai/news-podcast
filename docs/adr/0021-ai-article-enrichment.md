@@ -4,7 +4,7 @@
 - Date: 2026-08-11
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: 一部（「プロフィール変更時の再計算方針」）はADR-0024、一部（`temperature: 0`）はADR-0026
+- Superseded by: 一部（「プロフィール変更時の再計算方針」）はADR-0024、一部（`temperature: 0`）はADR-0026、一部（要約形式とMermaid検証）はADR-0027
 - Related: `docs/design.md`§7（LLM呼び出しはfake providerで契約テスト）、ADR-0016（`job_outbox`/リース機構と同様の「ワーカーがtickで進める」設計）、ADR-0019（keysetページネーション）、ADR-0020（FTS5全文検索・述語ビルダー方式）
 
 ## コンテキストと変更契機
@@ -14,7 +14,7 @@
 - 興味の源泉は明示的な興味プロフィール（`interestProfile.include`/`exclude`の自由記述）のみ。行動からの自動学習はしない。
 - AI処理は新着のみ・日次バッチ・件数上限つき。全件処理もオンデマンド専用もしない。
 - 成果物は3つ: 日本語Markdown要約（約300字） / 適合度スコア(0-100)と理由1行 / タグ自動付与（タグは別スコープとして本ADRでは要約・スコアのみ扱う）。
-- 要約は常に日本語（英語記事も日本語で要約する）。冒頭に結論を置き、その下にMermaid図・具体例・結果を添える。体言止めで文末の「。」は付けない。
+- 要約は常に日本語（英語記事も日本語で要約する）。形式とMermaid検証はADR-0027を正本とする。
 - スコアは並べ替え軸の一つ。既定は新着順のまま。低スコアを隠したりはしない。
 
 既存資産: `openai-summary-generator.ts`の`text.format = {type:"json_schema", strict:true}`パターン、`openai-podcast-agent.ts`の生fetch+zod検証+`providerOperation()`計装、`config.ts`の`readOpenAiConfig`、`local-store.ts`の述語ビルダー方式（`ARTICLE_SELECT`/`ARTICLE_FROM`/`articleSearchPredicate()`）、`apps/worker/src/process-rss-archive.ts`の「`runOnce()`が毎tick小さく進める」パターン。
