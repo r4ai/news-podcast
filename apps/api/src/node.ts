@@ -1,5 +1,4 @@
-// 自動計装を先に起動するため、registerを最初にimportする（@hono/node-server が
-// node:http を静的キャプチャする前に計装を登録する）。
+// bootstrapが自動計装を開始した後、このcomposition rootを動的importする。
 import {
   createPropagationHook,
   getNodeObservability,

@@ -209,6 +209,25 @@ ssh -N \
 
 接続後はWebアプリを<http://localhost:4173>、SigNozを<http://localhost:8100>で開く。
 
+#### CodexからSigNoz MCPを使う
+
+公式の[SigNoz MCP Server](https://github.com/SigNoz/signoz-mcp-server)をユーザー領域へ配置し、SigNoz UIの`Settings → API Keys`で作成したviewer service account keyを[Codex MCP設定](https://developers.openai.com/codex/mcp)へ登録する。API keyはrepositoryや`.env`へ保存しない。
+
+```bash
+export SIGNOZ_URL=http://127.0.0.1:8100
+export SIGNOZ_API_KEY=replace-with-viewer-key
+
+codex mcp add signoz \
+  --env SIGNOZ_URL="$SIGNOZ_URL" \
+  --env SIGNOZ_API_KEY="$SIGNOZ_API_KEY" \
+  --env LOG_LEVEL=warn \
+  -- /absolute/path/to/signoz-mcp-server
+
+codex mcp list
+```
+
+Codexは展開後のkeyをpermission `0600`の`~/.codex/config.toml`へ保存する。登録後はCodexを再起動し、`/mcp`で`signoz`が有効か確認する。MCPからのdashboard・alert変更はviewer keyでは拒否されるため、通常の障害調査はread-onlyのまま行える。
+
 直接確認やデバッグが必要な場合だけ、次のportを追加でforwardする。
 
 | port | 用途 |
