@@ -1,4 +1,5 @@
 import { Plus, X } from "lucide-react"
+import { useState } from "react"
 
 import type { Tag, TagSuggestion } from "@/features/settings"
 import { Badge } from "@workspace/ui/components/badge"
@@ -49,6 +50,11 @@ export function TagVocabularyManagerView({
   deleteTag,
   promoteSuggestion,
 }: TagVocabularyManagerViewProps) {
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false)
+  const visibleSuggestions = showAllSuggestions
+    ? suggestions
+    : suggestions.slice(0, 8)
+
   return (
     <Card>
       <CardHeader>
@@ -84,19 +90,18 @@ export function TagVocabularyManagerView({
           <ul className="flex flex-wrap gap-2">
             {tags.map((tag) => (
               <li key={tag.id}>
-                <Badge
-                  render={
-                    <button
-                      aria-label={`タグ「${tag.name}」を削除`}
-                      disabled={pending}
-                      onClick={() => deleteTag(tag.id)}
-                      type="button"
-                    />
-                  }
-                  variant="secondary"
-                >
-                  {tag.name}
-                  <X aria-hidden="true" data-icon="inline-end" />
+                <Badge className="gap-0.5 pr-0.5" variant="secondary">
+                  <span>{tag.name}</span>
+                  <Button
+                    aria-label={`タグ「${tag.name}」を削除`}
+                    className="size-5 rounded-full hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
+                    disabled={pending}
+                    onClick={() => deleteTag(tag.id)}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <X aria-hidden="true" />
+                  </Button>
                 </Badge>
               </li>
             ))}
@@ -111,34 +116,54 @@ export function TagVocabularyManagerView({
 
         {suggestions.length > 0 ? (
           <div className="flex flex-col gap-2 border-t pt-4">
-            <h3 className="text-sm font-medium">AIからの提案</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">AIからの提案</h3>
+              <Badge variant="outline">{suggestions.length}件</Badge>
+            </div>
             <p className="text-xs text-muted-foreground">
               語彙に無いためタグ付けを見送った名前です。よく出るものはタグ化すると、
               以後のAI付与に使われます。
             </p>
-            <ul className="flex flex-col gap-2">
-              {suggestions.map((suggestion) => (
+            <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleSuggestions.map((suggestion) => (
                 <li
-                  className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                  className="flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5"
                   key={suggestion.name}
                 >
-                  <span className="text-sm">
+                  <span className="min-w-0 flex-1 truncate text-sm">
                     {suggestion.name}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {suggestion.occurrences}回
-                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {suggestion.occurrences}回
                   </span>
                   <Button
+                    aria-label={`提案「${suggestion.name}」からタグを作成`}
+                    className="shrink-0"
                     disabled={pending}
                     onClick={() => promoteSuggestion(suggestion.name)}
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                   >
-                    このタグを作る
+                    作成
                   </Button>
                 </li>
               ))}
             </ul>
+            {suggestions.length > 8 ? (
+              <Button
+                aria-label={
+                  showAllSuggestions ? "提案を折りたたむ" : "提案をすべて表示"
+                }
+                className="self-start"
+                onClick={() => setShowAllSuggestions((current) => !current)}
+                size="sm"
+                variant="ghost"
+              >
+                {showAllSuggestions
+                  ? "折りたたむ"
+                  : `残り${suggestions.length - 8}件を表示`}
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </CardContent>
