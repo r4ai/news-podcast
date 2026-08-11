@@ -77,7 +77,7 @@ const PODCAST_AGENT_TOOLS = [
     type: "function",
     name: "submit_episode_draft",
     description:
-      "完成したPodcast台本と、実際に使用したRSSまたはWeb検索の出典URLを提出する。",
+      "台本（タイトル・本文）と使用した出典URLを提出する。",
     strict: true,
     parameters: {
       type: "object",
@@ -179,7 +179,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     let previousResponseId: string | undefined
     let nextInput: unknown = selectedArticleIds.size
       ? await this.buildSelectedArticlesPrompt(input)
-      : "購読中のRSS記事から、今聴く価値のある日本語ニュースPodcastを制作してください。記事本文を読み、必要な場合だけWeb検索で補足確認し、完成したらsubmit_episode_draftを呼んでください。"
+      : "購読中のRSS記事から、今聴く価値のあるニュースを選び、本文を読んで要点を抽出せよ。事実確認に必要な時だけweb_searchを使え。台本が完成したらsubmit_episode_draftを呼べ。"
     let toolCalls = 0
     let sourceCorrections = 0
 
@@ -311,13 +311,11 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
       )
       .join("\n")
     return [
-      "ユーザーが次の記事を番組の対象として明示的に選びました。",
+      "以下の記事だけを番組で扱う。全てread_articleで読め。",
       list,
       "",
-      "これら全ての記事をread_articleで読み、全てを番組で扱ってください。",
-      "選択されていない記事を主題にしてはいけません。web_searchは選択記事の",
-      "裏取りと補足確認にのみ使ってください。完成したらsubmit_episode_draftを",
-      "呼んでください。",
+      "選ばれていない記事を主題にするな。web_searchは事実確認時のみ。",
+      "完成したらsubmit_episode_draft。",
     ].join("\n")
   }
 
@@ -402,7 +400,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
       body: JSON.stringify({
         model: this.config.model,
         instructions:
-          "あなたは自主的なニュースPodcast編集者です。RSS記事を主題の起点にし、本文を読んで重要性を判断してください。必要な場合だけWeb検索で補足確認してください。根拠のない事実を追加せず、自然な日本語の単独ナレーションを作ってください。ツールの取得範囲と実行上限を守ってください。",
+          "あなたはニュースPodcast編集者だ。記事本文を読み、本質的な要点だけを抜き出して台本を書け。前置き・免責事項・定型文は一切省け。抽象的な説明の後に具体的な数字・事例を入れ、納得感のある構成にせよ。句読点は読み上げて自然な位置にだけ打て。語尾は「〜た」「〜だ」「〜する」で締めよ。web_searchは事実確認が必要な時だけ使え。",
         input: input.input,
         ...(input.previousResponseId
           ? { previous_response_id: input.previousResponseId }

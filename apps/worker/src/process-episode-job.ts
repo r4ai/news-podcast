@@ -8,10 +8,9 @@ import type {
   LocalStore,
   WorkerJob,
 } from "@news-podcast/adapters/db/local"
-import {
-  OpenAiPodcastAgent,
-  PodcastAgentError,
-} from "@news-podcast/adapters/openai-agent"
+import type { OpenAiConfig } from "@news-podcast/adapters/config"
+import { PodcastAgentError } from "@news-podcast/adapters/openai-agent"
+import { SectionalOpenAiPodcastAgent } from "@news-podcast/adapters/sectional-openai-agent"
 import type { AgentAudit } from "@news-podcast/adapters/openai-agent"
 import {
   VoicevoxProviderError,
@@ -78,6 +77,8 @@ export interface EpisodeProcessorDependencies {
   readonly speech: SpeechSynthesizer
   readonly objects?: ObjectStore
   readonly voice: { characterName: string; styleName?: string }
+  readonly openAi?: OpenAiConfig
+  readonly voicevoxBaseUrl?: URL
   readonly observability?: Observability
 }
 
@@ -320,6 +321,9 @@ export class EpisodeProcessor {
         },
       })
     }
+    await this.extractReadingTerms(job, draft!, observability, signal).catch(
+      () => undefined,
+    )
     const sources = this.dependencies.store.resolveEpisodeSources(
       job.ownerId,
       draft.sourceUrls
@@ -590,6 +594,71 @@ export class EpisodeProcessor {
       status === "succeeded" || status === "failed" || status === "canceled"
     )
   }
+
+  private async extractReadingTerms(
+    job: WorkerJob,
+    draft: { script: string; inputHash: string },
+    observability: Observability,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const config = this.dependencies.openAi
+    if (!config) return
+
+    const existing = new Set(
+      this.dependencies.store
+        .listReadingDictionary(job.ownerId)
+        .map((e) => e.surface),
+    )
+
+    const terms = await extractTermsFromScript(draft.script, config, signal)
+    const newTerms: TermReading[] = []
+    for (const term of terms) {
+      if (existing.has(term.surface)) continue
+      newTerms.push(term)
+    }
+
+    if (newTerms.length === 0) return
+
+    const baseUrl = this.dependencies.voicevoxBaseUrl
+    for (const term of newTerms) {
+      let wordUuid: string | null = null
+      if (baseUrl) {
+        try {
+          wordUuid = await addVoicevoxWord(
+            baseUrl,
+            term.surface,
+            term.reading,
+            term.accentType,
+            signal,
+          )
+        } catch {
+          // VOICEVOX unavailable; persist locally only
+        }
+      }
+      const entry = this.dependencies.store.addReadingDictionary({
+        ownerId: job.ownerId,
+        surface: term.surface,
+        reading: term.reading,
+        accentType: term.accentType,
+        source: "ai_auto",
+        episodeJobId: job.id,
+      })
+      if (wordUuid) {
+        this.dependencies.store.updateReadingDictionary(job.ownerId, entry.id, {
+          wordUuid,
+        })
+      }
+      existing.add(term.surface)
+      observability.log({
+        name: "reading_dictionary.term_added",
+        attributes: {
+          ...jobAttributes(job),
+          "term.surface": term.surface,
+          "term.reading": term.reading,
+        },
+      })
+    }
+  }
 }
 
 /**
@@ -650,7 +719,7 @@ function createAgentAudit(store: LocalStore): AgentAudit {
 export function createLiveProcessor(input: {
   readonly store: LocalStore
   readonly objects: ObjectStore
-  readonly openAi: ConstructorParameters<typeof OpenAiPodcastAgent>[0]
+  readonly openAi: OpenAiConfig
   readonly voicevox: ConstructorParameters<typeof VoicevoxSpeechSynthesizer>[0]
   readonly observability?: Observability
 }): EpisodeProcessor {
@@ -666,7 +735,7 @@ export function createLiveProcessor(input: {
   return new EpisodeProcessor({
     store: input.store,
     audio: new ObjectAudioStore(input.objects),
-    agent: new OpenAiPodcastAgent(
+    agent: new SectionalOpenAiPodcastAgent(
       input.openAi,
       {
         listArticles: ({ ownerId, feedIds, limit, articleIds }) =>
@@ -724,6 +793,8 @@ export function createLiveProcessor(input: {
         ? { styleName: input.voicevox.styleName }
         : {}),
     },
+    openAi: input.openAi,
+    voicevoxBaseUrl: input.voicevox.baseUrl,
     observability,
   })
 }
@@ -1060,8 +1131,95 @@ function hashJson(value: unknown): string {
   return sha256(new TextEncoder().encode(JSON.stringify(value)))
 }
 
+interface TermReading {
+  readonly surface: string
+  readonly reading: string
+  readonly accentType: number
+}
+
+async function extractTermsFromScript(
+  script: string,
+  config: OpenAiConfig,
+  signal: AbortSignal,
+): Promise<readonly TermReading[]> {
+  const prompt = [
+    "以下のPodcast台本から、専門用語・固有名詞・英略語など、",
+    "VOICEVOXが正しく読めない可能性がある単語を抽出し、正しいカタカナ読みを付けよ。",
+    "一般的な日本語は不要。明らかに読み間違えそうな単語だけを対象とせよ。",
+    "",
+    "JSON形式で出力:",
+    '[ { "surface": "GPT-5", "reading": "ジーピーティーファイブ", "accent_type": 6 } ]',
+    "",
+    "台本:",
+    script,
+  ].join("\n")
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(60_000)])
+      : AbortSignal.timeout(60_000),
+    body: JSON.stringify({
+      model: config.model,
+      instructions: "簡潔なJSONだけを出力せよ。説明や前置きは一切不要。",
+      input: prompt,
+    }),
+  })
+
+  if (!response.ok) return []
+
+  const data = (await response.json()) as {
+    output?: readonly { content?: readonly { text?: string }[] }[]
+  }
+  const text = data.output?.[0]?.content?.[0]?.text
+  if (!text) return []
+
+  const match = text.match(/\[[\s\S]*\]/)
+  if (!match) return []
+
+  try {
+    return (JSON.parse(match[0]) as unknown[]).map((item) => {
+      const obj = item as Record<string, unknown>
+      return {
+        surface: String(obj.surface ?? ""),
+        reading: String(obj.reading ?? ""),
+        accentType: Number(obj.accent_type ?? 0),
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex")
+}
+
+async function addVoicevoxWord(
+  baseUrl: URL,
+  surface: string,
+  pronunciation: string,
+  accentType: number,
+  signal: AbortSignal,
+): Promise<string> {
+  const url = new URL("user_dict_word", baseUrl)
+  url.searchParams.set("surface", surface)
+  url.searchParams.set("pronunciation", pronunciation)
+  url.searchParams.set("accent_type", String(accentType))
+  const response = await fetch(url, {
+    method: "POST",
+    signal,
+  })
+  if (!response.ok) {
+    throw new Error(
+      `VOICEVOX user_dict_word add failed with ${response.status}`,
+    )
+  }
+  return (await response.text()).trim()
 }
 
 function silentWave(): Uint8Array {

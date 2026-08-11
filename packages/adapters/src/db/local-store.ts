@@ -88,6 +88,18 @@ export interface TagSuggestionDto {
   readonly lastSeenAt: string
 }
 
+export interface ReadingDictionaryDto {
+  readonly id: string
+  readonly surface: string
+  readonly reading: string
+  readonly accentType: number
+  readonly wordUuid: string | null
+  readonly source: "manual" | "ai_auto"
+  readonly episodeJobId: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
 export type ArticleListState = "all" | "unread" | "saved" | "later"
 export type ArticleListSort = "newest" | "oldest" | "source" | "relevance"
 
@@ -1442,6 +1454,128 @@ export class LocalStore implements EpisodeJobRepository {
       )
       .all()
       .map((row) => String((row as Record<string, unknown>).owner_id))
+  }
+
+  // --- 読み辞書 ----------------------------------------------------------
+  // surface（表記）とreading（読みカナ）の組をownerごとに管理。
+  // VOICEVOX /user_dict_word APIと同期してTTSの読み品質を改善する。
+
+  listReadingDictionary(
+    ownerId: string,
+  ): readonly ReadingDictionaryDto[] {
+    return this.database
+      .prepare(
+        `SELECT id, surface, reading, accent_type, word_uuid, source,
+                episode_job_id, created_at, updated_at
+         FROM reading_dictionary WHERE owner_id = ? ORDER BY surface`
+      )
+      .all(ownerId)
+      .map(toReadingDictionaryEntry)
+  }
+
+  addReadingDictionary(input: {
+    readonly ownerId: string
+    readonly surface: string
+    readonly reading: string
+    readonly accentType?: number
+    readonly source: "manual" | "ai_auto"
+    readonly episodeJobId?: string
+  }): ReadingDictionaryDto {
+    const now = new Date().toISOString()
+    const entry: ReadingDictionaryDto = {
+      id: randomUUID(),
+      surface: input.surface,
+      reading: input.reading,
+      accentType: input.accentType ?? 0,
+      wordUuid: null,
+      source: input.source,
+      episodeJobId: input.episodeJobId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.database
+      .prepare(
+        `INSERT OR IGNORE INTO reading_dictionary
+         (id, owner_id, surface, reading, accent_type, word_uuid, source,
+          episode_job_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        entry.id,
+        input.ownerId,
+        entry.surface,
+        entry.reading,
+        entry.accentType,
+        entry.wordUuid,
+        entry.source,
+        entry.episodeJobId,
+        entry.createdAt,
+        entry.updatedAt,
+      )
+    const existing = this.database
+      .prepare(
+        `SELECT id, surface, reading, accent_type, word_uuid, source,
+                episode_job_id, created_at, updated_at
+         FROM reading_dictionary WHERE owner_id = ? AND surface = ?`
+      )
+      .get(input.ownerId, input.surface) as Record<string, unknown> | undefined
+    return existing ? toReadingDictionaryEntry(existing) : entry
+  }
+
+  updateReadingDictionary(
+    ownerId: string,
+    id: string,
+    patch: {
+      readonly surface?: string
+      readonly reading?: string
+      readonly accentType?: number
+      readonly wordUuid?: string | null
+    },
+  ): ReadingDictionaryDto | null {
+    const now = new Date().toISOString()
+    const sets: string[] = ["updated_at = ?"]
+    const params: (string | number | null)[] = [now]
+    if (patch.surface !== undefined) {
+      sets.push("surface = ?")
+      params.push(patch.surface)
+    }
+    if (patch.reading !== undefined) {
+      sets.push("reading = ?")
+      params.push(patch.reading)
+    }
+    if (patch.accentType !== undefined) {
+      sets.push("accent_type = ?")
+      params.push(patch.accentType)
+    }
+    if (patch.wordUuid !== undefined) {
+      sets.push("word_uuid = ?")
+      params.push(patch.wordUuid)
+    }
+    params.push(id, ownerId)
+    this.database
+      .prepare(
+        `UPDATE reading_dictionary SET ${sets.join(", ")}
+         WHERE id = ? AND owner_id = ?`
+      )
+      .run(...params)
+    const row = this.database
+      .prepare(
+        `SELECT id, surface, reading, accent_type, word_uuid, source,
+                episode_job_id, created_at, updated_at
+         FROM reading_dictionary WHERE id = ? AND owner_id = ?`
+      )
+      .get(id, ownerId) as Record<string, unknown> | undefined
+    return row ? toReadingDictionaryEntry(row) : null
+  }
+
+  deleteReadingDictionary(ownerId: string, id: string): boolean {
+    return (
+      this.database
+        .prepare(
+          "DELETE FROM reading_dictionary WHERE id = ? AND owner_id = ?"
+        )
+        .run(id, ownerId).changes > 0
+    )
   }
 
   // --- AI補助キュー（enrich_queue）-------------------------------------
@@ -3461,6 +3595,22 @@ function toTagSuggestion(row: Record<string, unknown>): TagSuggestionDto {
     name: String(row.name),
     occurrences: Number(row.occurrences),
     lastSeenAt: String(row.last_seen_at),
+  }
+}
+
+function toReadingDictionaryEntry(
+  row: Record<string, unknown>,
+): ReadingDictionaryDto {
+  return {
+    id: String(row.id),
+    surface: String(row.surface),
+    reading: String(row.reading),
+    accentType: Number(row.accent_type),
+    wordUuid: row.word_uuid ? String(row.word_uuid) : null,
+    source: String(row.source) as "manual" | "ai_auto",
+    episodeJobId: row.episode_job_id ? String(row.episode_job_id) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
   }
 }
 

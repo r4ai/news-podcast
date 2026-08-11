@@ -303,6 +303,32 @@ export const EpisodeSchema = z
   })
   .openapi("Episode")
 
+export const ReadingDictionaryEntrySchema = z
+  .object({
+    id: IdSchema,
+    surface: z.string(),
+    reading: z.string(),
+    accentType: z.number().int().min(0),
+    wordUuid: z.string().uuid().optional(),
+    source: z.enum(["manual", "ai_auto"]),
+    episodeJobId: IdSchema.optional(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .openapi("ReadingDictionaryEntry")
+
+export const CreateReadingDictionarySchema = z.object({
+  surface: z.string().min(1).max(100),
+  reading: z.string().min(1).max(100),
+  accentType: z.number().int().min(0).default(0),
+})
+
+export const UpdateReadingDictionarySchema = z.object({
+  surface: z.string().min(1).max(100).optional(),
+  reading: z.string().min(1).max(100).optional(),
+  accentType: z.number().int().min(0).optional(),
+})
+
 export const page = <T extends z.ZodType>(item: T) =>
   z.object({
     items: z.array(item),

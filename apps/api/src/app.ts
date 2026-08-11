@@ -30,6 +30,7 @@ import {
   ArticleFacetsSchema,
   ArticleSchema,
   BulkArticleStateResultSchema,
+  CreateReadingDictionarySchema,
   EnrichQueueSchema,
   FeedSchema,
   IdSchema,
@@ -40,12 +41,14 @@ import {
   MAX_SELECTED_ARTICLES,
   page,
   problemContent,
+  ReadingDictionaryEntrySchema,
   ScheduleSchema,
   SettingsSchema,
   SubscriptionSchema,
   TagNameSchema,
   TagSchema,
   TagSuggestionSchema,
+  UpdateReadingDictionarySchema,
 } from "./http/schemas.js"
 
 type Variables = { ownerId: string }
@@ -619,6 +622,99 @@ export function createApp(dependencies: AppDependencies = {}) {
     return context.json(tag, 201)
   })
 
+  app.openapi(listReadingDictionaryRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    return context.json(
+      {
+        items: dependencies.store
+          .listReadingDictionary(ownerId)
+          .map((e) => ({
+            id: e.id,
+            surface: e.surface,
+            reading: e.reading,
+            accentType: e.accentType,
+            wordUuid: e.wordUuid ?? undefined,
+            source: e.source,
+            episodeJobId: e.episodeJobId ?? undefined,
+            createdAt: e.createdAt,
+            updatedAt: e.updatedAt,
+          })),
+        page: { hasMore: false },
+      },
+      200,
+    )
+  })
+
+  app.openapi(createReadingDictionaryRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const body = context.req.valid("json")
+    const entry = dependencies.store.addReadingDictionary({
+      ownerId,
+      surface: body.surface,
+      reading: body.reading,
+      accentType: body.accentType,
+      source: "manual",
+    })
+    context.header("Location", `/v1/me/reading-dictionary/${entry.id}`)
+    return context.json(
+      {
+        id: entry.id,
+        surface: entry.surface,
+        reading: entry.reading,
+        accentType: entry.accentType,
+        wordUuid: entry.wordUuid ?? undefined,
+        source: entry.source,
+        episodeJobId: entry.episodeJobId ?? undefined,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+      },
+      201,
+    )
+  })
+
+  app.openapi(updateReadingDictionaryRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const { id } = context.req.valid("param")
+    const body = context.req.valid("json")
+    const entry = dependencies.store.updateReadingDictionary(
+      ownerId,
+      id,
+      {
+        surface: body.surface,
+        reading: body.reading,
+        accentType: body.accentType,
+      },
+    )
+    if (!entry)
+      return context.json(problem(404, "not-found", "Not found"), 404)
+    return context.json(
+      {
+        id: entry.id,
+        surface: entry.surface,
+        reading: entry.reading,
+        accentType: entry.accentType,
+        wordUuid: entry.wordUuid ?? undefined,
+        source: entry.source,
+        episodeJobId: entry.episodeJobId ?? undefined,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+      },
+      200,
+    )
+  })
+
+  app.openapi(deleteReadingDictionaryRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const { id } = context.req.valid("param")
+    return dependencies.store.deleteReadingDictionary(ownerId, id)
+      ? context.body(null, 204)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
   app.openapi(listSubscriptionsRoute, (context) => {
     if (!dependencies.store) return context.json(unavailable(), 503)
     return context.json(
@@ -1104,6 +1200,10 @@ export const documentConfig = {
     { name: "Agent runtime", description: "Agent runs and safe timeline" },
     { name: "Agent memory", description: "Owner-scoped durable Agent memory" },
     { name: "Episodes", description: "Completed episodes and audio access" },
+    {
+      name: "Reading Dictionary",
+      description: "Owner-scoped word-reading dictionary for TTS quality",
+    },
   ],
   servers: [{ url: "http://localhost:4173", description: "Local development" }],
 }
@@ -1645,6 +1745,84 @@ const promoteTagSuggestionRoute = createRoute({
   },
   responses: {
     201: jsonContent(TagSchema, "Promoted"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const listReadingDictionaryRoute = createRoute({
+  method: "get",
+  path: "/v1/me/reading-dictionary",
+  tags: ["Reading Dictionary"],
+  operationId: "listReadingDictionary",
+  description:
+    "List the authenticated owner's reading dictionary entries (surface→reading mappings for TTS).",
+  responses: {
+    200: jsonContent(page(ReadingDictionaryEntrySchema), "Reading dictionary"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const createReadingDictionaryRoute = createRoute({
+  method: "post",
+  path: "/v1/me/reading-dictionary",
+  tags: ["Reading Dictionary"],
+  operationId: "createReadingDictionary",
+  description:
+    "Add a reading dictionary entry (idempotent by surface).",
+  request: {
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: CreateReadingDictionarySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    201: jsonContent(ReadingDictionaryEntrySchema, "Created"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const updateReadingDictionaryRoute = createRoute({
+  method: "put",
+  path: "/v1/me/reading-dictionary/{id}",
+  tags: ["Reading Dictionary"],
+  operationId: "updateReadingDictionary",
+  description: "Update a reading dictionary entry.",
+  request: {
+    params: z.object({ id: IdSchema }),
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: UpdateReadingDictionarySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: jsonContent(ReadingDictionaryEntrySchema, "Updated"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const deleteReadingDictionaryRoute = createRoute({
+  method: "delete",
+  path: "/v1/me/reading-dictionary/{id}",
+  tags: ["Reading Dictionary"],
+  operationId: "deleteReadingDictionary",
+  description: "Delete a reading dictionary entry.",
+  request: { params: z.object({ id: IdSchema }) },
+  responses: {
+    204: { description: "Deleted" },
     401: problemContent("Unauthorized"),
     404: problemContent("Not found"),
     503: problemContent("Unavailable"),

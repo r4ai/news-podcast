@@ -348,3 +348,37 @@ export interface UserSettingsRepository {
     schedule: GenerationSchedule
   ): Promise<GenerationSchedule>
 }
+
+export interface ReadingDictionaryEntry {
+  readonly id: string
+  readonly surface: string
+  readonly reading: string
+  readonly accentType: number
+  readonly wordUuid?: string
+  readonly source: "manual" | "ai_auto"
+  readonly episodeJobId?: string
+  readonly createdAt: Date
+  readonly updatedAt: Date
+}
+
+export interface ReadingDictionaryRepository {
+  list(ownerId: string): Promise<readonly ReadingDictionaryEntry[]>
+  add(input: {
+    readonly ownerId: string
+    readonly surface: string
+    readonly reading: string
+    readonly accentType?: number
+    readonly source: "manual" | "ai_auto"
+    readonly episodeJobId?: string
+  }): Promise<ReadingDictionaryEntry>
+  update(input: {
+    readonly ownerId: string
+    readonly id: string
+    readonly surface?: string
+    readonly reading?: string
+    readonly accentType?: number
+  }): Promise<ReadingDictionaryEntry>
+  delete(ownerId: string, id: string): Promise<void>
+  /** VOICEVOXに全単語を再同期（起動時・辞書変更時） */
+  syncToVoicevox(ownerId: string): Promise<void>
+}
