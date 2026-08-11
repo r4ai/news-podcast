@@ -4,7 +4,7 @@
 - Date: 2026-08-11
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: 一部（「プロフィール変更時の再計算方針」）はADR-0024
+- Superseded by: 一部（「プロフィール変更時の再計算方針」）はADR-0024、一部（`temperature: 0`）はADR-0026
 - Related: `docs/design.md`§7（LLM呼び出しはfake providerで契約テスト）、ADR-0016（`job_outbox`/リース機構と同様の「ワーカーがtickで進める」設計）、ADR-0019（keysetページネーション）、ADR-0020（FTS5全文検索・述語ビルダー方式）
 
 ## コンテキストと変更契機
@@ -49,7 +49,7 @@
 対象は`archive_status='succeeded'`の新着のうち、現行`profile_hash`/`prompt_version`で未処理のものを新しい順に、環境変数`AI_ENRICH_DAILY_LIMIT`（既定200）で上限を切る。
 
 - **要約は1記事1コール**。本文Markdownをオブジェクトストアから取得し、先頭`SUMMARY_MAX_MARKDOWN_CHARS`（6,000字）へ切り詰めてから送る。既に現行`prompt_version`の要約があれば再利用し、コールしない。
-- **スコアは`RELEVANCE_BATCH_SIZE`（8件、5〜10件の範囲）でまとめて1コール**。タイトルと要約のMarkdownだけを渡す。ここがコストの主眼——記事数が増えてもコール数は`N/8`で増える。スコアのブレを抑えるため`temperature: 0`で決定論化し、プロンプトに明示的なスコア基準（include直合致80-100 / 部分関連50-79 / 中立30-49 / 無関係・exclude合致0-29）を持たせる。
+- **スコアは`RELEVANCE_BATCH_SIZE`（8件、5〜10件の範囲）でまとめて1コール**。タイトルと要約のMarkdownだけを渡す。ここがコストの主眼——記事数が増えてもコール数は`N/8`で増える。プロンプトに明示的なスコア基準（include直合致80-100 / 部分関連50-79 / 中立30-49 / 無関係・exclude合致0-29）を持たせる。`temperature: 0`の指定はモデル非互換のためADR-0026で廃止された。
 - 1ownerあたり1tickで処理する候補数を`RELEVANCE_BATCH_SIZE`に揃えることで、1tickの作業が高々1バッチ分に収まり、特定ownerが日次上限を独占しない。複数ownerがいる環境では、tickごとに全owner分の候補が少しずつ進む。
 - トークン使用量（Responses APIの`usage.input_tokens`/`output_tokens`）を要約は`article_summaries`に、スコアはバッチ内で均等割り（端数は最後の記事へ寄せる）した上で`article_relevance`の各行に記録する。同時にOTelカウンタ`article.enrich.tokens`（属性`enrich.step`/`token.kind`）へも計上する。バッチの合算値を素朴に均等割りする設計であり、記事ごとの正確な内訳ではないが、コスト監視には十分な近似とする。
 

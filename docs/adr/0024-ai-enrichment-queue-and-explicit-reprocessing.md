@@ -19,6 +19,9 @@ ADR-0021では「興味プロフィール変更→`profile_hash`不一致→全�
 また、従来の候補選定（`NOT EXISTS`の都度SQL）は「処理中」状態を持たず、複数worker/APIのオンデマンドと
 並走した場合に同じ記事へAIコールが二重に飛ぶレースがあった。キュー導入でこれも解消する。
 
+> **2026-08-12実装修正**: 本ADRの結果では「終端失敗は明示再処理で復帰可能」としていたが、実装は`status='succeeded'`だけを再投入対象にしていた。
+> 既存決定へ実装を一致させ、成功・終端失敗の両方を明示再処理可能にした。
+
 ## 決定
 
 ### 「1回処理済み」の定義を profile_hash 非依存へ
@@ -48,8 +51,17 @@ ADR-0021では「興味プロフィール変更→`profile_hash`不一致→全�
 
 ### 明示再処理
 
-- `POST /v1/me/enrich/reprocess`（設定の「全記事を再処理」）→ 処理済み記事を `reason='reprocess', priority=100` で投入。日次上限は適用（worker側）。
+- `POST /v1/me/enrich/reprocess`（設定の「全記事を再処理」）→ 関連度を試行済みの記事を、成功・終端失敗を問わず `reason='reprocess', priority=100, attempt=0` で投入。日次上限は適用（worker側）。
 - `POST /v1/me/articles/{articleId}/enrich`（記事詳細の「AIで再計算」）→ 既存のオンデマンド再計算を維持。
+
+```mermaid
+stateDiagram-v2
+  succeeded --> queued: 明示再処理
+  failed --> queued: 明示再処理 / attempt=0
+  queued --> processing: worker lease
+  processing --> succeeded: 成功
+  processing --> failed: 4回失敗
+```
 
 ### キュー状態ビュー
 

@@ -113,7 +113,7 @@ Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% 
 
 - Domain: 公開interfaceから確認できる規則をunit testし、ドメインロジック100%を維持する。行カバレッジを全体KPIにはしない。
 - Application: portのfakeを使ったユースケース統合テスト。
-- Adapters: SQLite/D1、local/R2、VOICEVOX、OpenAIの契約テスト。外部実通信は資格情報のないCIでは行わない。
+- Adapters: SQLite/D1、local/R2、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは全採用モデル共通の可搬サブセット型と実行時allow-listを通し、モデル変更時は実API smokeで互換性を確認する。外部実通信は資格情報のないCIでは行わない。
 - API: OpenAPI lint/validation、型生成差分、認証matrix、Problem Details、owner isolation、pagination、冪等性競合。
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
 - E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生を重要導線として確認するが、確認ゲート後に実装する。
