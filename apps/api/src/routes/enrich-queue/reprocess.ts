@@ -10,7 +10,7 @@ export const enrichReprocessRoute = createRoute({
   tags: ["AI enrichment"],
   operationId: "enrichReprocess",
   description:
-    "Explicitly enqueue all already-processed articles for AI enrichment again.",
+    "Explicitly enqueue all previously attempted articles for AI enrichment again, including terminal failures.",
   responses: {
     200: jsonContent(
       z.object({ enqueued: z.number().int().nonnegative() }),

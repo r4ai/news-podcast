@@ -490,6 +490,45 @@ describe("LocalStore enrich_queue", () => {
     expect(item?.reason).toBe("reprocess")
   })
 
+  it("enqueueReprocess recovers an article after terminal relevance failure", () => {
+    const store = openStore()
+    const owner = "owner-reprocess-failed"
+    const failed = seedArchivedArticle(
+      store,
+      owner,
+      "failed",
+      "2026-01-01T00:00:00.000Z"
+    )
+    store.saveArticleRelevanceFailure({
+      ownerId: owner,
+      feedItemId: failed,
+      profileHash: computeProfileHash("", ""),
+      model: "m",
+      error: "unsupported parameter",
+    })
+    store.reconcileEnrichQueue(NOW)
+    for (let index = 0; index < 4; index += 1) {
+      const batch = store.leaseEnrichBatch(owner, 8, NOW)
+      store.completeEnrichBatch(
+        owner,
+        {
+          succeeded: [],
+          failed: [{ feedItemId: batch[0]!.feedItemId, error: "boom" }],
+        },
+        NOW
+      )
+    }
+
+    expect(store.listEnrichQueueStatus(owner, 200).failed.count).toBe(1)
+    expect(store.enqueueReprocess(owner, NOW)).toBe(1)
+
+    const pending = store.listEnrichQueueStatus(owner, 200).pending.items[0]
+    expect(pending?.feedItemId).toBe(failed)
+    expect(pending?.status).toBe("queued")
+    expect(pending?.attempt).toBe(0)
+    expect(pending?.error).toBeUndefined()
+  })
+
   it("listEnrichQueueStatus reports daily usage and reprocessable count", () => {
     const store = openStore()
     const owner = "owner-status"

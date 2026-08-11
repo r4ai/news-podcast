@@ -1710,7 +1710,7 @@ export class LocalStore implements EpisodeJobRepository {
     })
   }
 
-  // 処理済み（succeededなarticle_relevanceを持つ）記事を明示再処理として投入する。
+  // 関連度を処理済み（成功・失敗を問わない）の記事を明示再処理として投入する。
   // 設定・記事詳細からの明示要求専用。処理中の記事は対象外。
   enqueueReprocess(ownerId: string, now: Date = new Date()): number {
     const result = this.database
@@ -1729,7 +1729,6 @@ export class LocalStore implements EpisodeJobRepository {
            AND EXISTS (
              SELECT 1 FROM article_relevance r
              WHERE r.owner_id = sub.owner_id AND r.feed_item_id = i.id
-               AND r.status = 'succeeded'
            )
            AND NOT EXISTS (
              SELECT 1 FROM enrich_queue q
@@ -1843,7 +1842,6 @@ export class LocalStore implements EpisodeJobRepository {
                AND EXISTS (
                  SELECT 1 FROM article_relevance r
                  WHERE r.owner_id = sub.owner_id AND r.feed_item_id = i.id
-                   AND r.status = 'succeeded'
                )`
           )
           .get(ownerId) as Record<string, unknown>

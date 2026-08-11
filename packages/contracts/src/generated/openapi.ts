@@ -219,7 +219,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Explicitly enqueue all already-processed articles for AI enrichment again. */
+        /** @description Explicitly enqueue all previously attempted articles for AI enrichment again, including terminal failures. */
         post: operations["enrichReprocess"];
         delete?: never;
         options?: never;

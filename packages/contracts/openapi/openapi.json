@@ -2169,7 +2169,7 @@
           "AI enrichment"
         ],
         "operationId": "enrichReprocess",
-        "description": "Explicitly enqueue all already-processed articles for AI enrichment again.",
+        "description": "Explicitly enqueue all previously attempted articles for AI enrichment again, including terminal failures.",
         "responses": {
           "200": {
             "description": "Number of enqueued articles",
