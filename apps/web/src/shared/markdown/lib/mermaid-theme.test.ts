@@ -16,10 +16,21 @@ describe("buildMermaidThemeVariables", () => {
     }
     const variables = buildMermaidThemeVariables((name) => tokens[name] ?? "")
 
-    expect(variables.background).toBe(tokens.background)
-    expect(variables.primaryTextColor).toBe(tokens.foreground)
-    expect(variables.lineColor).toBe(tokens.border)
-    expect(variables.errorTextColor).toBe(tokens.destructive)
-    expect(variables.noteTextColor).toBe(tokens["muted-foreground"])
+    expect(variables.background).toBe("#ffffff")
+    expect(variables.primaryTextColor).toMatch(/^#[0-9a-f]{6}$/)
+    expect(variables.lineColor).toMatch(/^#[0-9a-f]{6}$/)
+    expect(variables.errorTextColor).toMatch(/^#[0-9a-f]{6}$/)
+    expect(variables.noteTextColor).toMatch(/^#[0-9a-f]{6}$/)
+    expect(
+      Object.values(variables).some((value) => value.includes("oklch"))
+    ).toBe(false)
+  })
+
+  it("preserves OKLCH alpha as a Mermaid-compatible rgba color", () => {
+    const variables = buildMermaidThemeVariables((name) =>
+      name === "border" ? "oklch(1 0 0 / 10%)" : "oklch(0 0 0)"
+    )
+
+    expect(variables.lineColor).toBe("rgba(255, 255, 255, 0.1)")
   })
 })
