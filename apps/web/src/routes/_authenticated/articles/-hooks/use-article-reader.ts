@@ -134,6 +134,8 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
   )
 
   const pendingReadRef = useRef<ReadonlyMap<string, Article>>(new Map())
+  // ユーザーが明示的に「未読へ戻した」記事は、離脱時の自動既読化から除外する。
+  const userUnreadRef = useRef<ReadonlySet<string>>(new Set())
 
   // flushはref経由で最新を参照する。依存にpatchMutationを入れると毎renderで
   // callbackが作り直され、flush effectが不要な再実行を起こすため。
@@ -162,6 +164,7 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
   // 開いた未読記事をpendingへ記録する。読み込みが終わるまでフラッシュしない。
   useEffect(() => {
     if (!article || article.read) return
+    if (userUnreadRef.current.has(article.id)) return
     pendingReadRef.current = new Map(pendingReadRef.current).set(
       article.id,
       article
@@ -203,8 +206,14 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     toggleHidden: () =>
       article &&
       update({ hidden: !article.hidden }, "非表示を更新できませんでした"),
-    markUnread: () =>
-      article && update({ read: false }, "未読に戻せませんでした"),
+    markUnread: () => {
+      if (!article) return
+      userUnreadRef.current = new Set(userUnreadRef.current).add(article.id)
+      const next = new Map(pendingReadRef.current)
+      next.delete(article.id)
+      pendingReadRef.current = next
+      update({ read: false }, "未読に戻せませんでした")
+    },
   } as const
 }
 

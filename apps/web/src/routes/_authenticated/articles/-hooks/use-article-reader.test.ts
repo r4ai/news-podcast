@@ -169,4 +169,37 @@ describe("useArticleReader", () => {
     const patch = calls.find((call) => call.method === "PATCH")
     expect(patch?.body).toEqual({ saved: true })
   })
+
+  it("keeps an article unread when the user marks it unread and leaves", async () => {
+    const rendered = render([
+      { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
+      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      {
+        method: "PATCH",
+        path: "/v1/me/articles/a",
+        body: makeArticle({ read: false }),
+      },
+    ])
+    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
+
+    await act(async () => rendered.result.current.markUnread())
+    await act(async () => rendered.unmount())
+
+    await waitFor(() =>
+      expect(
+        rendered.calls.some(
+          (call) =>
+            call.method === "PATCH" &&
+            (call.body as { read?: boolean } | undefined)?.read === false
+        )
+      ).toBe(true)
+    )
+    expect(
+      rendered.calls.some(
+        (call) =>
+          call.method === "PATCH" &&
+          (call.body as { read?: boolean } | undefined)?.read === true
+      )
+    ).toBe(false)
+  })
 })
