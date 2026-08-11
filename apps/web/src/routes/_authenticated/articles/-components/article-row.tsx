@@ -8,7 +8,6 @@ import {
   archiveMetaLabel,
   articleSnippet,
   articleTimestamp,
-  publishedAtLabel,
   type Article,
 } from "../-model"
 
@@ -31,30 +30,33 @@ export function ArticleRow({
 }: ArticleRowProps) {
   const meta = archiveMetaLabel(article.archiveStatus)
   const snippet = articleSnippet(article)
+  const visibleTags = article.tags.slice(0, 2)
+  const remainingTagCount = article.tags.length - visibleTags.length
 
   return (
     <div
       className={cn(
-        "flex min-h-12 items-start gap-3 border-b px-3 py-2.5 last:border-b-0 sm:min-h-14",
-        isSelected && "bg-accent"
+        "group/row flex min-h-12 items-start gap-2 border-b px-2.5 py-2 transition-colors last:border-b-0 hover:bg-muted/50 sm:min-h-14",
+        isSelected &&
+          "bg-accent shadow-[inset_3px_0_0_0_var(--primary)] hover:bg-accent"
       )}
     >
       <span
         aria-hidden="true"
         className={cn(
-          "mt-2 size-1.5 shrink-0 rounded-full",
+          "mt-2.5 size-1.5 shrink-0 rounded-full",
           article.read ? "bg-transparent" : "bg-primary"
         )}
       />
       <button
         aria-current={isSelected ? "true" : undefined}
-        className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex min-w-0 flex-1 flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() => onSelect(article)}
         type="button"
       >
         <span
           className={cn(
-            "truncate text-sm",
+            "line-clamp-2 text-sm leading-5",
             article.read
               ? "font-normal text-muted-foreground"
               : "font-medium text-foreground"
@@ -62,22 +64,29 @@ export function ArticleRow({
         >
           {article.title}
         </span>
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          <span>{article.sourceName}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="min-w-0 max-w-28 truncate font-medium text-foreground/80">
+            {article.sourceName}
+          </span>
           <time dateTime={articleTimestamp(article)}>
-            {publishedAtLabel(articleTimestamp(article))}
+            {compactArticleTimestamp(articleTimestamp(article))}
           </time>
-          {meta ? <span>{meta}</span> : null}
+          {meta ? <span className="truncate">{meta}</span> : null}
           {article.usedInEpisode ? (
-            <Mic aria-label="番組で採用済み" className="size-3" role="img" />
+            <Mic
+              aria-label="番組で採用済み"
+              className="ml-auto size-3 shrink-0"
+              role="img"
+            />
           ) : null}
           {showRelevanceScore && typeof article.relevanceScore === "number" ? (
-            <span
+            <Badge
               aria-label={`適合度スコア ${article.relevanceScore}`}
-              className="font-medium text-foreground"
+              className="ml-auto shrink-0 tabular-nums"
+              variant="outline"
             >
               {article.relevanceScore}
-            </span>
+            </Badge>
           ) : null}
         </span>
         {snippet ? (
@@ -86,18 +95,27 @@ export function ArticleRow({
           </span>
         ) : null}
         {article.tags.length > 0 ? (
-          <span className="flex flex-wrap gap-1">
-            {article.tags.map((tag) => (
-              <Badge className="text-[0.625rem]" key={tag} variant="secondary">
+          <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+            {visibleTags.map((tag) => (
+              <Badge
+                className="max-w-28 truncate text-[0.625rem]"
+                key={tag}
+                variant="secondary"
+              >
                 {tag}
               </Badge>
             ))}
+            {remainingTagCount > 0 ? (
+              <span className="shrink-0 text-[0.625rem] text-muted-foreground">
+                +{remainingTagCount}
+              </span>
+            ) : null}
           </span>
         ) : null}
       </button>
       <Button
         aria-label={article.saved ? "保存を解除" : "記事を保存"}
-        className="mt-0.5 size-11 shrink-0 sm:size-7"
+        className="mt-0.5 size-11 shrink-0 opacity-70 group-hover/row:opacity-100 sm:size-7"
         onClick={() => onToggleSaved(article)}
         size="icon-sm"
         variant="ghost"
@@ -110,4 +128,19 @@ export function ArticleRow({
       </Button>
     </div>
   )
+}
+
+function compactArticleTimestamp(value: string): string {
+  const date = new Date(value)
+  const today = new Date()
+  const sameDay =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  return new Intl.DateTimeFormat(
+    "ja-JP",
+    sameDay
+      ? { hour: "2-digit", minute: "2-digit" }
+      : { month: "numeric", day: "numeric" }
+  ).format(date)
 }

@@ -73,7 +73,7 @@ function ArticlesRoute() {
       <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch lg:gap-6">
         <div
           className={cn(
-            "lg:w-[360px] lg:shrink-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain",
+            "lg:w-[400px] xl:w-[420px] lg:shrink-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain",
             hasSelection && "hidden lg:block"
           )}
         >

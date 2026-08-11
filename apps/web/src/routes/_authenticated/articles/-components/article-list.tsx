@@ -36,7 +36,7 @@ export function ArticleList({
   onShowEnrichQueue,
 }: ArticleListProps) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <ArticleToolbar
         aiPending={list.aiPending}
         facets={list.facets}
@@ -213,7 +213,7 @@ export function ArticleListView({
   const showRelevanceScore = shouldShowRelevanceScore(search.sort)
 
   return (
-    <div className="flex flex-col rounded-lg border">
+    <div className="flex flex-col overflow-hidden rounded-lg border bg-background">
       {groups.map((group) => (
         <ArticleDateGroup
           group={group}
