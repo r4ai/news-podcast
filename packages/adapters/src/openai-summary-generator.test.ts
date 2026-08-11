@@ -48,6 +48,7 @@ describe("OpenAiSummaryGenerator", () => {
     expect(request.text.format.schema.properties.source_urls.items).toEqual({
       type: "string",
     })
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
   })
 
   it("rejects provider-invented source URLs", async () => {

@@ -6,7 +6,10 @@ import {
 } from "./openai-relevance-scorer.js"
 import { DEFAULT_RETRY_OPTIONS, ProviderRateLimitError } from "./shared.js"
 
-const noSleepRetry = { ...DEFAULT_RETRY_OPTIONS, sleep: () => Promise.resolve() }
+const noSleepRetry = {
+  ...DEFAULT_RETRY_OPTIONS,
+  sleep: () => Promise.resolve(),
+}
 
 function jsonSchemaResponse(scores: unknown) {
   return new Response(
@@ -50,8 +53,20 @@ describe("OpenAiRelevanceScorer", () => {
 
     expect(fetcher).toHaveBeenCalledOnce()
     expect(result.scores).toEqual([
-      { feedItemId: "a", score: 80, reason: "興味に合致", tags: [], suggestedTags: [] },
-      { feedItemId: "b", score: 10, reason: "除外対象に近い", tags: [], suggestedTags: [] },
+      {
+        feedItemId: "a",
+        score: 80,
+        reason: "興味に合致",
+        tags: [],
+        suggestedTags: [],
+      },
+      {
+        feedItemId: "b",
+        score: 10,
+        reason: "除外対象に近い",
+        tags: [],
+        suggestedTags: [],
+      },
     ])
     expect(result.tokensIn).toBe(300)
     expect(result.tokensOut).toBe(90)
@@ -148,9 +163,11 @@ describe("OpenAiRelevanceScorer", () => {
   })
 
   it("omits tag fields from the schema and skips tagging when the vocabulary is empty", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonSchemaResponse([{ feed_item_id: "a", score: 80, reason: "ok" }])
-    )
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonSchemaResponse([{ feed_item_id: "a", score: 80, reason: "ok" }])
+      )
     const scorer = new OpenAiRelevanceScorer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
       fetcher,
@@ -185,7 +202,11 @@ describe("OpenAiRelevanceScorer", () => {
     )
 
     await expect(
-      scorer.score({ profile: { include: "", exclude: "" }, candidates, tagVocabulary: [] })
+      scorer.score({
+        profile: { include: "", exclude: "" },
+        candidates,
+        tagVocabulary: [],
+      })
     ).rejects.toBeInstanceOf(RelevanceScoreError)
   })
 
@@ -200,7 +221,11 @@ describe("OpenAiRelevanceScorer", () => {
     )
 
     await expect(
-      scorer.score({ profile: { include: "", exclude: "" }, candidates, tagVocabulary: [] })
+      scorer.score({
+        profile: { include: "", exclude: "" },
+        candidates,
+        tagVocabulary: [],
+      })
     ).rejects.toBeInstanceOf(ProviderRateLimitError)
     expect(fetcher).toHaveBeenCalledTimes(2)
   })

@@ -7,6 +7,8 @@ import type {
 import type { OpenAiConfig } from "./config.js"
 import { z } from "zod"
 
+const OPENAI_REQUEST_TIMEOUT_MS = 120_000
+
 interface OpenAiResponse {
   readonly output?: readonly {
     readonly content?: readonly {
@@ -51,6 +53,7 @@ export class OpenAiSummaryGenerator implements SummaryGenerator {
           Authorization: `Bearer ${this.config.apiKey}`,
           "Content-Type": "application/json",
         },
+        signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
           model: this.config.model,
           input: [

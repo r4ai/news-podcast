@@ -20,6 +20,8 @@ interface OpenAiUsage {
   readonly output_tokens?: unknown
 }
 
+const OPENAI_REQUEST_TIMEOUT_MS = 120_000
+
 interface OpenAiResponse {
   readonly output?: readonly {
     readonly content?: readonly {
@@ -88,7 +90,7 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
             Authorization: `Bearer ${this.config.apiKey}`,
             "Content-Type": "application/json",
           },
-          ...(signal ? { signal } : {}),
+          signal: boundedSignal(signal),
           body: JSON.stringify({
             model: this.config.model,
             input: [
@@ -198,6 +200,11 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
     )
     return { scores, ...readUsage(providerResponse.usage) }
   }
+}
+
+function boundedSignal(parent?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS)
+  return parent ? AbortSignal.any([parent, timeout]) : timeout
 }
 
 function parseScorePayload(

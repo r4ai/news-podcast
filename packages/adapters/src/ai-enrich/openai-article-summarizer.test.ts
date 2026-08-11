@@ -6,7 +6,10 @@ import {
 } from "./openai-article-summarizer.js"
 import { DEFAULT_RETRY_OPTIONS, ProviderRateLimitError } from "./shared.js"
 
-const noSleepRetry = { ...DEFAULT_RETRY_OPTIONS, sleep: () => Promise.resolve() }
+const noSleepRetry = {
+  ...DEFAULT_RETRY_OPTIONS,
+  sleep: () => Promise.resolve(),
+}
 
 function jsonSchemaResponse(bullets: unknown) {
   return new Response(
@@ -14,9 +17,7 @@ function jsonSchemaResponse(bullets: unknown) {
       output: [
         {
           type: "message",
-          content: [
-            { type: "output_text", text: JSON.stringify({ bullets }) },
-          ],
+          content: [{ type: "output_text", text: JSON.stringify({ bullets }) }],
         },
       ],
       usage: { input_tokens: 120, output_tokens: 40 },
@@ -29,9 +30,7 @@ describe("OpenAiArticleSummarizer", () => {
   it("returns 3 Japanese bullets and token usage on a valid structured response", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(
-        jsonSchemaResponse(["要点1", "要点2", "要点3"])
-      )
+      .mockResolvedValue(jsonSchemaResponse(["要点1", "要点2", "要点3"]))
     const summarizer = new OpenAiArticleSummarizer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
       fetcher,

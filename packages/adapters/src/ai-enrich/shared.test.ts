@@ -43,12 +43,17 @@ describe("fetchWithRetry", () => {
       .mockResolvedValueOnce(new Response("ok", { status: 200 }))
     const sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue()
 
-    const response = await fetchWithRetry(fetcher, "https://example.com", {}, {
-      maxAttempts: 3,
-      sleep,
-      defaultRetryAfterMs: 5_000,
-      maxRetryAfterMs: 60_000,
-    })
+    const response = await fetchWithRetry(
+      fetcher,
+      "https://example.com",
+      {},
+      {
+        maxAttempts: 3,
+        sleep,
+        defaultRetryAfterMs: 5_000,
+        maxRetryAfterMs: 60_000,
+      }
+    )
 
     expect(response.status).toBe(200)
     expect(fetcher).toHaveBeenCalledTimes(2)
@@ -61,12 +66,17 @@ describe("fetchWithRetry", () => {
       .mockResolvedValue(new Response(null, { status: 429 }))
     const sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue()
 
-    const response = await fetchWithRetry(fetcher, "https://example.com", {}, {
-      maxAttempts: 2,
-      sleep,
-      defaultRetryAfterMs: 1_000,
-      maxRetryAfterMs: 60_000,
-    })
+    const response = await fetchWithRetry(
+      fetcher,
+      "https://example.com",
+      {},
+      {
+        maxAttempts: 2,
+        sleep,
+        defaultRetryAfterMs: 1_000,
+        maxRetryAfterMs: 60_000,
+      }
+    )
 
     expect(response.status).toBe(429)
     expect(fetcher).toHaveBeenCalledTimes(2)
@@ -85,13 +95,44 @@ describe("fetchWithRetry", () => {
       .mockResolvedValueOnce(new Response("ok", { status: 200 }))
     const sleep = vi.fn<(ms: number) => Promise<void>>().mockResolvedValue()
 
-    await fetchWithRetry(fetcher, "https://example.com", {}, {
-      maxAttempts: 3,
-      sleep,
-      defaultRetryAfterMs: 1_000,
-      maxRetryAfterMs: 10_000,
-    })
+    await fetchWithRetry(
+      fetcher,
+      "https://example.com",
+      {},
+      {
+        maxAttempts: 3,
+        sleep,
+        defaultRetryAfterMs: 1_000,
+        maxRetryAfterMs: 10_000,
+      }
+    )
 
     expect(sleep).toHaveBeenCalledWith(10_000)
+  })
+
+  it("stops a rate-limit wait when the request is canceled", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429 }))
+    const sleep = vi.fn<(ms: number) => Promise<void>>(
+      () => new Promise(() => undefined)
+    )
+    const controller = new AbortController()
+    const request = fetchWithRetry(
+      fetcher,
+      "https://example.com",
+      { signal: controller.signal },
+      {
+        maxAttempts: 3,
+        sleep,
+        defaultRetryAfterMs: 60_000,
+        maxRetryAfterMs: 60_000,
+      }
+    )
+
+    controller.abort(new Error("canceled"))
+
+    await expect(request).rejects.toThrow("canceled")
+    expect(fetcher).toHaveBeenCalledOnce()
   })
 })
