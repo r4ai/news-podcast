@@ -101,6 +101,49 @@ describe("episode article selection", () => {
     store.close()
   })
 
+  it("listArticles with archiveStatus=succeeded matches filterSelectableArticleIds", () => {
+    const store = createStore()
+    store.ensureDefaultSubscriptions("owner-1")
+    const [succeededId, unarchivedId] = seedArticles(store, [
+      "selectable-consistency-1",
+      "selectable-consistency-2",
+    ])
+
+    // 1件だけアーカイブ完了にする（snapshot_id あり）
+    const article = store.listArticles("owner-1", { limit: 2 }).items.find(
+      (a) => a.id === succeededId
+    )!
+    store.completeArchive({
+      articleId: article.id,
+      snapshotId: "00000000-0000-4000-8000-000000000051",
+      sourceUrl: article.url,
+      title: article.title,
+      contentHash: "hash",
+      rawKey: "raw",
+      replayKey: "replay",
+      markdownKey: "markdown",
+      byteLength: 10,
+      assets: [],
+    })
+
+    // listArticles(archiveStatus=succeeded) と filterSelectableArticleIds の
+    // 結果が一致することを構造的に保証する回帰テスト。
+    // これが破れる = SELECTABLE_ITEM_PREDICATE の共有が壊れている。
+    const fromList = store
+      .listArticles("owner-1", { archiveStatus: ["succeeded"], limit: 100 })
+      .items.map((a) => a.id)
+
+    const fromFilter = store.filterSelectableArticleIds("owner-1", [
+      succeededId!,
+      unarchivedId!,
+    ])
+
+    expect(new Set(fromList)).toEqual(new Set(fromFilter))
+    expect(fromList).toContain(succeededId)
+    expect(fromList).not.toContain(unarchivedId)
+    store.close()
+  })
+
   it("keeps selected articles available after their feed is disabled", async () => {
     const store = createStore()
     store.ensureDefaultSubscriptions("owner-1")

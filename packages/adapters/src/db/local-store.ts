@@ -1036,8 +1036,7 @@ export class LocalStore implements EpisodeJobRepository {
             JOIN feed_subscriptions s
               ON s.feed_id = i.feed_id AND s.owner_id = ?
             JOIN episode_job_articles a ON a.feed_item_id = i.id
-           WHERE i.archive_status = 'succeeded'
-             AND i.latest_snapshot_id IS NOT NULL
+           WHERE ${SELECTABLE_ITEM_PREDICATE}
              AND i.id IN (${selected})
            GROUP BY i.id
            ORDER BY MIN(a.position)`
@@ -1055,9 +1054,8 @@ export class LocalStore implements EpisodeJobRepository {
          JOIN feed_catalog f ON f.id = i.feed_id
          JOIN feed_subscriptions s
            ON s.feed_id = i.feed_id AND s.owner_id = ? AND s.enabled = 1
-         WHERE i.archive_status = 'succeeded'
-           AND i.latest_snapshot_id IS NOT NULL
-           AND i.feed_id IN (${placeholders})
+          WHERE ${SELECTABLE_ITEM_PREDICATE}
+            AND i.feed_id IN (${placeholders})
          ORDER BY COALESCE(i.published_at, i.discovered_at) DESC
          LIMIT ?`
       )
@@ -1091,8 +1089,7 @@ export class LocalStore implements EpisodeJobRepository {
         `SELECT i.id FROM feed_items i
          JOIN feed_subscriptions s
            ON s.feed_id = i.feed_id AND s.owner_id = ? AND s.enabled = 1
-         WHERE i.archive_status = 'succeeded'
-           AND i.latest_snapshot_id IS NOT NULL
+         WHERE ${SELECTABLE_ITEM_PREDICATE}
            AND i.id IN (${placeholders})`
       )
       .all(ownerId, ...articleIds)
@@ -3130,6 +3127,14 @@ function toSubscription(row: unknown): SubscriptionDto {
 // idx_feed_items_feed_published (feed_id, published_at DESC, discovered_at DESC) と列順を揃える。
 const ARTICLE_SORT_KEY = "COALESCE(i.published_at, i.discovered_at)"
 
+/**
+ * 「生成対象として選べる記事」の条件。
+ * filterSelectableArticleIds / listAgentArticles / listArticles(archiveStatus=succeeded)
+ * の3箇所で使い回す単一の真実源。これがズレるとUIで選べるのにAPIが弾く不整合が起きる。
+ */
+const SELECTABLE_ITEM_PREDICATE =
+  "i.archive_status = 'succeeded' AND i.latest_snapshot_id IS NOT NULL"
+
 // あるスナップショットが (owner配下の) いずれかのエピソードで使われたかどうか。
 // sub.owner_id は既にARTICLE_FROMのJOIN条件で束縛済みの列なので、追加のバインド引数は不要。
 const USED_IN_EPISODE_EXISTS = `EXISTS (
@@ -3366,9 +3371,23 @@ function articleArchiveStatusPredicate(
   statuses: readonly ArticleDto["archiveStatus"][] | undefined
 ): { readonly sql: string; readonly params: readonly string[] } {
   if (!statuses || statuses.length === 0) return { sql: "1=1", params: [] }
+  const parts: string[] = []
+  const params: string[] = []
+  const nonSelectable = statuses.filter((s) => s !== "succeeded")
+  if (statuses.includes("succeeded")) {
+    // SELECTABLE_ITEM_PREDICATE をそのまま使うことで、
+    // filterSelectableArticleIds / listAgentArticles との一貫性を構造的に保証する。
+    parts.push(`(${SELECTABLE_ITEM_PREDICATE})`)
+  }
+  if (nonSelectable.length > 0) {
+    parts.push(
+      `i.archive_status IN (${nonSelectable.map(() => "?").join(",")})`
+    )
+    params.push(...nonSelectable)
+  }
   return {
-    sql: `i.archive_status IN (${statuses.map(() => "?").join(",")})`,
-    params: statuses,
+    sql: parts.join(" OR "),
+    params,
   }
 }
 
