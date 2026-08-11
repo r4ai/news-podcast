@@ -171,6 +171,7 @@ export interface JobDto {
   readonly id: string
   readonly status: JobStatus
   readonly createdAt: string
+  readonly articleIds?: readonly string[]
   readonly attempt: number
   readonly maxAttempts: number
   readonly stage?: JobStage
@@ -988,11 +989,11 @@ export class LocalStore implements EpisodeJobRepository {
           `SELECT i.id, i.feed_id, f.name AS source_name, i.title, i.url,
                   i.published_at, i.summary, i.discovered_at, i.archive_status,
                   i.latest_snapshot_id, 0 AS read, 0 AS saved
-           FROM feed_items i
-           JOIN feed_catalog f ON f.id = i.feed_id
-           JOIN feed_subscriptions s
-             ON s.feed_id = i.feed_id AND s.owner_id = ? AND s.enabled = 1
-           JOIN episode_job_articles a ON a.feed_item_id = i.id
+            FROM feed_items i
+            JOIN feed_catalog f ON f.id = i.feed_id
+            JOIN feed_subscriptions s
+              ON s.feed_id = i.feed_id AND s.owner_id = ?
+            JOIN episode_job_articles a ON a.feed_item_id = i.id
            WHERE i.archive_status = 'succeeded'
              AND i.latest_snapshot_id IS NOT NULL
              AND i.id IN (${selected})
@@ -1848,14 +1849,24 @@ export class LocalStore implements EpisodeJobRepository {
          ORDER BY created_at DESC, id DESC LIMIT 100`
       )
       .all(ownerId)
-      .map(toJob)
+      .map((row) =>
+        toJob(
+          row,
+          this.listJobArticleIds(String((row as Record<string, unknown>).id))
+        )
+      )
   }
 
   getJob(ownerId: string, jobId: string): JobDto | undefined {
     const row = this.database
       .prepare("SELECT * FROM episode_jobs WHERE owner_id = ? AND id = ?")
       .get(ownerId, jobId)
-    return row ? toJob(row) : undefined
+    return row
+      ? toJob(
+          row,
+          this.listJobArticleIds(String((row as Record<string, unknown>).id))
+        )
+      : undefined
   }
 
   cancelJob(
@@ -3175,7 +3186,7 @@ function ageMs(value: unknown, now: Date): number {
   return Number.isFinite(timestamp) ? Math.max(0, now.getTime() - timestamp) : 0
 }
 
-function toJob(row: unknown): JobDto {
+function toJob(row: unknown, articleIds: readonly string[] = []): JobDto {
   const value = row as Record<string, unknown>
   const failure = value.failure_code
     ? {
@@ -3188,6 +3199,7 @@ function toJob(row: unknown): JobDto {
     id: String(value.id),
     status: String(value.status) as JobStatus,
     createdAt: String(value.created_at),
+    articleIds,
     attempt: Number(value.attempt),
     maxAttempts: Number(value.max_attempts),
     ...(value.stage ? { stage: String(value.stage) as JobStage } : {}),

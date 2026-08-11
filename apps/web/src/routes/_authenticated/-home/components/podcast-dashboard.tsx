@@ -118,7 +118,7 @@ const statusCopy: Record<
   failed: {
     label: "失敗",
     title: "番組を生成できませんでした",
-    description: "問題を確認してから、もう一度生成してください。",
+    description: "記事を選び直して、別の条件で再生成できます。",
   },
   canceled: {
     label: "キャンセル",
@@ -233,7 +233,7 @@ function GenerationAction({
           onClick={onRetry}
         >
           {pending ? <Spinner data-icon="inline-start" /> : <RotateCcw />}
-          {pending ? "受付中…" : "この条件で再試行"}
+          {pending ? "受付中…" : "記事を選び直して再生成"}
         </Button>
       ) : (
         <Button

@@ -68,6 +68,16 @@ describe("useArticlePicker", () => {
     expect(result.current.selectedIds).toEqual([])
   })
 
+  it("initializes the selection from the previous job", async () => {
+    stubArticles(3)
+    const { result } = renderHookWithProviders(() =>
+      useArticlePicker(true, ["a1"])
+    )
+
+    await waitFor(() => expect(result.current.articles).toHaveLength(3))
+    expect(result.current.selectedIds).toEqual(["a1"])
+  })
+
   it("refuses to select past the contract's limit", async () => {
     stubArticles(MAX_SELECTED_ARTICLES + 5)
     const { result } = renderHookWithProviders(() => useArticlePicker(true))

@@ -165,6 +165,7 @@ export const JobSchema = z
     id: IdSchema,
     status: JobStatusSchema,
     createdAt: z.iso.datetime(),
+    articleIds: z.array(IdSchema).optional(),
     attempt: z.number().int().min(0).max(4),
     maxAttempts: z.literal(4),
     stage: JobStageSchema.optional(),

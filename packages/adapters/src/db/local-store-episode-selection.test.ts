@@ -100,6 +100,46 @@ describe("episode article selection", () => {
     expect(store.filterSelectableArticleIds("owner-1", [])).toEqual([])
     store.close()
   })
+
+  it("keeps selected articles available after their feed is disabled", async () => {
+    const store = createStore()
+    store.ensureDefaultSubscriptions("owner-1")
+    const [articleId] = seedArticles(store, ["disabled-feed"])
+    const article = store.listArticles("owner-1", { limit: 1 }).items[0]!
+    store.completeArchive({
+      articleId: article.id,
+      snapshotId: "00000000-0000-4000-8000-000000000021",
+      sourceUrl: article.url,
+      title: article.title,
+      contentHash: "hash",
+      rawKey: "raw",
+      replayKey: "replay",
+      markdownKey: "markdown",
+      byteLength: 10,
+      assets: [],
+    })
+    const created = await store.create({
+      ownerId: "owner-1",
+      idempotencyKey: "disabled-feed-selection",
+      requestHash: "hash",
+      trigger: "manual",
+      feedIds: [FEED_ID],
+      articleIds: [articleId!],
+    })
+    const subscription = store
+      .listSubscriptions("owner-1")
+      .find((item) => item.feedId === FEED_ID)!
+
+    store.setSubscriptionEnabled("owner-1", subscription.id, false)
+
+    expect(
+      store
+        .listAgentArticles("owner-1", [FEED_ID], 50, [articleId!])
+        .map((article) => article.id)
+    ).toEqual([articleId])
+    expect(store.listJobArticleIds(created.jobId)).toEqual([articleId])
+    store.close()
+  })
 })
 
 describe("job event sequence", () => {

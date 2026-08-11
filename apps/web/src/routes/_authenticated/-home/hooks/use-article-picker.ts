@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { type Article } from "@/features/articles"
 import { api } from "@/shared/api"
@@ -6,6 +6,7 @@ import { api } from "@/shared/api"
 import { MAX_SELECTED_ARTICLES } from "../model"
 
 const PAGE_SIZE = 30
+const EMPTY_SELECTION: readonly string[] = []
 
 /**
  * 生成ダイアログの候補一覧と選択状態。
@@ -14,8 +15,15 @@ const PAGE_SIZE = 30
  * エージェントの読める記事なので `archiveStatus` で絞り、おすすめ順で
  * 上から選べるようにする。
  */
-export function useArticlePicker(enabled: boolean) {
+export function useArticlePicker(
+  enabled: boolean,
+  initialSelectedIds: readonly string[] = EMPTY_SELECTION
+) {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+
+  useEffect(() => {
+    if (enabled) setSelectedIds([...initialSelectedIds])
+  }, [enabled, initialSelectedIds])
 
   const listQuery = api.useInfiniteQuery(
     "get",

@@ -8,10 +8,15 @@ import { PodcastDashboard } from "./podcast-dashboard"
  * `PodcastDashboard` 側はpropsのみなのでStorybookでそのまま検証できる。
  */
 export function GenerationDashboard() {
-  const { pickerOpen, onPickerOpenChange, onConfirmGenerate, ...generation } =
-    useGeneration()
+  const {
+    pickerInitialArticleIds,
+    pickerOpen,
+    onPickerOpenChange,
+    onConfirmGenerate,
+    ...generation
+  } = useGeneration()
   // 候補の取得はダイアログを開くまで走らせない。
-  const picker = useArticlePicker(pickerOpen)
+  const picker = useArticlePicker(pickerOpen, pickerInitialArticleIds)
 
   return (
     <>

@@ -430,6 +430,12 @@
             "type": "string",
             "format": "date-time"
           },
+          "articleIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            }
+          },
           "attempt": {
             "type": "integer",
             "minimum": 0,

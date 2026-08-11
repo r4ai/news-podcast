@@ -694,6 +694,7 @@ export interface components {
             status: components["schemas"]["JobStatus"];
             /** Format: date-time */
             createdAt: string;
+            articleIds?: components["schemas"]["Id"][];
             attempt: number;
             /** @enum {number} */
             maxAttempts: 4;

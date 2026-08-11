@@ -27,6 +27,9 @@ export function useGeneration() {
   const queryClient = useQueryClient()
   const [pending, startTransition] = useTransition()
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerInitialArticleIds, setPickerInitialArticleIds] = useState<
+    readonly string[]
+  >([])
   const [streamConnected, setStreamConnected] = useState(false)
   const jobs = api.useSuspenseQuery("get", "/v1/episode-jobs", undefined, {
     // 進行中のジョブがある間だけ追従し、静止したら止める。SSEが生きている
@@ -44,7 +47,6 @@ export function useGeneration() {
   const { data: feeds } = useSuspenseQuery(feedsQueryOptions)
   const createJob = api.useMutation("post", "/v1/episode-jobs")
   const cancelJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/cancel")
-  const retryJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/retry")
 
   const latestJob = jobs.data.items[0]
   const latestEpisode = episodes.items[0]
@@ -137,8 +139,12 @@ export function useGeneration() {
       : undefined,
     pending,
     pickerOpen,
+    pickerInitialArticleIds,
     // 生成は記事選択が前提なので、ボタンは即発火ではなくダイアログを開く。
-    onGenerate: () => setPickerOpen(true),
+    onGenerate: () => {
+      setPickerInitialArticleIds([])
+      setPickerOpen(true)
+    },
     onPickerOpenChange: setPickerOpen,
     onConfirmGenerate: generate,
     onCancel: () =>
@@ -146,10 +152,9 @@ export function useGeneration() {
       runJobAction(() =>
         cancelJob.mutateAsync({ params: { path: { jobId: latestJob.id } } })
       ),
-    onRetry: () =>
-      latestJob &&
-      runJobAction(() =>
-        retryJob.mutateAsync({ params: { path: { jobId: latestJob.id } } })
-      ),
+    onRetry: () => {
+      setPickerInitialArticleIds(latestJob?.articleIds ?? [])
+      setPickerOpen(true)
+    },
   } as const
 }
