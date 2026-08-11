@@ -3,12 +3,16 @@ import { createLocalAuth } from "@news-podcast/adapters/auth/local"
 import { SqliteAgentRuntimeStore } from "@news-podcast/adapters/agent-runtime/sqlite"
 import {
   readLocalAuthConfig,
+  readOpenAiConfig,
   readS3Config,
 } from "@news-podcast/adapters/config"
 import { LocalStore } from "@news-podcast/adapters/db/local"
 import { createSafeFetcher } from "@news-podcast/adapters/http/safe"
 import { S3ObjectStore } from "@news-podcast/adapters/object-store/s3"
 import { RssFeedReader } from "@news-podcast/adapters/rss"
+import { OpenAiArticleSummarizer } from "@news-podcast/adapters/ai-enrich/summarizer"
+import { OpenAiRelevanceScorer } from "@news-podcast/adapters/ai-enrich/scorer"
+import { AiEnrichWorker } from "@news-podcast/adapters/ai-enrich/worker"
 import { CreateEpisodeJob } from "@news-podcast/application"
 import {
   createNodeObservability,
@@ -52,6 +56,53 @@ const audio = createAudioAccess({
 })
 const articles = createArticleAccess({ store, objects })
 const rss = new RssFeedReader(createSafeFetcher())
+// AI補助のオンデマンド再計算 (POST /v1/me/articles/{id}/enrich)。
+// OpenAI設定が無い環境（ローカルのfakeモード等）ではエンドポイントを503にする。
+const aiEnrich = ((): AiEnrichWorker | undefined => {
+  try {
+    const openAiConfig = readOpenAiConfig(process.env)
+    return new AiEnrichWorker(
+      store,
+      objects,
+      new OpenAiArticleSummarizer(openAiConfig),
+      new OpenAiRelevanceScorer(openAiConfig),
+      openAiConfig.model,
+      undefined,
+      (event) => {
+        if (event.type === "summary_succeeded" || event.type === "relevance_succeeded") {
+          observability.count(
+            "article.enrich.tokens",
+            event.tokensIn,
+            { "enrich.step": event.type === "summary_succeeded" ? "summary" : "relevance", "token.kind": "in" }
+          )
+          observability.count(
+            "article.enrich.tokens",
+            event.tokensOut,
+            { "enrich.step": event.type === "summary_succeeded" ? "summary" : "relevance", "token.kind": "out" }
+          )
+        }
+        if (event.type === "summary_failed" || event.type === "relevance_failed") {
+          observability.log({
+            name:
+              event.type === "summary_failed"
+                ? "article.enrich.summary.failed"
+                : "article.enrich.relevance.failed",
+            level: "warn",
+            error: event.error,
+          })
+          if (event.rateLimited) {
+            observability.log({
+              name: "article.enrich.rate_limited",
+              level: "warn",
+            })
+          }
+        }
+      }
+    )
+  } catch {
+    return undefined
+  }
+})()
 
 const app = createApp({
   store,
@@ -110,6 +161,12 @@ const app = createApp({
     articles.replay(ownerId, articleId),
   serveArticleAsset: (ownerId, articleId, hash) =>
     articles.asset(ownerId, articleId, hash),
+  ...(aiEnrich
+    ? {
+        enrichArticle: (ownerId: string, articleId: string) =>
+          aiEnrich.enrichOne(ownerId, articleId),
+      }
+    : {}),
 })
 
 const server = serve(

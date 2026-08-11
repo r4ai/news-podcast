@@ -18,9 +18,13 @@ import {
   AgentInstanceSchema,
   AgentMemorySchema,
   AgentRunSchema,
+  ArticleArchiveStatusSchema,
+  ArticleFacetsSchema,
   ArticleSchema,
+  BulkArticleStateResultSchema,
   FeedSchema,
   IdSchema,
+  InterestProfileSchema,
   JobReceiptSchema,
   JobSchema,
   jsonContent,
@@ -29,6 +33,9 @@ import {
   ScheduleSchema,
   SettingsSchema,
   SubscriptionSchema,
+  TagNameSchema,
+  TagSchema,
+  TagSuggestionSchema,
 } from "./http/schemas.js"
 
 type Variables = { ownerId: string }
@@ -92,6 +99,11 @@ export interface AppDependencies {
     articleId: string,
     hash: string
   ) => Promise<Response>
+  // AI補助（要約+スコア）のオンデマンド再計算。falseはアーカイブ未完了などの対象外。
+  readonly enrichArticle?: (
+    ownerId: string,
+    articleId: string
+  ) => Promise<boolean>
 }
 
 const unavailable = () =>
@@ -269,15 +281,64 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.openapi(listArticlesRoute, (context) => {
     if (!dependencies.store) return context.json(unavailable(), 503)
+    const query = context.req.valid("query")
+    const result = dependencies.store.listArticles(context.get("ownerId"), {
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+      limit: query.limit,
+      ...(query.q ? { q: query.q } : {}),
+      state: query.state,
+      ...(query.feedIds ? { feedIds: query.feedIds } : {}),
+      sort: query.sort,
+      ...(query.includeHidden !== undefined
+        ? { includeHidden: query.includeHidden }
+        : {}),
+      ...(query.usedInEpisode !== undefined
+        ? { usedInEpisode: query.usedInEpisode }
+        : {}),
+      ...(query.minScore !== undefined ? { minScore: query.minScore } : {}),
+      ...(query.publishedAfter
+        ? { publishedAfter: query.publishedAfter }
+        : {}),
+      ...(query.publishedBefore
+        ? { publishedBefore: query.publishedBefore }
+        : {}),
+      ...(query.archiveStatus ? { archiveStatus: query.archiveStatus } : {}),
+      ...(query.tagIds ? { tagIds: query.tagIds } : {}),
+    })
     return context.json(
       {
-        items: dependencies.store
-          .listArticles(context.get("ownerId"))
-          .map(articleResponse),
-        page: { hasMore: false },
+        items: result.items.map(articleResponse),
+        page: {
+          hasMore: result.hasMore,
+          ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+        },
       },
       200
     )
+  })
+
+  app.openapi(articleFacetsRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const query = context.req.valid("query")
+    const facets = dependencies.store.listArticleFacets(
+      context.get("ownerId"),
+      {
+        ...(query.q ? { q: query.q } : {}),
+        ...(query.feedIds ? { feedIds: query.feedIds } : {}),
+        ...(query.includeHidden !== undefined
+          ? { includeHidden: query.includeHidden }
+          : {}),
+        ...(query.publishedAfter
+          ? { publishedAfter: query.publishedAfter }
+          : {}),
+        ...(query.publishedBefore
+          ? { publishedBefore: query.publishedBefore }
+          : {}),
+        ...(query.archiveStatus ? { archiveStatus: query.archiveStatus } : {}),
+        ...(query.tagIds ? { tagIds: query.tagIds } : {}),
+      }
+    )
+    return context.json(facets, 200)
   })
 
   app.openapi(getArticleRoute, (context) => {
@@ -303,6 +364,38 @@ export function createApp(dependencies: AppDependencies = {}) {
       : context.json(problem(404, "not-found", "Not found"), 404)
   })
 
+  app.openapi(bulkArticleStateRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const body = context.req.valid("json")
+    const updated = dependencies.store.bulkSetArticleState(
+      context.get("ownerId"),
+      {
+        ...(body.q ? { q: body.q } : {}),
+        ...(body.state ? { state: body.state } : {}),
+        ...(body.feedIds ? { feedIds: body.feedIds } : {}),
+        ...(body.includeHidden !== undefined
+          ? { includeHidden: body.includeHidden }
+          : {}),
+        ...(body.publishedAfter
+          ? { publishedAfter: body.publishedAfter }
+          : {}),
+        ...(body.publishedBefore
+          ? { publishedBefore: body.publishedBefore }
+          : {}),
+        ...(body.archiveStatus ? { archiveStatus: body.archiveStatus } : {}),
+      },
+      {
+        ...(body.read !== undefined ? { read: body.read } : {}),
+        ...(body.saved !== undefined ? { saved: body.saved } : {}),
+        ...(body.readLater !== undefined
+          ? { readLater: body.readLater }
+          : {}),
+        ...(body.hidden !== undefined ? { hidden: body.hidden } : {}),
+      }
+    )
+    return context.json({ updated }, 200)
+  })
+
   app.openapi(articleMarkdownRoute, (context) =>
     dependencies.serveArticleMarkdown
       ? dependencies.serveArticleMarkdown(
@@ -319,6 +412,26 @@ export function createApp(dependencies: AppDependencies = {}) {
         )
       : context.json(unavailable(), 503)
   )
+  app.openapi(enrichArticleRoute, async (context) => {
+    if (!dependencies.store || !dependencies.enrichArticle) {
+      return context.json(unavailable(), 503)
+    }
+    const ownerId = context.get("ownerId")
+    const articleId = context.req.valid("param").articleId
+    const article = dependencies.store.getArticle(ownerId, articleId)
+    if (!article) return context.json(problem(404, "not-found", "Not found"), 404)
+    const recomputed = await dependencies.enrichArticle(ownerId, articleId)
+    if (!recomputed) {
+      return context.json(
+        problem(409, "article-not-archived", "Article is not archived yet"),
+        409
+      )
+    }
+    const refreshed = dependencies.store.getArticle(ownerId, articleId)
+    return refreshed
+      ? context.json(articleResponse(refreshed), 200)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
   app.openapi(articleAssetRoute, (context) =>
     dependencies.serveArticleAsset
       ? dependencies.serveArticleAsset(
@@ -328,6 +441,77 @@ export function createApp(dependencies: AppDependencies = {}) {
         )
       : context.json(unavailable(), 503)
   )
+
+  app.openapi(putArticleTagsRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const articleId = context.req.valid("param").articleId
+    if (!dependencies.store.getArticle(ownerId, articleId)) {
+      return context.json(problem(404, "not-found", "Not found"), 404)
+    }
+    dependencies.store.setArticleManualTags(
+      ownerId,
+      articleId,
+      context.req.valid("json").tagIds
+    )
+    const article = dependencies.store.getArticle(ownerId, articleId)
+    return article
+      ? context.json(articleResponse(article), 200)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
+  app.openapi(listTagsRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    return context.json(
+      {
+        items: dependencies.store.listTags(context.get("ownerId")),
+        page: { hasMore: false },
+      },
+      200
+    )
+  })
+
+  app.openapi(createTagRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const tag = dependencies.store.createTag(
+      context.get("ownerId"),
+      context.req.valid("json").name
+    )
+    context.header("Location", `/v1/me/tags/${tag.id}`)
+    return context.json(tag, 201)
+  })
+
+  app.openapi(deleteTagRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    return dependencies.store.deleteTag(
+      context.get("ownerId"),
+      context.req.valid("param").tagId
+    )
+      ? context.body(null, 204)
+      : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+
+  app.openapi(listTagSuggestionsRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    return context.json(
+      {
+        items: dependencies.store.listTagSuggestions(context.get("ownerId")),
+        page: { hasMore: false },
+      },
+      200
+    )
+  })
+
+  app.openapi(promoteTagSuggestionRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const tag = dependencies.store.promoteTagSuggestion(
+      context.get("ownerId"),
+      context.req.valid("json").name
+    )
+    if (!tag) return context.json(problem(404, "not-found", "Not found"), 404)
+    context.header("Location", `/v1/me/tags/${tag.id}`)
+    return context.json(tag, 201)
+  })
 
   app.openapi(listSubscriptionsRoute, (context) => {
     if (!dependencies.store) return context.json(unavailable(), 503)
@@ -381,11 +565,11 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.openapi(getSettingsRoute, (context) => {
     if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
     return context.json(
       {
-        generationSchedule: dependencies.store.getSettings(
-          context.get("ownerId")
-        ),
+        generationSchedule: dependencies.store.getSettings(ownerId),
+        interestProfile: dependencies.store.getInterestProfile(ownerId),
       },
       200
     )
@@ -393,21 +577,28 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.openapi(patchSettingsRoute, (context) => {
     if (!dependencies.store) return context.json(unavailable(), 503)
-    const schedule = context.req.valid("json").generationSchedule
-    try {
-      new Intl.DateTimeFormat("en", { timeZone: schedule.timeZone }).format()
-    } catch {
-      return context.json(
-        problem(400, "invalid-time-zone", "Invalid time zone"),
-        400
-      )
+    const ownerId = context.get("ownerId")
+    const body = context.req.valid("json")
+    if (body.generationSchedule) {
+      try {
+        new Intl.DateTimeFormat("en", {
+          timeZone: body.generationSchedule.timeZone,
+        }).format()
+      } catch {
+        return context.json(
+          problem(400, "invalid-time-zone", "Invalid time zone"),
+          400
+        )
+      }
+      dependencies.store.setSettings(ownerId, body.generationSchedule)
+    }
+    if (body.interestProfile) {
+      dependencies.store.setInterestProfile(ownerId, body.interestProfile)
     }
     return context.json(
       {
-        generationSchedule: dependencies.store.setSettings(
-          context.get("ownerId"),
-          schedule
-        ),
+        generationSchedule: dependencies.store.getSettings(ownerId),
+        interestProfile: dependencies.store.getInterestProfile(ownerId),
       },
       200
     )
@@ -711,6 +902,7 @@ export const documentConfig = {
     { name: "Feeds", description: "RSS feed catalog" },
     { name: "Subscriptions", description: "Owner-scoped RSS subscriptions" },
     { name: "Articles", description: "Archived RSS articles and read state" },
+    { name: "Tags", description: "Owner-defined tag vocabulary and AI tag suggestions" },
     { name: "Settings", description: "Owner-scoped generation schedule" },
     { name: "Episode jobs", description: "Asynchronous generation jobs" },
     { name: "Agent runtime", description: "Agent runs and safe timeline" },
@@ -819,14 +1011,87 @@ const articleParams = z.object({
   articleId: IdSchema.openapi({ param: { name: "articleId", in: "path" } }),
 })
 
+// 単一値/複数値どちらでも渡せるクエリパラメータを配列へ正規化する。
+// Honoは同名クエリが1つだけの場合は文字列、複数の場合は配列で渡す。
+const toQueryArray = (value: unknown) =>
+  value === undefined ? undefined : Array.isArray(value) ? value : [value]
+
+// 期間絞り込み。publishedAfter/publishedBeforeともに境界値を含む閉区間として扱う
+// （両方指定時、逆転していれば422）。判定対象はソート基準と揃えたCOALESCE(published_at, discovered_at)。
+const publishedRangeFields = {
+  publishedAfter: z.iso.datetime().optional(),
+  publishedBefore: z.iso.datetime().optional(),
+}
+const publishedRangeValid = (value: {
+  readonly publishedAfter?: string
+  readonly publishedBefore?: string
+}) =>
+  !value.publishedAfter ||
+  !value.publishedBefore ||
+  value.publishedAfter <= value.publishedBefore
+const publishedRangeRefinement = {
+  message: "publishedAfter must not be after publishedBefore",
+  path: ["publishedBefore"],
+}
+
+const listArticlesQuery = z
+  .object({
+    cursor: z.string().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    q: z.string().min(1).max(200).optional(),
+    state: z.enum(["all", "unread", "saved", "later"]).default("all"),
+    feedIds: z.preprocess(toQueryArray, z.array(IdSchema)).optional(),
+    sort: z.enum(["newest", "oldest", "source", "relevance"]).default("newest"),
+    includeHidden: z.stringbool().optional(),
+    usedInEpisode: z.stringbool().optional(),
+    // sort=relevance以外でも使える。未処理（スコア無し）記事は満たさない扱い。
+    minScore: z.coerce.number().int().min(0).max(100).optional(),
+    ...publishedRangeFields,
+    archiveStatus: z
+      .preprocess(toQueryArray, z.array(ArticleArchiveStatusSchema))
+      .optional(),
+    // 指定時、いずれかのタグが付いている記事のみ返す（OR条件）。
+    tagIds: z.preprocess(toQueryArray, z.array(IdSchema)).optional(),
+  })
+  .refine(publishedRangeValid, publishedRangeRefinement)
+
 const listArticlesRoute = createRoute({
   method: "get",
   path: "/v1/me/articles",
   tags: ["Articles"],
   operationId: "listArticles",
   description: "List articles from the authenticated owner's subscriptions.",
+  request: { query: listArticlesQuery },
   responses: {
     200: jsonContent(page(ArticleSchema), "Articles"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const articleFacetsQuery = z
+  .object({
+    q: z.string().min(1).max(200).optional(),
+    feedIds: z.preprocess(toQueryArray, z.array(IdSchema)).optional(),
+    includeHidden: z.stringbool().optional(),
+    ...publishedRangeFields,
+    archiveStatus: z
+      .preprocess(toQueryArray, z.array(ArticleArchiveStatusSchema))
+      .optional(),
+    tagIds: z.preprocess(toQueryArray, z.array(IdSchema)).optional(),
+  })
+  .refine(publishedRangeValid, publishedRangeRefinement)
+
+const articleFacetsRoute = createRoute({
+  method: "get",
+  path: "/v1/me/articles/facets",
+  tags: ["Articles"],
+  operationId: "getArticleFacets",
+  description:
+    "Return state and per-feed counts for the current search/filter scope.",
+  request: { query: articleFacetsQuery },
+  responses: {
+    200: jsonContent(ArticleFacetsSchema, "Article facets"),
     401: problemContent("Unauthorized"),
     503: problemContent("Unavailable"),
   },
@@ -847,28 +1112,36 @@ const getArticleRoute = createRoute({
   },
 })
 
+const articleStateBody = z.object({
+  read: z.boolean().optional(),
+  saved: z.boolean().optional(),
+  readLater: z.boolean().optional(),
+  hidden: z.boolean().optional(),
+})
+
+const hasAnyArticleStateFlag = (value: {
+  read?: boolean
+  saved?: boolean
+  readLater?: boolean
+  hidden?: boolean
+}) =>
+  value.read !== undefined ||
+  value.saved !== undefined ||
+  value.readLater !== undefined ||
+  value.hidden !== undefined
+
 const patchArticleRoute = createRoute({
   method: "patch",
   path: "/v1/me/articles/{articleId}",
   tags: ["Articles"],
   operationId: "updateArticleState",
-  description: "Update read or saved state for one article.",
+  description: "Update read, saved, readLater, or hidden state for one article.",
   request: {
     params: articleParams,
     body: {
       required: true,
       content: {
-        "application/json": {
-          schema: z
-            .object({
-              read: z.boolean().optional(),
-              saved: z.boolean().optional(),
-            })
-            .refine(
-              (value: { read?: boolean; saved?: boolean }) =>
-                value.read !== undefined || value.saved !== undefined
-            ),
-        },
+        "application/json": { schema: articleStateBody.refine(hasAnyArticleStateFlag) },
       },
     },
   },
@@ -876,6 +1149,39 @@ const patchArticleRoute = createRoute({
     200: jsonContent(ArticleSchema, "Updated"),
     401: problemContent("Unauthorized"),
     404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const bulkArticleStateBody = z
+  .object({
+    q: z.string().min(1).max(200).optional(),
+    state: z.enum(["all", "unread", "saved", "later"]).optional(),
+    feedIds: z.array(IdSchema).optional(),
+    includeHidden: z.boolean().optional(),
+    ...publishedRangeFields,
+    archiveStatus: z.array(ArticleArchiveStatusSchema).optional(),
+  })
+  .extend(articleStateBody.shape)
+  .refine(hasAnyArticleStateFlag)
+  .refine(publishedRangeValid, publishedRangeRefinement)
+
+const bulkArticleStateRoute = createRoute({
+  method: "post",
+  path: "/v1/me/articles/bulk-state",
+  tags: ["Articles"],
+  operationId: "bulkUpdateArticleState",
+  description:
+    "Apply read/saved/readLater/hidden state to every article matching a filter (e.g. mark all as read).",
+  request: {
+    body: {
+      required: true,
+      content: { "application/json": { schema: bulkArticleStateBody } },
+    },
+  },
+  responses: {
+    200: jsonContent(BulkArticleStateResultSchema, "Number of articles updated"),
+    401: problemContent("Unauthorized"),
     503: problemContent("Unavailable"),
   },
 })
@@ -916,6 +1222,23 @@ const articleArchiveRoute = createRoute({
   },
 })
 
+const enrichArticleRoute = createRoute({
+  method: "post",
+  path: "/v1/me/articles/{articleId}/enrich",
+  tags: ["Articles"],
+  operationId: "enrichArticle",
+  description:
+    "Recompute the AI summary and relevance score for one article on demand.",
+  request: { params: articleParams },
+  responses: {
+    200: jsonContent(ArticleSchema, "Recomputed"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    409: problemContent("Article is not archived yet"),
+    503: problemContent("Unavailable"),
+  },
+})
+
 const articleAssetRoute = createRoute({
   method: "get",
   path: "/v1/me/articles/{articleId}/assets/{hash}",
@@ -940,6 +1263,122 @@ const articleAssetRoute = createRoute({
         },
       },
     },
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+// PUT /articles/{id}/tags: 記事の手動タグ集合を丸ごと置き換える。AI付与タグは別枠で維持される
+// （LocalStore.setArticleManualTagsを参照）。
+const putArticleTagsRoute = createRoute({
+  method: "put",
+  path: "/v1/me/articles/{articleId}/tags",
+  tags: ["Articles"],
+  operationId: "setArticleTags",
+  description: "Replace the manual tag set for one article.",
+  request: {
+    params: articleParams,
+    body: {
+      required: true,
+      content: {
+        "application/json": { schema: z.object({ tagIds: z.array(IdSchema) }) },
+      },
+    },
+  },
+  responses: {
+    200: jsonContent(ArticleSchema, "Updated"),
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const tagParams = z.object({
+  tagId: IdSchema.openapi({ param: { name: "tagId", in: "path" } }),
+})
+
+const listTagsRoute = createRoute({
+  method: "get",
+  path: "/v1/me/tags",
+  tags: ["Tags"],
+  operationId: "listTags",
+  description:
+    "List the authenticated owner's tag vocabulary (used both for manual tagging and as the AI candidate set).",
+  responses: {
+    200: jsonContent(page(TagSchema), "Tags"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const createTagRoute = createRoute({
+  method: "post",
+  path: "/v1/me/tags",
+  tags: ["Tags"],
+  operationId: "createTag",
+  description: "Add a tag to the owner's vocabulary (idempotent by name).",
+  request: {
+    body: {
+      required: true,
+      content: {
+        "application/json": { schema: z.object({ name: TagNameSchema }) },
+      },
+    },
+  },
+  responses: {
+    201: jsonContent(TagSchema, "Created"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const deleteTagRoute = createRoute({
+  method: "delete",
+  path: "/v1/me/tags/{tagId}",
+  tags: ["Tags"],
+  operationId: "deleteTag",
+  description: "Remove one tag from the owner's vocabulary.",
+  request: { params: tagParams },
+  responses: {
+    204: { description: "Deleted" },
+    401: problemContent("Unauthorized"),
+    404: problemContent("Not found"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const listTagSuggestionsRoute = createRoute({
+  method: "get",
+  path: "/v1/me/tag-suggestions",
+  tags: ["Tags"],
+  operationId: "listTagSuggestions",
+  description:
+    "List AI-proposed tag names that fell outside the owner's vocabulary, most frequent first.",
+  responses: {
+    200: jsonContent(page(TagSuggestionSchema), "Tag suggestions"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const promoteTagSuggestionRoute = createRoute({
+  method: "post",
+  path: "/v1/me/tag-suggestions/promote",
+  tags: ["Tags"],
+  operationId: "promoteTagSuggestion",
+  description:
+    "Turn a suggested tag name into a real vocabulary tag and remove the suggestion.",
+  request: {
+    body: {
+      required: true,
+      content: {
+        "application/json": { schema: z.object({ name: TagNameSchema }) },
+      },
+    },
+  },
+  responses: {
+    201: jsonContent(TagSchema, "Promoted"),
     401: problemContent("Unauthorized"),
     404: problemContent("Not found"),
     503: problemContent("Unavailable"),
@@ -1030,7 +1469,8 @@ const getSettingsRoute = createRoute({
   path: "/v1/me/settings",
   tags: ["Settings"],
   operationId: "getSettings",
-  description: "Return the authenticated owner's generation schedule.",
+  description:
+    "Return the authenticated owner's generation schedule and interest profile.",
   responses: {
     200: jsonContent(SettingsSchema, "Settings"),
     401: problemContent("Unauthorized"),
@@ -1043,13 +1483,17 @@ const patchSettingsRoute = createRoute({
   path: "/v1/me/settings",
   tags: ["Settings"],
   operationId: "updateSettings",
-  description: "Update the authenticated owner's generation schedule.",
+  description:
+    "Update the authenticated owner's generation schedule and/or interest profile.",
   request: {
     body: {
       required: true,
       content: {
         "application/json": {
-          schema: z.object({ generationSchedule: ScheduleSchema }),
+          schema: z.object({
+            generationSchedule: ScheduleSchema.optional(),
+            interestProfile: InterestProfileSchema.optional(),
+          }),
         },
       },
     },
@@ -1397,7 +1841,7 @@ function toAgentMemoryResponse(memory: AgentMemoryRecord) {
 }
 
 function articleResponse(
-  article: ReturnType<LocalStore["listArticles"]>[number]
+  article: ReturnType<LocalStore["listArticles"]>["items"][number]
 ) {
   return {
     ...article,

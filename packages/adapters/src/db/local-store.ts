@@ -9,6 +9,11 @@ import type {
   GenerationSchedule,
 } from "@news-podcast/application"
 import type { JobStatus } from "@news-podcast/domain"
+import {
+  computeProfileHash,
+  RELEVANCE_PROMPT_VERSION,
+  SUMMARY_PROMPT_VERSION,
+} from "../ai-enrich/shared.js"
 
 export type JobStage =
   | "researching_sources"
@@ -54,6 +59,99 @@ export interface ArticleDto {
   readonly snapshotId?: string
   readonly read: boolean
   readonly saved: boolean
+  readonly readLater: boolean
+  readonly hidden: boolean
+  readonly hiddenAt?: string
+  readonly usedInEpisode: boolean
+  // 日本語箇条書き3点。要約が未生成、または現行prompt_versionと不一致なら未設定。
+  readonly aiSummary?: readonly string[]
+  // 0-100。現行profile_hash/prompt_versionに一致する行が無ければ未設定（=未処理）。
+  readonly relevanceScore?: number
+  readonly relevanceReason?: string
+  // 手動+AI付与タグ名の和集合（重複なし）。未付与なら空配列。
+  readonly tags: readonly string[]
+}
+
+export interface TagDto {
+  readonly id: string
+  readonly name: string
+  readonly createdAt: string
+}
+
+export interface TagSuggestionDto {
+  readonly name: string
+  readonly occurrences: number
+  readonly lastSeenAt: string
+}
+
+export type ArticleListState = "all" | "unread" | "saved" | "later"
+export type ArticleListSort = "newest" | "oldest" | "source" | "relevance"
+
+export interface ArticleListOptions {
+  readonly cursor?: string
+  readonly limit?: number
+  readonly q?: string
+  readonly state?: ArticleListState
+  readonly feedIds?: readonly string[]
+  readonly sort?: ArticleListSort
+  // 既定ではhiddenな記事を除外する。trueで含める。
+  readonly includeHidden?: boolean
+  readonly usedInEpisode?: boolean
+  // 指定時、未処理（スコア無し）記事も含めて relevanceScore >= minScore のみ返す。
+  // 未処理記事はスコア無し扱いのためminScore指定時は除外される。
+  readonly minScore?: number
+  // 期間絞り込み（両端を含む閉区間）。ソート基準と揃えCOALESCE(published_at, discovered_at)を対象にする。
+  readonly publishedAfter?: string
+  readonly publishedBefore?: string
+  // 複数指定可。未指定時は全archive_statusを対象にする。
+  readonly archiveStatus?: readonly ArticleDto["archiveStatus"][]
+  // 指定時、いずれかのタグIDが付いている記事のみ返す（OR条件）。
+  readonly tagIds?: readonly string[]
+}
+
+export interface InterestProfileDto {
+  readonly include: string
+  readonly exclude: string
+}
+
+export interface ArticleListResult {
+  readonly items: readonly ArticleDto[]
+  readonly hasMore: boolean
+  readonly nextCursor?: string
+}
+
+export interface ArticleFacets {
+  readonly states: {
+    readonly all: number
+    readonly unread: number
+    readonly saved: number
+    readonly later: number
+  }
+  readonly feeds: readonly {
+    readonly feedId: string
+    readonly name: string
+    readonly count: number
+  }[]
+  // 一覧の隅に出す「AI処理待ちN件」用。絞り込み条件には依存しない
+  // （購読全体に対するAI補助バッチの未処理件数）。
+  readonly aiPending: number
+}
+
+export interface ArticleStateInput {
+  readonly read?: boolean
+  readonly saved?: boolean
+  readonly readLater?: boolean
+  readonly hidden?: boolean
+}
+
+export interface ArticleBulkStateFilter {
+  readonly q?: string
+  readonly state?: ArticleListState
+  readonly feedIds?: readonly string[]
+  readonly includeHidden?: boolean
+  readonly publishedAfter?: string
+  readonly publishedBefore?: string
+  readonly archiveStatus?: readonly ArticleDto["archiveStatus"][]
 }
 
 export interface SubscriptionDto {
@@ -484,41 +582,269 @@ export class LocalStore implements EpisodeJobRepository {
       )
   }
 
-  listArticles(ownerId: string, limit = 100): readonly ArticleDto[] {
-    return this.articleRows(ownerId, undefined, limit).map(toArticle)
+  listArticles(
+    ownerId: string,
+    options: ArticleListOptions = {}
+  ): ArticleListResult {
+    const limit = clampArticleLimit(options.limit)
+    // sort=relevanceまたはminScore指定時のみ、順序付け/絞り込みにarticle_relevanceを
+    // 結合する（他の呼び出しでは無駄な結合を避ける）。
+    const needsRelevanceJoin =
+      (options.sort ?? "newest") === "relevance" || options.minScore !== undefined
+    const profileHash = needsRelevanceJoin
+      ? computeProfileHash(
+          this.getInterestProfile(ownerId).include,
+          this.getInterestProfile(ownerId).exclude
+        )
+      : undefined
+    const columns = articleSortColumns(options.sort ?? "newest")
+    const filters = this.articleFilterPredicate(options)
+    const minScoreFilter =
+      needsRelevanceJoin && options.minScore !== undefined
+        ? { sql: "COALESCE(rel.score, -1) >= CAST(? AS INTEGER)", params: [String(options.minScore)] }
+        : undefined
+    const cursorValues = options.cursor
+      ? decodeArticleCursor(options.cursor)
+      : undefined
+    const keyset =
+      cursorValues && cursorValues.length === columns.length
+        ? keysetPredicate(columns, cursorValues)
+        : undefined
+
+    const where = [
+      filters.sql,
+      ...(minScoreFilter ? [minScoreFilter.sql] : []),
+      ...(keyset ? [keyset.sql] : []),
+    ].join(" AND ")
+    const params = [
+      ownerId,
+      ownerId,
+      ...(needsRelevanceJoin
+        ? [ownerId, profileHash as string, RELEVANCE_PROMPT_VERSION]
+        : []),
+      ...filters.params,
+      ...(minScoreFilter ? minScoreFilter.params : []),
+      ...(keyset ? keyset.params : []),
+    ]
+    const orderBy = columns
+      .map((column) => `${column.expr} ${column.direction}`)
+      .join(", ")
+    const from = needsRelevanceJoin
+      ? `${ARTICLE_FROM}
+         LEFT JOIN article_relevance rel
+           ON rel.feed_item_id = i.id AND rel.owner_id = ?
+              AND rel.profile_hash = ? AND rel.prompt_version = ?
+              AND rel.status = 'succeeded'`
+      : ARTICLE_FROM
+    // sort=relevanceのkeysetカーソルはscore_missing/score列を必要とする
+    // （articleSortColumnsのalias参照先）。ARTICLE_SELECTには無いのでここで足す。
+    const select = needsRelevanceJoin
+      ? `${ARTICLE_SELECT},
+         CASE WHEN rel.score IS NULL THEN '1' ELSE '0' END AS score_missing,
+         printf('%05d', COALESCE(rel.score, -1) + 1) AS score`
+      : ARTICLE_SELECT
+
+    const rows = this.database
+      .prepare(
+        `SELECT ${select}
+         ${from}
+         WHERE ${where}
+         ORDER BY ${orderBy}
+         LIMIT ?`
+      )
+      .all(...params, limit + 1) as Record<string, unknown>[]
+
+    const hasMore = rows.length > limit
+    const pageRows = hasMore ? rows.slice(0, limit) : rows
+    const nextCursor = hasMore
+      ? encodeCursorFor(columns, pageRows.at(-1))
+      : undefined
+
+    return {
+      items: this.attachAiEnrichment(ownerId, pageRows.map(toArticle)),
+      hasMore,
+      ...(nextCursor ? { nextCursor } : {}),
+    }
+  }
+
+  listArticleFacets(
+    ownerId: string,
+    options: {
+      readonly q?: string
+      readonly feedIds?: readonly string[]
+      readonly includeHidden?: boolean
+      readonly publishedAfter?: string
+      readonly publishedBefore?: string
+      readonly archiveStatus?: readonly ArticleDto["archiveStatus"][]
+      readonly tagIds?: readonly string[]
+    } = {}
+  ): ArticleFacets {
+    const filters = this.articleFilterPredicate(options)
+    const params = [ownerId, ownerId, ...filters.params]
+
+    const stateRow = this.database
+      .prepare(
+        `SELECT
+           COUNT(*) AS all_count,
+           SUM(CASE WHEN COALESCE(s.read, 0) = 0 THEN 1 ELSE 0 END) AS unread_count,
+           SUM(CASE WHEN COALESCE(s.saved, 0) = 1 THEN 1 ELSE 0 END) AS saved_count,
+           SUM(CASE WHEN COALESCE(s.read_later, 0) = 1 THEN 1 ELSE 0 END) AS later_count
+         ${ARTICLE_FROM}
+         WHERE ${filters.sql}`
+      )
+      .get(...params) as Record<string, unknown>
+
+    const feedRows = this.database
+      .prepare(
+        `SELECT i.feed_id AS feed_id, f.name AS name, COUNT(*) AS count
+         ${ARTICLE_FROM}
+         WHERE ${filters.sql}
+         GROUP BY i.feed_id, f.name
+         ORDER BY f.name ASC`
+      )
+      .all(...params) as Record<string, unknown>[]
+
+    return {
+      states: {
+        all: Number(stateRow.all_count ?? 0),
+        unread: Number(stateRow.unread_count ?? 0),
+        saved: Number(stateRow.saved_count ?? 0),
+        later: Number(stateRow.later_count ?? 0),
+      },
+      feeds: feedRows.map((row) => ({
+        feedId: String(row.feed_id),
+        name: String(row.name),
+        count: Number(row.count),
+      })),
+      aiPending: this.countEnrichPending(ownerId),
+    }
   }
 
   getArticle(ownerId: string, articleId: string): ArticleDto | undefined {
     const row = this.articleRows(ownerId, articleId, 1)[0]
-    return row ? toArticle(row) : undefined
+    if (!row) return undefined
+    return this.attachAiEnrichment(ownerId, [toArticle(row)])[0]
+  }
+
+  // state/feed/検索/hidden除外の絞り込み述語を組み立てる。owner scope (sub.enabled = 1) は必ず含める。
+  private articleFilterPredicate(
+    options: Pick<
+      ArticleListOptions,
+      | "q"
+      | "state"
+      | "feedIds"
+      | "includeHidden"
+      | "usedInEpisode"
+      | "publishedAfter"
+      | "publishedBefore"
+      | "archiveStatus"
+      | "tagIds"
+    >
+  ): { readonly sql: string; readonly params: readonly string[] } {
+    const predicates: { readonly sql: string; readonly params: readonly string[] }[] = [
+      { sql: "sub.enabled = 1", params: [] },
+      articleSearchPredicate(options.q),
+      { sql: articleStatePredicate(options.state), params: [] },
+      { sql: articleHiddenPredicate(options.includeHidden), params: [] },
+      articleFeedIdsPredicate(options.feedIds),
+      articleUsedInEpisodePredicate(options.usedInEpisode),
+      articlePublishedRangePredicate(
+        options.publishedAfter,
+        options.publishedBefore
+      ),
+      articleArchiveStatusPredicate(options.archiveStatus),
+      articleTagsPredicate(options.tagIds),
+    ]
+    const active = predicates.filter((predicate) => predicate.sql !== "1=1")
+    return {
+      sql: active.map((predicate) => predicate.sql).join(" AND "),
+      params: active.flatMap((predicate) => predicate.params),
+    }
   }
 
   setArticleState(
     ownerId: string,
     articleId: string,
-    state: { readonly read?: boolean; readonly saved?: boolean }
+    state: ArticleStateInput
   ): ArticleDto | undefined {
     if (!this.getArticle(ownerId, articleId)) return undefined
     const current = this.database
       .prepare(
-        "SELECT read, saved FROM article_user_states WHERE owner_id = ? AND feed_item_id = ?"
+        `SELECT read, saved, read_later, hidden, hidden_at
+         FROM article_user_states WHERE owner_id = ? AND feed_item_id = ?`
       )
       .get(ownerId, articleId) as Record<string, unknown> | undefined
+    this.applyArticleState(
+      ownerId,
+      articleId,
+      current,
+      state,
+      new Date().toISOString()
+    )
+    return this.getArticle(ownerId, articleId)
+  }
+
+  // 絞り込み条件に一致する全記事へ一括で状態を適用し、更新件数を返す。
+  // owner scope はarticleFilterPredicateのsub.enabled = 1条件で必ず担保される。
+  bulkSetArticleState(
+    ownerId: string,
+    filter: ArticleBulkStateFilter,
+    state: ArticleStateInput
+  ): number {
+    return this.transaction(() => {
+      const filters = this.articleFilterPredicate(filter)
+      const params = [ownerId, ownerId, ...filters.params]
+      const rows = this.database
+        .prepare(
+          `SELECT i.id AS id, s.read AS read, s.saved AS saved,
+                  s.read_later AS read_later, s.hidden AS hidden,
+                  s.hidden_at AS hidden_at
+           ${ARTICLE_FROM}
+           WHERE ${filters.sql}`
+        )
+        .all(...params) as Record<string, unknown>[]
+
+      const now = new Date().toISOString()
+      for (const row of rows) {
+        this.applyArticleState(ownerId, String(row.id), row, state, now)
+      }
+      return rows.length
+    })
+  }
+
+  // setArticleState/bulkSetArticleStateで共有するupsert本体。
+  // hiddenがtrueへ遷移した時だけhidden_atを刻み、falseに戻したらNULLへ戻す。
+  private applyArticleState(
+    ownerId: string,
+    articleId: string,
+    current: Record<string, unknown> | undefined,
+    state: ArticleStateInput,
+    now: string
+  ): void {
+    const nextHidden = resolveBooleanField(state.hidden, current?.hidden)
+    const hiddenAt = nextHidden
+      ? (current?.hidden_at ? String(current.hidden_at) : now)
+      : null
     this.database
       .prepare(
-        `INSERT INTO article_user_states (owner_id, feed_item_id, read, saved, updated_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO article_user_states
+         (owner_id, feed_item_id, read, saved, read_later, hidden, hidden_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(owner_id, feed_item_id) DO UPDATE SET
-           read = excluded.read, saved = excluded.saved, updated_at = excluded.updated_at`
+           read = excluded.read, saved = excluded.saved,
+           read_later = excluded.read_later, hidden = excluded.hidden,
+           hidden_at = excluded.hidden_at, updated_at = excluded.updated_at`
       )
       .run(
         ownerId,
         articleId,
-        (state.read ?? Boolean(current?.read)) ? 1 : 0,
-        (state.saved ?? Boolean(current?.saved)) ? 1 : 0,
-        new Date().toISOString()
+        resolveBooleanField(state.read, current?.read) ? 1 : 0,
+        resolveBooleanField(state.saved, current?.saved) ? 1 : 0,
+        resolveBooleanField(state.readLater, current?.read_later) ? 1 : 0,
+        nextHidden ? 1 : 0,
+        hiddenAt,
+        now
       )
-    return this.getArticle(ownerId, articleId)
   }
 
   getArticleObject(
@@ -560,6 +886,44 @@ export class LocalStore implements EpisodeJobRepository {
     return row
       ? { key: String(row.object_key), contentType: String(row.content_type) }
       : undefined
+  }
+
+  // アーカイブ済みMarkdown本文をFTS索引へ投入する。feed_itemsはowner非依存
+  // （購読を通じて共有される）ため、articleIdだけで一意に特定できる。
+  setArticleSearchBody(articleId: string, body: string): void {
+    this.database
+      .prepare(
+        `UPDATE feed_items_fts SET body = ?, body_indexed_at = ?
+         WHERE rowid = (SELECT rowid FROM feed_items WHERE id = ?)`
+      )
+      .run(body, new Date().toISOString(), articleId)
+  }
+
+  // 本文が未投入（body_indexed_at IS NULL）かつアーカイブ済みの記事をN件返す。
+  // ワーカーのバックフィル処理が繰り返し呼び出し、返り値が尽きるまで進める。
+  listArticlesPendingBodyIndex(
+    limit: number
+  ): readonly { readonly id: string; readonly markdownKey: string }[] {
+    return this.database
+      .prepare(
+        `SELECT i.id AS id, snap.markdown_key AS markdown_key
+         FROM feed_items i
+         JOIN feed_items_fts fts ON fts.rowid = i.rowid
+         JOIN article_snapshots snap ON snap.id = i.latest_snapshot_id
+         WHERE i.archive_status = 'succeeded'
+           AND i.latest_snapshot_id IS NOT NULL
+           AND fts.body_indexed_at IS NULL
+         ORDER BY i.discovered_at, i.id
+         LIMIT ?`
+      )
+      .all(limit)
+      .map((row) => {
+        const value = row as Record<string, unknown>
+        return {
+          id: String(value.id),
+          markdownKey: String(value.markdown_key),
+        }
+      })
   }
 
   resolveEpisodeSources(
@@ -786,6 +1150,526 @@ export class LocalStore implements EpisodeJobRepository {
         schedule.timeZone
       )
     return schedule
+  }
+
+  getInterestProfile(ownerId: string): InterestProfileDto {
+    const row = this.database
+      .prepare(
+        `SELECT interest_include, interest_exclude
+         FROM user_settings WHERE owner_id = ?`
+      )
+      .get(ownerId) as Record<string, unknown> | undefined
+    return {
+      include: row ? String(row.interest_include ?? "") : "",
+      exclude: row ? String(row.interest_exclude ?? "") : "",
+    }
+  }
+
+  setInterestProfile(
+    ownerId: string,
+    profile: InterestProfileDto
+  ): InterestProfileDto {
+    const hash = computeProfileHash(profile.include, profile.exclude)
+    this.database
+      .prepare(
+        `INSERT INTO user_settings
+         (owner_id, interest_include, interest_exclude, interest_profile_hash)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(owner_id) DO UPDATE SET
+           interest_include = excluded.interest_include,
+           interest_exclude = excluded.interest_exclude,
+           interest_profile_hash = excluded.interest_profile_hash`
+      )
+      .run(ownerId, profile.include, profile.exclude, hash)
+    return profile
+  }
+
+  // --- タグ -------------------------------------------------------------
+  // タグ語彙はowner_id+nameで一意。AIは常にこの語彙からのみ選ぶ（enrich-worker.ts参照）。
+
+  listTags(ownerId: string): readonly TagDto[] {
+    return this.database
+      .prepare(
+        "SELECT id, name, created_at FROM tags WHERE owner_id = ? ORDER BY name"
+      )
+      .all(ownerId)
+      .map(toTag)
+  }
+
+  // 同名タグが既にあれば既存を返す（べき等）。
+  createTag(ownerId: string, name: string): TagDto {
+    const existing = this.database
+      .prepare("SELECT id, name, created_at FROM tags WHERE owner_id = ? AND name = ?")
+      .get(ownerId, name) as Record<string, unknown> | undefined
+    if (existing) return toTag(existing)
+    const tag: TagDto = { id: randomUUID(), name, createdAt: new Date().toISOString() }
+    this.database
+      .prepare(
+        "INSERT INTO tags (id, owner_id, name, created_at) VALUES (?, ?, ?, ?)"
+      )
+      .run(tag.id, ownerId, tag.name, tag.createdAt)
+    return tag
+  }
+
+  deleteTag(ownerId: string, tagId: string): boolean {
+    return (
+      this.database
+        .prepare("DELETE FROM tags WHERE id = ? AND owner_id = ?")
+        .run(tagId, ownerId).changes > 0
+    )
+  }
+
+  // タグ語彙の名前一覧。AIの構造化出力enumに渡す候補（空なら呼び出し側がタグ付けをスキップする）。
+  getTagVocabulary(ownerId: string): readonly string[] {
+    return this.database
+      .prepare("SELECT name FROM tags WHERE owner_id = ? ORDER BY name")
+      .all(ownerId)
+      .map((row) => String((row as Record<string, unknown>).name))
+  }
+
+  // PUT /articles/{id}/tags: 手動タグの集合をtagIdsで完全に置き換える。AI付与タグ(source='ai')は別行として残す。
+  setArticleManualTags(
+    ownerId: string,
+    feedItemId: string,
+    tagIds: readonly string[]
+  ): void {
+    this.transaction(() => {
+      this.database
+        .prepare(
+          "DELETE FROM article_tags WHERE owner_id = ? AND feed_item_id = ? AND source = 'manual'"
+        )
+        .run(ownerId, feedItemId)
+      const insert = this.database.prepare(
+        `INSERT INTO article_tags (owner_id, feed_item_id, tag_id, source, confidence, created_at)
+         VALUES (?, ?, ?, 'manual', NULL, ?)
+         ON CONFLICT(owner_id, feed_item_id, tag_id) DO UPDATE SET source = 'manual'`
+      )
+      const now = new Date().toISOString()
+      for (const tagId of tagIds) insert.run(ownerId, feedItemId, tagId, now)
+    })
+  }
+
+  // AI補助バッチが語彙内タグを付与する（既存のsource='ai'行は上書き）。
+  saveAiArticleTags(
+    ownerId: string,
+    feedItemId: string,
+    tags: readonly { readonly name: string; readonly confidence: number }[]
+  ): void {
+    if (tags.length === 0) return
+    this.transaction(() => {
+      const now = new Date().toISOString()
+      for (const tag of tags) {
+        const row = this.database
+          .prepare("SELECT id FROM tags WHERE owner_id = ? AND name = ?")
+          .get(ownerId, tag.name) as Record<string, unknown> | undefined
+        if (!row) continue // 語彙に無い名前は無視（呼び出し側でsuggestedTagsへ回すべき値）
+        this.database
+          .prepare(
+            `INSERT INTO article_tags (owner_id, feed_item_id, tag_id, source, confidence, created_at)
+             VALUES (?, ?, ?, 'ai', ?, ?)
+             ON CONFLICT(owner_id, feed_item_id, tag_id) DO UPDATE SET
+               confidence = excluded.confidence, created_at = excluded.created_at`
+          )
+          .run(ownerId, feedItemId, String(row.id), tag.confidence, now)
+      }
+    })
+  }
+
+  listTagSuggestions(ownerId: string): readonly TagSuggestionDto[] {
+    return this.database
+      .prepare(
+        `SELECT name, occurrences, last_seen_at FROM tag_suggestions
+         WHERE owner_id = ? ORDER BY occurrences DESC, last_seen_at DESC`
+      )
+      .all(ownerId)
+      .map(toTagSuggestion)
+  }
+
+  // 語彙に無いタグ名をAIが出した場合の受け皿。既にあれば出現回数を積み増す。
+  recordTagSuggestions(ownerId: string, names: readonly string[]): void {
+    if (names.length === 0) return
+    const now = new Date().toISOString()
+    const upsert = this.database.prepare(
+      `INSERT INTO tag_suggestions (owner_id, name, occurrences, last_seen_at)
+       VALUES (?, ?, 1, ?)
+       ON CONFLICT(owner_id, name) DO UPDATE SET
+         occurrences = occurrences + 1, last_seen_at = excluded.last_seen_at`
+    )
+    this.transaction(() => {
+      for (const name of new Set(names)) upsert.run(ownerId, name, now)
+    })
+  }
+
+  // 提案からタグ語彙へ昇格させる。作成後は提案行を消す。
+  promoteTagSuggestion(ownerId: string, name: string): TagDto | undefined {
+    const suggestion = this.database
+      .prepare(
+        "SELECT 1 FROM tag_suggestions WHERE owner_id = ? AND name = ?"
+      )
+      .get(ownerId, name)
+    if (!suggestion) return undefined
+    return this.transaction(() => {
+      const tag = this.createTag(ownerId, name)
+      this.database
+        .prepare("DELETE FROM tag_suggestions WHERE owner_id = ? AND name = ?")
+        .run(ownerId, name)
+      return tag
+    })
+  }
+
+  // AI補助バッチが対象とする所有者一覧（有効な購読を1つ以上持つ所有者）。
+  listOwnersWithSubscriptions(): readonly string[] {
+    return this.database
+      .prepare(
+        `SELECT DISTINCT owner_id FROM feed_subscriptions WHERE enabled = 1
+         ORDER BY owner_id`
+      )
+      .all()
+      .map((row) => String((row as Record<string, unknown>).owner_id))
+  }
+
+  // アーカイブ済みかつ、現行profile_hash/prompt_versionのarticle_relevance行を
+  // まだ持たない記事を新しい順にlimit件返す（=日次バッチの候補）。
+  listEnrichCandidates(
+    ownerId: string,
+    profileHash: string,
+    limit: number
+  ): readonly {
+    readonly feedItemId: string
+    readonly title: string
+    readonly snapshotId: string
+    readonly markdownKey: string
+  }[] {
+    if (limit <= 0) return []
+    return this.database
+      .prepare(
+        `SELECT i.id AS feed_item_id, i.title AS title,
+                snap.id AS snapshot_id, snap.markdown_key AS markdown_key
+         FROM feed_items i
+         JOIN feed_subscriptions sub
+           ON sub.feed_id = i.feed_id AND sub.owner_id = ? AND sub.enabled = 1
+         JOIN article_snapshots snap ON snap.id = i.latest_snapshot_id
+         WHERE i.archive_status = 'succeeded'
+           AND i.latest_snapshot_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM article_relevance r
+             WHERE r.owner_id = ? AND r.feed_item_id = i.id
+               AND r.profile_hash = ? AND r.prompt_version = ?
+               AND r.status = 'succeeded'
+           )
+         ORDER BY COALESCE(i.published_at, i.discovered_at) DESC, i.id
+         LIMIT ?`
+      )
+      .all(ownerId, ownerId, profileHash, RELEVANCE_PROMPT_VERSION, limit)
+      .map((row) => {
+        const value = row as Record<string, unknown>
+        return {
+          feedItemId: String(value.feed_item_id),
+          title: String(value.title),
+          snapshotId: String(value.snapshot_id),
+          markdownKey: String(value.markdown_key),
+        }
+      })
+  }
+
+  // 一覧の隅に出す「AI処理待ちN件」用。listEnrichCandidatesと同じ対象条件のCOUNT。
+  countEnrichPending(ownerId: string): number {
+    const profile = this.getInterestProfile(ownerId)
+    const profileHash = computeProfileHash(profile.include, profile.exclude)
+    const row = this.database
+      .prepare(
+        `SELECT COUNT(*) AS pending
+         FROM feed_items i
+         JOIN feed_subscriptions sub
+           ON sub.feed_id = i.feed_id AND sub.owner_id = ? AND sub.enabled = 1
+         WHERE i.archive_status = 'succeeded'
+           AND i.latest_snapshot_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM article_relevance r
+             WHERE r.owner_id = ? AND r.feed_item_id = i.id
+               AND r.profile_hash = ? AND r.prompt_version = ?
+               AND r.status = 'succeeded'
+           )`
+      )
+      .get(ownerId, ownerId, profileHash, RELEVANCE_PROMPT_VERSION) as Record<
+      string,
+      unknown
+    >
+    return Number(row.pending ?? 0)
+  }
+
+  // 現行prompt_versionの要約があれば箇条書きを返す。無ければundefined。
+  getArticleSummary(snapshotId: string): readonly string[] | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT summary_json FROM article_summaries
+         WHERE snapshot_id = ? AND prompt_version = ?`
+      )
+      .get(snapshotId, SUMMARY_PROMPT_VERSION) as
+      | Record<string, unknown>
+      | undefined
+    if (!row) return undefined
+    const parsed = JSON.parse(String(row.summary_json)) as unknown
+    return Array.isArray(parsed) ? parsed.map(String) : undefined
+  }
+
+  saveArticleSummary(input: {
+    readonly snapshotId: string
+    readonly model: string
+    readonly bullets: readonly string[]
+    readonly tokensIn: number
+    readonly tokensOut: number
+  }): void {
+    this.database
+      .prepare(
+        `INSERT INTO article_summaries
+         (snapshot_id, model, prompt_version, summary_json, tokens_in, tokens_out, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(snapshot_id) DO UPDATE SET
+           model = excluded.model, prompt_version = excluded.prompt_version,
+           summary_json = excluded.summary_json, tokens_in = excluded.tokens_in,
+           tokens_out = excluded.tokens_out, created_at = excluded.created_at`
+      )
+      .run(
+        input.snapshotId,
+        input.model,
+        SUMMARY_PROMPT_VERSION,
+        JSON.stringify(input.bullets),
+        input.tokensIn,
+        input.tokensOut,
+        new Date().toISOString()
+      )
+  }
+
+  saveArticleRelevance(input: {
+    readonly ownerId: string
+    readonly feedItemId: string
+    readonly profileHash: string
+    readonly model: string
+    readonly score: number
+    readonly reason: string
+    readonly tokensIn: number
+    readonly tokensOut: number
+  }): void {
+    this.upsertArticleRelevance({
+      ...input,
+      status: "succeeded",
+      score: input.score,
+      reason: input.reason,
+      error: undefined,
+    })
+  }
+
+  saveArticleRelevanceFailure(input: {
+    readonly ownerId: string
+    readonly feedItemId: string
+    readonly profileHash: string
+    readonly model: string
+    readonly error: string
+  }): void {
+    this.upsertArticleRelevance({
+      ...input,
+      status: "failed",
+      score: undefined,
+      reason: undefined,
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+  }
+
+  private upsertArticleRelevance(input: {
+    readonly ownerId: string
+    readonly feedItemId: string
+    readonly profileHash: string
+    readonly model: string
+    readonly status: "succeeded" | "failed"
+    readonly score: number | undefined
+    readonly reason: string | undefined
+    readonly error: string | undefined
+    readonly tokensIn: number
+    readonly tokensOut: number
+  }): void {
+    this.database
+      .prepare(
+        `INSERT INTO article_relevance
+         (owner_id, feed_item_id, profile_hash, model, prompt_version,
+          score, reason, status, error, tokens_in, tokens_out, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(owner_id, feed_item_id) DO UPDATE SET
+           profile_hash = excluded.profile_hash, model = excluded.model,
+           prompt_version = excluded.prompt_version, score = excluded.score,
+           reason = excluded.reason, status = excluded.status,
+           error = excluded.error, tokens_in = excluded.tokens_in,
+           tokens_out = excluded.tokens_out, created_at = excluded.created_at`
+      )
+      .run(
+        input.ownerId,
+        input.feedItemId,
+        input.profileHash,
+        input.model,
+        RELEVANCE_PROMPT_VERSION,
+        input.score ?? null,
+        input.reason ?? null,
+        input.status,
+        input.error ?? null,
+        input.tokensIn,
+        input.tokensOut,
+        new Date().toISOString()
+      )
+  }
+
+  // AI補助バッチの日次上限(AI_ENRICH_DAILY_LIMIT)をローカル日付単位で追跡する。
+  getEnrichProcessedToday(localDate: string): number {
+    const row = this.database
+      .prepare(
+        "SELECT processed_count FROM ai_enrich_daily_progress WHERE local_date = ?"
+      )
+      .get(localDate) as Record<string, unknown> | undefined
+    return row ? Number(row.processed_count) : 0
+  }
+
+  incrementEnrichProcessed(localDate: string, by: number): void {
+    if (by <= 0) return
+    this.database
+      .prepare(
+        `INSERT INTO ai_enrich_daily_progress (local_date, processed_count)
+         VALUES (?, ?)
+         ON CONFLICT(local_date) DO UPDATE SET
+           processed_count = processed_count + excluded.processed_count`
+      )
+      .run(localDate, by)
+  }
+
+  // 記事1件を対象にした即時（オンデマンド）再処理用に、現行の候補情報を返す。
+  // 既に処理済み(現行profile_hash/prompt_version一致)でも強制的に返す
+  // （呼び出し側のPOST /enrichは常に再実行なため）。
+  getEnrichTarget(
+    ownerId: string,
+    feedItemId: string
+  ):
+    | {
+        readonly feedItemId: string
+        readonly title: string
+        readonly snapshotId: string
+        readonly markdownKey: string
+      }
+    | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT i.id AS feed_item_id, i.title AS title,
+                snap.id AS snapshot_id, snap.markdown_key AS markdown_key
+         FROM feed_items i
+         JOIN feed_subscriptions sub
+           ON sub.feed_id = i.feed_id AND sub.owner_id = ? AND sub.enabled = 1
+         JOIN article_snapshots snap ON snap.id = i.latest_snapshot_id
+         WHERE i.id = ? AND i.archive_status = 'succeeded'
+           AND i.latest_snapshot_id IS NOT NULL`
+      )
+      .get(ownerId, feedItemId) as Record<string, unknown> | undefined
+    if (!row) return undefined
+    return {
+      feedItemId: String(row.feed_item_id),
+      title: String(row.title),
+      snapshotId: String(row.snapshot_id),
+      markdownKey: String(row.markdown_key),
+    }
+  }
+
+  // listArticles/getArticleの結果にaiSummary/relevanceScore/relevanceReasonを付与する。
+  // 要約は所有者非依存（snapshot単位）、スコアは所有者の現行プロフィールハッシュに
+  // 一致する行のみを反映する（不一致・未処理は「スコア無し」のまま）。
+  private attachAiEnrichment(
+    ownerId: string,
+    rows: readonly ArticleDto[]
+  ): readonly ArticleDto[] {
+    if (rows.length === 0) return rows
+    const profile = this.getInterestProfile(ownerId)
+    const profileHash = computeProfileHash(profile.include, profile.exclude)
+    const feedItemIds = rows.map((row) => row.id)
+    const snapshotIds = [
+      ...new Set(
+        rows
+          .map((row) => row.snapshotId)
+          .filter((value): value is string => Boolean(value))
+      ),
+    ]
+
+    const relevancePlaceholders = feedItemIds.map(() => "?").join(",")
+    const relevanceRows = feedItemIds.length
+      ? (this.database
+          .prepare(
+            `SELECT feed_item_id, score, reason FROM article_relevance
+             WHERE owner_id = ? AND profile_hash = ? AND prompt_version = ?
+               AND status = 'succeeded' AND feed_item_id IN (${relevancePlaceholders})`
+          )
+          .all(
+            ownerId,
+            profileHash,
+            RELEVANCE_PROMPT_VERSION,
+            ...feedItemIds
+          ) as Record<string, unknown>[])
+      : []
+    const relevanceMap = new Map(
+      relevanceRows.map((row) => [
+        String(row.feed_item_id),
+        { score: Number(row.score), reason: String(row.reason) },
+      ])
+    )
+
+    const summaryPlaceholders = snapshotIds.map(() => "?").join(",")
+    const summaryRows = snapshotIds.length
+      ? (this.database
+          .prepare(
+            `SELECT snapshot_id, summary_json FROM article_summaries
+             WHERE prompt_version = ? AND snapshot_id IN (${summaryPlaceholders})`
+          )
+          .all(SUMMARY_PROMPT_VERSION, ...snapshotIds) as Record<
+          string,
+          unknown
+        >[])
+      : []
+    const summaryMap = new Map(
+      summaryRows.map((row) => [
+        String(row.snapshot_id),
+        (JSON.parse(String(row.summary_json)) as unknown[]).map(String),
+      ])
+    )
+
+    const tagPlaceholders = feedItemIds.map(() => "?").join(",")
+    const tagRows = feedItemIds.length
+      ? (this.database
+          .prepare(
+            `SELECT at.feed_item_id AS feed_item_id, t.name AS name
+             FROM article_tags at JOIN tags t ON t.id = at.tag_id
+             WHERE at.owner_id = ? AND at.feed_item_id IN (${tagPlaceholders})
+             ORDER BY t.name`
+          )
+          .all(ownerId, ...feedItemIds) as Record<string, unknown>[])
+      : []
+    const tagsMap = new Map<string, string[]>()
+    for (const row of tagRows) {
+      const feedItemId = String(row.feed_item_id)
+      const list = tagsMap.get(feedItemId) ?? []
+      const name = String(row.name)
+      if (!list.includes(name)) list.push(name)
+      tagsMap.set(feedItemId, list)
+    }
+
+    return rows.map((row) => {
+      const relevance = relevanceMap.get(row.id)
+      const summary = row.snapshotId ? summaryMap.get(row.snapshotId) : undefined
+      return {
+        ...row,
+        ...(relevance
+          ? {
+              relevanceScore: relevance.score,
+              relevanceReason: relevance.reason,
+            }
+          : {}),
+        ...(summary ? { aiSummary: summary } : {}),
+        tags: tagsMap.get(row.id) ?? [],
+      }
+    })
   }
 
   listEnabledFeedIds(ownerId: string): Promise<readonly string[]> {
@@ -1658,21 +2542,14 @@ export class LocalStore implements EpisodeJobRepository {
     return row ? toSubscription(row) : undefined
   }
 
+  // listArticlesと同じSELECT/FROMを共有する単発取得用（getArticleが使う）。
   private articleRows(ownerId: string, articleId?: string, limit = 100) {
     return this.database
       .prepare(
-        `SELECT i.id, i.feed_id, f.name AS source_name, i.title, i.url,
-                i.published_at, i.summary, i.discovered_at, i.archive_status,
-                i.latest_snapshot_id, COALESCE(s.read, 0) AS read,
-                COALESCE(s.saved, 0) AS saved
-         FROM feed_items i
-         JOIN feed_catalog f ON f.id = i.feed_id
-         JOIN feed_subscriptions sub
-           ON sub.feed_id = i.feed_id AND sub.owner_id = ?
-         LEFT JOIN article_user_states s
-           ON s.feed_item_id = i.id AND s.owner_id = ?
+        `SELECT ${ARTICLE_SELECT}
+         ${ARTICLE_FROM}
          WHERE sub.enabled = 1 AND (? IS NULL OR i.id = ?)
-         ORDER BY COALESCE(i.published_at, i.discovered_at) DESC, i.id DESC
+         ORDER BY ${ARTICLE_SORT_KEY} DESC, i.id DESC
          LIMIT ?`
       )
       .all(ownerId, ownerId, articleId ?? null, articleId ?? null, limit)
@@ -1764,6 +2641,262 @@ function toSubscription(row: unknown): SubscriptionDto {
   }
 }
 
+// published_at優先、無ければdiscovered_atで並べる。既存インデックス
+// idx_feed_items_feed_published (feed_id, published_at DESC, discovered_at DESC) と列順を揃える。
+const ARTICLE_SORT_KEY = "COALESCE(i.published_at, i.discovered_at)"
+
+// あるスナップショットが (owner配下の) いずれかのエピソードで使われたかどうか。
+// sub.owner_id は既にARTICLE_FROMのJOIN条件で束縛済みの列なので、追加のバインド引数は不要。
+const USED_IN_EPISODE_EXISTS = `EXISTS (
+    SELECT 1 FROM episode_sources es
+    JOIN episodes e ON e.id = es.episode_id
+    WHERE es.snapshot_id = i.latest_snapshot_id AND e.owner_id = sub.owner_id
+  )`
+
+const ARTICLE_SELECT = `i.id, i.feed_id, f.name AS source_name, i.title, i.url,
+    i.published_at, i.summary, i.discovered_at, i.archive_status,
+    i.latest_snapshot_id, COALESCE(s.read, 0) AS read,
+    COALESCE(s.saved, 0) AS saved, COALESCE(s.read_later, 0) AS read_later,
+    COALESCE(s.hidden, 0) AS hidden, s.hidden_at AS hidden_at,
+    ${USED_IN_EPISODE_EXISTS} AS used_in_episode,
+    ${ARTICLE_SORT_KEY} AS sort_key`
+
+const ARTICLE_FROM = `FROM feed_items i
+    JOIN feed_catalog f ON f.id = i.feed_id
+    JOIN feed_subscriptions sub
+      ON sub.feed_id = i.feed_id AND sub.owner_id = ?
+    LEFT JOIN article_user_states s
+      ON s.feed_item_id = i.id AND s.owner_id = ?`
+
+interface ArticleSortColumn {
+  readonly expr: string
+  readonly alias: string
+  readonly direction: "ASC" | "DESC"
+}
+
+// ソートモードごとのORDER BY列。末尾に必ずi.id（一意）を含めることで
+// keysetページネーションの境界で重複・欠落が起きないようにする。
+function articleSortColumns(sort: ArticleListSort): readonly ArticleSortColumn[] {
+  if (sort === "oldest") {
+    return [
+      { expr: ARTICLE_SORT_KEY, alias: "sort_key", direction: "ASC" },
+      { expr: "i.id", alias: "id", direction: "ASC" },
+    ]
+  }
+  if (sort === "source") {
+    return [
+      { expr: "f.name", alias: "source_name", direction: "ASC" },
+      { expr: ARTICLE_SORT_KEY, alias: "sort_key", direction: "DESC" },
+      { expr: "i.id", alias: "id", direction: "DESC" },
+    ]
+  }
+  if (sort === "relevance") {
+    // 未処理（スコア無し）記事は常に末尾へ回す。CASE式が'0'(スコア有)/'1'(スコア無)で
+    // 先に並べ、スコア有の中では降順、同点はsort_key/idで安定させる。
+    // keysetカーソルの比較はTEXT同士でしか値クラスの一致が保証できない
+    // （SQLiteはINTEGERとTEXTの比較で値クラス優先の順序になるため）ので、
+    // 数値列はここで固定長ゼロ埋めのTEXTへ変換して他の列と揃える。
+    return [
+      {
+        expr: "CASE WHEN rel.score IS NULL THEN '1' ELSE '0' END",
+        alias: "score_missing",
+        direction: "ASC",
+      },
+      {
+        expr: "printf('%05d', COALESCE(rel.score, -1) + 1)",
+        alias: "score",
+        direction: "DESC",
+      },
+      { expr: ARTICLE_SORT_KEY, alias: "sort_key", direction: "DESC" },
+      { expr: "i.id", alias: "id", direction: "DESC" },
+    ]
+  }
+  return [
+    { expr: ARTICLE_SORT_KEY, alias: "sort_key", direction: "DESC" },
+    { expr: "i.id", alias: "id", direction: "DESC" },
+  ]
+}
+
+function clampArticleLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return 50
+  return Math.min(100, Math.max(1, Math.trunc(limit)))
+}
+
+function encodeArticleCursor(values: readonly string[]): string {
+  return Buffer.from(JSON.stringify(values), "utf8").toString("base64url")
+}
+
+function decodeArticleCursor(cursor: string): readonly string[] | undefined {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8")
+    ) as unknown
+    return Array.isArray(parsed) && parsed.every((v) => typeof v === "string")
+      ? parsed
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function encodeCursorFor(
+  columns: readonly ArticleSortColumn[],
+  row: Record<string, unknown> | undefined
+): string | undefined {
+  if (!row) return undefined
+  return encodeArticleCursor(
+    columns.map((column) => String(row[column.alias]))
+  )
+}
+
+// keyset述語: (c1, c2, ..., cn) の辞書式比較をOR連鎖で表現する。
+// SQLiteの行値比較に依存しないため全バージョンで安全に動く。
+function keysetPredicate(
+  columns: readonly ArticleSortColumn[],
+  cursorValues: readonly string[]
+): { readonly sql: string; readonly params: readonly string[] } {
+  const clauses: string[] = []
+  const params: string[] = []
+  for (let i = 0; i < columns.length; i++) {
+    const eqParts: string[] = []
+    for (let j = 0; j < i; j++) {
+      eqParts.push(`${columns[j]!.expr} = ?`)
+      params.push(cursorValues[j]!)
+    }
+    const cmp = columns[i]!.direction === "DESC" ? "<" : ">"
+    clauses.push(`(${[...eqParts, `${columns[i]!.expr} ${cmp} ?`].join(" AND ")})`)
+    params.push(cursorValues[i]!)
+  }
+  return { sql: `(${clauses.join(" OR ")})`, params }
+}
+
+// FTS5(trigram)ベースの検索述語。ソース名(f.name)はfeed_items_ftsに無いため、
+// 常にLIKEで別枠に足す（フィード数は少なくコストは無視できる）。
+// trigramは3文字未満のクエリにマッチしないため、短いクエリはLIKEへフォールバックする。
+function articleSearchPredicate(
+  q: string | undefined
+): { readonly sql: string; readonly params: readonly string[] } {
+  if (!q) return { sql: "1=1", params: [] }
+  const trimmed = q.trim()
+  if (!trimmed) return { sql: "1=1", params: [] }
+  const pattern = `%${escapeLikePattern(trimmed)}%`
+  const sourcePredicate = "f.name LIKE ? ESCAPE '\\'"
+
+  if ([...trimmed].length < FTS_TRIGRAM_MIN_LENGTH) {
+    return {
+      sql: `(i.title LIKE ? ESCAPE '\\' OR i.summary LIKE ? ESCAPE '\\' OR ${sourcePredicate})`,
+      params: [pattern, pattern, pattern],
+    }
+  }
+  return {
+    sql: `(i.rowid IN (SELECT rowid FROM feed_items_fts WHERE feed_items_fts MATCH ?) OR ${sourcePredicate})`,
+    params: [toFtsLiteralQuery(trimmed), pattern],
+  }
+}
+
+// trigramトークナイザが有効に働く最小文字数（コードポイント単位）。
+const FTS_TRIGRAM_MIN_LENGTH = 3
+
+// ユーザー入力をFTS5クエリ構文として解釈させないため、常に二重引用符で
+// くくったリテラルフレーズにする。二重引用符自体は二重化してエスケープする。
+function toFtsLiteralQuery(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+function articleStatePredicate(state: ArticleListState | undefined): string {
+  if (state === "unread") return "COALESCE(s.read, 0) = 0"
+  if (state === "saved") return "COALESCE(s.saved, 0) = 1"
+  if (state === "later") return "COALESCE(s.read_later, 0) = 1"
+  return "1=1"
+}
+
+// 既定ではhiddenな記事を全stateから除外する。includeHidden指定時のみ含める。
+function articleHiddenPredicate(includeHidden: boolean | undefined): string {
+  return includeHidden ? "1=1" : "COALESCE(s.hidden, 0) = 0"
+}
+
+function articleFeedIdsPredicate(
+  feedIds: readonly string[] | undefined
+): { readonly sql: string; readonly params: readonly string[] } {
+  if (!feedIds || feedIds.length === 0) return { sql: "1=1", params: [] }
+  return {
+    sql: `i.feed_id IN (${feedIds.map(() => "?").join(",")})`,
+    params: feedIds,
+  }
+}
+
+// タグ絞り込み。複数指定時はOR（いずれか1つでも付いていれば一致）。
+// article_tagsは1記事に複数行あり得るためJOINではなくEXISTSで絞り込む（重複行を防ぐ）。
+function articleTagsPredicate(
+  tagIds: readonly string[] | undefined
+): { readonly sql: string; readonly params: readonly string[] } {
+  if (!tagIds || tagIds.length === 0) return { sql: "1=1", params: [] }
+  return {
+    sql: `EXISTS (
+      SELECT 1 FROM article_tags at
+      WHERE at.feed_item_id = i.id AND at.owner_id = sub.owner_id
+        AND at.tag_id IN (${tagIds.map(() => "?").join(",")})
+    )`,
+    params: tagIds,
+  }
+}
+
+// 期間絞り込み。ソート基準(ARTICLE_SORT_KEY = COALESCE(published_at, discovered_at))と
+// 同じ列を対象にすることで、期間で絞り込んでもページネーションの境界がずれないようにする。
+// after/beforeとも境界値を含む閉区間として扱う（APIのrefineで after<=before を保証済み）。
+function articlePublishedRangePredicate(
+  after: string | undefined,
+  before: string | undefined
+): { readonly sql: string; readonly params: readonly string[] } {
+  const clauses: string[] = []
+  const params: string[] = []
+  if (after !== undefined) {
+    clauses.push(`${ARTICLE_SORT_KEY} >= ?`)
+    params.push(after)
+  }
+  if (before !== undefined) {
+    clauses.push(`${ARTICLE_SORT_KEY} <= ?`)
+    params.push(before)
+  }
+  if (clauses.length === 0) return { sql: "1=1", params: [] }
+  return { sql: `(${clauses.join(" AND ")})`, params }
+}
+
+// アーカイブ状態での絞り込み。複数指定時はOR相当（IN句）。
+function articleArchiveStatusPredicate(
+  statuses: readonly ArticleDto["archiveStatus"][] | undefined
+): { readonly sql: string; readonly params: readonly string[] } {
+  if (!statuses || statuses.length === 0) return { sql: "1=1", params: [] }
+  return {
+    sql: `i.archive_status IN (${statuses.map(() => "?").join(",")})`,
+    params: statuses,
+  }
+}
+
+function articleUsedInEpisodePredicate(
+  usedInEpisode: boolean | undefined
+): { readonly sql: string; readonly params: readonly string[] } {
+  if (usedInEpisode === undefined) return { sql: "1=1", params: [] }
+  return {
+    sql: usedInEpisode
+      ? USED_IN_EPISODE_EXISTS
+      : `NOT ${USED_IN_EPISODE_EXISTS}`,
+    params: [],
+  }
+}
+
+// PATCH/bulk-stateで未指定のフラグは既存値を維持する。
+function resolveBooleanField(
+  explicit: boolean | undefined,
+  current: unknown
+): boolean {
+  return explicit ?? Boolean(current)
+}
+
 function toArticle(row: unknown): ArticleDto {
   const value = row as Record<string, unknown>
   return {
@@ -1781,6 +2914,27 @@ function toArticle(row: unknown): ArticleDto {
       : {}),
     read: Boolean(value.read),
     saved: Boolean(value.saved),
+    readLater: Boolean(value.read_later),
+    hidden: Boolean(value.hidden),
+    ...(value.hidden_at ? { hiddenAt: String(value.hidden_at) } : {}),
+    usedInEpisode: Boolean(value.used_in_episode),
+    tags: [],
+  }
+}
+
+function toTag(row: Record<string, unknown>): TagDto {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    createdAt: String(row.created_at),
+  }
+}
+
+function toTagSuggestion(row: Record<string, unknown>): TagSuggestionDto {
+  return {
+    name: String(row.name),
+    occurrences: Number(row.occurrences),
+    lastSeenAt: String(row.last_seen_at),
   }
 }
 

@@ -1,29 +1,106 @@
 import { createFileRoute } from "@tanstack/react-router"
+import { cn } from "@workspace/ui/lib/utils"
 
 import { api } from "@/shared/api"
 import { Panel } from "@/shared/components/panel"
 import { PageHeader } from "@/shared/layouts/page-header"
 import { ArticleList } from "./-components/article-list"
+import { ArticleReaderView } from "./-components/article-reader"
+import { useArticleKeyboardShortcuts } from "./-hooks/use-article-keyboard-shortcuts"
+import { useArticleList } from "./-hooks/use-article-list"
+import { useArticleReader } from "./-hooks/use-article-reader"
+import {
+  siblingArticleId,
+  toFacetsQuery,
+  validateArticlesSearch,
+} from "./-model"
 
 export const Route = createFileRoute("/_authenticated/articles/")({
-  loader: ({ context }) => {
+  validateSearch: validateArticlesSearch,
+  loaderDeps: ({ search }) => ({ search }),
+  loader: ({ context, deps }) => {
     void context.queryClient.ensureQueryData(
-      api.queryOptions("get", "/v1/me/articles")
+      api.queryOptions("get", "/v1/me/articles/facets", {
+        params: { query: toFacetsQuery(deps.search) },
+      })
     )
   },
   component: ArticlesRoute,
 })
 
 function ArticlesRoute() {
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+
+  function onSearchChange(
+    patch: Partial<typeof search>,
+    options?: { readonly replace?: boolean }
+  ) {
+    void navigate({
+      replace: options?.replace,
+      search: (prev) => ({ ...prev, ...patch }),
+    })
+  }
+
+  const list = useArticleList({ search, onSearchChange })
+  const reader = useArticleReader({ articleId: search.article })
+
+  function selectArticle(id: string | undefined) {
+    onSearchChange({ article: id })
+  }
+
+  useArticleKeyboardShortcuts({
+    onNext: () =>
+      selectArticle(siblingArticleId(list.articles, search.article, 1)),
+    onPrev: () =>
+      selectArticle(siblingArticleId(list.articles, search.article, -1)),
+    onOpenOriginal: () => {
+      if (reader.article) {
+        window.open(reader.article.url, "_blank", "noopener,noreferrer")
+      }
+    },
+    onToggleSaved: reader.toggleSaved,
+    onToggleReadLater: reader.toggleReadLater,
+    onMarkUnread: reader.markUnread,
+  })
+
+  const hasSelection = search.article !== undefined
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        description="購読フィードの記事を読み、保存済みアーカイブを開けます。"
+        description="購読フィードの記事を走査し、絞り込み、読みます。"
         title="記事"
       />
-      <Panel name="article-list">
-        <ArticleList />
-      </Panel>
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div
+          className={cn(
+            "lg:w-[360px] lg:shrink-0",
+            hasSelection && "hidden lg:block"
+          )}
+        >
+          <Panel name="article-list">
+            <ArticleList
+              list={list}
+              onSelect={(article) => selectArticle(article.id)}
+              selectedArticleId={search.article}
+            />
+          </Panel>
+        </div>
+        <div
+          className={cn(
+            "min-h-[60vh] flex-1",
+            !hasSelection && "hidden lg:flex"
+          )}
+        >
+          <Panel name="article-reader">
+            <ArticleReaderView
+              {...reader}
+              onBack={() => selectArticle(undefined)}
+            />
+          </Panel>
+        </div>
+      </div>
     </div>
   )
 }

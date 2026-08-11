@@ -33,6 +33,14 @@ export const FeedSchema = z
   })
   .openapi("Feed")
 
+// 記事一覧/facets/一括操作のarchiveStatus絞り込みと、Article.archiveStatusで共有する。
+export const ArticleArchiveStatusSchema = z.enum([
+  "pending",
+  "archiving",
+  "succeeded",
+  "failed",
+])
+
 export const SubscriptionSchema = z
   .object({
     id: IdSchema,
@@ -52,14 +60,67 @@ export const ArticleSchema = z
     publishedAt: z.iso.datetime().optional(),
     summary: z.string().optional(),
     discoveredAt: z.iso.datetime(),
-    archiveStatus: z.enum(["pending", "archiving", "succeeded", "failed"]),
+    archiveStatus: ArticleArchiveStatusSchema,
     snapshotId: IdSchema.optional(),
     read: z.boolean(),
     saved: z.boolean(),
+    readLater: z.boolean(),
+    hidden: z.boolean(),
+    hiddenAt: z.iso.datetime().optional(),
+    usedInEpisode: z.boolean(),
     archiveUrl: z.string().optional(),
     markdownUrl: z.string().optional(),
+    aiSummary: z.array(z.string()).length(3).optional(),
+    relevanceScore: z.number().int().min(0).max(100).optional(),
+    relevanceReason: z.string().optional(),
+    // 手動+AI付与タグ名の和集合。未付与なら空配列。
+    tags: z.array(z.string()),
   })
   .openapi("Article")
+
+export const TagNameSchema = z.string().min(1).max(50)
+
+export const TagSchema = z
+  .object({
+    id: IdSchema,
+    name: TagNameSchema,
+    createdAt: z.iso.datetime(),
+  })
+  .openapi("Tag")
+
+export const TagSuggestionSchema = z
+  .object({
+    name: TagNameSchema,
+    occurrences: z.number().int().min(1),
+    lastSeenAt: z.iso.datetime(),
+  })
+  .openapi("TagSuggestion")
+
+export const ArticleFacetsSchema = z
+  .object({
+    states: z.object({
+      all: z.number().int().nonnegative(),
+      unread: z.number().int().nonnegative(),
+      saved: z.number().int().nonnegative(),
+      later: z.number().int().nonnegative(),
+    }),
+    feeds: z.array(
+      z.object({
+        feedId: IdSchema,
+        name: z.string(),
+        count: z.number().int().nonnegative(),
+      })
+    ),
+    // 絞り込み条件に依存しない、購読全体のAI補助バッチ未処理件数。
+    aiPending: z.number().int().nonnegative(),
+  })
+  .openapi("ArticleFacets")
+
+export const BulkArticleStateResultSchema = z
+  .object({
+    updated: z.number().int().nonnegative(),
+  })
+  .openapi("BulkArticleStateResult")
 
 export const ScheduleSchema = z
   .object({
@@ -69,8 +130,20 @@ export const ScheduleSchema = z
   })
   .openapi("GenerationSchedule")
 
+export const InterestProfileSchema = z
+  .object({
+    // 含めたい話題（自由記述）。
+    include: z.string().max(2_000),
+    // 除きたい話題（自由記述）。
+    exclude: z.string().max(2_000),
+  })
+  .openapi("InterestProfile")
+
 export const SettingsSchema = z
-  .object({ generationSchedule: ScheduleSchema })
+  .object({
+    generationSchedule: ScheduleSchema,
+    interestProfile: InterestProfileSchema,
+  })
   .openapi("UserSettings")
 
 const FailureSchema = z
@@ -187,7 +260,10 @@ export const EpisodeSchema = z
 export const page = <T extends z.ZodType>(item: T) =>
   z.object({
     items: z.array(item),
-    page: z.object({ hasMore: z.literal(false) }),
+    page: z.object({
+      hasMore: z.boolean(),
+      nextCursor: z.string().optional(),
+    }),
   })
 
 export const jsonContent = (schema: z.ZodType, description: string) => ({

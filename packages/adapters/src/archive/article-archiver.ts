@@ -4,11 +4,11 @@ import { Readability } from "@mozilla/readability"
 import { parseHTML } from "linkedom"
 import postcss from "postcss"
 import valueParser from "postcss-value-parser"
-import TurndownService from "turndown"
 
 import type { ObjectStore } from "@news-podcast/application"
 import { DEFAULT_ARCHIVE_LIMITS, type ArchiveLimits } from "../config.js"
 import { createSafeFetcher } from "../http/safe-fetch.js"
+import { htmlToMarkdown } from "./html-to-markdown.js"
 
 type CssValueNode = ReturnType<typeof valueParser>["nodes"][number]
 const DISABLED_LINK_RELATIONS = new Set([
@@ -82,10 +82,13 @@ export class ArticleArchiver {
     document
       .querySelectorAll("base")
       .forEach((element: Element) => element.remove())
+    // 正規化とasset捕獲を終えたDOMから抽出する。ここより前だとリンクが相対のまま、
+    // ここより後だとreader view置換で本文が痩せる。Readabilityは渡したDOMを壊すため
+    // 直列化して別DOMへ渡す。
+    const markdown = htmlToMarkdown(document.toString(), sourceUrl)
     if (captureResult.missingStylesheets > 0)
       replaceWithReaderView(document, sourceUrl)
     const replay = addContentSecurityPolicy(document)
-    const markdown = extractMarkdown(html, sourceUrl)
     const title =
       document.querySelector("title")?.textContent?.trim() ||
       new URL(sourceUrl).hostname
@@ -785,27 +788,6 @@ function ensureBase(
   const base = document.createElement("base")
   base.setAttribute("href", sourceUrl)
   document.head.insertBefore(base, document.head.firstChild)
-}
-
-function extractMarkdown(html: string, sourceUrl: string): string {
-  const { document } = parseHTML(html)
-  const article = new Readability(document as unknown as Document, {
-    charThreshold: 0,
-  }).parse()
-  const turndown = new TurndownService({
-    headingStyle: "atx",
-    codeBlockStyle: "fenced",
-    bulletListMarker: "-",
-  })
-  const title = article?.title?.trim() || new URL(sourceUrl).hostname
-  const byline = article?.byline?.trim()
-  const content = article?.content || document.body.innerHTML
-  return [
-    `# ${title}`,
-    byline ? `\n- Author: ${byline}` : "",
-    `\n- Source: ${sourceUrl}`,
-    `\n${turndown.turndown(content).trim()}\n`,
-  ].join("")
 }
 
 function addContentSecurityPolicy(

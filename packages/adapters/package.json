@@ -16,6 +16,10 @@
     "./sandbox/firecracker": "./src/sandbox/firecracker-sandbox-client.ts",
     "./http/safe": "./src/http/safe-fetch.ts",
     "./archive": "./src/archive/article-archiver.ts",
+    "./ai-enrich/shared": "./src/ai-enrich/shared.ts",
+    "./ai-enrich/summarizer": "./src/ai-enrich/openai-article-summarizer.ts",
+    "./ai-enrich/scorer": "./src/ai-enrich/openai-relevance-scorer.ts",
+    "./ai-enrich/worker": "./src/ai-enrich/enrich-worker.ts",
     "./audio/local": "./src/audio/local-audio-store.ts",
     "./audio/object": "./src/audio/object-audio-store.ts",
     "./object-store/s3": "./src/object-store/s3-object-store.ts"
@@ -37,6 +41,7 @@
     "postcss": "8.5.15",
     "postcss-value-parser": "4.2.0",
     "turndown": "7.2.4",
+    "turndown-plugin-gfm": "1.0.2",
     "zod": "4.4.3"
   },
   "devDependencies": {

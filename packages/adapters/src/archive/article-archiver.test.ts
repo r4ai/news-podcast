@@ -49,6 +49,7 @@ describe("ArticleArchiver", () => {
       <meta name="msapplication-TileImage" content="/tile.png">
       <style>@font-face{src:url('/inline.woff2')}</style></head>
       <body><article><h1>保存記事</h1><p>これは十分に意味のある記事本文です。</p>
+      <p><a href="/related">関連記事へのリンクです。</a></p>
       <img src="/image.png" style="background-image:url('/background.png')"><link rel="stylesheet" href="/style.css">
       <script>alert('x')</script></article></body></html>`
     const fetcher = (async (input: URL | RequestInfo) => {
@@ -104,6 +105,10 @@ describe("ArticleArchiver", () => {
     expect(replay).not.toContain("/background.png")
     expect(markdown).toContain("# 保存記事")
     expect(markdown).toContain("記事本文")
+    // 相対リンクは絶対URLへ、画像は捕獲済みassetへ向いていること。
+    expect(markdown).toContain("https://93.184.216.34/related")
+    expect(markdown).toContain("assets/")
+    expect(markdown).not.toContain("(/image.png)")
     expect(result.assets).toHaveLength(5)
     expect(requestedUrls.some((url) => url.endsWith("not-an-asset.png"))).toBe(
       false

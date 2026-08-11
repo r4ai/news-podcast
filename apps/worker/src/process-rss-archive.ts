@@ -9,13 +9,16 @@ import {
   type Observability,
 } from "@news-podcast/observability"
 
+// 1tickあたりバックフィルする記事本文の件数。archiveArticleを塞がない程度に小さく保つ。
+const SEARCH_BODY_BACKFILL_BATCH_SIZE = 5
+
 export class RssArchiveWorker {
   private readonly feeds = new RssFeedReader(createSafeFetcher())
   private readonly archiver: ArticleArchiver
 
   constructor(
     private readonly store: LocalStore,
-    objects: ObjectStore,
+    private readonly objects: ObjectStore,
     private readonly observability: Observability = noopObservability,
     limits?: ArchiveLimits
   ) {
@@ -27,6 +30,36 @@ export class RssArchiveWorker {
     if (feed) await this.syncFeed(feed)
     const article = this.store.leaseArchiveCandidate()
     if (article) await this.archiveArticle(article.id, article.url)
+    await this.backfillSearchBody(SEARCH_BODY_BACKFILL_BATCH_SIZE)
+  }
+
+  // 既にアーカイブ済みだがFTS索引にbodyが未投入の記事をN件処理する。
+  // アーカイブ成功時の即時投入で拾えなかった過去分（機能追加前のデータなど）を埋める。
+  // 戻り値は実際に処理した件数（0なら残作業なし）。
+  async backfillSearchBody(limit: number): Promise<number> {
+    const pending = this.store.listArticlesPendingBodyIndex(limit)
+    for (const article of pending) {
+      await this.indexArticleBody(article.id, article.markdownKey)
+    }
+    return pending.length
+  }
+
+  private async indexArticleBody(
+    articleId: string,
+    markdownKey: string
+  ): Promise<void> {
+    try {
+      const object = await this.objects.get(markdownKey)
+      const body = object ? new TextDecoder().decode(object.body) : ""
+      this.store.setArticleSearchBody(articleId, body)
+    } catch (error) {
+      // 索引投入の失敗はアーカイブ自体の成否に影響させない。次回のバックフィルで再試行される。
+      this.observability.log({
+        name: "article.search_body.index_failed",
+        level: "warn",
+        error,
+      })
+    }
   }
 
   private async syncFeed(feed: {
@@ -74,6 +107,9 @@ export class RssArchiveWorker {
         byteLength: archived.byteLength,
         assets: archived.assets,
       })
+      // アーカイブ直後に本文をFTS索引へ投入する。失敗してもアーカイブ自体は
+      // 成功扱いのままとし、未投入分は次回のbackfillSearchBodyで拾う。
+      await this.indexArticleBody(articleId, archived.markdownKey)
       this.observability.log({ name: "article.archive.succeeded" })
     } catch (error) {
       this.store.failArchive(

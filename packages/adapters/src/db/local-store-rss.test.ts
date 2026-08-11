@@ -55,7 +55,7 @@ describe("LocalStore RSS reader", () => {
       byteLength: 10,
       assets: [],
     })
-    const article = store.listArticles(owner)[0]!
+    const article = store.listArticles(owner).items[0]!
     expect(article.archiveStatus).toBe("succeeded")
 
     store.completeArchive({
@@ -91,7 +91,7 @@ describe("LocalStore RSS reader", () => {
       read: true,
       saved: false,
     })
-    expect(store.listArticles(otherOwner)).toEqual([])
+    expect(store.listArticles(otherOwner).items).toEqual([])
     store.close()
   })
 })

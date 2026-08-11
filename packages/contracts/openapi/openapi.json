@@ -26,6 +26,10 @@
       "description": "Archived RSS articles and read state"
     },
     {
+      "name": "Tags",
+      "description": "Owner-defined tag vocabulary and AI tag suggestions"
+    },
+    {
       "name": "Settings",
       "description": "Owner-scoped generation schedule"
     },
@@ -183,11 +187,44 @@
           "saved": {
             "type": "boolean"
           },
+          "readLater": {
+            "type": "boolean"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "hiddenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usedInEpisode": {
+            "type": "boolean"
+          },
           "archiveUrl": {
             "type": "string"
           },
           "markdownUrl": {
             "type": "string"
+          },
+          "aiSummary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "relevanceScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "relevanceReason": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -199,7 +236,132 @@
           "discoveredAt",
           "archiveStatus",
           "read",
-          "saved"
+          "saved",
+          "readLater",
+          "hidden",
+          "usedInEpisode",
+          "tags"
+        ]
+      },
+      "ArticleFacets": {
+        "type": "object",
+        "properties": {
+          "states": {
+            "type": "object",
+            "properties": {
+              "all": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unread": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "saved": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "later": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "all",
+              "unread",
+              "saved",
+              "later"
+            ]
+          },
+          "feeds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "feedId": {
+                  "$ref": "#/components/schemas/Id"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "feedId",
+                "name",
+                "count"
+              ]
+            }
+          },
+          "aiPending": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "states",
+          "feeds",
+          "aiPending"
+        ]
+      },
+      "BulkArticleStateResult": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "updated"
+        ]
+      },
+      "Tag": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "createdAt"
+        ]
+      },
+      "TagSuggestion": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "occurrences": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "occurrences",
+          "lastSeenAt"
         ]
       },
       "UserSettings": {
@@ -207,10 +369,14 @@
         "properties": {
           "generationSchedule": {
             "$ref": "#/components/schemas/GenerationSchedule"
+          },
+          "interestProfile": {
+            "$ref": "#/components/schemas/InterestProfile"
           }
         },
         "required": [
-          "generationSchedule"
+          "generationSchedule",
+          "interestProfile"
         ]
       },
       "GenerationSchedule": {
@@ -232,6 +398,23 @@
           "enabled",
           "localTime",
           "timeZone"
+        ]
+      },
+      "InterestProfile": {
+        "type": "object",
+        "properties": {
+          "include": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "exclude": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "include",
+          "exclude"
         ]
       },
       "EpisodeJob": {
@@ -781,10 +964,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -910,6 +1093,152 @@
         ],
         "operationId": "listArticles",
         "description": "List articles from the authenticated owner's subscriptions.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "unread",
+                "saved",
+                "later"
+              ],
+              "default": "all"
+            },
+            "required": false,
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Id"
+              }
+            },
+            "required": false,
+            "name": "feedIds",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "source",
+                "relevance"
+              ],
+              "default": "newest"
+            },
+            "required": false,
+            "name": "sort",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "includeHidden",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "usedInEpisode",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 100
+            },
+            "required": false,
+            "name": "minScore",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "publishedAfter",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "publishedBefore",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "archiving",
+                  "succeeded",
+                  "failed"
+                ]
+              }
+            },
+            "required": false,
+            "name": "archiveStatus",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Id"
+              }
+            },
+            "required": false,
+            "name": "tagIds",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Articles",
@@ -928,10 +1257,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -943,6 +1272,124 @@
                     "items",
                     "page"
                   ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/articles/facets": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "getArticleFacets",
+        "description": "Return state and per-feed counts for the current search/filter scope.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Id"
+              }
+            },
+            "required": false,
+            "name": "feedIds",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "includeHidden",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "publishedAfter",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "publishedBefore",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "archiving",
+                  "succeeded",
+                  "failed"
+                ]
+              }
+            },
+            "required": false,
+            "name": "archiveStatus",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Id"
+              }
+            },
+            "required": false,
+            "name": "tagIds",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Article facets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleFacets"
                 }
               }
             }
@@ -1035,7 +1482,7 @@
           "Articles"
         ],
         "operationId": "updateArticleState",
-        "description": "Update read or saved state for one article.",
+        "description": "Update read, saved, readLater, or hidden state for one article.",
         "parameters": [
           {
             "schema": {
@@ -1057,6 +1504,12 @@
                     "type": "boolean"
                   },
                   "saved": {
+                    "type": "boolean"
+                  },
+                  "readLater": {
+                    "type": "boolean"
+                  },
+                  "hidden": {
                     "type": "boolean"
                   }
                 }
@@ -1087,6 +1540,114 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/articles/bulk-state": {
+      "post": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "bulkUpdateArticleState",
+        "description": "Apply read/saved/readLater/hidden state to every article matching a filter (e.g. mark all as read).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "q": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "unread",
+                      "saved",
+                      "later"
+                    ]
+                  },
+                  "feedIds": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Id"
+                    }
+                  },
+                  "includeHidden": {
+                    "type": "boolean"
+                  },
+                  "publishedAfter": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "publishedBefore": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "archiveStatus": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "archiving",
+                        "succeeded",
+                        "failed"
+                      ]
+                    }
+                  },
+                  "read": {
+                    "type": "boolean"
+                  },
+                  "saved": {
+                    "type": "boolean"
+                  },
+                  "readLater": {
+                    "type": "boolean"
+                  },
+                  "hidden": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Number of articles updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkArticleStateResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1230,6 +1791,77 @@
         }
       }
     },
+    "/v1/me/articles/{articleId}/enrich": {
+      "post": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "enrichArticle",
+        "description": "Recompute the AI summary and relevance score for one article on demand.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "articleId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recomputed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Article is not archived yet",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/articles/{articleId}/assets/{hash}": {
       "get": {
         "tags": [
@@ -1301,6 +1933,406 @@
         }
       }
     },
+    "/v1/me/articles/{articleId}/tags": {
+      "put": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "setArticleTags",
+        "description": "Replace the manual tag set for one article.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "articleId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tagIds": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Id"
+                    }
+                  }
+                },
+                "required": [
+                  "tagIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/tags": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "operationId": "listTags",
+        "description": "List the authenticated owner's tag vocabulary (used both for manual tagging and as the AI candidate set).",
+        "responses": {
+          "200": {
+            "description": "Tags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Tag"
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hasMore"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "page"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Tags"
+        ],
+        "operationId": "createTag",
+        "description": "Add a tag to the owner's vocabulary (idempotent by name).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/tags/{tagId}": {
+      "delete": {
+        "tags": [
+          "Tags"
+        ],
+        "operationId": "deleteTag",
+        "description": "Remove one tag from the owner's vocabulary.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "required": true,
+            "name": "tagId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/tag-suggestions": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "operationId": "listTagSuggestions",
+        "description": "List AI-proposed tag names that fell outside the owner's vocabulary, most frequent first.",
+        "responses": {
+          "200": {
+            "description": "Tag suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TagSuggestion"
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "properties": {
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hasMore"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "page"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/tag-suggestions/promote": {
+      "post": {
+        "tags": [
+          "Tags"
+        ],
+        "operationId": "promoteTagSuggestion",
+        "description": "Turn a suggested tag name into a real vocabulary tag and remove the suggestion.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Promoted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/feed-subscriptions": {
       "get": {
         "tags": [
@@ -1326,10 +2358,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -1572,7 +2604,7 @@
           "Settings"
         ],
         "operationId": "getSettings",
-        "description": "Return the authenticated owner's generation schedule.",
+        "description": "Return the authenticated owner's generation schedule and interest profile.",
         "responses": {
           "200": {
             "description": "Settings",
@@ -1611,7 +2643,7 @@
           "Settings"
         ],
         "operationId": "updateSettings",
-        "description": "Update the authenticated owner's generation schedule.",
+        "description": "Update the authenticated owner's generation schedule and/or interest profile.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1621,11 +2653,11 @@
                 "properties": {
                   "generationSchedule": {
                     "$ref": "#/components/schemas/GenerationSchedule"
+                  },
+                  "interestProfile": {
+                    "$ref": "#/components/schemas/InterestProfile"
                   }
-                },
-                "required": [
-                  "generationSchedule"
-                ]
+                }
               }
             }
           }
@@ -1699,10 +2731,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -2132,10 +3164,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -2209,10 +3241,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -2286,10 +3318,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -2586,10 +3618,10 @@
                       "type": "object",
                       "properties": {
                         "hasMore": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string"
                         }
                       },
                       "required": [

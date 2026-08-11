@@ -6,6 +6,10 @@ import {
   readVoicevoxConfig,
 } from "@news-podcast/adapters/config"
 import { S3ObjectStore } from "@news-podcast/adapters/object-store/s3"
+import { DEFAULT_AI_ENRICH_DAILY_LIMIT } from "@news-podcast/adapters/ai-enrich/shared"
+import { OpenAiArticleSummarizer } from "@news-podcast/adapters/ai-enrich/summarizer"
+import { OpenAiRelevanceScorer } from "@news-podcast/adapters/ai-enrich/scorer"
+import { AiEnrichWorker } from "@news-podcast/adapters/ai-enrich/worker"
 
 import {
   createFakeProcessor,
@@ -51,6 +55,67 @@ const rssArchive = new RssArchiveWorker(
   observability,
   readArchiveLimits(process.env)
 )
+const openAiConfig =
+  mode === "fake" ? undefined : readOpenAiConfig(process.env)
+const aiEnrich = openAiConfig
+  ? new AiEnrichWorker(
+      store,
+      objects,
+      new OpenAiArticleSummarizer(openAiConfig),
+      new OpenAiRelevanceScorer(openAiConfig),
+      openAiConfig.model,
+      readAiEnrichDailyLimit(process.env),
+      (event) => {
+        if (event.type === "summary_succeeded") {
+          recordEnrichTokens("summary", event.tokensIn, event.tokensOut)
+          observability.log({ name: "article.enrich.summary.succeeded" })
+        } else if (event.type === "summary_failed") {
+          observability.log({
+            name: "article.enrich.summary.failed",
+            level: "warn",
+            error: event.error,
+          })
+          if (event.rateLimited) {
+            observability.log({
+              name: "article.enrich.rate_limited",
+              level: "warn",
+            })
+          }
+        } else if (event.type === "relevance_succeeded") {
+          recordEnrichTokens("relevance", event.tokensIn, event.tokensOut)
+          observability.count("article.enrich.processed", event.count)
+          observability.log({ name: "article.enrich.relevance.succeeded" })
+        } else {
+          observability.log({
+            name: "article.enrich.relevance.failed",
+            level: "warn",
+            error: event.error,
+          })
+          if (event.rateLimited) {
+            observability.log({
+              name: "article.enrich.rate_limited",
+              level: "warn",
+            })
+          }
+        }
+      }
+    )
+  : undefined
+
+function recordEnrichTokens(
+  step: "summary" | "relevance",
+  tokensIn: number,
+  tokensOut: number
+): void {
+  observability.count("article.enrich.tokens", tokensIn, {
+    "enrich.step": step,
+    "token.kind": "in",
+  })
+  observability.count("article.enrich.tokens", tokensOut, {
+    "enrich.step": step,
+    "token.kind": "out",
+  })
+}
 
 const healthPort = readPort("WORKER_HEALTH_PORT", 3001)
 let livenessAt = Date.now()
@@ -93,6 +158,7 @@ async function tick(): Promise<void> {
   }
   await scheduler.run()
   await rssArchive.runOnce()
+  if (aiEnrich) await aiEnrich.runOnce(now)
   const cleanup = store.leaseObjectCleanup()
   if (cleanup) {
     try {
@@ -180,6 +246,18 @@ function emitHealthTelemetry(now: Date): void {
 function required(key: string): string {
   const value = process.env[key]?.trim()
   if (!value) throw new Error(`Missing required configuration: ${key}`)
+  return value
+}
+
+function readAiEnrichDailyLimit(
+  env: Readonly<Record<string, string | undefined>>
+): number {
+  const raw = env.AI_ENRICH_DAILY_LIMIT?.trim()
+  if (!raw) return DEFAULT_AI_ENRICH_DAILY_LIMIT
+  const value = Number(raw)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error("AI_ENRICH_DAILY_LIMIT must be a positive integer")
+  }
   return value
 }
 

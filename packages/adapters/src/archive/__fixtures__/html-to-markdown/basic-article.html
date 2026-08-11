@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <title>SQLite FTS5 で日本語全文検索を実用にする</title>
+    <meta name="author" content="山田 太郎">
+  </head>
+  <body>
+    <article>
+      <h1>SQLite FTS5 で日本語全文検索を実用にする</h1>
+      <p>日本語は空白で語を区切らないため、FTS5 の既定 <code>unicode61</code> トークナイザでは実質的に使い物になりません。選択肢は二つあります。</p>
+      <h2>trigram を使う</h2>
+      <p>3文字単位で索引を張るので任意の部分文字列にヒットし、辞書のメンテナンスも不要です。代償は索引サイズで、元テキストのおよそ3〜4倍に膨らみます。</p>
+      <ul>
+        <li>辞書が不要</li>
+        <li>部分一致に強い</li>
+        <li>索引が大きい</li>
+      </ul>
+      <h2>形態素解析を外部で回す</h2>
+      <p>分かち書き済みの文字列を FTS 側に流し込む方式です。索引は小さく精度も高い一方、辞書の更新と実行環境への依存が増えます。詳しくは<a href="https://example.com/tokenizers">トークナイザの比較</a>を参照してください。</p>
+      <blockquote>
+        <p>索引サイズは実測してから決めるべきです。</p>
+      </blockquote>
+      <img src="assets/9f2c1a.png" alt="索引サイズの比較">
+    </article>
+  </body>
+</html>

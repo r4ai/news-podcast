@@ -25,11 +25,17 @@ export function TestProviders({
 }
 
 /** Suspense queryを使うhookを、providerごとrenderする。 */
-export function renderHookWithProviders<Result>(
-  hook: () => Result,
-  queryClient = createTestQueryClient()
-): RenderHookResult<Result, void> & { readonly queryClient: QueryClient } {
+export function renderHookWithProviders<Result, Props = void>(
+  hook: (props: Props) => Result,
+  options: {
+    readonly queryClient?: QueryClient
+    /** propsを取るhookをrerenderで差し替えたい時 (URL状態の往復テストなど) に渡す。 */
+    readonly initialProps?: Props
+  } = {}
+): RenderHookResult<Result, Props> & { readonly queryClient: QueryClient } {
+  const queryClient = options.queryClient ?? createTestQueryClient()
   const result = renderHook(hook, {
+    initialProps: options.initialProps,
     wrapper: ({ children }) => (
       <TestProviders queryClient={queryClient}>{children}</TestProviders>
     ),
@@ -46,6 +52,9 @@ export type FetchRoute = {
   readonly path: string
   readonly status?: number
   readonly body?: unknown
+  /** text/markdown・text/htmlなどJSON以外のボディをそのまま返したい時に使う。 */
+  readonly raw?: string
+  readonly contentType?: string
 }
 
 export function stubFetch(routes: readonly FetchRoute[]) {
@@ -71,6 +80,12 @@ export function stubFetch(routes: readonly FetchRoute[]) {
       return new Response(JSON.stringify({ message: "not stubbed" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (route.raw !== undefined) {
+      return new Response(route.raw, {
+        status: route.status ?? 200,
+        headers: { "Content-Type": route.contentType ?? "text/plain" },
       })
     }
     return new Response(JSON.stringify(route.body ?? {}), {

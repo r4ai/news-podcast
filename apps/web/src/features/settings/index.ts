@@ -1,2 +1,8 @@
 export { settingsQueryOptions } from "./api/settings-queries"
-export type { GenerationSchedule, UserSettings } from "./model"
+export type {
+  GenerationSchedule,
+  InterestProfile,
+  Tag,
+  TagSuggestion,
+  UserSettings,
+} from "./model"

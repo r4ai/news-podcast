@@ -2,17 +2,48 @@ import { act, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
-import type { Article } from "../-model"
+import {
+  defaultArticlesSearch,
+  type Article,
+  type ArticlesSearch,
+} from "../-model"
 import { applyDraft, useArticleList } from "./use-article-list"
 
 vi.mock("@workspace/ui/components/sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
+function makeArticle(overrides: Partial<Article>): Article {
+  return {
+    id: "a",
+    feedId: "feed-1",
+    sourceName: "Zenn",
+    title: "React 19",
+    url: "https://example.com/a",
+    discoveredAt: "2026-08-11T00:00:00.000Z",
+    publishedAt: "2026-08-11T00:00:00.000Z",
+    archiveStatus: "succeeded",
+    read: false,
+    saved: false,
+    readLater: false,
+    hidden: false,
+    usedInEpisode: false,
+    ...overrides,
+  } as Article
+}
+
 const items = [
-  { id: "a", title: "React 19", sourceName: "Zenn", saved: false, read: false },
-  { id: "b", title: "OTel", sourceName: "HN", saved: true, read: false },
-] as unknown as Article[]
+  makeArticle({ id: "a", title: "React 19", sourceName: "Zenn", saved: false }),
+  makeArticle({ id: "b", title: "OTel", sourceName: "HN", saved: true }),
+]
+const facets = {
+  states: { all: 2, unread: 2, saved: 1, later: 0 },
+  feeds: [{ feedId: "feed-1", name: "Zenn", count: 2 }],
+  aiPending: 3,
+}
+const tags = {
+  items: [{ id: "tag-1", name: "AI", createdAt: "2026-08-11T00:00:00.000Z" }],
+}
 
 describe("applyDraft", () => {
   it("merges the patch into the targeted article only", () => {
@@ -23,35 +54,103 @@ describe("applyDraft", () => {
 })
 
 describe("useArticleList", () => {
-  async function renderList(routes: Parameters<typeof stubFetch>[0]) {
+  function renderList(
+    routes: Parameters<typeof stubFetch>[0],
+    search: ArticlesSearch = defaultArticlesSearch
+  ) {
     const stub = stubFetch(routes)
-    const rendered = renderHookWithProviders(() => useArticleList())
-    await waitFor(() =>
-      expect(rendered.result.current.articles).toHaveLength(2)
+    const onSearchChange = vi.fn()
+    const rendered = renderHookWithProviders(
+      ({ search: currentSearch }: { search: ArticlesSearch }) =>
+        useArticleList({ search: currentSearch, onSearchChange }),
+      { initialProps: { search } }
     )
-    return { ...rendered, ...stub }
+    return { ...rendered, ...stub, onSearchChange }
   }
 
-  it("filters on the deferred search term", async () => {
-    const { result } = await renderList([
-      { path: "/v1/me/articles", body: { items } },
+  it("sends state/sort/q from the URL search as query params, and exposes facet counts", async () => {
+    const { result, calls } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
+      { path: "/v1/me/tags", body: tags },
     ])
 
-    act(() => result.current.setSearch("zenn"))
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+    expect(result.current.facets).toEqual(facets)
+    expect(result.current.aiPending).toBe(3)
 
-    await waitFor(() => expect(result.current.articles).toHaveLength(1))
-    expect(result.current.articles[0]?.id).toBe("a")
+    const listCall = calls.find((call) => call.url === "/v1/me/articles")
+    expect(listCall?.method).toBe("GET")
   })
 
-  it("sends only the changed flag when saving an article", async () => {
-    const { result, calls } = await renderList([
-      { path: "/v1/me/articles", body: { items } },
+  it("exposes the owner's tag vocabulary and sends tagIds through onSearchChange", async () => {
+    const { result, onSearchChange } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
+      { path: "/v1/me/tags", body: tags },
+    ])
+
+    await waitFor(() =>
+      expect(result.current.tags).toEqual([
+        { id: "tag-1", name: "AI", createdAt: "2026-08-11T00:00:00.000Z" },
+      ])
+    )
+
+    act(() => result.current.setTagIds(["tag-1"]))
+    expect(onSearchChange).toHaveBeenCalledWith({ tagIds: ["tag-1"] })
+  })
+
+  it("debounces search input and pushes it to the URL via onSearchChange", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { result, onSearchChange } = renderList([
+      {
+        path: "/v1/me/articles",
+        body: { items: [], page: { hasMore: false } },
+      },
+      { path: "/v1/me/articles/facets", body: facets },
+    ])
+
+    act(() => result.current.setQ("otel"))
+    expect(onSearchChange).not.toHaveBeenCalled()
+
+    await act(async () => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(onSearchChange).toHaveBeenCalledWith(
+      { q: "otel" },
+      { replace: true }
+    )
+    vi.useRealTimers()
+  })
+
+  it("reflects a search prop change coming from browser back/forward (URL round trip)", async () => {
+    const { result, rerender } = renderList(
+      [
+        { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+        { path: "/v1/me/articles/facets", body: facets },
+      ],
+      { ...defaultArticlesSearch, state: "unread" }
+    )
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+
+    rerender({ search: { ...defaultArticlesSearch, state: "saved" } })
+
+    await waitFor(() => expect(result.current.search.state).toBe("saved"))
+    expect(result.current.q).toBe(defaultArticlesSearch.q)
+  })
+
+  it("sends only the changed flag when saving an article, optimistically first", async () => {
+    const { result, calls } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
       {
         method: "PATCH",
         path: "/v1/me/articles/a",
         body: { ...items[0], saved: true },
       },
     ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
 
     await act(async () => result.current.toggleSaved(items[0]!))
 
@@ -59,20 +158,82 @@ describe("useArticleList", () => {
     expect(patch?.body).toEqual({ saved: true })
   })
 
-  it("marks an article read when its archive is opened", async () => {
-    const { result, calls } = await renderList([
-      { path: "/v1/me/articles", body: { items } },
+  it("rolls back the optimistic update and toasts when the save mutation fails", async () => {
+    const { toast } = await import("@workspace/ui/components/sonner")
+    const { result } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
+      { method: "PATCH", path: "/v1/me/articles/a", status: 500 },
+    ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+
+    await act(async () => result.current.toggleSaved(items[0]!))
+
+    expect(toast.error).toHaveBeenCalledWith("記事の状態を更新できませんでした")
+    await waitFor(() =>
+      expect(
+        result.current.articles.find((article) => article.id === "a")?.saved
+      ).toBe(false)
+    )
+  })
+
+  it("marks an article read when its link is opened", async () => {
+    const { result, calls } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
       {
         method: "PATCH",
         path: "/v1/me/articles/b",
         body: { ...items[1], read: true },
       },
     ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
 
     await act(async () => result.current.markRead(items[1]!))
 
     expect(calls.find((call) => call.method === "PATCH")?.body).toEqual({
       read: true,
     })
+  })
+
+  it("appends the next page when fetchNextPage follows the returned cursor", async () => {
+    const { result, calls } = renderList([
+      {
+        path: "/v1/me/articles",
+        body: {
+          items: [items[0]],
+          page: { hasMore: true, nextCursor: "cursor-1" },
+        },
+      },
+      { path: "/v1/me/articles/facets", body: facets },
+    ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(1))
+    expect(result.current.hasNextPage).toBe(true)
+
+    calls.length = 0
+    await act(async () => result.current.fetchNextPage())
+
+    const secondCall = calls.find((call) => call.url === "/v1/me/articles")
+    expect(secondCall?.url).toBe("/v1/me/articles")
+  })
+
+  it("applies a bulk read across the current filter and reports how many changed", async () => {
+    const { toast } = await import("@workspace/ui/components/sonner")
+    const { result, calls } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
+      {
+        method: "POST",
+        path: "/v1/me/articles/bulk-state",
+        body: { updated: 2 },
+      },
+    ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+
+    await act(async () => result.current.markAllRead())
+
+    const bulkCall = calls.find((call) => call.method === "POST")
+    expect(bulkCall?.body).toMatchObject({ read: true })
+    expect(toast.success).toHaveBeenCalledWith("2件を既読にしました")
   })
 })

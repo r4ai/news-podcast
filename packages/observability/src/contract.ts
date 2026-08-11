@@ -67,6 +67,12 @@ export const telemetryEventNames = [
   "rss.sync.failed",
   "article.archive.succeeded",
   "article.archive.failed",
+  "article.search_body.index_failed",
+  "article.enrich.summary.succeeded",
+  "article.enrich.summary.failed",
+  "article.enrich.relevance.succeeded",
+  "article.enrich.relevance.failed",
+  "article.enrich.rate_limited",
 ] as const
 
 export type TelemetryEventName = (typeof telemetryEventNames)[number]
@@ -100,6 +106,8 @@ export const metricNames = [
   "episode.duration",
   "episode.stage.duration",
   "http.server.duration",
+  "article.enrich.processed",
+  "article.enrich.tokens",
 ] as const
 
 export type MetricName = (typeof metricNames)[number]
@@ -133,4 +141,6 @@ export const metricUnits: Readonly<Record<MetricName, string>> = {
   "episode.duration": "ms",
   "episode.stage.duration": "ms",
   "http.server.duration": "ms",
+  "article.enrich.processed": "{article}",
+  "article.enrich.tokens": "{token}",
 }

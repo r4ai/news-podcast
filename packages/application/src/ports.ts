@@ -265,6 +265,70 @@ export interface EpisodeJobRepository {
   }): Promise<EpisodeJobRecord>
 }
 
+// --- AI補助（要約・適合度スコア）関連のポート ---
+// 要約は記事本文にのみ依存する（所有者非依存）。スコアは所有者の興味プロフィールに
+// 依存するため、生成器を別インターフェースに分ける。
+
+export interface ProviderUsage {
+  readonly tokensIn: number
+  readonly tokensOut: number
+}
+
+export interface ArticleSummaryInput {
+  readonly title: string
+  readonly markdown: string
+}
+
+export interface ArticleSummaryResult extends ProviderUsage {
+  // 日本語の箇条書き3点。
+  readonly bullets: readonly string[]
+}
+
+export interface ArticleSummarizer {
+  summarize(
+    input: ArticleSummaryInput,
+    signal?: AbortSignal
+  ): Promise<ArticleSummaryResult>
+}
+
+export interface InterestProfile {
+  readonly include: string
+  readonly exclude: string
+}
+
+export interface RelevanceCandidate {
+  readonly feedItemId: string
+  readonly title: string
+  readonly bullets: readonly string[]
+}
+
+export interface RelevanceScore {
+  readonly feedItemId: string
+  readonly score: number
+  readonly reason: string
+  // 利用者が定義した語彙(tagVocabulary)の中からAIが選んだタグ名のみ。自由生成はさせない。
+  readonly tags: readonly string[]
+  // 語彙に無いが付けたかったタグ名。tag_suggestionsへ溜めてUIの「このタグを作る」導線に使う。
+  readonly suggestedTags: readonly string[]
+}
+
+export interface RelevanceBatchResult extends ProviderUsage {
+  readonly scores: readonly RelevanceScore[]
+}
+
+export interface ArticleRelevanceScorer {
+  score(
+    input: {
+      readonly profile: InterestProfile
+      readonly candidates: readonly RelevanceCandidate[]
+      // タグ付与の候補語彙。空配列なら構造化出力からタグ関連フィールドを外し
+      // タグ付与自体をスキップする（enumが空だと構造化出力スキーマが壊れるため）。
+      readonly tagVocabulary: readonly string[]
+    },
+    signal?: AbortSignal
+  ): Promise<RelevanceBatchResult>
+}
+
 export interface GenerationSchedule {
   readonly enabled: boolean
   readonly localTime: string

@@ -73,6 +73,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/articles/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return state and per-feed counts for the current search/filter scope. */
+        get: operations["getArticleFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/articles/{articleId}": {
         parameters: {
             query?: never;
@@ -87,8 +104,25 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Update read or saved state for one article. */
+        /** @description Update read, saved, readLater, or hidden state for one article. */
         patch: operations["updateArticleState"];
+        trace?: never;
+    };
+    "/v1/me/articles/bulk-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Apply read/saved/readLater/hidden state to every article matching a filter (e.g. mark all as read). */
+        post: operations["bulkUpdateArticleState"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/me/articles/{articleId}/markdown": {
@@ -125,6 +159,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/articles/{articleId}/enrich": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Recompute the AI summary and relevance score for one article on demand. */
+        post: operations["enrichArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/articles/{articleId}/assets/{hash}": {
         parameters: {
             query?: never;
@@ -136,6 +187,92 @@ export interface paths {
         get: operations["getArticleAsset"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Replace the manual tag set for one article. */
+        put: operations["setArticleTags"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List the authenticated owner's tag vocabulary (used both for manual tagging and as the AI candidate set). */
+        get: operations["listTags"];
+        put?: never;
+        /** @description Add a tag to the owner's vocabulary (idempotent by name). */
+        post: operations["createTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/tags/{tagId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Remove one tag from the owner's vocabulary. */
+        delete: operations["deleteTag"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/tag-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List AI-proposed tag names that fell outside the owner's vocabulary, most frequent first. */
+        get: operations["listTagSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/tag-suggestions/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Turn a suggested tag name into a real vocabulary tag and remove the suggestion. */
+        post: operations["promoteTagSuggestion"];
         delete?: never;
         options?: never;
         head?: never;
@@ -185,14 +322,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Return the authenticated owner's generation schedule. */
+        /** @description Return the authenticated owner's generation schedule and interest profile. */
         get: operations["getSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Update the authenticated owner's generation schedule. */
+        /** @description Update the authenticated owner's generation schedule and/or interest profile. */
         patch: operations["updateSettings"];
         trace?: never;
     };
@@ -481,16 +618,59 @@ export interface components {
             snapshotId?: components["schemas"]["Id"];
             read: boolean;
             saved: boolean;
+            readLater: boolean;
+            hidden: boolean;
+            /** Format: date-time */
+            hiddenAt?: string;
+            usedInEpisode: boolean;
             archiveUrl?: string;
             markdownUrl?: string;
+            aiSummary?: string[];
+            relevanceScore?: number;
+            relevanceReason?: string;
+            tags: string[];
+        };
+        ArticleFacets: {
+            states: {
+                all: number;
+                unread: number;
+                saved: number;
+                later: number;
+            };
+            feeds: {
+                feedId: components["schemas"]["Id"];
+                name: string;
+                count: number;
+            }[];
+            aiPending: number;
+        };
+        BulkArticleStateResult: {
+            updated: number;
+        };
+        Tag: {
+            id: components["schemas"]["Id"];
+            name: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TagSuggestion: {
+            name: string;
+            occurrences: number;
+            /** Format: date-time */
+            lastSeenAt: string;
         };
         UserSettings: {
             generationSchedule: components["schemas"]["GenerationSchedule"];
+            interestProfile: components["schemas"]["InterestProfile"];
         };
         GenerationSchedule: {
             enabled: boolean;
             localTime: string;
             timeZone: string;
+        };
+        InterestProfile: {
+            include: string;
+            exclude: string;
         };
         EpisodeJob: {
             id: components["schemas"]["Id"];
@@ -730,8 +910,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["Feed"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
                 };
@@ -815,7 +995,21 @@ export interface operations {
     };
     listArticles: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string;
+                limit?: number;
+                q?: string;
+                state?: "all" | "unread" | "saved" | "later";
+                feedIds?: components["schemas"]["Id"][];
+                sort?: "newest" | "oldest" | "source" | "relevance";
+                includeHidden?: string;
+                usedInEpisode?: string;
+                minScore?: number | null;
+                publishedAfter?: string;
+                publishedBefore?: string;
+                archiveStatus?: ("pending" | "archiving" | "succeeded" | "failed")[];
+                tagIds?: components["schemas"]["Id"][];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -831,10 +1025,56 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["Article"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getArticleFacets: {
+        parameters: {
+            query?: {
+                q?: string;
+                feedIds?: components["schemas"]["Id"][];
+                includeHidden?: string;
+                publishedAfter?: string;
+                publishedBefore?: string;
+                archiveStatus?: ("pending" | "archiving" | "succeeded" | "failed")[];
+                tagIds?: components["schemas"]["Id"][];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Article facets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleFacets"];
                 };
             };
             /** @description Unauthorized */
@@ -920,6 +1160,8 @@ export interface operations {
                 "application/json": {
                     read?: boolean;
                     saved?: boolean;
+                    readLater?: boolean;
+                    hidden?: boolean;
                 };
             };
         };
@@ -944,6 +1186,63 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bulkUpdateArticleState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    q?: string;
+                    /** @enum {string} */
+                    state?: "all" | "unread" | "saved" | "later";
+                    feedIds?: components["schemas"]["Id"][];
+                    includeHidden?: boolean;
+                    /** Format: date-time */
+                    publishedAfter?: string;
+                    /** Format: date-time */
+                    publishedBefore?: string;
+                    archiveStatus?: ("pending" | "archiving" | "succeeded" | "failed")[];
+                    read?: boolean;
+                    saved?: boolean;
+                    readLater?: boolean;
+                    hidden?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Number of articles updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkArticleStateResult"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1060,6 +1359,64 @@ export interface operations {
             };
         };
     };
+    enrichArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                articleId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recomputed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Article is not archived yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getArticleAsset: {
         parameters: {
             query?: never;
@@ -1110,6 +1467,293 @@ export interface operations {
             };
         };
     };
+    setArticleTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                articleId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tagIds: components["schemas"]["Id"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tags */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Tag"][];
+                        page: {
+                            hasMore: boolean;
+                            nextCursor?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listTagSuggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tag suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TagSuggestion"][];
+                        page: {
+                            hasMore: boolean;
+                            nextCursor?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    promoteTagSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Promoted */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listSubscriptions: {
         parameters: {
             query?: never;
@@ -1128,8 +1772,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["FeedSubscription"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
                 };
@@ -1357,7 +2001,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    generationSchedule: components["schemas"]["GenerationSchedule"];
+                    generationSchedule?: components["schemas"]["GenerationSchedule"];
+                    interestProfile?: components["schemas"]["InterestProfile"];
                 };
             };
         };
@@ -1418,8 +2063,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["EpisodeJob"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
                 };
@@ -1743,8 +2388,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["AgentEvent"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
                 };
@@ -1796,8 +2441,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["AgentInstance"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
                 };
@@ -1842,8 +2487,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["AgentMemory"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
                 };
@@ -2054,8 +2699,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["Episode"][];
                         page: {
-                            /** @enum {boolean} */
-                            hasMore: false;
+                            hasMore: boolean;
+                            nextCursor?: string;
                         };
                     };
                 };

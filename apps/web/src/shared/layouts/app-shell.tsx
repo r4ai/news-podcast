@@ -5,11 +5,13 @@ import {
   Library,
   Newspaper,
   Rss,
+  Settings,
 } from "lucide-react"
 import type { ReactNode } from "react"
 
-import { Link, useMatchRoute } from "@tanstack/react-router"
+import { Link, useLocation, useMatchRoute } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
 
 const links = [
   { to: "/", label: "今日", icon: House },
@@ -17,6 +19,7 @@ const links = [
   { to: "/subscriptions", label: "購読", icon: Rss },
   { to: "/schedule", label: "生成時刻", icon: Clock3 },
   { to: "/library", label: "ライブラリ", icon: Library },
+  { to: "/settings", label: "設定", icon: Settings },
 ] as const
 
 function Brand() {
@@ -39,7 +42,7 @@ function Navigation({ mobile = false }: { readonly mobile?: boolean }) {
   return (
     <nav
       aria-label={mobile ? "モバイルナビゲーション" : "メインナビゲーション"}
-      className={mobile ? "grid grid-cols-5 gap-1" : "flex flex-col gap-1"}
+      className={mobile ? "grid grid-cols-6 gap-1" : "flex flex-col gap-1"}
     >
       {links.map(({ icon: Icon, label, to }) => {
         const active = Boolean(matchRoute({ to, fuzzy: to !== "/" }))
@@ -72,6 +75,11 @@ type AppShellProps = {
 }
 
 export function AppShell({ actions, children }: AppShellProps) {
+  // /articles だけは一覧+本文の2ペイン構造を見据えて、主領域の幅上限を外す (docs/design.md §7.1)。
+  const isWide = useLocation({
+    select: (location) => location.pathname.startsWith("/articles"),
+  })
+
   return (
     <div className="min-h-svh bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6">
@@ -86,7 +94,12 @@ export function AppShell({ actions, children }: AppShellProps) {
       </header>
 
       <main className="pb-24 md:ml-56 md:pb-0">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
+        <div
+          className={cn(
+            "mx-auto flex flex-col gap-6 p-4 sm:p-6 lg:p-8",
+            isWide ? "max-w-none" : "max-w-6xl"
+          )}
+        >
           {children}
         </div>
       </main>

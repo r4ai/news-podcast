@@ -3,6 +3,7 @@ export type BrowserEventName =
   | "audio.error"
   | "audio.started"
   | "episode.requested"
+  | "interest_profile.changed"
   | "login.result"
   | "panel.error"
   | "route.error"

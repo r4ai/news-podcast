@@ -1,5 +1,7 @@
-import { Newspaper } from "lucide-react"
+import { Newspaper, SearchX } from "lucide-react"
+import { useEffect, useRef } from "react"
 
+import { Button } from "@workspace/ui/components/button"
 import {
   Empty,
   EmptyDescription,
@@ -7,65 +9,224 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty"
-import { Input } from "@workspace/ui/components/input"
+import { Skeleton } from "@workspace/ui/components/skeleton"
+import { Spinner } from "@workspace/ui/components/spinner"
 
 import { useArticleList } from "../-hooks/use-article-list"
-import type { Article } from "../-model"
-import { ArticleCard } from "./article-card"
+import {
+  shouldShowRelevanceScore,
+  type Article,
+  type ArticlesSearch,
+} from "../-model"
+import { ArticleDateGroup } from "./article-date-group"
+import { ArticleToolbar } from "./article-toolbar"
 
-/** データ接続: hookを呼び、viewへ渡すだけ。 */
-export function ArticleList() {
-  const list = useArticleList()
-  return <ArticleListView {...list} />
+export type ArticleListProps = {
+  readonly list: ReturnType<typeof useArticleList>
+  readonly selectedArticleId: string | undefined
+  readonly onSelect: (article: Article) => void
 }
 
-export type ArticleListViewProps = {
-  readonly articles: readonly Article[]
-  readonly search: string
-  readonly setSearch: (value: string) => void
-  readonly toggleSaved: (article: Article) => void
-  readonly markRead: (article: Article) => void
+/** データ接続: 呼び出し元(route)が持つhook結果を、toolbarとviewへ渡すだけ。 */
+export function ArticleList({
+  list,
+  selectedArticleId,
+  onSelect,
+}: ArticleListProps) {
+  return (
+    <div className="flex flex-col gap-4">
+      <ArticleToolbar
+        aiPending={list.aiPending}
+        facets={list.facets}
+        isMarkingAllRead={list.isMarkingAllRead}
+        onArchiveStatusFilterChange={list.setArchiveStatusFilter}
+        onFeedIdsChange={list.setFeedIds}
+        onIncludeHiddenChange={list.setIncludeHidden}
+        onMarkAllRead={list.markAllRead}
+        onPeriodChange={list.setPeriod}
+        onQChange={list.setQ}
+        onSortChange={list.setSort}
+        onStateChange={list.setState}
+        onTagIdsChange={list.setTagIds}
+        onUsedInEpisodeChange={list.setUsedInEpisode}
+        q={list.q}
+        search={list.search}
+        tags={list.tags}
+      />
+      <ArticleListView
+        {...list}
+        onSelect={onSelect}
+        selectedArticleId={selectedArticleId}
+      />
+    </div>
+  )
+}
+
+export type ArticleListViewProps = ReturnType<typeof useArticleList> & {
+  readonly onSelect: (article: Article) => void
+  readonly selectedArticleId: string | undefined
+}
+
+function emptyStateCopy(search: ArticlesSearch) {
+  if (search.q.trim()) {
+    return {
+      title: "検索に一致する記事がありません",
+      description: `「${search.q}」に一致する記事は見つかりませんでした。`,
+      icon: SearchX,
+    }
+  }
+  const filtered =
+    search.feedIds.length > 0 ||
+    search.period !== "all" ||
+    search.archiveStatusFilter !== "all" ||
+    search.usedInEpisode ||
+    search.state !== "all"
+  return filtered
+    ? {
+        title: "条件に一致する記事がありません",
+        description: "絞り込みを変更すると、他の記事が表示されます。",
+        icon: SearchX,
+      }
+    : {
+        title: "表示できる記事がありません",
+        description: "RSSを購読すると、同期された記事がここに表示されます。",
+        icon: Newspaper,
+      }
+}
+
+function LoadingSkeleton() {
+  return (
+    <div
+      aria-label="記事を読み込み中"
+      className="flex flex-col gap-px"
+      role="status"
+    >
+      {Array.from({ length: 6 }, (_, index) => (
+        <div
+          className="flex items-center gap-3 border-b px-3 py-2.5"
+          key={index}
+        >
+          <Skeleton className="size-1.5 shrink-0 rounded-full" />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** IntersectionObserverで末尾検知し、自動でfetchNextPageする。非対応環境ではボタンで補う。 */
+function LoadMoreSentinel({
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
+}: Pick<
+  ArticleListViewProps,
+  "hasNextPage" | "isFetchingNextPage" | "fetchNextPage"
+>) {
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node || !hasNextPage || typeof IntersectionObserver === "undefined") {
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) fetchNextPage()
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasNextPage, fetchNextPage])
+
+  if (!hasNextPage) return null
+
+  return (
+    <div className="flex justify-center py-3" ref={sentinelRef}>
+      {isFetchingNextPage ? (
+        <Spinner aria-label="続きを読み込み中" />
+      ) : (
+        <Button onClick={fetchNextPage} size="sm" variant="outline">
+          もっと読み込む
+        </Button>
+      )}
+    </div>
+  )
 }
 
 export function ArticleListView({
   articles,
-  markRead,
+  groups,
   search,
-  setSearch,
+  isLoading,
+  isError,
+  refetch,
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
   toggleSaved,
+  onSelect,
+  selectedArticleId,
 }: ArticleListViewProps) {
+  if (isLoading) return <LoadingSkeleton />
+
+  if (isError && articles.length === 0) {
+    return (
+      <Empty className="border border-dashed">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <SearchX aria-hidden="true" />
+          </EmptyMedia>
+          <EmptyTitle>記事を取得できませんでした</EmptyTitle>
+          <EmptyDescription>
+            通信状況を確認してから、もう一度お試しください。
+          </EmptyDescription>
+        </EmptyHeader>
+        <Button onClick={refetch} size="sm" variant="outline">
+          再読み込み
+        </Button>
+      </Empty>
+    )
+  }
+
+  if (articles.length === 0) {
+    const empty = emptyStateCopy(search)
+    const Icon = empty.icon
+    return (
+      <Empty className="border border-dashed">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Icon aria-hidden="true" />
+          </EmptyMedia>
+          <EmptyTitle>{empty.title}</EmptyTitle>
+          <EmptyDescription>{empty.description}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
+  const showDateHeaders = search.sort === "newest" || search.sort === "oldest"
+  const showRelevanceScore = shouldShowRelevanceScore(search.sort)
+
   return (
-    <div className="flex flex-col gap-6">
-      <Input
-        aria-label="記事を検索"
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="タイトルまたは媒体名で検索"
-        value={search}
+    <div className="flex flex-col rounded-lg border">
+      {groups.map((group) => (
+        <ArticleDateGroup
+          group={group}
+          key={`${group.key}-${group.articles[0]?.id}`}
+          onSelect={onSelect}
+          onToggleSaved={toggleSaved}
+          selectedArticleId={selectedArticleId}
+          showHeader={showDateHeaders}
+          showRelevanceScore={showRelevanceScore}
+        />
+      ))}
+      <LoadMoreSentinel
+        fetchNextPage={fetchNextPage}
+        hasNextPage={hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
       />
-      {articles.length > 0 ? (
-        <div className="flex flex-col gap-3">
-          {articles.map((article) => (
-            <ArticleCard
-              article={article}
-              key={article.id}
-              onOpenArchive={markRead}
-              onToggleSaved={toggleSaved}
-            />
-          ))}
-        </div>
-      ) : (
-        <Empty className="border border-dashed">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Newspaper aria-hidden="true" />
-            </EmptyMedia>
-            <EmptyTitle>表示できる記事がありません</EmptyTitle>
-            <EmptyDescription>
-              RSSを購読すると、同期された記事がここに表示されます。
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      )}
     </div>
   )
 }
