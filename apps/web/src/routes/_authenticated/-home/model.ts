@@ -33,6 +33,14 @@ const stageLabels = {
 export const statusLabel = (status: JobStatus) => statusLabels[status]
 export const stageLabel = (stage: JobStage) => stageLabels[stage]
 
+/** SSEの終端状態を、追従が遅れる一覧APIより優先して画面状態を確定する。 */
+export function resolvedJobStatus(
+  streamed: JobStatus | undefined,
+  polled: JobStatus | undefined
+): JobStatus | "ready" {
+  return streamed ?? polled ?? "ready"
+}
+
 const failureMessages: Readonly<Record<string, string>> = {
   "provider-timeout":
     "外部サービスが時間内に応答しませんでした。自動再試行または手動再試行を利用できます。",

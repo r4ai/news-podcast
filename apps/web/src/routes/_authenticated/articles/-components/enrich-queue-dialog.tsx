@@ -1,4 +1,10 @@
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  PauseCircle,
+  RefreshCw,
+} from "lucide-react"
 
 import {
   Dialog,
@@ -28,6 +34,9 @@ export function EnrichQueueDialog({
   status,
   connected,
 }: EnrichQueueDialogProps) {
+  const limitReached = Boolean(
+    status && status.daily.used >= status.daily.limit
+  )
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-h-[80dvh] overflow-y-auto" size="lg">
@@ -50,24 +59,34 @@ export function EnrichQueueDialog({
 
         <DailyBudget daily={status?.daily} />
 
-        <QueueSection
-          icon={
-            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
-          }
-          label="処理中"
-          items={status?.processing ?? []}
-          showStatus={false}
-        />
+        {status?.processing.length ? (
+          <QueueSection
+            icon={
+              <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+            }
+            label={`処理中 ${status.processing.length}件`}
+            items={status.processing}
+            showStatus={false}
+          />
+        ) : null}
 
         <QueueSection
           icon={
-            <RefreshCw
-              aria-hidden="true"
-              className="size-3.5 text-muted-foreground"
-            />
+            limitReached ? (
+              <PauseCircle
+                aria-hidden="true"
+                className="size-3.5 text-muted-foreground"
+              />
+            ) : (
+              <RefreshCw
+                aria-hidden="true"
+                className="size-3.5 text-muted-foreground"
+              />
+            )
           }
-          label={`待ち ${status?.pending.count ?? 0}件`}
+          label={`${limitReached ? "本日の上限待ち" : "待ち"} ${status?.pending.count ?? 0}件`}
           items={status?.pending.items ?? []}
+          itemStatusLabel={limitReached ? "上限待ち" : undefined}
           showStatus={true}
         />
 
@@ -131,12 +150,14 @@ function QueueSection({
   label,
   items,
   showStatus,
+  itemStatusLabel,
   failure = false,
 }: {
   readonly icon: React.ReactNode
   readonly label: string
   readonly items: readonly EnrichQueueItem[]
   readonly showStatus: boolean
+  readonly itemStatusLabel?: string
   readonly failure?: boolean
 }) {
   return (
@@ -157,7 +178,8 @@ function QueueSection({
               <span className="line-clamp-1 flex-1">{item.title}</span>
               {showStatus ? (
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {item.status === "failed" ? "再試行待ち" : "待ち"}
+                  {itemStatusLabel ??
+                    (item.status === "failed" ? "再試行待ち" : "待ち")}
                 </span>
               ) : null}
               {failure && item.error ? (

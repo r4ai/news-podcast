@@ -15,8 +15,10 @@ import { recordBrowserEvent } from "@/shared/observability/events"
 import {
   failureMessage,
   hasActiveJob,
+  resolvedJobStatus,
   stageLabel,
   stagePercent,
+  type JobStatus,
   type JobStage,
 } from "../model"
 import { useGenerationStream } from "./use-generation-stream"
@@ -80,7 +82,12 @@ export function useGeneration() {
   }, [latestJob?.status, queryClient])
 
   // SSEが繋がっている間はそちらが最新。切れていればポーリング結果を使う。
-  const liveState = stream.connected ? stream.state : undefined
+  const liveState =
+    stream.connected || stream.finished ? stream.state : undefined
+  const state = resolvedJobStatus(
+    liveState?.status as JobStatus | undefined,
+    latestJob?.status
+  )
   const stage = (liveState?.stage ?? latestJob?.stage) as JobStage | undefined
   const stageProgress = liveState?.progress ?? latestJob?.stageProgress
 
@@ -120,9 +127,9 @@ export function useGeneration() {
     retryAt: latestJob?.nextAttemptAt,
     stageProgress,
     failure: failureMessage(liveState?.failure ?? latestJob?.failure),
-    progress: stagePercent(stage),
-    stage: stage ? stageLabel(stage) : undefined,
-    state: latestJob?.status ?? ("ready" as const),
+    progress: state === "running" && stage ? stagePercent(stage) : undefined,
+    stage: state === "running" && stage ? stageLabel(stage) : undefined,
+    state,
     timeline: stream.timeline,
     adoptedArticles: stream.adoptedArticles,
     streaming: stream.connected,

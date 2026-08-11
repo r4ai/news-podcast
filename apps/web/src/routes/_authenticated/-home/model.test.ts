@@ -5,6 +5,7 @@ import type { AgUiEvent, EpisodeJobState } from "@news-podcast/contracts/agui"
 import {
   emptyGenerationStream,
   reduceGenerationStream,
+  resolvedJobStatus,
   selectionLabel,
   toolLabel,
   type GenerationStream,
@@ -177,6 +178,12 @@ describe("reduceGenerationStream", () => {
 })
 
 describe("labels", () => {
+  it("uses the terminal SSE status before the polling response catches up", () => {
+    expect(resolvedJobStatus("succeeded", "running")).toBe("succeeded")
+    expect(resolvedJobStatus(undefined, "running")).toBe("running")
+    expect(resolvedJobStatus(undefined, undefined)).toBe("ready")
+  })
+
   it("falls back to the raw tool name when unmapped", () => {
     expect(toolLabel("web_search")).toBe("Webで裏取り")
     expect(toolLabel("mystery_tool")).toBe("mystery_tool")
