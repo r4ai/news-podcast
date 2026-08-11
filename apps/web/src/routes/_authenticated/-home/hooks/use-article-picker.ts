@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { type Article } from "@/features/articles"
 import { api } from "@/shared/api"
@@ -21,8 +21,15 @@ export function useArticlePicker(
 ) {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
 
+  const syncedKeyRef = useRef<string>("")
+
   useEffect(() => {
-    if (enabled) setSelectedIds([...initialSelectedIds])
+    if (!enabled) return
+    // 参照ではなく値で比較し、同一内容ならスキップして再レンダーの連鎖を防ぐ。
+    const key = initialSelectedIds.join(",")
+    if (key === syncedKeyRef.current) return
+    syncedKeyRef.current = key
+    setSelectedIds([...initialSelectedIds])
   }, [enabled, initialSelectedIds])
 
   const listQuery = api.useInfiniteQuery(
