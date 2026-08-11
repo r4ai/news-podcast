@@ -13,6 +13,7 @@ import {
   ProviderRateLimitError,
   type RetryOptions,
   SUMMARY_MAX_MARKDOWN_CHARS,
+  SUMMARY_SCHEMA_NAME,
 } from "./shared.js"
 
 interface OpenAiUsage {
@@ -89,7 +90,7 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
             text: {
               format: {
                 type: "json_schema",
-                name: "article_summary",
+                name: SUMMARY_SCHEMA_NAME,
                 strict: true,
                 schema: {
                   type: "object",
@@ -113,8 +114,15 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
       throw new ProviderRateLimitError()
     }
     if (!response.ok) {
+      let detail = ""
+      try {
+        const errorBody = (await response.json()) as Record<string, unknown>
+        detail = `: ${JSON.stringify(errorBody)}`
+      } catch {
+        // keep detail empty
+      }
       throw new ArticleSummaryError(
-        `OpenAI request failed with ${response.status}`
+        `OpenAI request failed with ${response.status}${detail}`
       )
     }
 

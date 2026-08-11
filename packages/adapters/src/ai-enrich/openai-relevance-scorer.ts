@@ -12,6 +12,7 @@ import {
   DEFAULT_RETRY_OPTIONS,
   fetchWithRetry,
   ProviderRateLimitError,
+  RELEVANCE_SCHEMA_NAME,
   type RetryOptions,
 } from "./shared.js"
 
@@ -120,7 +121,7 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
             text: {
               format: {
                 type: "json_schema",
-                name: "article_relevance_batch",
+                name: RELEVANCE_SCHEMA_NAME,
                 strict: true,
                 schema: {
                   type: "object",
