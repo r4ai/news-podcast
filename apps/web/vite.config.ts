@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react"
 import { tanstackRouter } from "@tanstack/router-plugin/vite"
 import { defineConfig } from "vite"
 
-const apiTarget = process.env.VITE_API_PROXY_TARGET ?? "http://localhost:3000"
+const apiTarget = process.env.VITE_API_PROXY_TARGET ?? "http://localhost:4000"
 
 // https://vite.dev/config/
 export default defineConfig({

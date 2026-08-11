@@ -6,7 +6,7 @@ services:
       network: host
     command: ["pnpm", "--filter", "web", "dev", "--host", "0.0.0.0"]
     environment:
-      VITE_API_PROXY_TARGET: http://api:3000
+      VITE_API_PROXY_TARGET: http://api:4000
     ports:
       - "127.0.0.1:4173:4173"
     depends_on:
@@ -24,7 +24,7 @@ services:
       - path: .env
         required: false
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4000:4000"
     volumes:
       - app-data:/app/data
       - audio-data:/app/audio:ro
@@ -37,7 +37,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)})",
+          "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)})",
         ]
       interval: 5s
       timeout: 3s

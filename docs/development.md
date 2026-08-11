@@ -62,8 +62,8 @@ container内だけ名前解決が数秒以上遅い場合は、containerの`/etc
 | 接続先 | URL |
 | --- | --- |
 | Webアプリ | <http://localhost:4173> |
-| APIヘルスチェック | <http://localhost:3000/health> |
-| OpenAPIドキュメント | <http://localhost:3000/openapi.json> |
+| APIヘルスチェック | <http://localhost:4000/health> |
+| OpenAPIドキュメント | <http://localhost:4000/openapi.json> |
 | VOICEVOX Engine | <http://localhost:50021> |
 | SeaweedFS S3 API | <http://localhost:8333> |
 | SeaweedFS Master UI | <http://localhost:9333> |
@@ -94,7 +94,7 @@ SQLiteデータ、記事アーカイブ、生成音声はDocker volumeに残り�
 ```mermaid
 flowchart LR
     Browser["ブラウザ<br/>localhost:4173"] --> Web["Vite Web"]
-    Web --> API["Hono API<br/>localhost:3000"]
+    Web --> API["Hono API<br/>localhost:4000"]
     API --> DB[("SQLite")]
     Worker["Worker"] --> DB
     Worker --> Provider{"PROVIDER_MODE"}
@@ -188,7 +188,7 @@ TELEMETRY_PROXY_TOKEN=news-podcast-local-observability
 
 | 接続先 | URL |
 | --- | --- |
-| SigNoz UI | <http://localhost:8080> |
+| SigNoz UI | <http://localhost:8100> |
 | OTLP gRPC | `localhost:4317` |
 | OTLP HTTP | `localhost:4318` |
 
@@ -196,24 +196,24 @@ TELEMETRY_PROXY_TOKEN=news-podcast-local-observability
 
 #### SSH先で起動したサービスへ接続する
 
-通常利用ではWebアプリの4173番とSigNoz UIの8080番だけをforwardする。WebがAPIをproxyするため、APIの3000番を直接forwardする必要はない。
+通常利用ではWebアプリの4173番とSigNoz UIの8100番だけをforwardする。WebがAPIをproxyするため、APIの4000番を直接forwardする必要はない。
 
 ```bash
 ssh -N \
   -o ExitOnForwardFailure=yes \
   -o ServerAliveInterval=30 \
   -L 4173:127.0.0.1:4173 \
-  -L 8080:127.0.0.1:8080 \
+  -L 8100:127.0.0.1:8100 \
   user@ssh-host
 ```
 
-接続後はWebアプリを<http://localhost:4173>、SigNozを<http://localhost:8080>で開く。
+接続後はWebアプリを<http://localhost:4173>、SigNozを<http://localhost:8100>で開く。
 
 直接確認やデバッグが必要な場合だけ、次のportを追加でforwardする。
 
 | port | 用途 |
 | ---: | --- |
-| 3000 | API、health check、OpenAPI |
+| 4000 | API、health check、OpenAPI |
 | 8333 | SeaweedFS S3 API |
 | 9333 | SeaweedFS Master UI |
 | 50021 | VOICEVOX Engine |
@@ -227,8 +227,8 @@ ssh -N \
   -o ExitOnForwardFailure=yes \
   -o ServerAliveInterval=30 \
   -L 4173:127.0.0.1:4173 \
-  -L 3000:127.0.0.1:3000 \
-  -L 8080:127.0.0.1:8080 \
+  -L 4000:127.0.0.1:4000 \
+  -L 8100:127.0.0.1:8100 \
   -L 8333:127.0.0.1:8333 \
   -L 9333:127.0.0.1:9333 \
   -L 50021:127.0.0.1:50021 \
@@ -259,7 +259,7 @@ docker compose up -d --build api worker voicevox
 pnpm --filter web dev
 ```
 
-Webは既定で `http://localhost:3000` のAPIへプロキシします。
+Webは既定で `http://localhost:4000` のAPIへプロキシします。
 終了時はWebのプロセスを `Ctrl+C` で止め、コンテナを削除します。
 
 ```bash
@@ -398,11 +398,11 @@ APIのrouteやschemaを変更した場合は `pnpm contract:generate` を実行�
 | `ARCHIVE_MAX_TOTAL_ASSET_BYTES` | `104857600` | Worker | 1 snapshotに保存するresource合計の最大byte数 |
 | `ARCHIVE_MAX_ASSETS` | `512` | Worker | 1 snapshotに保存する重複除外後resourceの最大件数 |
 | `AUDIO_ACCESS_SECRET` | 自動生成 | API | 音声アクセス用トークンの署名に使う秘密値 |
-| `API_PORT` | `3000` | API | APIが待ち受けるポート |
-| `VITE_API_PROXY_TARGET` | `http://localhost:3000` | Web | Viteが `/api`、`/v1` などを転送するAPIのURL |
+| `API_PORT` | `4000` | API | APIが待ち受けるポート |
+| `VITE_API_PROXY_TARGET` | `http://localhost:4000` | Web | Viteが `/api`、`/v1` などを転送するAPIのURL |
 
-ComposeではWebの `VITE_API_PROXY_TARGET` を `http://api:3000` に上書きします。
-ホスト上で `pnpm --filter web dev` を実行する場合は、既定の `http://localhost:3000` が使われます。
+ComposeではWebの `VITE_API_PROXY_TARGET` を `http://api:4000` に上書きします。
+ホスト上で `pnpm --filter web dev` を実行する場合は、既定の `http://localhost:4000` が使われます。
 
 ## トラブルシューティング
 
@@ -434,7 +434,7 @@ liveモードではOpenAI APIキー、RSSへの接続、VOICEVOXのヘルスチ�
 
 ### ポートが使用中と表示される
 
-4173、3000、50021番ポートを使う別プロセスを終了するか、起動中のCompose環境を停止します。
+4173、4000、8100、50021番ポートを使う別プロセスを終了するか、起動中のCompose環境を停止します。
 
 ```bash
 pnpm dev:down

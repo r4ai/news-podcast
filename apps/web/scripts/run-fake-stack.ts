@@ -18,7 +18,7 @@ import { createFakeProcessor } from "../../worker/src/process-episode-job.js"
 import { LocalScheduler } from "../../worker/src/scheduler.js"
 
 const directory = mkdtempSync(join(tmpdir(), "news-podcast-e2e-"))
-const apiPort = Number(process.env.E2E_API_PORT ?? 3000)
+const apiPort = Number(process.env.E2E_API_PORT ?? 4000)
 const webPort = Number(process.env.E2E_WEB_PORT ?? 4173)
 const ownerId = "00000000-0000-4000-8000-000000000100"
 const store = new LocalStore(join(directory, "app.sqlite"))

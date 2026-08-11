@@ -11,7 +11,7 @@ const intervalMs = readPositiveNumber("WATCHDOG_INTERVAL_MS", 60_000)
 const targets = [
   {
     name: "api",
-    url: process.env.WATCHDOG_API_URL ?? "http://127.0.0.1:3000/health",
+    url: process.env.WATCHDOG_API_URL ?? "http://127.0.0.1:4000/health",
   },
   {
     name: "worker",
@@ -24,7 +24,7 @@ const targets = [
   {
     name: "signoz",
     url:
-      process.env.WATCHDOG_SIGNOZ_URL ?? "http://127.0.0.1:8080/api/v1/health",
+      process.env.WATCHDOG_SIGNOZ_URL ?? "http://127.0.0.1:8100/api/v1/health",
   },
 ]
 const collectorMetricsUrl =

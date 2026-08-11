@@ -13,7 +13,7 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    // 既定の http://localhost:3000 は開発APIと同じoriginなので、
+    // 既定の http://localhost:4000 は開発APIと同じoriginなので、
     // 取りこぼしたfetchが実サーバへ届かないよう別originにする。
     environmentOptions: { jsdom: { url: "http://web.test/" } },
     globals: false,

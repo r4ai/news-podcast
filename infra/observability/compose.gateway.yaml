@@ -36,10 +36,10 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      WATCHDOG_API_URL: http://127.0.0.1:3000/health
+      WATCHDOG_API_URL: http://127.0.0.1:4000/health
       WATCHDOG_WORKER_URL: http://127.0.0.1:3001/health
       WATCHDOG_VOICEVOX_URL: http://127.0.0.1:50021/version
-      WATCHDOG_SIGNOZ_URL: http://127.0.0.1:8080/api/v1/health
+      WATCHDOG_SIGNOZ_URL: http://127.0.0.1:8100/api/v1/health
       WATCHDOG_COLLECTOR_METRICS_URL: http://127.0.0.1:8888/metrics
       WATCHDOG_SMTP_HOST: ${WATCHDOG_SMTP_HOST:?set WATCHDOG_SMTP_HOST}
       WATCHDOG_SMTP_PORT: ${WATCHDOG_SMTP_PORT:-587}

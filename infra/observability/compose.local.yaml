@@ -10,4 +10,4 @@ services:
 
   signoz-signoz-0:
     ports: !override
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8100:8080"

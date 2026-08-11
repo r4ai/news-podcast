@@ -183,7 +183,7 @@ const app = createApp({
 })
 
 const server = serve(
-  { fetch: app.fetch, port: Number(process.env.API_PORT ?? 3000) },
+  { fetch: app.fetch, port: Number(process.env.API_PORT ?? 4000) },
   ({ port }) => {
     console.log(`API listening on http://localhost:${port}`)
   }
