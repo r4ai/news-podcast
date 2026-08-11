@@ -246,7 +246,9 @@ describe("LocalStore.listArticleFacets", () => {
 
     const scoped = store.listArticleFacets(owner, { feedIds: [feedA.id] })
     expect(scoped.states.all).toBe(4)
-    expect(scoped.feeds).toEqual([{ feedId: feedA.id, name: "north", count: 4 }])
+    expect(scoped.feeds).toEqual([
+      { feedId: feedA.id, name: "north", count: 4 },
+    ])
 
     const searched = store.listArticleFacets(owner, { q: "quarterly" })
     // 各feedで index % 5 === 0 が1件ずつ一致する
@@ -266,16 +268,12 @@ describe("LocalStore hidden/read-later article state", () => {
     expect(store.listArticles(owner).items.map((a) => a.id)).not.toContain(
       target.id
     )
-    expect(store.listArticles(owner, { state: "unread" }).items).toHaveLength(
-      2
-    )
+    expect(store.listArticles(owner, { state: "unread" }).items).toHaveLength(2)
     expect(
       store.listArticles(owner, { includeHidden: true }).items
     ).toHaveLength(3)
     expect(
-      store
-        .listArticles(owner, { includeHidden: true }).items
-        .map((a) => a.id)
+      store.listArticles(owner, { includeHidden: true }).items.map((a) => a.id)
     ).toContain(target.id)
 
     const facets = store.listArticleFacets(owner)
@@ -398,9 +396,7 @@ describe("LocalStore.bulkSetArticleState", () => {
       { read: true }
     )
     expect(updated).toBe(3)
-    expect(store.listArticles(owner, { state: "unread" }).items).toHaveLength(
-      0
-    )
+    expect(store.listArticles(owner, { state: "unread" }).items).toHaveLength(0)
     store.close()
   })
 
@@ -413,9 +409,9 @@ describe("LocalStore.bulkSetArticleState", () => {
 
     const updated = store.bulkSetArticleState(owner, {}, { saved: true })
     expect(updated).toBe(2)
-    expect(
-      store.listArticles(otherOwner).items.every((a) => !a.saved)
-    ).toBe(true)
+    expect(store.listArticles(otherOwner).items.every((a) => !a.saved)).toBe(
+      true
+    )
     store.close()
   })
 
@@ -469,9 +465,7 @@ describe("LocalStore.listArticles publishedAfter/publishedBefore", () => {
 
     const result = store.listArticles(owner, {
       // 1ms after hour0、1ms before hour2 -> hour1のみヒット
-      publishedAfter: new Date(
-        Date.UTC(2026, 0, 1, 0, 0, 0, 1)
-      ).toISOString(),
+      publishedAfter: new Date(Date.UTC(2026, 0, 1, 0, 0, 0, 1)).toISOString(),
       publishedBefore: new Date(
         Date.UTC(2026, 0, 1, 1, 59, 59, 999)
       ).toISOString(),
@@ -561,9 +555,7 @@ describe("LocalStore.listArticles publishedAfter/publishedBefore", () => {
 
     const after = new Date(Date.UTC(2026, 0, 1, 0)).toISOString()
     const result = store.listArticles(owner, { publishedAfter: after })
-    expect(result.items.every((a) => a.sourceName === "range-iso-a")).toBe(
-      true
-    )
+    expect(result.items.every((a) => a.sourceName === "range-iso-a")).toBe(true)
     store.close()
   })
 })
@@ -579,9 +571,21 @@ describe("LocalStore.listArticles archiveStatus filter", () => {
       feedUrl: "https://archive-status.example.com/feed.xml",
     })
     store.upsertFeedItems(feed.id, [
-      { externalId: "a", title: "A", url: "https://archive-status.example.com/a" },
-      { externalId: "b", title: "B", url: "https://archive-status.example.com/b" },
-      { externalId: "c", title: "C", url: "https://archive-status.example.com/c" },
+      {
+        externalId: "a",
+        title: "A",
+        url: "https://archive-status.example.com/a",
+      },
+      {
+        externalId: "b",
+        title: "B",
+        url: "https://archive-status.example.com/b",
+      },
+      {
+        externalId: "c",
+        title: "C",
+        url: "https://archive-status.example.com/c",
+      },
     ])
 
     const succeeded = store.leaseArchiveCandidate()!
@@ -870,7 +874,9 @@ describe("LocalStore.listArticles full text search (FTS5 trigram)", () => {
     ])
 
     const hit = store.listArticles(owner, { q: "全文検索" })
-    expect(hit.items.map((a) => a.title)).toEqual(["日本語全文検索を実用にする"])
+    expect(hit.items.map((a) => a.title)).toEqual([
+      "日本語全文検索を実用にする",
+    ])
     store.close()
   })
 
@@ -1048,12 +1054,12 @@ describe("LocalStore.listArticles full text search (FTS5 trigram)", () => {
     const otherOwner = "owner-b"
     seedFeed(store, owner, "isolated-fts", 3, 0)
 
-    expect(
-      store.listArticles(owner, { q: "isolated-fts" }).items
-    ).toHaveLength(3)
-    expect(
-      store.listArticles(otherOwner, { q: "isolated-fts" }).items
-    ).toEqual([])
+    expect(store.listArticles(owner, { q: "isolated-fts" }).items).toHaveLength(
+      3
+    )
+    expect(store.listArticles(otherOwner, { q: "isolated-fts" }).items).toEqual(
+      []
+    )
     store.close()
   })
 

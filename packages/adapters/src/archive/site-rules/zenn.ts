@@ -38,7 +38,8 @@ export const zennSiteRule: SiteRule = {
   turndownRules: {
     zennCodeBlock: {
       filter: (node) =>
-        node.nodeName === "DIV" && node.classList.contains("code-block-container"),
+        node.nodeName === "DIV" &&
+        node.classList.contains("code-block-container"),
       replacement: (_content, node, options) => {
         const code = node.querySelector("pre code")
         if (!code) return ""

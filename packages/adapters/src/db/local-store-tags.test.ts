@@ -19,7 +19,12 @@ function openStore(): LocalStore {
   return new LocalStore(join(directory, "app.sqlite"))
 }
 
-function seedFeed(store: LocalStore, owner: string, name: string, count: number) {
+function seedFeed(
+  store: LocalStore,
+  owner: string,
+  name: string,
+  count: number
+) {
   const { feed } = store.registerFeed({
     ownerId: owner,
     name,
@@ -95,14 +100,14 @@ describe("LocalStore PUT記事タグ（手動）", () => {
 
     store.setArticleManualTags(owner, articleId!, [manual1.id])
     store.saveAiArticleTags(owner, articleId!, [{ name: "AI", confidence: 1 }])
-    expect([...(store.getArticle(owner, articleId!)?.tags ?? [])].sort()).toEqual(
-      ["AI", "手動1"].sort()
-    )
+    expect(
+      [...(store.getArticle(owner, articleId!)?.tags ?? [])].sort()
+    ).toEqual(["AI", "手動1"].sort())
 
     store.setArticleManualTags(owner, articleId!, [manual2.id])
-    expect([...(store.getArticle(owner, articleId!)?.tags ?? [])].sort()).toEqual(
-      ["AI", "手動2"].sort()
-    )
+    expect(
+      [...(store.getArticle(owner, articleId!)?.tags ?? [])].sort()
+    ).toEqual(["AI", "手動2"].sort())
     expect(aiTag.id).toBeDefined()
     store.close()
   })

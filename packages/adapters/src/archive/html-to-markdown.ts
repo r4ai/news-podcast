@@ -30,7 +30,8 @@ export function htmlToMarkdown(html: string, sourceUrl: string): string {
   normalizeEmbeds(document)
   normalizeTaskLists(document)
 
-  const selected = siteRule?.selectContent?.(document as unknown as Document, url) ?? null
+  const selected =
+    siteRule?.selectContent?.(document as unknown as Document, url) ?? null
   const article = selected
     ? null
     : new Readability(document as unknown as Document, {
@@ -80,7 +81,9 @@ function resolveContentHtml(
  * 付けているため、そのままだと同じ見出しが二回出てしまう。
  */
 function stripDuplicateTitle(contentHtml: string, title: string): string {
-  const { document: fragment } = parseHTML(`<div id="archive-root">${contentHtml}</div>`)
+  const { document: fragment } = parseHTML(
+    `<div id="archive-root">${contentHtml}</div>`
+  )
   const root = fragment.getElementById("archive-root")
   const first = firstContentElement(root)
   // Readabilityは記事の`<h1>`を`<h2>`へ降格させることがあるため両方を見る。
@@ -189,7 +192,9 @@ function normalizeFootnotes(document: ArchiveDocument): void {
   markFootnoteDefinitions(definitions, indices)
 }
 
-function collectFootnoteDefinitions(document: ArchiveDocument): Map<string, Element> {
+function collectFootnoteDefinitions(
+  document: ArchiveDocument
+): Map<string, Element> {
   const definitions = new Map<string, Element>()
   document.querySelectorAll("ol li[id], ul li[id]").forEach((li: Element) => {
     const id = li.getAttribute("id")
@@ -227,7 +232,9 @@ function markFootnoteDefinitions(
     const li = definitions.get(id)
     if (!li) continue
     // 定義側に残る「本文へ戻る」リンクはGFM脚注では不要なので削る。
-    li.querySelectorAll('a[href^="#"]').forEach((backlink: Element) => backlink.remove())
+    li.querySelectorAll('a[href^="#"]').forEach((backlink: Element) =>
+      backlink.remove()
+    )
     li.className = `archive-footnote-def archive-footnote-${index}`
   }
 }
@@ -253,7 +260,8 @@ function normalizeTaskLists(document: ArchiveDocument): void {
 function normalizeEmbeds(document: ArchiveDocument): void {
   document.querySelectorAll("iframe").forEach((iframe: Element) => {
     const src = iframe.getAttribute("src")
-    const label = iframe.getAttribute("title")?.trim() || src || "埋め込みコンテンツ"
+    const label =
+      iframe.getAttribute("title")?.trim() || src || "埋め込みコンテンツ"
     const paragraph = document.createElement("p")
     if (src) {
       const link = document.createElement("a")
@@ -312,7 +320,8 @@ function addOverrideRules(turndown: TurndownService): void {
   })
   turndown.addRule("footnoteRef", {
     filter: (node) =>
-      node.nodeName === "SPAN" && node.classList.contains("archive-footnote-ref"),
+      node.nodeName === "SPAN" &&
+      node.classList.contains("archive-footnote-ref"),
     replacement: (_content, node) => `[^${footnoteIndex(node)}]`,
   })
   turndown.addRule("footnoteDef", {
@@ -357,7 +366,8 @@ function addDetailsRules(turndown: TurndownService): void {
   turndown.addRule("details", {
     filter: "details",
     replacement: (content, node) => {
-      const summaryText = node.querySelector("summary")?.textContent?.trim() || "詳細"
+      const summaryText =
+        node.querySelector("summary")?.textContent?.trim() || "詳細"
       return `\n\n<details>\n<summary>${summaryText}</summary>\n\n${content.trim()}\n\n</details>\n\n`
     },
   })

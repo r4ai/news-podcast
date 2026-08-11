@@ -13,6 +13,7 @@
     "**/coverage/**",
     "**/storybook-static/**",
     "**/test-results/**",
+    "packages/adapters/src/archive/__fixtures__/**",
     ".codex/**",
     "docs/**",
     "infra/**",

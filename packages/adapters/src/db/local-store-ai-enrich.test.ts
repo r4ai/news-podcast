@@ -86,8 +86,18 @@ describe("LocalStore.listArticles sort=relevance", () => {
   it("orders scored articles by score desc and pushes unscored articles to the tail", () => {
     const store = openStore()
     const owner = "owner-relevance"
-    const idLow = seedArchivedArticle(store, owner, "low", "2026-01-01T00:00:00.000Z")
-    const idHigh = seedArchivedArticle(store, owner, "high", "2026-01-02T00:00:00.000Z")
+    const idLow = seedArchivedArticle(
+      store,
+      owner,
+      "low",
+      "2026-01-01T00:00:00.000Z"
+    )
+    const idHigh = seedArchivedArticle(
+      store,
+      owner,
+      "high",
+      "2026-01-02T00:00:00.000Z"
+    )
     const idUnscored = seedArchivedArticle(
       store,
       owner,
@@ -134,7 +144,12 @@ describe("LocalStore.listArticles sort=relevance", () => {
   it("treats a stale profile_hash (interest profile changed) as unscored for ordering and display", () => {
     const store = openStore()
     const owner = "owner-stale"
-    const id = seedArchivedArticle(store, owner, "stale", "2026-01-01T00:00:00.000Z")
+    const id = seedArchivedArticle(
+      store,
+      owner,
+      "stale",
+      "2026-01-01T00:00:00.000Z"
+    )
     const staleHash = computeProfileHash("old-include", "")
     store.saveArticleRelevance({
       ownerId: owner,
@@ -200,8 +215,18 @@ describe("LocalStore.listArticles minScore", () => {
     const store = openStore()
     const owner = "owner-minscore"
     const profileHash = computeProfileHash("", "")
-    const idAbove = seedArchivedArticle(store, owner, "above", "2026-01-01T00:00:00.000Z")
-    const idBelow = seedArchivedArticle(store, owner, "below", "2026-01-02T00:00:00.000Z")
+    const idAbove = seedArchivedArticle(
+      store,
+      owner,
+      "above",
+      "2026-01-01T00:00:00.000Z"
+    )
+    const idBelow = seedArchivedArticle(
+      store,
+      owner,
+      "below",
+      "2026-01-02T00:00:00.000Z"
+    )
     seedArchivedArticle(store, owner, "unscored", "2026-01-03T00:00:00.000Z")
     store.saveArticleRelevance({
       ownerId: owner,
@@ -232,8 +257,18 @@ describe("LocalStore.listArticles minScore", () => {
 describe("LocalStore article relevance owner isolation", () => {
   it("never leaks one owner's relevance score onto another owner's view of a different article", () => {
     const store = openStore()
-    const idX = seedArchivedArticle(store, "owner-x", "x-1", "2026-01-01T00:00:00.000Z")
-    const idY = seedArchivedArticle(store, "owner-y", "y-1", "2026-01-01T00:00:00.000Z")
+    const idX = seedArchivedArticle(
+      store,
+      "owner-x",
+      "x-1",
+      "2026-01-01T00:00:00.000Z"
+    )
+    const idY = seedArchivedArticle(
+      store,
+      "owner-y",
+      "y-1",
+      "2026-01-01T00:00:00.000Z"
+    )
     const hashX = computeProfileHash(
       store.getInterestProfile("owner-x").include,
       store.getInterestProfile("owner-x").exclude
