@@ -28,6 +28,11 @@ import {
   type Observability,
 } from "@news-podcast/observability"
 import { createTracedFetch } from "@news-podcast/observability/node"
+import {
+  extractReadingTerms,
+  readingTermKey,
+  type ReadingTerm,
+} from "./reading-term-extractor.js"
 
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const
 export const EPISODE_EXECUTION_POLICY = {
@@ -322,7 +327,14 @@ export class EpisodeProcessor {
       })
     }
     await this.extractReadingTerms(job, draft!, observability, signal).catch(
-      () => undefined,
+      (error) => {
+        observability.log({
+          name: "reading_dictionary.extraction_failed",
+          level: "warn",
+          attributes: jobAttributes(job),
+          error,
+        })
+      }
     )
     const sources = this.dependencies.store.resolveEpisodeSources(
       job.ownerId,
@@ -599,7 +611,7 @@ export class EpisodeProcessor {
     job: WorkerJob,
     draft: { script: string; inputHash: string },
     observability: Observability,
-    signal: AbortSignal,
+    signal: AbortSignal
   ): Promise<void> {
     const config = this.dependencies.openAi
     if (!config) return
@@ -607,13 +619,13 @@ export class EpisodeProcessor {
     const existing = new Set(
       this.dependencies.store
         .listReadingDictionary(job.ownerId)
-        .map((e) => e.surface),
+        .map((e) => readingTermKey(e.surface))
     )
 
-    const terms = await extractTermsFromScript(draft.script, config, signal)
-    const newTerms: TermReading[] = []
+    const terms = await extractReadingTerms(draft.script, config, signal)
+    const newTerms: ReadingTerm[] = []
     for (const term of terms) {
-      if (existing.has(term.surface)) continue
+      if (existing.has(readingTermKey(term.surface))) continue
       newTerms.push(term)
     }
 
@@ -629,7 +641,7 @@ export class EpisodeProcessor {
             term.surface,
             term.reading,
             term.accentType,
-            signal,
+            signal
           )
         } catch {
           // VOICEVOX unavailable; persist locally only
@@ -648,7 +660,7 @@ export class EpisodeProcessor {
           wordUuid,
         })
       }
-      existing.add(term.surface)
+      existing.add(readingTermKey(term.surface))
       observability.log({
         name: "reading_dictionary.term_added",
         attributes: {
@@ -1131,70 +1143,6 @@ function hashJson(value: unknown): string {
   return sha256(new TextEncoder().encode(JSON.stringify(value)))
 }
 
-interface TermReading {
-  readonly surface: string
-  readonly reading: string
-  readonly accentType: number
-}
-
-async function extractTermsFromScript(
-  script: string,
-  config: OpenAiConfig,
-  signal: AbortSignal,
-): Promise<readonly TermReading[]> {
-  const prompt = [
-    "以下のPodcast台本から、専門用語・固有名詞・英略語など、",
-    "VOICEVOXが正しく読めない可能性がある単語を抽出し、正しいカタカナ読みを付けよ。",
-    "一般的な日本語は不要。明らかに読み間違えそうな単語だけを対象とせよ。",
-    "",
-    "JSON形式で出力:",
-    '[ { "surface": "GPT-5", "reading": "ジーピーティーファイブ", "accent_type": 6 } ]',
-    "",
-    "台本:",
-    script,
-  ].join("\n")
-
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    signal: signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(60_000)])
-      : AbortSignal.timeout(60_000),
-    body: JSON.stringify({
-      model: config.model,
-      instructions: "簡潔なJSONだけを出力せよ。説明や前置きは一切不要。",
-      input: prompt,
-    }),
-  })
-
-  if (!response.ok) return []
-
-  const data = (await response.json()) as {
-    output?: readonly { content?: readonly { text?: string }[] }[]
-  }
-  const text = data.output?.[0]?.content?.[0]?.text
-  if (!text) return []
-
-  const match = text.match(/\[[\s\S]*\]/)
-  if (!match) return []
-
-  try {
-    return (JSON.parse(match[0]) as unknown[]).map((item) => {
-      const obj = item as Record<string, unknown>
-      return {
-        surface: String(obj.surface ?? ""),
-        reading: String(obj.reading ?? ""),
-        accentType: Number(obj.accent_type ?? 0),
-      }
-    })
-  } catch {
-    return []
-  }
-}
-
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex")
 }
@@ -1204,7 +1152,7 @@ async function addVoicevoxWord(
   surface: string,
   pronunciation: string,
   accentType: number,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<string> {
   const url = new URL("user_dict_word", baseUrl)
   url.searchParams.set("surface", surface)
@@ -1216,7 +1164,7 @@ async function addVoicevoxWord(
   })
   if (!response.ok) {
     throw new Error(
-      `VOICEVOX user_dict_word add failed with ${response.status}`,
+      `VOICEVOX user_dict_word add failed with ${response.status}`
     )
   }
   return (await response.text()).trim()

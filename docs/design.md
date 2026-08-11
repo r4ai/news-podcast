@@ -198,6 +198,8 @@ bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去�
 | 話題数、語り口、補足検索 | turn、tool call、HTTP時間上限 |
 | 使用する根拠の選択 | source ID検証、structured result、TTS可能性 |
 
+台本完成後・音声合成前に、英略語・英数字技術語・固有名詞の読み候補をstrict JSON Schemaで最大30件抽出する。全角カタカナ・長さ・アクセントを検証し、ownerの既存辞書とNFKC正規化キーで重複を除いた候補だけをSQLiteとVOICEVOX辞書へ同期する。抽出失敗は`reading_dictionary.extraction_failed`として記録し、番組生成自体は継続する。詳細は[ADR-0028](adr/0028-structured-reading-dictionary-extraction.md)を正本とする。
+
 初期toolは`list_rss_articles`、`read_article`、Responses APIのhosted `web_search`、`submit_episode_draft`とする。RSS記事を主題の起点にし、Web検索は補足と事実確認に使い、異なるsource kindとして保存する。RSS出典はagentが保存済みMarkdown本文を読んだ記事だけを受理する。
 
 ### 8.4 隔離型Agent Harness

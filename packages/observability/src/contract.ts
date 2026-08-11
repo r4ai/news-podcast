@@ -85,6 +85,7 @@ export const telemetryEventNames = [
   "article.enrich.relevance.failed",
   "article.enrich.rate_limited",
   "reading_dictionary.term_added",
+  "reading_dictionary.extraction_failed",
   "process.uncaught_exception",
   "process.unhandled_rejection",
 ] as const
