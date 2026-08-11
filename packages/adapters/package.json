@@ -42,6 +42,7 @@
     "fast-xml-parser": "5.10.1",
     "ipaddr.js": "1.9.1",
     "linkedom": "0.18.13",
+    "mermaid": "11.16.1",
     "postcss": "8.5.15",
     "postcss-value-parser": "4.2.0",
     "turndown": "7.2.4",

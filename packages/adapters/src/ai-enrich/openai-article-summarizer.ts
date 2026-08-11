@@ -1,4 +1,5 @@
 import { z } from "zod"
+import mermaid from "mermaid"
 
 import type {
   ArticleSummarizer,
@@ -26,6 +27,10 @@ interface OpenAiUsage {
 }
 
 const OPENAI_REQUEST_TIMEOUT_MS = 120_000
+const MAX_SUMMARY_ATTEMPTS = 2
+
+const SUMMARY_INSTRUCTIONS =
+  "与えられた記事のタイトルと本文Markdownだけを根拠に、日本語のMarkdown要約を約300字で作成してください。英語の記事でも必ず日本語で要約してください。記事が一番伝えたい結論・要点から書き始め、ポイントを直感的に伝えるMermaidのフローチャートや、具体例・結果・表などを簡潔に添えてください。Mermaidは```mermaidのコードブロックで囲ってください。Markdown見出しや「要点：」「結論：」「概要：」「まとめ：」などの見出しラベルは一切使わず、フラットな文章にしてください。体言止め（名詞で文を終える）で書き、文末に「。」は付けないでください。根拠のない事実は追加しないでください。"
 
 interface OpenAiResponse {
   readonly output?: readonly {
@@ -63,6 +68,38 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
     signal?: AbortSignal
   ): Promise<ArticleSummaryResult> {
     const markdown = input.markdown.slice(0, SUMMARY_MAX_MARKDOWN_CHARS)
+    let invalidSummary: string | undefined
+    let tokensIn = 0
+    let tokensOut = 0
+
+    for (let attempt = 0; attempt < MAX_SUMMARY_ATTEMPTS; attempt += 1) {
+      const result = await this.requestSummary(
+        input.title,
+        markdown,
+        invalidSummary,
+        signal
+      )
+      tokensIn += result.tokensIn
+      tokensOut += result.tokensOut
+      const summary = flattenSummaryHeadings(result.summary)
+      if (await hasValidMermaid(summary)) {
+        return { markdown: summary, tokensIn, tokensOut }
+      }
+      invalidSummary = summary
+    }
+
+    throw new ArticleSummaryError(
+      "OpenAI response contained invalid Mermaid after one repair attempt",
+      false
+    )
+  }
+
+  private async requestSummary(
+    title: string,
+    markdown: string,
+    invalidSummary: string | undefined,
+    signal?: AbortSignal
+  ): Promise<{ summary: string; tokensIn: number; tokensOut: number }> {
     let response: Response
     try {
       response = await fetchWithRetry(
@@ -81,14 +118,16 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
               input: [
                 {
                   role: "system",
-                  content:
-                    "与えられた記事のタイトルと本文Markdownだけを根拠に、日本語のMarkdown要約を約300字で作成してください。英語の記事でも必ず日本語で要約してください。冒頭に記事が一番伝えたい結論・要点を簡潔に書き、その下にポイントを直感的に伝えるMermaidのフローチャートや、具体例・結果・表などを簡潔に添えてください。Mermaidは```mermaidのコードブロックで囲ってください。体言止め（名詞で文を終える）で書き、文末に「。」は付けないでください。根拠のない事実は追加しないでください。",
+                  content: invalidSummary
+                    ? `${SUMMARY_INSTRUCTIONS} 前回の要約に構文エラーのあるMermaidが含まれていました。内容を変えずにMermaid構文だけを修正し、要約全体を返してください。`
+                    : SUMMARY_INSTRUCTIONS,
                 },
                 {
                   role: "user",
                   content: JSON.stringify({
-                    title: input.title,
+                    title,
                     markdown,
+                    ...(invalidSummary ? { invalidSummary } : {}),
                   }),
                 },
               ],
@@ -138,10 +177,45 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
     }
 
     return {
-      markdown: parseSummaryPayload(outputText).summary,
+      summary: parseSummaryPayload(outputText).summary,
       ...readUsage(providerResponse.usage),
     }
   }
+}
+
+/** 生成規約を後処理でも保証し、見出しだけの行は落として本文は保持する。 */
+export function flattenSummaryHeadings(summary: string): string {
+  return summary
+    .split("\n")
+    .flatMap((line) => {
+      const withoutMarkdownHeading = line.replace(/^#{1,6}\s+/, "")
+      if (/^(?:要点|結論|概要|まとめ)[：:]?$/.test(withoutMarkdownHeading)) {
+        return []
+      }
+      return [
+        withoutMarkdownHeading.replace(
+          /^(?:要点|結論|概要|まとめ)[：:]\s*/,
+          ""
+        ),
+      ]
+    })
+    .join("\n")
+    .replace(/^\n+|\n+$/g, "")
+}
+
+async function hasValidMermaid(summary: string): Promise<boolean> {
+  const diagrams = [...summary.matchAll(/```mermaid\s*\n([\s\S]*?)```/gi)]
+  for (const diagram of diagrams) {
+    const source = diagram[1]?.trim()
+    if (!source) return false
+    try {
+      const result = await mermaid.parse(source, { suppressErrors: true })
+      if (!result) return false
+    } catch {
+      return false
+    }
+  }
+  return true
 }
 
 function boundedSignal(parent?: AbortSignal): AbortSignal {

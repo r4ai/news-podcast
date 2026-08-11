@@ -362,6 +362,9 @@ importers:
       linkedom:
         specifier: 0.18.13
         version: 0.18.13
+      mermaid:
+        specifier: 11.16.1
+        version: 11.16.1
       postcss:
         specifier: 8.5.23
         version: 8.5.23

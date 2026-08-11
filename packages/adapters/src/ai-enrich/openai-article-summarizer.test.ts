@@ -32,7 +32,7 @@ describe("OpenAiArticleSummarizer", () => {
       .fn<typeof fetch>()
       .mockResolvedValue(
         jsonSchemaResponse(
-          "## 結論\nSuspeiseとuseで実装が簡潔になる。\n\n```mermaid\nflowchart LR\na-->b\n```"
+          "Suspeiseとuseで実装が簡潔になる\n\n```mermaid\nflowchart LR\na-->b\n```"
         )
       )
     const summarizer = new OpenAiArticleSummarizer(
@@ -45,10 +45,80 @@ describe("OpenAiArticleSummarizer", () => {
       summarizer.summarize({ title: "タイトル", markdown: "本文" })
     ).resolves.toEqual({
       markdown:
-        "## 結論\nSuspeiseとuseで実装が簡潔になる。\n\n```mermaid\nflowchart LR\na-->b\n```",
+        "Suspeiseとuseで実装が簡潔になる\n\n```mermaid\nflowchart LR\na-->b\n```",
       tokensIn: 120,
       tokensOut: 40,
     })
+  })
+
+  it("removes summary headings and heading-like labels from the generated text", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonSchemaResponse(
+          "## 要点\n要点：React 19では処理が簡潔になる\n\n### 具体例\nuseを利用する"
+        )
+      )
+    const summarizer = new OpenAiArticleSummarizer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await expect(
+      summarizer.summarize({ title: "タイトル", markdown: "本文" })
+    ).resolves.toMatchObject({
+      markdown: "React 19では処理が簡潔になる\n\n具体例\nuseを利用する",
+    })
+  })
+
+  it("repairs invalid Mermaid once and returns only the validated summary", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonSchemaResponse("処理の流れ\n\n```mermaid\nflowchart LR\nA-->\n```")
+      )
+      .mockResolvedValueOnce(
+        jsonSchemaResponse("処理の流れ\n\n```mermaid\nflowchart LR\nA-->B\n```")
+      )
+    const summarizer = new OpenAiArticleSummarizer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await expect(
+      summarizer.summarize({ title: "タイトル", markdown: "本文" })
+    ).resolves.toMatchObject({
+      markdown: "処理の流れ\n\n```mermaid\nflowchart LR\nA-->B\n```",
+      tokensIn: 240,
+      tokensOut: 80,
+    })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    const repairBody = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))
+    expect(repairBody.input[0].content).toContain("Mermaid")
+  })
+
+  it("stops after one Mermaid repair attempt", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() =>
+        Promise.resolve(
+          jsonSchemaResponse(
+            "処理の流れ\n\n```mermaid\nflowchart LR\nA-->\n```"
+          )
+        )
+      )
+    const summarizer = new OpenAiArticleSummarizer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await expect(
+      summarizer.summarize({ title: "タイトル", markdown: "本文" })
+    ).rejects.toThrow("Mermaid")
+    expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
   it("truncates markdown to the configured max length before sending", async () => {
