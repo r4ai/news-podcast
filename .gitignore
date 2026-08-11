@@ -23,6 +23,7 @@ test-results
 work/
 outputs/
 news-podcast-app/
+.claude/worktrees/
 
 # turbo
 .turbo
