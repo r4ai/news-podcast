@@ -7,7 +7,7 @@ import {
   readS3Config,
 } from "@news-podcast/adapters/config"
 import { LocalStore } from "@news-podcast/adapters/db/local"
-import { createSafeFetcher } from "@news-podcast/adapters/http/safe"
+import { createNodeSafeFetcher } from "@news-podcast/adapters/http/safe"
 import { S3ObjectStore } from "@news-podcast/adapters/object-store/s3"
 import { RssFeedReader } from "@news-podcast/adapters/rss"
 import { OpenAiArticleSummarizer } from "@news-podcast/adapters/ai-enrich/summarizer"
@@ -55,7 +55,8 @@ const audio = createAudioAccess({
   directory: required("AUDIO_DIRECTORY"),
 })
 const articles = createArticleAccess({ store, objects })
-const rss = new RssFeedReader(createSafeFetcher())
+const safeHttp = createNodeSafeFetcher()
+const rss = new RssFeedReader(safeHttp.fetch)
 // AI補助のオンデマンド再計算 (POST /v1/me/articles/{id}/enrich)。
 // OpenAI設定が無い環境（ローカルのfakeモード等）ではエンドポイントを503にする。
 const aiEnrich = ((): AiEnrichWorker | undefined => {
@@ -202,7 +203,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     clearInterval(canaryTimer)
     server.close(() => {
       store.close()
-      void observability.shutdown().finally(() => process.exit(0))
+      void Promise.all([safeHttp.close(), observability.shutdown()]).finally(
+        () => process.exit(0)
+      )
     })
   })
 }

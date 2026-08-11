@@ -1,9 +1,129 @@
+import type { LookupAddress } from "node:dns"
 import { lookup } from "node:dns/promises"
-import { isIP } from "node:net"
+import { isIP, type LookupFunction } from "node:net"
+
+import ipaddr from "ipaddr.js"
+import {
+  Agent,
+  fetch as undiciFetch,
+  type RequestInit as UndiciRequestInit,
+} from "undici"
 
 const MAX_REDIRECTS = 5
+const MAX_CONCURRENT_PINNED_HOSTNAMES = 1_024
+
+type AddressResolver = (hostname: string) => Promise<readonly LookupAddress[]>
+
+export interface NodeSafeFetcher {
+  readonly fetch: typeof fetch
+  close(): Promise<void>
+}
+
+export function createNodeSafeFetcher(
+  resolver: AddressResolver = resolveAddresses
+): NodeSafeFetcher {
+  const pins = createPinnedLookup()
+  const dispatcher = new Agent({ connect: { lookup: pins.lookup } })
+  const safeFetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    let resolved = await resolveSafePublicUrl(
+      input instanceof Request ? input.url : String(input),
+      resolver
+    )
+    for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+      const releasePin = pins.pin(resolved.url.hostname, resolved.addresses)
+      let response: Response
+      try {
+        const requestInit: UndiciRequestInit = {
+          ...(init as unknown as UndiciRequestInit),
+          dispatcher,
+          redirect: "manual",
+        }
+        response = (await undiciFetch(
+          resolved.url,
+          requestInit
+        )) as unknown as Response
+      } finally {
+        releasePin()
+      }
+      if (![301, 302, 303, 307, 308].includes(response.status)) return response
+      const location = response.headers.get("location")
+      if (!location) return response
+      resolved = await resolveSafePublicUrl(
+        new URL(location, resolved.url),
+        resolver
+      )
+    }
+    throw new Error("Too many redirects")
+  }) as typeof fetch
+  return {
+    fetch: safeFetch,
+    close: () => dispatcher.close(),
+  }
+}
+
+export function createPinnedLookup(): {
+  readonly pin: (
+    hostname: string,
+    addresses: readonly LookupAddress[]
+  ) => () => void
+  readonly lookup: LookupFunction
+} {
+  const pinned = new Map<string, Map<symbol, readonly LookupAddress[]>>()
+  return {
+    pin: (hostname, addresses) => {
+      const key = normalizeHostname(hostname)
+      let active = pinned.get(key)
+      if (!active) {
+        if (pinned.size >= MAX_CONCURRENT_PINNED_HOSTNAMES) {
+          throw new Error("Too many concurrently pinned hostnames")
+        }
+        active = new Map()
+        pinned.set(key, active)
+      }
+      const token = Symbol(key)
+      active.set(token, [...addresses])
+      return () => {
+        const current = pinned.get(key)
+        current?.delete(token)
+        if (current?.size === 0) pinned.delete(key)
+      }
+    },
+    lookup: (hostname, options, callback) => {
+      const active = pinned.get(normalizeHostname(hostname))
+      const addresses = active ? ([...active.values()].at(-1) ?? []) : []
+      const candidates =
+        typeof options.family === "number" && options.family !== 0
+          ? addresses.filter(({ family }) => family === options.family)
+          : addresses
+      const selected = candidates[0]
+      if (!selected) {
+        const error = new Error(
+          `No validated address is pinned for ${hostname}`
+        ) as NodeJS.ErrnoException
+        error.code = "ENOTFOUND"
+        callback(error, "")
+        return
+      }
+      if (options.all) {
+        callback(null, [...candidates])
+        return
+      }
+      callback(null, selected.address, selected.family)
+    },
+  }
+}
 
 export async function assertSafePublicUrl(value: string | URL): Promise<URL> {
+  return (await resolveSafePublicUrl(value, resolveAddresses)).url
+}
+
+async function resolveSafePublicUrl(
+  value: string | URL,
+  resolver: AddressResolver
+): Promise<{
+  readonly url: URL
+  readonly addresses: readonly LookupAddress[]
+}> {
   const url = new URL(value)
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Only HTTP and HTTPS URLs are allowed")
@@ -14,16 +134,18 @@ export async function assertSafePublicUrl(value: string | URL): Promise<URL> {
   if (url.hostname === "localhost" || url.hostname.endsWith(".localhost")) {
     throw new Error("Local addresses are not allowed")
   }
-  const addresses = isIP(url.hostname)
-    ? [{ address: url.hostname }]
-    : await lookup(url.hostname, { all: true })
+  const hostname = normalizeHostname(url.hostname)
+  const family = isIP(hostname)
+  const addresses = family
+    ? [{ address: hostname, family }]
+    : await resolver(hostname)
   if (
     addresses.length === 0 ||
     addresses.some(({ address }) => isPrivate(address))
   ) {
     throw new Error("Private or reserved addresses are not allowed")
   }
-  return url
+  return { url, addresses }
 }
 
 export function createSafeFetcher(
@@ -45,26 +167,20 @@ export function createSafeFetcher(
 }
 
 function isPrivate(address: string): boolean {
-  const normalized = address.toLowerCase()
-  if (normalized === "::1" || normalized === "::") return true
-  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true
-  if (normalized.startsWith("fe8") || normalized.startsWith("fe9")) return true
-  if (normalized.startsWith("fea") || normalized.startsWith("feb")) return true
-  const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1]
-  const candidate = mapped ?? normalized
-  const parts = candidate.split(".").map(Number)
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
-    return false
+  try {
+    return ipaddr.parse(address).range() !== "unicast"
+  } catch {
+    return true
   }
-  const [a, b] = parts as [number, number, number, number]
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a >= 224
-  )
+}
+
+function normalizeHostname(hostname: string): string {
+  const normalized = hostname.toLowerCase()
+  return normalized.startsWith("[") && normalized.endsWith("]")
+    ? normalized.slice(1, -1)
+    : normalized
+}
+
+function resolveAddresses(hostname: string): Promise<readonly LookupAddress[]> {
+  return lookup(hostname, { all: true })
 }

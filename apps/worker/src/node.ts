@@ -10,6 +10,7 @@ import { DEFAULT_AI_ENRICH_DAILY_LIMIT } from "@news-podcast/adapters/ai-enrich/
 import { OpenAiArticleSummarizer } from "@news-podcast/adapters/ai-enrich/summarizer"
 import { OpenAiRelevanceScorer } from "@news-podcast/adapters/ai-enrich/scorer"
 import { AiEnrichWorker } from "@news-podcast/adapters/ai-enrich/worker"
+import { createNodeSafeFetcher } from "@news-podcast/adapters/http/safe"
 
 import {
   createFakeProcessor,
@@ -49,14 +50,15 @@ const processor =
         observability,
       })
 const scheduler = new LocalScheduler(store)
+const safeHttp = createNodeSafeFetcher()
 const rssArchive = new RssArchiveWorker(
   store,
   objects,
   observability,
-  readArchiveLimits(process.env)
+  readArchiveLimits(process.env),
+  safeHttp.fetch
 )
-const openAiConfig =
-  mode === "fake" ? undefined : readOpenAiConfig(process.env)
+const openAiConfig = mode === "fake" ? undefined : readOpenAiConfig(process.env)
 const aiEnrich = openAiConfig
   ? new AiEnrichWorker(
       store,
@@ -217,7 +219,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     const grace = new Promise<void>((resolve) => setTimeout(resolve, 8_000))
     void Promise.race([activeTick, grace]).finally(() => {
       store.close()
-      void observability.shutdown().finally(() => process.exit(0))
+      void Promise.all([safeHttp.close(), observability.shutdown()]).finally(
+        () => process.exit(0)
+      )
     })
   })
 }

@@ -142,6 +142,8 @@ Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% 
 
 セルフホスト環境を正とし、RSS同期で発見した新着記事を自動的に静的archiveへ変換する。記事本文と音声を含む大きなobjectはSeaweedFS、検索・認可・状態・provenanceはSQLiteへ保存する。Podcast生成は固定promptの一括変換ではなく、read-only toolを使うagentが記事選定、本文読解、補足検索、構成、執筆を行う。
 
+任意URLを取得するNode API/Workerは、protocol・credential・解決IPを検査し、その検査済みpublic IP集合をsocket lookupへ固定する。通常fetchによるDNS再解決は許可せず、redirectごとに再検査する。pinはrequest単位の参照としてprocess memoryだけに保持し、接続確立・失敗時に解放する。同時hostname数を1,024件へ制限し、停止時にconnection dispatcherをcloseする。Cloudflareとテスト注入はruntime固有のfetch seamを維持する。詳細は[ADR-0023](adr/0023-node-dns-pinned-safe-fetch.md)を正本とする。
+
 ```mermaid
 flowchart LR
   Web["RSS Reader Web"] --> API["Hono API"]

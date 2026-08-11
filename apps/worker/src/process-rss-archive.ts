@@ -13,16 +13,18 @@ import {
 const SEARCH_BODY_BACKFILL_BATCH_SIZE = 5
 
 export class RssArchiveWorker {
-  private readonly feeds = new RssFeedReader(createSafeFetcher())
+  private readonly feeds: RssFeedReader
   private readonly archiver: ArticleArchiver
 
   constructor(
     private readonly store: LocalStore,
     private readonly objects: ObjectStore,
     private readonly observability: Observability = noopObservability,
-    limits?: ArchiveLimits
+    limits?: ArchiveLimits,
+    fetcher: typeof fetch = createSafeFetcher()
   ) {
-    this.archiver = new ArticleArchiver(objects, fetch, limits)
+    this.feeds = new RssFeedReader(fetcher)
+    this.archiver = new ArticleArchiver(objects, fetcher, limits)
   }
 
   async runOnce(now = new Date()): Promise<void> {

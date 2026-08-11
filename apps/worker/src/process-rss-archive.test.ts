@@ -43,7 +43,11 @@ class MemoryObjects implements ObjectStore {
     const body = this.values.get(key)
     return Promise.resolve(
       body
-        ? { body, contentType: "text/markdown; charset=utf-8", byteLength: body.byteLength }
+        ? {
+            body,
+            contentType: "text/markdown; charset=utf-8",
+            byteLength: body.byteLength,
+          }
         : null
     )
   }
@@ -97,7 +101,10 @@ describe("RssArchiveWorker.backfillSearchBody", () => {
     const store = openStore()
     const objects = new MemoryObjects()
     const markdownKey = "art-1/markdown/article.md"
-    objects.set(markdownKey, "蒸気タービンの効率について詳しく解説する記事本文。")
+    objects.set(
+      markdownKey,
+      "蒸気タービンの効率について詳しく解説する記事本文。"
+    )
     const articleId = seedArchivedArticle(store, "art-1", markdownKey)
     const worker = new RssArchiveWorker(store, objects)
 
@@ -147,7 +154,10 @@ describe("RssArchiveWorker.backfillSearchBody", () => {
 
     await expect(worker.backfillSearchBody(10)).resolves.toBe(0)
 
-    objects.set("missing/markdown/article.md", "後から利用可能になった記事本文。")
+    objects.set(
+      "missing/markdown/article.md",
+      "後から利用可能になった記事本文。"
+    )
     expect(await worker.backfillSearchBody(10)).toBe(1)
     expect(await worker.backfillSearchBody(10)).toBe(0)
     store.close()
