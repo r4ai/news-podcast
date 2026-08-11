@@ -55,8 +55,9 @@ export class RssArchiveWorker {
       const object = await this.objects.get(markdownKey)
       if (!object) {
         this.observability.log({
-          name: "article.search_body.object_missing",
+          name: "article.search_body.index_failed",
           level: "warn",
+          error: new Error("Archived markdown object is unavailable"),
         })
         return false
       }
