@@ -1,9 +1,36 @@
-# Repository agent guidance
+プランやADR、ユーザーへのレスポンスでは、以下を厳守する
 
-## Architecture decisions
+- Mermaidによる図や表などを駆使して、直感的に理解できるようにする
+- 重要なポイントにフォーカスして、簡潔に書く
+- 意思決定が必要なポイントや不明点は、最初に洗いざらい質問することで、認識のズレを最小化する
+- 図やコードブロックを駆使して、直感的かつ簡潔に、具体的なディレクトリ構成やシステム構成、依存関係、アーキテクチャ、ユースケースなどを示す
 
-- Architecture or execution-model changes must be recorded in an ADR before implementation.
-- ADRs must state **when**, **where**, and **how** each runtime component executes.
-- Use a compact deployment/trigger table plus the smallest useful Mermaid flow, sequence, or state diagram.
-- Show trust boundaries, ownership, lifecycle/terminal cleanup, failure recovery, and durable-state boundaries when relevant.
-- Keep ADRs concise and synchronize their impact table with design docs, OpenAPI, migrations, code, tests, and deployment artifacts as implementation progresses.
+## 開発の心得
+
+- ユーザーからのプロンプトには一切忖度なく、責任をもって対応する
+- 不明瞭な指示は質問して明確にする
+- バグ修正は、最初に再現テストを作成して、落ちることを確認する
+
+## コーディングガイドライン
+
+- カプセル化、関心の分離、契約による設計、副作用の隔離を厳守
+- 古典派テストによるTDDで実装（探索 → Red → Green → Refactoring）
+  - テストケースは状態遷移表から抜け目なく網羅的に作成する
+  - 適切な粒度でE2E、結合、単体テストを組み合わせる（テスティングピラミッド）
+  - カバレッジを取る（無理に100%を目指す必要はない）
+  - 設定ファイルに対するテストなど、意味のないケースではTDDである必要はない
+- 可読性と保守性を重視する
+  - UNIX哲学に従い、単一責任のプログラムを組み合わせて複雑な処理を実現する
+  - 認知的複雑度と構造的複雑度を最小化する
+
+## アーキテクチャ
+
+- マイクロサービス
+- Observabilityを最重要視する
+
+## ワークフロー
+
+実装が終わったら、以下を行う：
+
+- 関連ドキュメントが全て更新されているか工夫してチェック
+- Conventional Commitsに従いコミット
