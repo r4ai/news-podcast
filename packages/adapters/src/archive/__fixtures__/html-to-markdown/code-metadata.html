@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja">
+  <head><title>コードメタデータ</title></head>
+  <body>
+    <article>
+      <h1>コードメタデータ</h1>
+      <p>一般的なハイライターのクラス名を復元します。</p>
+
+      <div class="code-block-filename">src/example.ts</div>
+      <pre class="shiki github-dark" data-language="typescript"><code><span class="line">const answer: number = 42</span></code></pre>
+
+      <p>データ属性に保存された言語名と、近接するファイル名を使ってコードフェンスを組み立てます。</p>
+
+      <pre class="highlight-source-js"><code>console.log("hello")</code></pre>
+
+      <p>highlight.jsやGitHub形式のクラス名も言語情報として解釈し、表示時のハイライトへ引き継ぎます。</p>
+
+      <pre><code class="lang-bash">pnpm test</code></pre>
+
+      <p>コード本文は装飾用のspanを取り除いたプレーンテキストとして安全に保存します。</p>
+    </article>
+  </body>
+</html>

@@ -29,6 +29,7 @@ export function htmlToMarkdown(html: string, sourceUrl: string): string {
   normalizeFootnotes(document)
   normalizeEmbeds(document)
   normalizeTaskLists(document)
+  normalizeCodeBlocks(document)
 
   const selected =
     siteRule?.selectContent?.(document as unknown as Document, url) ?? null
@@ -275,6 +276,80 @@ function normalizeEmbeds(document: ArchiveDocument): void {
   })
 }
 
+const CODE_FILENAME_SELECTOR = [
+  '[class*="code-block-filename" i]',
+  '[class~="filename" i]',
+  "[data-filename]",
+].join(",")
+
+/**
+ * Shiki/Prism/highlight.js系がHTMLへ残すクラスや属性を、Turndownが理解できる
+ * `language-*` と `title` へ正規化する。ハイライト済みspanの見た目ではなく、
+ * 生のtextContentをMarkdownへ戻すためサイトをまたいで利用できる。
+ */
+function normalizeCodeBlocks(document: ArchiveDocument): void {
+  document.querySelectorAll("pre").forEach((pre: Element) => {
+    const code = pre.querySelector("code")
+    if (!code) return
+    const container = codeContainer(pre)
+    const filenameElement = container?.querySelector(CODE_FILENAME_SELECTOR)
+    const filename =
+      pre.getAttribute("data-filename")?.trim() ||
+      code.getAttribute("data-filename")?.trim() ||
+      filenameElement?.textContent?.trim() ||
+      undefined
+    const language =
+      languageFromCodeElement(code) ??
+      languageFromCodeElement(pre) ??
+      (filename ? languageFromFilename(filename) : undefined)
+
+    if (language) code.classList.add(`language-${language}`)
+    if (filename) code.setAttribute("title", filename)
+    pre.classList.add("archive-code-block")
+    filenameElement?.remove()
+  })
+}
+
+function codeContainer(pre: Element): Element | null {
+  const parent = pre.parentElement
+  if (!parent) return null
+  return Array.from(parent.children).some(
+    (child) => child !== pre && child.matches(CODE_FILENAME_SELECTOR)
+  )
+    ? parent
+    : null
+}
+
+function languageFromCodeElement(element: Element): string | undefined {
+  const attribute =
+    element.getAttribute("data-language") ?? element.getAttribute("data-lang")
+  if (attribute?.trim()) return normalizeCodeLanguage(attribute)
+
+  const classes = Array.from(element.classList)
+  for (const className of classes) {
+    const match =
+      /^(?:language|lang|highlight-source|brush)[-_:]([a-zA-Z0-9+#.-]+)$/.exec(
+        className
+      )
+    if (match?.[1]) return normalizeCodeLanguage(match[1])
+  }
+  const brushIndex = classes.findIndex((name) => name === "brush:")
+  return brushIndex >= 0 && classes[brushIndex + 1]
+    ? normalizeCodeLanguage(classes[brushIndex + 1] as string)
+    : undefined
+}
+
+function normalizeCodeLanguage(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.-]/g, "")
+}
+
+function languageFromFilename(filename: string): string | undefined {
+  return /\.([a-zA-Z0-9]+)$/.exec(filename)?.[1]?.toLowerCase()
+}
+
 function buildTurndownService(siteRule: SiteRule | undefined): TurndownService {
   const turndown = new TurndownService({
     headingStyle: "atx",
@@ -330,8 +405,27 @@ function addOverrideRules(turndown: TurndownService): void {
     replacement: (content, node) =>
       `\n[^${footnoteIndex(node)}]: ${content.trim()}\n`,
   })
+  turndown.addRule("codeBlockMetadata", {
+    filter: (node) =>
+      node.nodeName === "PRE" && node.classList.contains("archive-code-block"),
+    replacement: (_content, node, options) =>
+      fencedCodeBlock(node.querySelector("code"), options.fence ?? "```"),
+  })
   addMathRules(turndown)
   addDetailsRules(turndown)
+}
+
+function fencedCodeBlock(code: Element | null, fence: string): string {
+  if (!code) return ""
+  const language = Array.from(code.classList)
+    .find((name) => name.startsWith("language-"))
+    ?.slice("language-".length)
+  const filename = code.getAttribute("title")?.replaceAll('"', "&quot;")
+  const metadata = [language, filename ? `title="${filename}"` : ""]
+    .filter(Boolean)
+    .join(" ")
+  const text = (code.textContent ?? "").replace(/\n$/, "")
+  return `\n\n${fence}${metadata}\n${text}\n${fence}\n\n`
 }
 
 /**

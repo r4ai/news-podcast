@@ -43,9 +43,9 @@ export const zennSiteRule: SiteRule = {
       replacement: (_content, node, options) => {
         const code = node.querySelector("pre code")
         if (!code) return ""
-        const filename = node
-          .querySelector(".code-block-filename")
-          ?.textContent?.trim()
+        const filename =
+          node.querySelector(".code-block-filename")?.textContent?.trim() ??
+          code.getAttribute("title")?.trim()
         const language = filename ? languageFromFilename(filename) : ""
         const header = filename ? `${language} title="${filename}"` : language
         const fence = options.fence ?? "```"
