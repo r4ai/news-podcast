@@ -142,7 +142,7 @@ describe("AiEnrichWorker.runOnce", () => {
     expect(scorerCalls.length).toBe(1)
   })
 
-  it("reprocesses once the interest profile changes (profile_hash mismatch)", async () => {
+  it("does not reprocess articles when the interest profile changes", async () => {
     const store = openStore()
     const owner = "owner-b"
     seedArchivedArticle(store, owner, "profile-change")
@@ -158,9 +158,11 @@ describe("AiEnrichWorker.runOnce", () => {
     await worker.runOnce()
     expect(scorerCalls.length).toBe(1)
 
+    // プロフィールを変えても「1回処理済み」は維持され、自動再スコアリングされない
+    // （明示再処理は設定・記事詳細からのenqueueReprocess/richOneでのみ行う）。
     store.setInterestProfile(owner, { include: "AI 半導体", exclude: "" })
     await worker.runOnce()
-    expect(scorerCalls.length).toBe(2)
+    expect(scorerCalls.length).toBe(1)
   })
 
   it("enforces the daily processing limit across owners", async () => {
@@ -294,6 +296,51 @@ describe("AiEnrichWorker.runOnce", () => {
         (event) => event.type === "relevance_failed" && event.rateLimited
       )
     ).toBe(true)
+  })
+
+  it("retries a failed item on the next run and succeeds once the provider recovers", async () => {
+    const store = openStore()
+    const owner = "owner-retry"
+    const feedItemId = seedArchivedArticle(store, owner, "retry")
+
+    let failing = true
+    const flakyScorer: ArticleRelevanceScorer = {
+      score: (input) => {
+        if (failing) {
+          failing = false
+          return Promise.reject(new ProviderRateLimitError())
+        }
+        const candidate = input.candidates[0]!
+        return Promise.resolve({
+          scores: [
+            {
+              feedItemId: candidate.feedItemId,
+              score: 42,
+              reason: "回復後",
+              tags: [],
+              suggestedTags: [],
+            },
+          ],
+          tokensIn: 10,
+          tokensOut: 5,
+        })
+      },
+    }
+    const worker = new AiEnrichWorker(
+      store,
+      fakeObjects(),
+      fakeSummarizer(),
+      flakyScorer,
+      "gpt-5.6-luna"
+    )
+    await worker.runOnce()
+    expect(
+      store.getArticle(owner, feedItemId)?.relevanceScore
+    ).toBeUndefined()
+
+    await worker.runOnce()
+    expect(store.getArticle(owner, feedItemId)?.relevanceScore).toBe(42)
+    expect(store.listEnrichQueueStatus(owner, 200).pending.count).toBe(0)
   })
 })
 
@@ -436,5 +483,26 @@ describe("AiEnrichWorker.enrichOne", () => {
     await expect(worker.enrichOne(owner, feedItemId)).rejects.toThrow(
       "scorer unavailable"
     )
+  })
+
+  it("marks the on-demand item succeeded so the batch does not re-score it", async () => {
+    const store = openStore()
+    const owner = "owner-ondemand-queue"
+    const feedItemId = seedArchivedArticle(store, owner, "ondemand-queue")
+    const scorerCalls: number[][] = []
+    const worker = new AiEnrichWorker(
+      store,
+      fakeObjects(),
+      fakeSummarizer(),
+      fakeScorer(scorerCalls),
+      "gpt-5.6-luna"
+    )
+
+    await expect(worker.enrichOne(owner, feedItemId)).resolves.toBe(true)
+    expect(scorerCalls.length).toBe(1)
+    expect(store.countEnrichPending(owner)).toBe(0)
+
+    await worker.runOnce()
+    expect(scorerCalls.length).toBe(1)
   })
 })

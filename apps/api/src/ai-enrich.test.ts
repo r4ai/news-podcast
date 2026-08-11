@@ -56,6 +56,115 @@ function seedArchivedArticle(
   return candidate.id
 }
 
+describe("GET /v1/me/enrich/queue", () => {
+  it("returns the queue status with the daily budget and reprocessable count", async () => {
+    const store = openStore()
+    const owner = "owner-queue-status"
+    seedArchivedArticle(store, owner, "done")
+    const id = seedArchivedArticle(store, owner, "fresh")
+    store.saveArticleRelevance({
+      ownerId: owner,
+      feedItemId: id,
+      profileHash: computeProfileHash("", ""),
+      model: "m",
+      score: 5,
+      reason: "r",
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+    store.reconcileEnrichQueue(new Date("2026-08-11T00:00:00.000Z"))
+    const app = createApp({
+      store,
+      resolveOwner: async () => owner,
+      enrichDailyLimit: 150,
+    })
+
+    const response = await app.request("/v1/me/enrich/queue")
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      daily: { used: number; limit: number }
+      reprocessable: { count: number }
+      pending: { count: number }
+    }
+    expect(body.daily).toEqual({ used: 0, limit: 150 })
+    expect(body.reprocessable.count).toBe(1)
+    expect(body.pending.count).toBe(1)
+    store.close()
+  })
+
+  it("returns 503 without a store", async () => {
+    const app = createApp({ resolveOwner: async () => "owner" })
+    const response = await app.request("/v1/me/enrich/queue")
+    expect(response.status).toBe(503)
+  })
+})
+
+describe("POST /v1/me/enrich/reprocess", () => {
+  it("enqueues already-processed articles and returns the count", async () => {
+    const store = openStore()
+    const owner = "owner-reprocess-api"
+    const done = seedArchivedArticle(store, owner, "done")
+    store.saveArticleRelevance({
+      ownerId: owner,
+      feedItemId: done,
+      profileHash: computeProfileHash("", ""),
+      model: "m",
+      score: 1,
+      reason: "r",
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+    const app = createApp({ store, resolveOwner: async () => owner })
+
+    const response = await app.request("/v1/me/enrich/reprocess", {
+      method: "POST",
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { enqueued: number }
+    expect(body.enqueued).toBe(1)
+    store.close()
+  })
+
+  it("returns 503 without a store", async () => {
+    const app = createApp({ resolveOwner: async () => "owner" })
+    const response = await app.request("/v1/me/enrich/reprocess", {
+      method: "POST",
+    })
+    expect(response.status).toBe(503)
+  })
+})
+
+describe("GET /v1/me/enrich/queue/events", () => {
+  it("streams a queue status snapshot over SSE", async () => {
+    const store = openStore()
+    const owner = "owner-queue-events"
+    seedArchivedArticle(store, owner, "pending")
+    store.reconcileEnrichQueue(new Date("2026-08-11T00:00:00.000Z"))
+    const app = createApp({ store, resolveOwner: async () => owner })
+
+    const controller = new AbortController()
+    const response = await app.request("/v1/me/enrich/queue/events", {
+      signal: controller.signal,
+    })
+    expect(response.status).toBe(200)
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream")
+
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let text = ""
+    for (let index = 0; index < 20; index += 1) {
+      const { value, done } = await reader.read()
+      if (done) break
+      text += decoder.decode(value)
+      if (text.includes("snapshot")) break
+    }
+    controller.abort()
+    expect(text).toContain('"type":"snapshot"')
+    expect(text).toContain('"pending"')
+    store.close()
+  })
+})
+
 describe("GET/PATCH /v1/me/settings interest profile", () => {
   it("round-trips the interest profile alongside the generation schedule", async () => {
     const store = openStore()

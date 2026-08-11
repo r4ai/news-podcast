@@ -10,7 +10,6 @@ const meta = {
     draft: { include: "生成AI、フロントエンド", exclude: "芸能ゴシップ" },
     pending: false,
     confirmOpen: false,
-    recomputeCount: 42,
     canSubmit: true,
     update: fn(),
     requestSave: fn(),
@@ -35,8 +34,8 @@ export const ConfirmDialogOpen: Story = {
   args: { confirmOpen: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement.ownerDocument.body)
-    await expect(canvas.getByText("スコアを再計算しますか")).toBeVisible()
-    await expect(canvas.getByText(/42件/)).toBeVisible()
+    await expect(canvas.getByText("保存しますか")).toBeVisible()
+    await expect(canvas.getByText(/全記事を再処理/)).toBeVisible()
   },
 }
 

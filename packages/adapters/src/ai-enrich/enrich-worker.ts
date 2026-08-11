@@ -51,8 +51,8 @@ export type AiEnrichEvent =
       readonly rateLimited: boolean
     }
 
-// RSS記事へのAI補助（日本語要約＋適合度スコア）を新着分だけ日次上限つきで
-// 処理するワーカー。要約は記事本文単位（所有者非依存）でキャッシュし、
+// RSS記事へのAI補助（日本語要約＋適合度スコア）をenrich_queueから優先度順で
+// 日次上限つきで処理するワーカー。要約は記事本文単位（所有者非依存）でキャッシュし、
 // スコアはowner+記事単位でタイトル・要約だけを使って5〜10件ずつまとめて
 // 1コールにする（コストの主眼はここ）。
 export class AiEnrichWorker {
@@ -67,6 +67,9 @@ export class AiEnrichWorker {
   ) {}
 
   async runOnce(now = new Date()): Promise<void> {
+    // 未処理記事の自動投入と期限切れleaseの回収。日次上限を使い切っていても
+    // 実行し、次の日の最初のtickで滞留したprocessingを回収できるようにする。
+    this.store.reconcileEnrichQueue(now)
     const localDate = toLocalDate(now)
     let processed = this.store.getEnrichProcessedToday(localDate)
     if (processed >= this.dailyLimit) return
@@ -76,7 +79,7 @@ export class AiEnrichWorker {
         this.dailyLimit - processed,
         MAX_CANDIDATES_PER_OWNER_PER_TICK
       )
-      processed += await this.enrichOwner(ownerId, localDate, remaining)
+      processed += await this.enrichOwner(ownerId, localDate, remaining, now)
     }
   }
 
@@ -90,7 +93,7 @@ export class AiEnrichWorker {
     const profileHash = computeProfileHash(profile.include, profile.exclude)
     const bullets = await this.ensureSummary(target, true)
     if (!bullets) return false
-    const processed = await this.scoreBatch(
+    const result = await this.scoreBatch(
       ownerId,
       profile,
       profileHash,
@@ -98,45 +101,75 @@ export class AiEnrichWorker {
       new Map([[target.feedItemId, bullets]]),
       true
     )
-    return processed > 0
+    if (result.succeeded.length > 0) {
+      // 未処理のままqueueに残っていた場合は成功として片付ける。
+      // これにより、オンデマンド処理後もバッチが二重スコアリングしない。
+      this.store.completeEnrichBatch(ownerId, {
+        succeeded: [feedItemId],
+        failed: [],
+      })
+    }
+    return result.succeeded.length > 0
   }
 
   private async enrichOwner(
     ownerId: string,
     localDate: string,
-    limit: number
+    limit: number,
+    now: Date
   ): Promise<number> {
     if (limit <= 0) return 0
     const profile = this.store.getInterestProfile(ownerId)
     const profileHash = computeProfileHash(profile.include, profile.exclude)
-    const candidates = this.store.listEnrichCandidates(
-      ownerId,
-      profileHash,
-      limit
-    )
-    if (candidates.length === 0) return 0
+    const batch = this.store.leaseEnrichBatch(ownerId, limit, now)
+    if (batch.length === 0) return 0
 
     const bulletsByFeedItem = new Map<string, readonly string[]>()
-    for (const candidate of candidates) {
-      const bullets = await this.ensureSummary(candidate)
-      if (bullets) bulletsByFeedItem.set(candidate.feedItemId, bullets)
+    const failed: { readonly feedItemId: string; readonly error: string }[] = []
+    for (const candidate of batch) {
+      try {
+        const bullets = await this.ensureSummary(candidate)
+        if (bullets) {
+          bulletsByFeedItem.set(candidate.feedItemId, bullets)
+        } else {
+          failed.push({
+            feedItemId: candidate.feedItemId,
+            error: "summary-unavailable",
+          })
+        }
+      } catch (error) {
+        failed.push({
+          feedItemId: candidate.feedItemId,
+          error:
+            error instanceof Error ? error.message : "summary-failed",
+        })
+      }
     }
-    const scorable = candidates.filter((candidate) =>
+    const scorable = batch.filter((candidate) =>
       bulletsByFeedItem.has(candidate.feedItemId)
     )
 
-    let processed = 0
-    for (const batch of chunk(scorable, RELEVANCE_BATCH_SIZE)) {
-      processed += await this.scoreBatch(
+    const succeeded: string[] = []
+    for (const batchItem of chunk(scorable, RELEVANCE_BATCH_SIZE)) {
+      const result = await this.scoreBatch(
         ownerId,
         profile,
         profileHash,
-        batch,
+        batchItem,
         bulletsByFeedItem
       )
+      succeeded.push(...result.succeeded)
+      failed.push(...result.failed)
     }
-    if (processed > 0) this.store.incrementEnrichProcessed(localDate, processed)
-    return processed
+    this.store.completeEnrichBatch(
+      ownerId,
+      { succeeded, failed },
+      now
+    )
+    if (succeeded.length > 0) {
+      this.store.incrementEnrichProcessed(localDate, succeeded.length)
+    }
+    return succeeded.length
   }
 
   // 既存の要約（現行prompt_version）があれば再利用し、無ければ1記事1コールで生成する。
@@ -178,6 +211,8 @@ export class AiEnrichWorker {
   }
 
   // タイトル＋要約だけを使い、候補をまとめて1コールでスコア付けする。
+  // 戻り値は成功したfeedItemIdと失敗したfeedItemId+errorの組。呼び出し側
+  // （enrichOwner/enrichOne）がenrich_queueへ成否を反映する。
   private async scoreBatch(
     ownerId: string,
     profile: InterestProfile,
@@ -185,7 +220,10 @@ export class AiEnrichWorker {
     batch: readonly EnrichCandidate[],
     bulletsByFeedItem: ReadonlyMap<string, readonly string[]>,
     rethrowFailure = false
-  ): Promise<number> {
+  ): Promise<{
+    readonly succeeded: readonly string[]
+    readonly failed: readonly { readonly feedItemId: string; readonly error: string }[]
+  }> {
     try {
       // タグ付与はこのスコア付けコールに相乗りさせる（新規コールは増やさない）。
       // 語彙が空のときはscorer側がtags関連フィールドをスキーマから外すため、
@@ -234,7 +272,10 @@ export class AiEnrichWorker {
         tokensIn: result.tokensIn,
         tokensOut: result.tokensOut,
       })
-      return result.scores.length
+      return {
+        succeeded: result.scores.map((score) => score.feedItemId),
+        failed: [],
+      }
     } catch (error) {
       this.onEvent({
         type: "relevance_failed",
@@ -244,17 +285,21 @@ export class AiEnrichWorker {
       })
       const message =
         error instanceof Error ? error.message : "Relevance scoring failed"
-      for (const candidate of batch) {
+      const failed = batch.map((candidate) => ({
+        feedItemId: candidate.feedItemId,
+        error: message.slice(0, 500),
+      }))
+      for (const item of failed) {
         this.store.saveArticleRelevanceFailure({
           ownerId,
-          feedItemId: candidate.feedItemId,
+          feedItemId: item.feedItemId,
           profileHash,
           model: this.model,
-          error: message.slice(0, 500),
+          error: item.error,
         })
       }
       if (rethrowFailure) throw error
-      return 0
+      return { succeeded: [], failed }
     }
   }
 }

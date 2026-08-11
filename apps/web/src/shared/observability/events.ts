@@ -2,6 +2,7 @@ export type BrowserEventName =
   | "audio.completed"
   | "audio.error"
   | "audio.started"
+  | "enrich.reprocess_requested"
   | "episode.requested"
   | "episode.stream_connected"
   | "episode.stream_fallback"

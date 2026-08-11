@@ -86,6 +86,8 @@ export function ArticleReaderView({
   toggleReadLater,
   toggleHidden,
   refetch,
+  recalculateAi,
+  isRecalculating,
   onBack,
 }: ArticleReaderViewProps) {
   if (!articleId) return <EmptySelection />
@@ -123,7 +125,11 @@ export function ArticleReaderView({
         </p>
       ) : null}
 
-      <ArticleAiBlock article={article} />
+      <ArticleAiBlock
+        article={article}
+        isRecalculating={isRecalculating}
+        onRecalculate={recalculateAi}
+      />
 
       <ArticleReaderContent
         archiveHtml={archiveHtml}

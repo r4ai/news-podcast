@@ -141,7 +141,7 @@ describe("LocalStore.listArticles sort=relevance", () => {
     expect(result.items[2]?.relevanceScore).toBeUndefined()
   })
 
-  it("treats a stale profile_hash (interest profile changed) as unscored for ordering and display", () => {
+  it("keeps showing the latest relevance score even when the profile_hash becomes stale", () => {
     const store = openStore()
     const owner = "owner-stale"
     const id = seedArchivedArticle(
@@ -162,8 +162,10 @@ describe("LocalStore.listArticles sort=relevance", () => {
       tokensOut: 1,
     })
 
+    // プロフィール変更で自動再処理しなくなったため、旧プロフィールのスコアを表示し続ける。
     const article = store.getArticle(owner, id)
-    expect(article?.relevanceScore).toBeUndefined()
+    expect(article?.relevanceScore).toBe(99)
+    expect(article?.relevanceReason).toBe("古いプロフィールでのスコア")
   })
 
   it("supports keyset pagination under sort=relevance without duplicates or gaps", () => {
@@ -288,5 +290,276 @@ describe("LocalStore article relevance owner isolation", () => {
     // owner-yは自分の記事しか見えず（購読関係が別）、owner-xのスコアも見えない。
     expect(store.getArticle("owner-y", idY)?.relevanceScore).toBeUndefined()
     expect(store.getArticle("owner-y", idX)).toBeUndefined()
+  })
+})
+
+describe("LocalStore enrich_queue", () => {
+  const NOW = new Date("2026-08-11T00:00:00.000Z")
+
+  it("reconcile enqueues never-processed articles as new with priority 0", () => {
+    const store = openStore()
+    const owner = "owner-reconcile"
+    seedArchivedArticle(
+      store,
+      owner,
+      "fresh",
+      "2026-01-02T00:00:00.000Z"
+    )
+    store.reconcileEnrichQueue(NOW)
+
+    const status = store.listEnrichQueueStatus(owner, 200)
+    expect(status.pending.count).toBe(1)
+    expect(status.pending.items[0]?.reason).toBe("new")
+    expect(status.pending.items[0]?.priority).toBe(0)
+    expect(status.processing).toHaveLength(0)
+  })
+
+  it("reconcile does not re-enqueue articles processed under any profile_hash", () => {
+    const store = openStore()
+    const owner = "owner-processed"
+    const id = seedArchivedArticle(
+      store,
+      owner,
+      "done",
+      "2026-01-01T00:00:00.000Z"
+    )
+    store.saveArticleRelevance({
+      ownerId: owner,
+      feedItemId: id,
+      profileHash: "any-hash",
+      model: "m",
+      score: 50,
+      reason: "r",
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+
+    store.reconcileEnrichQueue(NOW)
+    expect(store.countEnrichPending(owner)).toBe(0)
+  })
+
+  it("interest profile change does NOT re-enqueue already-processed articles", () => {
+    const store = openStore()
+    const owner = "owner-profile-change"
+    const id = seedArchivedArticle(
+      store,
+      owner,
+      "kept",
+      "2026-01-01T00:00:00.000Z"
+    )
+    store.saveArticleRelevance({
+      ownerId: owner,
+      feedItemId: id,
+      profileHash: computeProfileHash("old", ""),
+      model: "m",
+      score: 70,
+      reason: "r",
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+
+    store.setInterestProfile(owner, { include: "new", exclude: "" })
+    store.reconcileEnrichQueue(NOW)
+    expect(store.countEnrichPending(owner)).toBe(0)
+  })
+
+  it("reconcile reclaims expired processing leases back to queued", () => {
+    const store = openStore()
+    const owner = "owner-lease"
+    seedArchivedArticle(
+      store,
+      owner,
+      "expired",
+      "2026-01-01T00:00:00.000Z"
+    )
+    store.reconcileEnrichQueue(NOW)
+    const claimed = store.leaseEnrichBatch(owner, 8, NOW)
+    expect(claimed).toHaveLength(1)
+    expect(store.listEnrichQueueStatus(owner, 200).processing).toHaveLength(1)
+
+    store.reconcileEnrichQueue(new Date("2026-08-11T00:20:00.000Z"))
+    const status = store.listEnrichQueueStatus(owner, 200)
+    expect(status.processing).toHaveLength(0)
+    expect(status.pending.count).toBe(1)
+  })
+
+  it("claims new articles before explicit reprocess and newest published first", () => {
+    const store = openStore()
+    const owner = "owner-priority"
+    const aNever = seedArchivedArticle(
+      store,
+      owner,
+      "a-never",
+      "2026-01-02T00:00:00.000Z"
+    )
+    const bProcessed = seedArchivedArticle(
+      store,
+      owner,
+      "b-processed",
+      "2026-01-01T00:00:00.000Z"
+    )
+    store.saveArticleRelevance({
+      ownerId: owner,
+      feedItemId: bProcessed,
+      profileHash: computeProfileHash("", ""),
+      model: "m",
+      score: 10,
+      reason: "r",
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+    store.enqueueReprocess(owner, NOW)
+    store.reconcileEnrichQueue(NOW)
+
+    const claimed = store.leaseEnrichBatch(owner, 8, NOW)
+    expect(claimed.map((item) => item.feedItemId)).toEqual([
+      aNever,
+      bProcessed,
+    ])
+  })
+
+  it("marks succeeded and failed items with attempt/error and stops after the attempt cap", () => {
+    const store = openStore()
+    const owner = "owner-complete"
+    seedArchivedArticle(
+      store,
+      owner,
+      "ok",
+      "2026-01-01T00:00:00.000Z"
+    )
+    seedArchivedArticle(
+      store,
+      owner,
+      "ng",
+      "2026-01-02T00:00:00.000Z"
+    )
+    store.reconcileEnrichQueue(NOW)
+    const claimed = store.leaseEnrichBatch(owner, 8, NOW)
+    expect(claimed).toHaveLength(2)
+    store.completeEnrichBatch(
+      owner,
+      {
+        succeeded: [claimed[0]!.feedItemId],
+        failed: [
+          { feedItemId: claimed[1]!.feedItemId, error: "boom" },
+        ],
+      },
+      NOW
+    )
+
+    const status = store.listEnrichQueueStatus(owner, 200)
+    // 1回失敗（attempt=1<上限）は再試行対象として「待ち」に残る。
+    expect(status.pending.count).toBe(1)
+    expect(status.pending.items[0]?.feedItemId).toBe(claimed[1]?.feedItemId)
+    expect(status.pending.items[0]?.attempt).toBe(1)
+    const ng = status.recent.find(
+      (item) => item.feedItemId === claimed[1]?.feedItemId
+    )
+    expect(ng?.status).toBe("failed")
+    expect(ng?.attempt).toBe(1)
+    expect(ng?.error).toBe("boom")
+  })
+
+  it("treats an article that failed MAX_ENRICH_ATTEMPTS times as terminal", () => {
+    const store = openStore()
+    const owner = "owner-cap"
+    seedArchivedArticle(
+      store,
+      owner,
+      "cap",
+      "2026-01-01T00:00:00.000Z"
+    )
+    store.reconcileEnrichQueue(NOW)
+    for (let index = 0; index < 4; index += 1) {
+      const batch = store.leaseEnrichBatch(owner, 8, NOW)
+      expect(batch).toHaveLength(1)
+      store.completeEnrichBatch(
+        owner,
+        {
+          succeeded: [],
+          failed: [
+            { feedItemId: batch[0]!.feedItemId, error: `e${index}` },
+          ],
+        },
+        NOW
+      )
+    }
+
+    expect(store.leaseEnrichBatch(owner, 8, NOW)).toHaveLength(0)
+    const status = store.listEnrichQueueStatus(owner, 200)
+    expect(status.failed.count).toBe(1)
+    expect(status.pending.count).toBe(0)
+    expect(store.countEnrichPending(owner)).toBe(0)
+  })
+
+  it("enqueueReprocess queues only processed articles at priority 100", () => {
+    const store = openStore()
+    const owner = "owner-reprocess"
+    const done = seedArchivedArticle(
+      store,
+      owner,
+      "done",
+      "2026-01-01T00:00:00.000Z"
+    )
+    seedArchivedArticle(
+      store,
+      owner,
+      "fresh",
+      "2026-01-02T00:00:00.000Z"
+    )
+    store.saveArticleRelevance({
+      ownerId: owner,
+      feedItemId: done,
+      profileHash: computeProfileHash("", ""),
+      model: "m",
+      score: 1,
+      reason: "r",
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+    store.reconcileEnrichQueue(NOW)
+    const enqueued = store.enqueueReprocess(owner, NOW)
+    expect(enqueued).toBe(1)
+
+    const status = store.listEnrichQueueStatus(owner, 200)
+    const item = status.pending.items.find(
+      (row) => row.feedItemId === done
+    )
+    expect(item?.priority).toBe(100)
+    expect(item?.reason).toBe("reprocess")
+  })
+
+  it("listEnrichQueueStatus reports daily usage and reprocessable count", () => {
+    const store = openStore()
+    const owner = "owner-status"
+    seedArchivedArticle(
+      store,
+      owner,
+      "done",
+      "2026-01-01T00:00:00.000Z"
+    )
+    const id = seedArchivedArticle(
+      store,
+      owner,
+      "fresh",
+      "2026-01-02T00:00:00.000Z"
+    )
+    store.saveArticleRelevance({
+      ownerId: owner,
+      feedItemId: id,
+      profileHash: computeProfileHash("", ""),
+      model: "m",
+      score: 5,
+      reason: "r",
+      tokensIn: 0,
+      tokensOut: 0,
+    })
+    store.incrementEnrichProcessed("2026-08-11", 3)
+    store.reconcileEnrichQueue(NOW)
+
+    const status = store.listEnrichQueueStatus(owner, 200)
+    expect(status.daily).toEqual({ used: 3, limit: 200 })
+    expect(status.reprocessable.count).toBe(1)
+    expect(status.pending.count).toBe(1)
   })
 })

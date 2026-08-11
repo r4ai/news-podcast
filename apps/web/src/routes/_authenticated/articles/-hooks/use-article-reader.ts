@@ -112,6 +112,10 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
   }, [queryClient])
 
   const patchMutation = api.useMutation("patch", "/v1/me/articles/{articleId}")
+  const enrichMutation = api.useMutation(
+    "post",
+    "/v1/me/articles/{articleId}/enrich"
+  )
 
   const update = useCallback(
     (patch: ArticlePatch, errorMessage: string) => {
@@ -180,6 +184,29 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     return () => window.removeEventListener("pagehide", onPageHide)
   }, [])
 
+  const markUnread = () => {
+    if (!article) return
+    userUnreadRef.current = new Set(userUnreadRef.current).add(article.id)
+    const next = new Map(pendingReadRef.current)
+    next.delete(article.id)
+    pendingReadRef.current = next
+    update({ read: false }, "未読に戻せませんでした")
+  }
+
+  const recalculateAi = useCallback(async () => {
+    const target = article
+    if (!target) return
+    try {
+      await enrichMutation.mutateAsync({
+        params: { path: { articleId: target.id } },
+      })
+      await invalidate()
+      toast.success("AI要約と適合度スコアを再計算しました")
+    } catch {
+      toast.error("AIの再計算に失敗しました")
+    }
+  }, [article, enrichMutation, invalidate])
+
   return {
     articleId,
     article,
@@ -206,14 +233,9 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     toggleHidden: () =>
       article &&
       update({ hidden: !article.hidden }, "非表示を更新できませんでした"),
-    markUnread: () => {
-      if (!article) return
-      userUnreadRef.current = new Set(userUnreadRef.current).add(article.id)
-      const next = new Map(pendingReadRef.current)
-      next.delete(article.id)
-      pendingReadRef.current = next
-      update({ read: false }, "未読に戻せませんでした")
-    },
+    markUnread,
+    recalculateAi,
+    isRecalculating: enrichMutation.isPending,
   } as const
 }
 

@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { settingsQueryOptions } from "@/features/settings"
 import { Panel } from "@/shared/components/panel"
 import { PageHeader } from "@/shared/layouts/page-header"
+import { AiEnrichPanel } from "./-components/ai-enrich-panel"
 import { InterestProfileForm } from "./-components/interest-profile-form"
 import { TagVocabularyManager } from "./-components/tag-vocabulary-manager"
 
@@ -23,6 +24,9 @@ function SettingsRoute() {
       />
       <Panel name="interest-profile-form">
         <InterestProfileForm />
+      </Panel>
+      <Panel name="ai-enrich">
+        <AiEnrichPanel />
       </Panel>
       <Panel name="tag-vocabulary-manager">
         <TagVocabularyManager />

@@ -6,9 +6,11 @@ import { Panel } from "@/shared/components/panel"
 import { PageHeader } from "@/shared/layouts/page-header"
 import { ArticleList } from "./-components/article-list"
 import { ArticleReaderView } from "./-components/article-reader"
+import { EnrichQueueDialog } from "./-components/enrich-queue-dialog"
 import { useArticleKeyboardShortcuts } from "./-hooks/use-article-keyboard-shortcuts"
 import { useArticleList } from "./-hooks/use-article-list"
 import { useArticleReader } from "./-hooks/use-article-reader"
+import { useEnrichQueueDialog } from "./-hooks/use-enrich-queue"
 import {
   siblingArticleId,
   toFacetsQuery,
@@ -44,6 +46,7 @@ function ArticlesRoute() {
 
   const list = useArticleList({ search, onSearchChange })
   const reader = useArticleReader({ articleId: search.article })
+  const enrichQueue = useEnrichQueueDialog()
 
   function selectArticle(id: string | undefined) {
     onSearchChange({ article: id })
@@ -85,6 +88,7 @@ function ArticlesRoute() {
             <ArticleList
               list={list}
               onSelect={(article) => selectArticle(article.id)}
+              onShowEnrichQueue={() => enrichQueue.onOpenChange(true)}
               selectedArticleId={search.article}
             />
           </Panel>
@@ -103,6 +107,13 @@ function ArticlesRoute() {
           </Panel>
         </div>
       </div>
+
+      <EnrichQueueDialog
+        connected={enrichQueue.connected}
+        onOpenChange={enrichQueue.onOpenChange}
+        open={enrichQueue.open}
+        status={enrichQueue.status}
+      />
     </div>
   )
 }

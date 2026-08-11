@@ -13,6 +13,7 @@ import { RssFeedReader } from "@news-podcast/adapters/rss"
 import { OpenAiArticleSummarizer } from "@news-podcast/adapters/ai-enrich/summarizer"
 import { OpenAiRelevanceScorer } from "@news-podcast/adapters/ai-enrich/scorer"
 import { AiEnrichWorker } from "@news-podcast/adapters/ai-enrich/worker"
+import { DEFAULT_AI_ENRICH_DAILY_LIMIT } from "@news-podcast/adapters/ai-enrich/shared"
 import { CreateEpisodeJob } from "@news-podcast/application"
 import {
   createNodeObservability,
@@ -122,6 +123,7 @@ const app = createApp({
     google: Boolean(config.googleClientId && config.googleClientSecret),
   },
   observability,
+  enrichDailyLimit: readAiEnrichDailyLimit(process.env),
   telemetryOrigin: new URL(config.baseUrl).origin,
   ...(process.env.TELEMETRY_PROXY_ORIGIN
     ? {
@@ -232,5 +234,17 @@ function createTelemetryForwarder(endpoint: string, token: string) {
 function required(key: string): string {
   const value = process.env[key]?.trim()
   if (!value) throw new Error(`Missing required configuration: ${key}`)
+  return value
+}
+
+// worker側のAI補助バッチと同じ日次上限を読む（キュー状態の表示用）。
+function readAiEnrichDailyLimit(
+  env: Readonly<Record<string, string | undefined>>
+): number {
+  const raw = env.AI_ENRICH_DAILY_LIMIT?.trim()
+  if (!raw) return DEFAULT_AI_ENRICH_DAILY_LIMIT
+  const value = Number(raw)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value <= 0)
+    throw new Error("AI_ENRICH_DAILY_LIMIT must be a positive integer")
   return value
 }

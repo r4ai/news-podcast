@@ -37,22 +37,12 @@ describe("useInterestProfileForm", () => {
   it("seeds the draft from the saved interest profile", async () => {
     const { result } = await renderForm([
       { path: "/v1/me/settings", body: savedSettings },
-      { path: "/v1/me/articles/facets", body: facets },
     ])
 
     await waitFor(() =>
       expect(result.current.draft).toEqual(savedSettings.interestProfile)
     )
     expect(result.current.canSubmit).toBe(true)
-  })
-
-  it("exposes the total article count as the recompute target size", async () => {
-    const { result } = await renderForm([
-      { path: "/v1/me/settings", body: savedSettings },
-      { path: "/v1/me/articles/facets", body: facets },
-    ])
-
-    await waitFor(() => expect(result.current.recomputeCount).toBe(42))
   })
 
   it("does not save until the confirmation dialog is accepted", async () => {

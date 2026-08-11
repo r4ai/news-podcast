@@ -176,6 +176,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/enrich/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return the AI enrichment queue status: processing, pending, failed, recent, and the daily budget. */
+        get: operations["getEnrichQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/enrich/queue/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Stream the AI enrichment queue status as snapshots over SSE while it changes. */
+        get: operations["streamEnrichQueueEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/enrich/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Explicitly enqueue all already-processed articles for AI enrichment again. */
+        post: operations["enrichReprocess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/articles/{articleId}/assets/{hash}": {
         parameters: {
             query?: never;
@@ -663,6 +714,45 @@ export interface components {
         };
         BulkArticleStateResult: {
             updated: number;
+        };
+        EnrichQueue: {
+            processing: components["schemas"]["EnrichQueueItem"][];
+            pending: {
+                count: number;
+                items: components["schemas"]["EnrichQueueItem"][];
+            };
+            failed: {
+                count: number;
+                items: components["schemas"]["EnrichQueueItem"][];
+            };
+            recent: components["schemas"]["EnrichQueueItem"][];
+            daily: {
+                used: number;
+                limit: number;
+            };
+            reprocessable: {
+                count: number;
+            };
+        };
+        EnrichQueueItem: {
+            feedItemId: components["schemas"]["Id"];
+            title: string;
+            sourceName: string;
+            priority: number;
+            /** @enum {string} */
+            reason: "new" | "reprocess";
+            /** @enum {string} */
+            status: "queued" | "processing" | "succeeded" | "failed";
+            attempt: number;
+            error?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
         };
         Tag: {
             id: components["schemas"]["Id"];
@@ -1417,6 +1507,122 @@ export interface operations {
             };
             /** @description Article is not archived yet */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getEnrichQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enrich queue status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichQueue"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    streamEnrichQueueEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enrich queue status snapshot stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    enrichReprocess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Number of enqueued articles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enqueued: number;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

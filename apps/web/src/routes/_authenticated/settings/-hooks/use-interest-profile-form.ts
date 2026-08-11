@@ -5,24 +5,16 @@ import { toast } from "@workspace/ui/components/sonner"
 import { settingsQueryOptions } from "@/features/settings"
 import { api } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
-import {
-  isSubmittable,
-  recomputeTargetCount,
-  toDraft,
-  type InterestProfileDraft,
-} from "../-model"
+import { isSubmittable, toDraft, type InterestProfileDraft } from "../-model"
 
 /**
  * 興味プロフィール(include/exclude)の編集フォーム。保存は即座に反映せず、
- * 「N件のスコアを再計算しますか」の確認ダイアログを一度挟む
- * （プロフィールを変えると既存のarticle_relevance行がprofile_hash不一致で
- * 「未処理」扱いになり、日次バッチ/オンデマンド再処理の対象が増えるため）。
+ * 確認ダイアログを一度挟む（プロフィールを変えても既存記事は自動再処理しない。
+ * 再処理は「AI処理」パネルの明示操作で行う）。
  */
 export function useInterestProfileForm() {
   const queryClient = useQueryClient()
   const { data: settings } = useSuspenseQuery(settingsQueryOptions)
-  // 再計算対象の目安として、絞り込み無しの全記事数を使う。
-  const totalQuery = api.useQuery("get", "/v1/me/articles/facets")
   const save = api.useMutation("patch", "/v1/me/settings")
   const initial = settings.interestProfile
   const [draft, setDraft] = useState<InterestProfileDraft>(() =>
@@ -67,7 +59,6 @@ export function useInterestProfileForm() {
     draft,
     pending,
     confirmOpen,
-    recomputeCount: recomputeTargetCount(totalQuery.data?.states.all),
     canSubmit: isSubmittable(draft) && !pending,
     update,
     requestSave,

@@ -118,6 +118,8 @@ function readerArgs(
     toggleReadLater: fn(),
     toggleHidden: fn(),
     markUnread: fn(),
+    recalculateAi: fn(),
+    isRecalculating: false,
     onBack: fn(),
     ...overrides,
   }

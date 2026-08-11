@@ -25,6 +25,7 @@ export type ArticleListProps = {
   readonly list: ReturnType<typeof useArticleList>
   readonly selectedArticleId: string | undefined
   readonly onSelect: (article: Article) => void
+  readonly onShowEnrichQueue: () => void
 }
 
 /** データ接続: 呼び出し元(route)が持つhook結果を、toolbarとviewへ渡すだけ。 */
@@ -32,6 +33,7 @@ export function ArticleList({
   list,
   selectedArticleId,
   onSelect,
+  onShowEnrichQueue,
 }: ArticleListProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -45,6 +47,7 @@ export function ArticleList({
         onMarkAllRead={list.markAllRead}
         onPeriodChange={list.setPeriod}
         onQChange={list.setQ}
+        onShowEnrichQueue={onShowEnrichQueue}
         onSortChange={list.setSort}
         onStateChange={list.setState}
         onTagIdsChange={list.setTagIds}

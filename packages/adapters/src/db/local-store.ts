@@ -11,6 +11,10 @@ import type {
 import type { JobStatus } from "@news-podcast/domain"
 import {
   computeProfileHash,
+  ENRICH_LEASE_MS,
+  MAX_ENRICH_ATTEMPTS,
+  NEW_ARTICLE_PRIORITY,
+  REPROCESS_PRIORITY,
   RELEVANCE_PROMPT_VERSION,
   SUMMARY_PROMPT_VERSION,
 } from "../ai-enrich/shared.js"
@@ -135,6 +139,52 @@ export interface ArticleFacets {
   // 一覧の隅に出す「AI処理待ちN件」用。絞り込み条件には依存しない
   // （購読全体に対するAI補助バッチの未処理件数）。
   readonly aiPending: number
+}
+
+export type EnrichQueueStatus =
+  | "queued"
+  | "processing"
+  | "succeeded"
+  | "failed"
+
+// enrich_queue の1行を記事タイトル等と結合した表示用DTO。
+export interface EnrichQueueItem {
+  readonly feedItemId: string
+  readonly title: string
+  readonly sourceName: string
+  readonly priority: number
+  readonly reason: "new" | "reprocess"
+  readonly status: EnrichQueueStatus
+  readonly attempt: number
+  readonly error?: string
+  readonly publishedAt?: string
+  readonly createdAt: string
+  readonly startedAt?: string
+  readonly completedAt?: string
+}
+
+// GET /v1/me/enrich/queue の応答。処理中/待ち/失敗/直近/日次上限/再処理可能件数。
+export interface EnrichQueueStatusDto {
+  readonly processing: readonly EnrichQueueItem[]
+  readonly pending: {
+    readonly count: number
+    readonly items: readonly EnrichQueueItem[]
+  }
+  readonly failed: {
+    readonly count: number
+    readonly items: readonly EnrichQueueItem[]
+  }
+  readonly recent: readonly EnrichQueueItem[]
+  readonly daily: { readonly used: number; readonly limit: number }
+  readonly reprocessable: { readonly count: number }
+}
+
+// workerがclaimしたバッチ1件分。ensureSummaryに必要な情報を持つ。
+export interface EnrichClaim {
+  readonly feedItemId: string
+  readonly title: string
+  readonly snapshotId: string
+  readonly markdownKey: string
 }
 
 export interface ArticleStateInput {
@@ -598,16 +648,11 @@ export class LocalStore implements EpisodeJobRepository {
   ): ArticleListResult {
     const limit = clampArticleLimit(options.limit)
     // sort=relevanceまたはminScore指定時のみ、順序付け/絞り込みにarticle_relevanceを
-    // 結合する（他の呼び出しでは無駄な結合を避ける）。
+    // 結合する（他の呼び出しでは無駄な結合を避ける）。スコアは最新のsucceeded行を
+    // 使う（profile_hash/prompt_versionは問わない）。
     const needsRelevanceJoin =
       (options.sort ?? "newest") === "relevance" ||
       options.minScore !== undefined
-    const profileHash = needsRelevanceJoin
-      ? computeProfileHash(
-          this.getInterestProfile(ownerId).include,
-          this.getInterestProfile(ownerId).exclude
-        )
-      : undefined
     const columns = articleSortColumns(options.sort ?? "newest")
     const filters = this.articleFilterPredicate(options)
     const minScoreFilter =
@@ -633,9 +678,7 @@ export class LocalStore implements EpisodeJobRepository {
     const params = [
       ownerId,
       ownerId,
-      ...(needsRelevanceJoin
-        ? [ownerId, profileHash as string, RELEVANCE_PROMPT_VERSION]
-        : []),
+      ...(needsRelevanceJoin ? [ownerId] : []),
       ...filters.params,
       ...(minScoreFilter ? minScoreFilter.params : []),
       ...(keyset ? keyset.params : []),
@@ -647,7 +690,6 @@ export class LocalStore implements EpisodeJobRepository {
       ? `${ARTICLE_FROM}
          LEFT JOIN article_relevance rel
            ON rel.feed_item_id = i.id AND rel.owner_id = ?
-              AND rel.profile_hash = ? AND rel.prompt_version = ?
               AND rel.status = 'succeeded'`
       : ARTICLE_FROM
     // sort=relevanceのkeysetカーソルはscore_missing/score列を必要とする
@@ -1409,73 +1451,294 @@ export class LocalStore implements EpisodeJobRepository {
       .map((row) => String((row as Record<string, unknown>).owner_id))
   }
 
-  // アーカイブ済みかつ、現行profile_hash/prompt_versionのarticle_relevance行を
-  // まだ持たない記事を新しい順にlimit件返す（=日次バッチの候補）。
-  listEnrichCandidates(
+  // --- AI補助キュー（enrich_queue）-------------------------------------
+  // 「1回処理済み」= 任意のprofile_hashでstatus='succeeded'のarticle_relevance行を持つ。
+  // 興味プロフィール編集・タグ追加では自動再処理せず、未処理記事のみをreconcileで
+  // 自動投入する。明示再処理はenqueueReprocess（priority=100）で後回しにされる。
+
+  // 毎tickの自己修復。期限切れprocessingをqueuedへ戻し、未処理記事をnewとして投入する。
+  reconcileEnrichQueue(now: Date = new Date()): void {
+    this.transaction(() => {
+      this.database
+        .prepare(
+          `UPDATE enrich_queue
+           SET status = 'queued', lease_token = NULL, lease_expires_at = NULL,
+               started_at = NULL
+           WHERE status = 'processing'
+             AND lease_expires_at IS NOT NULL AND lease_expires_at < ?`
+        )
+        .run(now.toISOString())
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO enrich_queue
+           (owner_id, feed_item_id, priority, reason, status, attempt,
+            published_at, created_at)
+           SELECT sub.owner_id, i.id, ?, 'new', 'queued', 0,
+                  COALESCE(i.published_at, i.discovered_at), ?
+           FROM feed_items i
+           JOIN feed_subscriptions sub
+             ON sub.feed_id = i.feed_id AND sub.enabled = 1
+           JOIN article_snapshots snap ON snap.id = i.latest_snapshot_id
+           WHERE i.archive_status = 'succeeded'
+             AND i.latest_snapshot_id IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM article_relevance r
+               WHERE r.owner_id = sub.owner_id AND r.feed_item_id = i.id
+                 AND r.status = 'succeeded'
+             )`
+        )
+        .run(NEW_ARTICLE_PRIORITY, now.toISOString())
+    })
+  }
+
+  // キューから未処理を優先度順・新着順にclaimする。BEGIN IMMEDIATEのトランザクション内で
+  // SELECT→UPDATEすることで、複数workerが同じ記事を二重処理しないことを保証する。
+  // 戻り値はSELECTの並び（優先度順・新着順）をそのまま保持する。
+  leaseEnrichBatch(
     ownerId: string,
-    profileHash: string,
-    limit: number
-  ): readonly {
-    readonly feedItemId: string
-    readonly title: string
-    readonly snapshotId: string
-    readonly markdownKey: string
-  }[] {
+    limit: number,
+    now: Date = new Date()
+  ): readonly EnrichClaim[] {
     if (limit <= 0) return []
-    return this.database
+    const leaseToken = randomUUID()
+    const expiresAt = new Date(now.getTime() + ENRICH_LEASE_MS).toISOString()
+    return this.transaction(() => {
+      const rows = this.database
+        .prepare(
+          `SELECT i.id AS feed_item_id, i.title AS title,
+                  snap.id AS snapshot_id, snap.markdown_key AS markdown_key
+           FROM enrich_queue q
+           JOIN feed_items i ON i.id = q.feed_item_id
+           JOIN article_snapshots snap ON snap.id = i.latest_snapshot_id
+           WHERE q.owner_id = ? AND q.status IN ('queued', 'failed')
+             AND q.attempt < ?
+           ORDER BY q.priority ASC, q.published_at DESC, q.created_at ASC
+           LIMIT ?`
+        )
+        .all(ownerId, MAX_ENRICH_ATTEMPTS, limit) as Record<string, unknown>[]
+      if (rows.length === 0) return []
+      const update = this.database.prepare(
+        `UPDATE enrich_queue
+         SET status = 'processing', lease_token = ?, lease_expires_at = ?,
+             started_at = ?
+         WHERE owner_id = ? AND feed_item_id = ?`
+      )
+      const claimed = rows.map((row) => {
+        update.run(
+          leaseToken,
+          expiresAt,
+          now.toISOString(),
+          ownerId,
+          String(row.feed_item_id)
+        )
+        return {
+          feedItemId: String(row.feed_item_id),
+          title: String(row.title),
+          snapshotId: String(row.snapshot_id),
+          markdownKey: String(row.markdown_key),
+        }
+      })
+      return claimed
+    })
+  }
+
+  // claim済みバッチの結果をキューへ反映する。succeededは終端、failedはattemptを
+  // 1つ増やして再試行対象に戻す（上限超過後は終端として残る）。
+  completeEnrichBatch(
+    ownerId: string,
+    input: {
+      readonly succeeded: readonly string[]
+      readonly failed: readonly { readonly feedItemId: string; readonly error: string }[]
+    },
+    now: Date = new Date()
+  ): void {
+    this.transaction(() => {
+      const succeed = this.database.prepare(
+        `UPDATE enrich_queue
+         SET status = 'succeeded', lease_token = NULL, lease_expires_at = NULL,
+             completed_at = ?, error = NULL
+         WHERE owner_id = ? AND feed_item_id = ?`
+      )
+      for (const feedItemId of input.succeeded) {
+        succeed.run(now.toISOString(), ownerId, feedItemId)
+      }
+      const fail = this.database.prepare(
+        `UPDATE enrich_queue
+         SET status = 'failed', attempt = attempt + 1,
+             lease_token = NULL, lease_expires_at = NULL,
+             completed_at = ?, error = ?
+         WHERE owner_id = ? AND feed_item_id = ?`
+      )
+      for (const item of input.failed) {
+        fail.run(now.toISOString(), item.error.slice(0, 500), ownerId, item.feedItemId)
+      }
+    })
+  }
+
+  // 処理済み（succeededなarticle_relevanceを持つ）記事を明示再処理として投入する。
+  // 設定・記事詳細からの明示要求専用。処理中の記事は対象外。
+  enqueueReprocess(ownerId: string, now: Date = new Date()): number {
+    const result = this.database
       .prepare(
-        `SELECT i.id AS feed_item_id, i.title AS title,
-                snap.id AS snapshot_id, snap.markdown_key AS markdown_key
+        `INSERT INTO enrich_queue
+         (owner_id, feed_item_id, priority, reason, status, attempt,
+          published_at, created_at)
+         SELECT sub.owner_id, i.id, ?, 'reprocess', 'queued', 0,
+                COALESCE(i.published_at, i.discovered_at), ?
          FROM feed_items i
          JOIN feed_subscriptions sub
            ON sub.feed_id = i.feed_id AND sub.owner_id = ? AND sub.enabled = 1
          JOIN article_snapshots snap ON snap.id = i.latest_snapshot_id
          WHERE i.archive_status = 'succeeded'
            AND i.latest_snapshot_id IS NOT NULL
-           AND NOT EXISTS (
+           AND EXISTS (
              SELECT 1 FROM article_relevance r
-             WHERE r.owner_id = ? AND r.feed_item_id = i.id
-               AND r.profile_hash = ? AND r.prompt_version = ?
+             WHERE r.owner_id = sub.owner_id AND r.feed_item_id = i.id
                AND r.status = 'succeeded'
            )
-         ORDER BY COALESCE(i.published_at, i.discovered_at) DESC, i.id
-         LIMIT ?`
+           AND NOT EXISTS (
+             SELECT 1 FROM enrich_queue q
+             WHERE q.owner_id = sub.owner_id AND q.feed_item_id = i.id
+               AND q.status = 'processing'
+           )
+         ON CONFLICT(owner_id, feed_item_id) DO UPDATE SET
+           status = 'queued', priority = excluded.priority,
+           reason = excluded.reason, attempt = 0,
+           lease_token = NULL, lease_expires_at = NULL,
+           started_at = NULL, completed_at = NULL, error = NULL,
+           created_at = excluded.created_at`
       )
-      .all(ownerId, ownerId, profileHash, RELEVANCE_PROMPT_VERSION, limit)
-      .map((row) => {
-        const value = row as Record<string, unknown>
-        return {
-          feedItemId: String(value.feed_item_id),
-          title: String(value.title),
-          snapshotId: String(value.snapshot_id),
-          markdownKey: String(value.markdown_key),
-        }
-      })
+      .run(REPROCESS_PRIORITY, now.toISOString(), ownerId)
+    return Number(result.changes ?? 0)
   }
 
-  // 一覧の隅に出す「AI処理待ちN件」用。listEnrichCandidatesと同じ対象条件のCOUNT。
+  // キュー状態（処理中/待ち/失敗/直近/日次上限/再処理可能件数）を返す。
+  // GET /v1/me/enrich/queue の応答。
+  listEnrichQueueStatus(
+    ownerId: string,
+    dailyLimit: number
+  ): EnrichQueueStatusDto {
+    const now = new Date()
+    const daily = {
+      used: this.getEnrichProcessedToday(toLocalDate(now)),
+      limit: dailyLimit,
+    }
+    const queueRow = (
+      row: Record<string, unknown>
+    ): EnrichQueueItem => ({
+      feedItemId: String(row.feed_item_id),
+      title: String(row.title),
+      sourceName: String(row.source_name ?? ""),
+      priority: Number(row.priority ?? 0),
+      reason: String(row.reason) as "new" | "reprocess",
+      status: String(row.status) as EnrichQueueStatus,
+      attempt: Number(row.attempt ?? 0),
+      ...(row.error ? { error: String(row.error) } : {}),
+      ...(row.published_at
+        ? { publishedAt: String(row.published_at) }
+        : {}),
+      createdAt: String(row.created_at),
+      ...(row.started_at ? { startedAt: String(row.started_at) } : {}),
+      ...(row.completed_at ? { completedAt: String(row.completed_at) } : {}),
+    })
+    const queueSelect = `SELECT q.feed_item_id AS feed_item_id, i.title AS title,
+            f.name AS source_name, q.priority AS priority, q.reason AS reason,
+            q.status AS status, q.attempt AS attempt, q.error AS error,
+            q.published_at AS published_at, q.created_at AS created_at,
+            q.started_at AS started_at, q.completed_at AS completed_at
+         FROM enrich_queue q
+         JOIN feed_items i ON i.id = q.feed_item_id
+         JOIN feed_catalog f ON f.id = i.feed_id
+         WHERE q.owner_id = ?`
+    const processing = (
+      this.database
+        .prepare(`${queueSelect} AND q.status = 'processing'
+         ORDER BY q.started_at ASC, q.created_at ASC LIMIT 50`)
+        .all(ownerId) as Record<string, unknown>[]
+    ).map(queueRow)
+    const pendingCount = Number(
+      (
+        this.database
+          .prepare(
+            `SELECT COUNT(*) AS c FROM enrich_queue
+             WHERE owner_id = ? AND status IN ('queued', 'processing', 'failed')
+               AND attempt < ?`
+          )
+          .get(ownerId, MAX_ENRICH_ATTEMPTS) as Record<string, unknown>
+      ).c ?? 0
+    )
+    const pendingItems = (
+      this.database
+        .prepare(`${queueSelect} AND q.status IN ('queued', 'failed')
+           AND q.attempt < ?
+         ORDER BY q.priority ASC, q.published_at DESC, q.created_at ASC LIMIT 50`)
+        .all(ownerId, MAX_ENRICH_ATTEMPTS) as Record<string, unknown>[]
+    ).map(queueRow)
+    const failedCount = Number(
+      (
+        this.database
+          .prepare(
+            `SELECT COUNT(*) AS c FROM enrich_queue
+             WHERE owner_id = ? AND status = 'failed' AND attempt >= ?`
+          )
+          .get(ownerId, MAX_ENRICH_ATTEMPTS) as Record<string, unknown>
+      ).c ?? 0
+    )
+    const failedItems = (
+      this.database
+        .prepare(`${queueSelect} AND q.status = 'failed' AND q.attempt >= ?
+         ORDER BY q.completed_at DESC LIMIT 50`)
+        .all(ownerId, MAX_ENRICH_ATTEMPTS) as Record<string, unknown>[]
+    ).map(queueRow)
+    const recent = (
+      this.database
+        .prepare(
+          `${queueSelect} AND q.completed_at IS NOT NULL
+         ORDER BY q.completed_at DESC LIMIT 20`
+        )
+        .all(ownerId) as Record<string, unknown>[]
+    ).map(queueRow)
+    const reprocessableCount = Number(
+      (
+        this.database
+          .prepare(
+            `SELECT COUNT(*) AS c
+             FROM feed_items i
+             JOIN feed_subscriptions sub
+               ON sub.feed_id = i.feed_id AND sub.owner_id = ? AND sub.enabled = 1
+             JOIN article_snapshots snap ON snap.id = i.latest_snapshot_id
+             WHERE i.archive_status = 'succeeded'
+               AND i.latest_snapshot_id IS NOT NULL
+               AND EXISTS (
+                 SELECT 1 FROM article_relevance r
+                 WHERE r.owner_id = sub.owner_id AND r.feed_item_id = i.id
+                   AND r.status = 'succeeded'
+               )`
+          )
+          .get(ownerId) as Record<string, unknown>
+      ).c ?? 0
+    )
+    return {
+      processing,
+      pending: { count: pendingCount, items: pendingItems },
+      failed: { count: failedCount, items: failedItems },
+      recent,
+      daily,
+      reprocessable: { count: reprocessableCount },
+    }
+  }
+
+  // 一覧の隅に出す「AI処理待ちN件」用。enrich_queueの未処理（queued/processing/再試行中failed）。
   countEnrichPending(ownerId: string): number {
-    const profile = this.getInterestProfile(ownerId)
-    const profileHash = computeProfileHash(profile.include, profile.exclude)
     const row = this.database
       .prepare(
         `SELECT COUNT(*) AS pending
-         FROM feed_items i
-         JOIN feed_subscriptions sub
-           ON sub.feed_id = i.feed_id AND sub.owner_id = ? AND sub.enabled = 1
-         WHERE i.archive_status = 'succeeded'
-           AND i.latest_snapshot_id IS NOT NULL
-           AND NOT EXISTS (
-             SELECT 1 FROM article_relevance r
-             WHERE r.owner_id = ? AND r.feed_item_id = i.id
-               AND r.profile_hash = ? AND r.prompt_version = ?
-               AND r.status = 'succeeded'
-           )`
+         FROM enrich_queue
+         WHERE owner_id = ?
+           AND status IN ('queued', 'processing', 'failed')
+           AND attempt < ?`
       )
-      .get(ownerId, ownerId, profileHash, RELEVANCE_PROMPT_VERSION) as Record<
-      string,
-      unknown
-    >
+      .get(ownerId, MAX_ENRICH_ATTEMPTS) as Record<string, unknown>
     return Number(row.pending ?? 0)
   }
 
@@ -1657,15 +1920,14 @@ export class LocalStore implements EpisodeJobRepository {
   }
 
   // listArticles/getArticleの結果にaiSummary/relevanceScore/relevanceReasonを付与する。
-  // 要約は所有者非依存（snapshot単位）、スコアは所有者の現行プロフィールハッシュに
-  // 一致する行のみを反映する（不一致・未処理は「スコア無し」のまま）。
+  // 要約は所有者非依存（snapshot単位）。スコアは所有者の最新（profile_hash/prompt_versionに
+  // 関わらず）のsucceeded行を反映する——プロフィール変更で自動再処理されなくなっても、
+  // 古いプロフィールでのスコアを表示し続けるため。
   private attachAiEnrichment(
     ownerId: string,
     rows: readonly ArticleDto[]
   ): readonly ArticleDto[] {
     if (rows.length === 0) return rows
-    const profile = this.getInterestProfile(ownerId)
-    const profileHash = computeProfileHash(profile.include, profile.exclude)
     const feedItemIds = rows.map((row) => row.id)
     const snapshotIds = [
       ...new Set(
@@ -1680,15 +1942,10 @@ export class LocalStore implements EpisodeJobRepository {
       ? (this.database
           .prepare(
             `SELECT feed_item_id, score, reason FROM article_relevance
-             WHERE owner_id = ? AND profile_hash = ? AND prompt_version = ?
-               AND status = 'succeeded' AND feed_item_id IN (${relevancePlaceholders})`
+             WHERE owner_id = ? AND status = 'succeeded'
+               AND feed_item_id IN (${relevancePlaceholders})`
           )
-          .all(
-            ownerId,
-            profileHash,
-            RELEVANCE_PROMPT_VERSION,
-            ...feedItemIds
-          ) as Record<string, unknown>[])
+          .all(ownerId, ...feedItemIds) as Record<string, unknown>[])
       : []
     const relevanceMap = new Map(
       relevanceRows.map((row) => [
@@ -2950,6 +3207,11 @@ function articleSortColumns(
 function clampArticleLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return 50
   return Math.min(100, Math.max(1, Math.trunc(limit)))
+}
+
+// 日次バッチの処理件数カウンタ(ai_enrich_daily_progress)のキー。workerと揃える。
+function toLocalDate(now: Date): string {
+  return now.toISOString().slice(0, 10)
 }
 
 function encodeArticleCursor(values: readonly string[]): string {

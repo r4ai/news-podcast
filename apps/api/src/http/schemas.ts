@@ -145,6 +145,45 @@ export const InterestProfileSchema = z
   })
   .openapi("InterestProfile")
 
+export const EnrichQueueItemSchema = z
+  .object({
+    feedItemId: IdSchema,
+    title: z.string(),
+    sourceName: z.string(),
+    priority: z.number().int().nonnegative(),
+    reason: z.enum(["new", "reprocess"]),
+    status: z.enum(["queued", "processing", "succeeded", "failed"]),
+    attempt: z.number().int().nonnegative(),
+    error: z.string().optional(),
+    publishedAt: z.iso.datetime().optional(),
+    createdAt: z.iso.datetime(),
+    startedAt: z.iso.datetime().optional(),
+    completedAt: z.iso.datetime().optional(),
+  })
+  .openapi("EnrichQueueItem")
+
+export const EnrichQueueSchema = z
+  .object({
+    processing: z.array(EnrichQueueItemSchema),
+    pending: z.object({
+      count: z.number().int().nonnegative(),
+      items: z.array(EnrichQueueItemSchema),
+    }),
+    failed: z.object({
+      count: z.number().int().nonnegative(),
+      items: z.array(EnrichQueueItemSchema),
+    }),
+    recent: z.array(EnrichQueueItemSchema),
+    daily: z.object({
+      used: z.number().int().nonnegative(),
+      limit: z.number().int().min(1),
+    }),
+    reprocessable: z.object({
+      count: z.number().int().nonnegative(),
+    }),
+  })
+  .openapi("EnrichQueue")
+
 export const SettingsSchema = z
   .object({
     generationSchedule: ScheduleSchema,

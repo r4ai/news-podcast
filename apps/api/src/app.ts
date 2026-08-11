@@ -12,6 +12,7 @@ import {
 } from "@news-podcast/observability"
 
 import type { JobDto, LocalStore } from "@news-podcast/adapters/db/local"
+import { DEFAULT_AI_ENRICH_DAILY_LIMIT } from "@news-podcast/adapters/ai-enrich/shared"
 import type { SqliteAgentRuntimeStore } from "@news-podcast/adapters/agent-runtime/sqlite"
 import type {
   AgentMemoryRecord,
@@ -28,6 +29,7 @@ import {
   ArticleFacetsSchema,
   ArticleSchema,
   BulkArticleStateResultSchema,
+  EnrichQueueSchema,
   FeedSchema,
   IdSchema,
   InterestProfileSchema,
@@ -112,6 +114,8 @@ export interface AppDependencies {
     ownerId: string,
     articleId: string
   ) => Promise<boolean>
+  // AI補助バッチの日次上限（キュー状態の表示用）。worker側の実効値と揃える。
+  readonly enrichDailyLimit?: number
 }
 
 const unavailable = () =>
@@ -121,6 +125,8 @@ const JOB_STREAM_POLL_MS = 500
 const JOB_STREAM_HEARTBEAT_MS = 15_000
 /** ジョブ自体の上限30分より長くしておき、正常終了を打ち切らないようにする。 */
 const JOB_STREAM_MAX_MS = 35 * 60_000
+/** キュー状態SSEの上限。常時接続は避け、切断・再接続で最新を取れるようにする。 */
+const ENRICH_STREAM_MAX_MS = 30 * 60_000
 const TERMINAL_JOB_STATUSES = new Set(["succeeded", "failed", "canceled"])
 
 function toJobStateSnapshot(job: JobDto): EpisodeJobState {
@@ -467,6 +473,49 @@ export function createApp(dependencies: AppDependencies = {}) {
     return refreshed
       ? context.json(articleResponse(refreshed), 200)
       : context.json(problem(404, "not-found", "Not found"), 404)
+  })
+  app.openapi(enrichQueueRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const status = dependencies.store.listEnrichQueueStatus(
+      ownerId,
+      dependencies.enrichDailyLimit ?? DEFAULT_AI_ENRICH_DAILY_LIMIT
+    )
+    return context.json(status, 200)
+  })
+  app.openapi(enrichQueueEventsRoute, (context) => {
+    const store = dependencies.store
+    if (!store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const dailyLimit =
+      dependencies.enrichDailyLimit ?? DEFAULT_AI_ENRICH_DAILY_LIMIT
+    return streamSSE(context, async (stream) => {
+      let aborted = false
+      stream.onAbort(() => {
+        aborted = true
+      })
+      let last = ""
+      let lastWriteAt = Date.now()
+      const startedAt = Date.now()
+      while (!aborted && Date.now() - startedAt < ENRICH_STREAM_MAX_MS) {
+        const status = store.listEnrichQueueStatus(ownerId, dailyLimit)
+        const snapshot = JSON.stringify({ type: "snapshot", data: status })
+        if (snapshot !== last) {
+          await stream.write(`event: snapshot\ndata: ${snapshot}\n\n`)
+          last = snapshot
+          lastWriteAt = Date.now()
+        } else if (Date.now() - lastWriteAt >= JOB_STREAM_HEARTBEAT_MS) {
+          await stream.write(": heartbeat\n\n")
+        }
+        await stream.sleep(JOB_STREAM_POLL_MS)
+      }
+    })
+  })
+  app.openapi(enrichReprocessRoute, (context) => {
+    if (!dependencies.store) return context.json(unavailable(), 503)
+    const ownerId = context.get("ownerId")
+    const enqueued = dependencies.store.enqueueReprocess(ownerId)
+    return context.json({ enqueued }, 200)
   })
   app.openapi(articleAssetRoute, (context) =>
     dependencies.serveArticleAsset
@@ -1037,6 +1086,10 @@ export const documentConfig = {
     },
     { name: "Settings", description: "Owner-scoped generation schedule" },
     { name: "Episode jobs", description: "Asynchronous generation jobs" },
+    {
+      name: "AI enrichment",
+      description: "AI article enrichment queue and on-demand recompute",
+    },
     { name: "Agent runtime", description: "Agent runs and safe timeline" },
     { name: "Agent memory", description: "Owner-scoped durable Agent memory" },
     { name: "Episodes", description: "Completed episodes and audio access" },
@@ -1373,6 +1426,56 @@ const enrichArticleRoute = createRoute({
     401: problemContent("Unauthorized"),
     404: problemContent("Not found"),
     409: problemContent("Article is not archived yet"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const enrichQueueRoute = createRoute({
+  method: "get",
+  path: "/v1/me/enrich/queue",
+  tags: ["AI enrichment"],
+  operationId: "getEnrichQueue",
+  description:
+    "Return the AI enrichment queue status: processing, pending, failed, recent, and the daily budget.",
+  responses: {
+    200: jsonContent(EnrichQueueSchema, "Enrich queue status"),
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const enrichQueueEventsRoute = createRoute({
+  method: "get",
+  path: "/v1/me/enrich/queue/events",
+  tags: ["AI enrichment"],
+  operationId: "streamEnrichQueueEvents",
+  description:
+    "Stream the AI enrichment queue status as snapshots over SSE while it changes.",
+  responses: {
+    200: {
+      description: "Enrich queue status snapshot stream",
+      content: {
+        "text/event-stream": { schema: z.string() },
+      },
+    },
+    401: problemContent("Unauthorized"),
+    503: problemContent("Unavailable"),
+  },
+})
+
+const enrichReprocessRoute = createRoute({
+  method: "post",
+  path: "/v1/me/enrich/reprocess",
+  tags: ["AI enrichment"],
+  operationId: "enrichReprocess",
+  description:
+    "Explicitly enqueue all already-processed articles for AI enrichment again.",
+  responses: {
+    200: jsonContent(
+      z.object({ enqueued: z.number().int().nonnegative() }),
+      "Number of enqueued articles"
+    ),
+    401: problemContent("Unauthorized"),
     503: problemContent("Unavailable"),
   },
 })

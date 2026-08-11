@@ -18,10 +18,3 @@ export function isSubmittable(draft: InterestProfileDraft): boolean {
     draft.exclude.length <= INTEREST_PROFILE_MAX_LENGTH
   )
 }
-
-/** 保存前に「N件のスコアを再計算しますか」で見せる対象件数。全記事数をそのまま使う。 */
-export function recomputeTargetCount(
-  totalArticles: number | undefined
-): number {
-  return totalArticles ?? 0
-}

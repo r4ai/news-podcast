@@ -38,6 +38,10 @@
       "description": "Asynchronous generation jobs"
     },
     {
+      "name": "AI enrichment",
+      "description": "AI article enrichment queue and on-demand recompute"
+    },
+    {
       "name": "Agent runtime",
       "description": "Agent runs and safe timeline"
     },
@@ -317,6 +321,165 @@
         },
         "required": [
           "updated"
+        ]
+      },
+      "EnrichQueue": {
+        "type": "object",
+        "properties": {
+          "processing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnrichQueueItem"
+            }
+          },
+          "pending": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/EnrichQueueItem"
+                }
+              }
+            },
+            "required": [
+              "count",
+              "items"
+            ]
+          },
+          "failed": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/EnrichQueueItem"
+                }
+              }
+            },
+            "required": [
+              "count",
+              "items"
+            ]
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnrichQueueItem"
+            }
+          },
+          "daily": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "used",
+              "limit"
+            ]
+          },
+          "reprocessable": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "count"
+            ]
+          }
+        },
+        "required": [
+          "processing",
+          "pending",
+          "failed",
+          "recent",
+          "daily",
+          "reprocessable"
+        ]
+      },
+      "EnrichQueueItem": {
+        "type": "object",
+        "properties": {
+          "feedItemId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "title": {
+            "type": "string"
+          },
+          "sourceName": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "new",
+              "reprocess"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "processing",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "feedItemId",
+          "title",
+          "sourceName",
+          "priority",
+          "reason",
+          "status",
+          "attempt",
+          "createdAt"
         ]
       },
       "Tag": {
@@ -1847,6 +2010,138 @@
           },
           "409": {
             "description": "Article is not archived yet",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/enrich/queue": {
+      "get": {
+        "tags": [
+          "AI enrichment"
+        ],
+        "operationId": "getEnrichQueue",
+        "description": "Return the AI enrichment queue status: processing, pending, failed, recent, and the daily budget.",
+        "responses": {
+          "200": {
+            "description": "Enrich queue status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichQueue"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/enrich/queue/events": {
+      "get": {
+        "tags": [
+          "AI enrichment"
+        ],
+        "operationId": "streamEnrichQueueEvents",
+        "description": "Stream the AI enrichment queue status as snapshots over SSE while it changes.",
+        "responses": {
+          "200": {
+            "description": "Enrich queue status snapshot stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/enrich/reprocess": {
+      "post": {
+        "tags": [
+          "AI enrichment"
+        ],
+        "operationId": "enrichReprocess",
+        "description": "Explicitly enqueue all already-processed articles for AI enrichment again.",
+        "responses": {
+          "200": {
+            "description": "Number of enqueued articles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enqueued": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "enqueued"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
             "content": {
               "application/problem+json": {
                 "schema": {

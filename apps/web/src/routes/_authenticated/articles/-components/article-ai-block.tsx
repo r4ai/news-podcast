@@ -1,17 +1,25 @@
-import { Sparkles } from "lucide-react"
+import { RefreshCw, Sparkles } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import { Progress } from "@workspace/ui/components/progress"
 import { toast } from "@workspace/ui/components/sonner"
+import { Spinner } from "@workspace/ui/components/spinner"
 
 import { hasAiEnrichment, type Article } from "../-model"
 
 export type ArticleAiBlockProps = {
   readonly article: Article
+  /** 明示的なAI再計算（POST /enrich）。処理済み記事の再スコアリング。 */
+  readonly onRecalculate: () => void
+  readonly isRecalculating: boolean
 }
 
 /** 要約3点 + 理由 + 適合度。未処理の記事(フィールドが無い)では何も出さない。 */
-export function ArticleAiBlock({ article }: ArticleAiBlockProps) {
+export function ArticleAiBlock({
+  article,
+  onRecalculate,
+  isRecalculating,
+}: ArticleAiBlockProps) {
   if (!hasAiEnrichment(article)) return null
 
   return (
@@ -50,16 +58,32 @@ export function ArticleAiBlock({ article }: ArticleAiBlockProps) {
         </p>
       ) : null}
 
-      <Button
-        className="self-start px-0 text-xs"
-        onClick={() =>
-          toast.info("興味プロフィールの調整はまもなく利用できます")
-        }
-        size="sm"
-        variant="link"
-      >
-        興味プロフィールを調整
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button
+          className="self-start px-0 text-xs"
+          disabled={isRecalculating}
+          onClick={onRecalculate}
+          size="sm"
+          variant="link"
+        >
+          {isRecalculating ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <RefreshCw data-icon="inline-start" />
+          )}
+          {isRecalculating ? "再計算中…" : "AIで再計算"}
+        </Button>
+        <Button
+          className="self-start px-0 text-xs"
+          onClick={() =>
+            toast.info("興味プロフィールの調整はまもなく利用できます")
+          }
+          size="sm"
+          variant="link"
+        >
+          興味プロフィールを調整
+        </Button>
+      </div>
     </div>
   )
 }

@@ -39,7 +39,6 @@ export type InterestProfileFormViewProps = {
   readonly draft: InterestProfileDraft
   readonly pending: boolean
   readonly confirmOpen: boolean
-  readonly recomputeCount: number
   readonly canSubmit: boolean
   readonly update: (patch: Partial<InterestProfileDraft>) => void
   readonly requestSave: () => void
@@ -51,7 +50,6 @@ export function InterestProfileFormView({
   draft,
   pending,
   confirmOpen,
-  recomputeCount,
   canSubmit,
   update,
   requestSave,
@@ -117,10 +115,11 @@ export function InterestProfileFormView({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>スコアを再計算しますか</AlertDialogTitle>
+            <AlertDialogTitle>保存しますか</AlertDialogTitle>
             <AlertDialogDescription>
-              興味プロフィールを変更すると、既存の適合度スコアとAIタグは古いものとして扱われ、
-              最大{recomputeCount}件の記事が次回のAI補助バッチで再計算されます。
+              興味プロフィールを変更しても、既に処理済みの記事は自動では
+              再計算されません。最新のスコアとタグで再計算する場合は、
+              下の「AI処理」から「全記事を再処理」を明示的に実行してください。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -128,7 +127,7 @@ export function InterestProfileFormView({
               キャンセル
             </AlertDialogCancel>
             <AlertDialogAction onClick={confirmSave}>
-              保存して再計算する
+              保存
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

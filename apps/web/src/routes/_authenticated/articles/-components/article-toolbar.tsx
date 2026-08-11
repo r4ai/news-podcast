@@ -43,6 +43,8 @@ export type ArticleToolbarProps = Omit<
   readonly isMarkingAllRead: boolean
   /** 絞り込み条件に依存しない、購読全体のAI補助バッチ未処理件数。0または未取得なら出さない。 */
   readonly aiPending: number | undefined
+  /** AI処理キュー状態ダイアログを開く。 */
+  readonly onShowEnrichQueue: () => void
 }
 
 function tabCount(facets: ArticleFacets | undefined, state: ArticleState) {
@@ -61,6 +63,7 @@ export function ArticleToolbar({
   onSortChange,
   onMarkAllRead,
   onTagIdsChange,
+  onShowEnrichQueue,
   isMarkingAllRead,
   ...filterProps
 }: ArticleToolbarProps) {
@@ -89,10 +92,15 @@ export function ArticleToolbar({
 
         <div className="flex items-center gap-2">
           {aiPending ? (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <button
+              aria-label="AI処理のキュー状態を開く"
+              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              onClick={onShowEnrichQueue}
+              type="button"
+            >
               <Loader2 aria-hidden="true" className="size-3 animate-spin" />
               AI処理待ち {aiPending}件
-            </span>
+            </button>
           ) : null}
           <Button
             disabled={isMarkingAllRead}
