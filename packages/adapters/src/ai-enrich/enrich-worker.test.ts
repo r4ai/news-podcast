@@ -81,13 +81,18 @@ function fakeObjects(): ObjectStore {
   }
 }
 
-function fakeSummarizer(tokensIn = 100, tokensOut = 30): ArticleSummarizer {
+function fakeSummarizer(
+  tokensIn = 100,
+  tokensOut = 30,
+  warnings: readonly "invalid-mermaid-removed"[] = []
+): ArticleSummarizer {
   return {
     summarize: () =>
       Promise.resolve({
         markdown: "## 結論\n要点。",
         tokensIn,
         tokensOut,
+        ...(warnings.length > 0 ? { warnings } : {}),
       }),
   }
 }
@@ -296,6 +301,31 @@ describe("AiEnrichWorker.runOnce", () => {
         (event) => event.type === "relevance_failed" && event.rateLimited
       )
     ).toBe(true)
+  })
+
+  it("reports a summary that succeeded after removing invalid Mermaid", async () => {
+    const store = openStore()
+    const owner = "owner-summary-degraded"
+    seedArchivedArticle(store, owner, "degraded-1")
+    const events: AiEnrichEvent[] = []
+    const worker = new AiEnrichWorker(
+      store,
+      fakeObjects(),
+      fakeSummarizer(100, 30, ["invalid-mermaid-removed"]),
+      fakeScorer([]),
+      "gpt-5.6-luna",
+      undefined,
+      (event) => events.push(event)
+    )
+
+    await worker.runOnce()
+
+    expect(events).toContainEqual({
+      type: "summary_succeeded",
+      tokensIn: 100,
+      tokensOut: 30,
+      warnings: ["invalid-mermaid-removed"],
+    })
   })
 
   it("retries a failed item on the next run and succeeds once the provider recovers", async () => {

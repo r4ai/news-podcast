@@ -99,7 +99,7 @@ describe("OpenAiArticleSummarizer", () => {
     expect(repairBody.input[0].content).toContain("Mermaid")
   })
 
-  it("stops after one Mermaid repair attempt", async () => {
+  it("removes invalid Mermaid after one repair attempt and keeps the summary text", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockImplementation(() =>
@@ -117,7 +117,12 @@ describe("OpenAiArticleSummarizer", () => {
 
     await expect(
       summarizer.summarize({ title: "タイトル", markdown: "本文" })
-    ).rejects.toThrow("Mermaid")
+    ).resolves.toEqual({
+      markdown: "処理の流れ",
+      tokensIn: 240,
+      tokensOut: 80,
+      warnings: ["invalid-mermaid-removed"],
+    })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 

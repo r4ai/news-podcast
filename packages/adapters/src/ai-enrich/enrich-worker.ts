@@ -32,6 +32,7 @@ export type AiEnrichEvent =
       readonly type: "summary_succeeded"
       readonly tokensIn: number
       readonly tokensOut: number
+      readonly warnings: readonly "invalid-mermaid-removed"[]
     }
   | {
       readonly type: "summary_failed"
@@ -192,6 +193,7 @@ export class AiEnrichWorker {
         type: "summary_succeeded",
         tokensIn: result.tokensIn,
         tokensOut: result.tokensOut,
+        warnings: result.warnings ?? [],
       })
       return result.markdown
     } catch (error) {

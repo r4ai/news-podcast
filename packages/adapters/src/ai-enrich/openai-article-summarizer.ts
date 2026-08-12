@@ -82,14 +82,26 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
       tokensIn += result.tokensIn
       tokensOut += result.tokensOut
       const summary = flattenSummaryHeadings(result.summary)
-      if (await hasValidMermaid(summary)) {
+      const inspected = await inspectMermaid(summary)
+      if (inspected.valid) {
         return { markdown: summary, tokensIn, tokensOut }
+      }
+      if (
+        attempt === MAX_SUMMARY_ATTEMPTS - 1 &&
+        inspected.markdownWithoutInvalid.length > 0
+      ) {
+        return {
+          markdown: inspected.markdownWithoutInvalid,
+          tokensIn,
+          tokensOut,
+          warnings: ["invalid-mermaid-removed"],
+        }
       }
       invalidSummary = summary
     }
 
     throw new ArticleSummaryError(
-      "OpenAI response contained invalid Mermaid after one repair attempt",
+      "OpenAI response contained no usable summary after Mermaid removal",
       false
     )
   }
@@ -203,19 +215,47 @@ export function flattenSummaryHeadings(summary: string): string {
     .replace(/^\n+|\n+$/g, "")
 }
 
-async function hasValidMermaid(summary: string): Promise<boolean> {
-  const diagrams = [...summary.matchAll(/```mermaid\s*\n([\s\S]*?)```/gi)]
+async function inspectMermaid(summary: string): Promise<{
+  readonly valid: boolean
+  readonly markdownWithoutInvalid: string
+}> {
+  const starts = [...summary.matchAll(/```mermaid\b/gi)]
+  const diagrams = [
+    ...summary.matchAll(/```mermaid[^\S\r\n]*\r?\n([\s\S]*?)```/gi),
+  ]
+  let valid = starts.length === diagrams.length
+  let cursor = 0
+  let markdownWithoutInvalid = ""
   for (const diagram of diagrams) {
     const source = diagram[1]?.trim()
-    if (!source) return false
+    let diagramValid = Boolean(source)
     try {
-      const result = await mermaid.parse(source, { suppressErrors: true })
-      if (!result) return false
+      diagramValid = Boolean(
+        source && (await mermaid.parse(source, { suppressErrors: true }))
+      )
     } catch {
-      return false
+      diagramValid = false
     }
+    valid &&= diagramValid
+    const index = diagram.index ?? cursor
+    markdownWithoutInvalid += summary.slice(cursor, index)
+    if (diagramValid) markdownWithoutInvalid += diagram[0]
+    cursor = index + diagram[0].length
   }
-  return true
+  markdownWithoutInvalid += summary.slice(cursor)
+  if (starts.length > diagrams.length) {
+    valid = false
+    markdownWithoutInvalid = markdownWithoutInvalid.replace(
+      /```mermaid\b[\s\S]*$/i,
+      ""
+    )
+  }
+  return {
+    valid,
+    markdownWithoutInvalid: markdownWithoutInvalid
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+  }
 }
 
 function boundedSignal(parent?: AbortSignal): AbortSignal {

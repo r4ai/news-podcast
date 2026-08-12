@@ -287,6 +287,8 @@ export interface ArticleSummaryInput {
 export interface ArticleSummaryResult extends ProviderUsage {
   // 日本語のMarkdown要約（約300字。結論→図・具体例・結果の順）。
   readonly markdown: string
+  /** 本文を保持したまま任意要素を安全に縮退した場合の低cardinality通知。 */
+  readonly warnings?: readonly "invalid-mermaid-removed"[]
 }
 
 export interface ArticleSummarizer {
