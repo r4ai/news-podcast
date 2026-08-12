@@ -10,6 +10,13 @@ const MAX_SCRIPT_CHARACTERS = 20_000
 const MAX_TERMS = 30
 const KATAKANA_READING = /^[ァ-ヶー・＝＆＋A-Z0-9\s]+$/
 
+export class ReadingTermExtractionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "ReadingTermExtractionError"
+  }
+}
+
 /** 壊れやすい自由JSONを避け、Responses APIの構造化出力から読み候補を抽出する。 */
 export async function extractReadingTerms(
   script: string,
@@ -68,8 +75,12 @@ export async function extractReadingTerms(
     }),
   })
 
-  if (!response.ok) return []
-  const body = (await response.json()) as {
+  if (!response.ok) {
+    throw new ReadingTermExtractionError(
+      `OpenAI request failed with ${response.status}`
+    )
+  }
+  let body: {
     readonly output?: readonly {
       readonly content?: readonly {
         readonly type?: unknown
@@ -77,25 +88,46 @@ export async function extractReadingTerms(
       }[]
     }[]
   }
+  try {
+    body = (await response.json()) as typeof body
+  } catch {
+    throw new ReadingTermExtractionError(
+      "OpenAI response body was not valid JSON"
+    )
+  }
   const outputText = body.output
     ?.flatMap((output) => output.content ?? [])
     .find((content) => content.type === "output_text")?.text
-  if (typeof outputText !== "string") return []
+  if (typeof outputText !== "string") {
+    throw new ReadingTermExtractionError(
+      "OpenAI response did not contain output_text"
+    )
+  }
 
-  return parseReadingTerms(outputText)
+  return parseReadingTerms(outputText, script)
 }
 
-function parseReadingTerms(outputText: string): readonly ReadingTerm[] {
+function parseReadingTerms(
+  outputText: string,
+  script: string
+): readonly ReadingTerm[] {
   let terms: unknown
   try {
     const payload = JSON.parse(outputText) as { readonly terms?: unknown }
     terms = payload.terms
   } catch {
-    return []
+    throw new ReadingTermExtractionError(
+      "OpenAI response was not valid JSON"
+    )
   }
-  if (!Array.isArray(terms)) return []
+  if (!Array.isArray(terms)) {
+    throw new ReadingTermExtractionError(
+      "OpenAI response did not match the reading terms schema"
+    )
+  }
 
   const seen = new Set<string>()
+  const normalizedScript = script.normalize("NFKC").toLocaleLowerCase("ja")
   const result: ReadingTerm[] = []
   for (const value of terms.slice(0, MAX_TERMS)) {
     if (!isRecord(value)) continue
@@ -112,6 +144,7 @@ function parseReadingTerms(outputText: string): readonly ReadingTerm[] {
       !Number.isInteger(accentType) ||
       (accentType as number) < 0 ||
       (accentType as number) > 100 ||
+      !normalizedScript.includes(key) ||
       seen.has(key)
     ) {
       continue

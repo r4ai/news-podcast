@@ -79,12 +79,17 @@ describe("extractReadingTerms", () => {
         { surface: "empty", reading: "", accent_type: 0 },
         { surface: "english", reading: "english", accent_type: 0 },
         { surface: "invalid", reading: "123", accent_type: -1 },
+        {
+          surface: "台本にない製品",
+          reading: "ダイホンニナイセイヒン",
+          accent_type: 4,
+        },
       ])
     )
 
     await expect(
       extractReadingTerms(
-        "台本",
+        "GPT-5を扱う台本",
         { apiKey: "test-key", model: "gpt-5.6-luna" },
         new AbortController().signal,
         fetcher
@@ -96,5 +101,38 @@ describe("extractReadingTerms", () => {
         accentType: 6,
       },
     ])
+  })
+
+  it.each([
+    {
+      name: "a provider error",
+      response: new Response(null, { status: 503 }),
+      message: "OpenAI request failed with 503",
+    },
+    {
+      name: "an empty output",
+      response: Response.json({ status: "completed", output: [] }),
+      message: "OpenAI response did not contain output_text",
+    },
+    {
+      name: "malformed structured output",
+      response: Response.json({
+        output: [
+          { content: [{ type: "output_text", text: "not-json" }] },
+        ],
+      }),
+      message: "OpenAI response was not valid JSON",
+    },
+  ])("reports $name instead of silently succeeding", async ({ response, message }) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+
+    await expect(
+      extractReadingTerms(
+        "台本",
+        { apiKey: "test-key", model: "gpt-5.6-luna" },
+        new AbortController().signal,
+        fetcher
+      )
+    ).rejects.toThrow(message)
   })
 })
