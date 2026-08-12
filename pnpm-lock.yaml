@@ -80,9 +80,15 @@ importers:
 
   apps/gateway:
     dependencies:
+      '@nats-io/transport-node':
+        specifier: 3.4.0
+        version: 3.4.0
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@news-podcast/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@news-podcast/protocols':
         specifier: workspace:*
         version: link:../../packages/protocols
@@ -684,9 +690,18 @@ importers:
 
   services/episode-production:
     dependencies:
+      '@nats-io/transport-node':
+        specifier: 3.4.0
+        version: 3.4.0
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@news-podcast/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@news-podcast/protocols':
+        specifier: workspace:*
+        version: link:../../packages/protocols
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
