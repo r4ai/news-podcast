@@ -340,4 +340,31 @@ describe("OpenAiRelevanceScorer", () => {
     ).resolves.toMatchObject({ scores: [{ feedItemId: "a" }, { feedItemId: "b" }] })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
+
+  it("does not retry a refusal", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        output: [
+          { content: [{ type: "refusal", refusal: "cannot comply" }] },
+        ],
+      })
+    )
+    const scorer = new OpenAiRelevanceScorer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    const error = await scorer
+      .score({
+        profile: { include: "AI", exclude: "" },
+        candidates,
+        tagVocabulary: [],
+      })
+      .catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(RelevanceScoreError)
+    expect(error).toMatchObject({ retryable: false })
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
 })

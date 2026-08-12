@@ -10,6 +10,7 @@ import type {
 import type { OpenAiConfig } from "../config.js"
 import {
   createPortableStructuredResponseRequest,
+  hasOpenAiRefusal,
   isRetryableOpenAiStatus,
   readOpenAiErrorMessage,
 } from "./openai-responses.js"
@@ -203,6 +204,9 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
       ?.flatMap((item) => item.content ?? [])
       .find((item) => item.type === "output_text")?.text
     if (typeof outputText !== "string") {
+      if (hasOpenAiRefusal(providerResponse.output)) {
+        throw new ArticleSummaryError("OpenAI refused summary output", false)
+      }
       throw new ArticleSummaryError(
         "OpenAI response did not contain output_text"
       )

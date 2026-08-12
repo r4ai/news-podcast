@@ -233,4 +233,27 @@ describe("OpenAiArticleSummarizer", () => {
     ).resolves.toMatchObject({ markdown: "回復後の要約" })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
+
+  it("does not retry a refusal", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        output: [
+          { content: [{ type: "refusal", refusal: "cannot comply" }] },
+        ],
+      })
+    )
+    const summarizer = new OpenAiArticleSummarizer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    const error = await summarizer
+      .summarize({ title: "t", markdown: "m" })
+      .catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(ArticleSummaryError)
+    expect(error).toMatchObject({ retryable: false })
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
 })
