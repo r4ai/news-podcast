@@ -6,6 +6,9 @@ import {
   createSqliteArticleCatalog,
   createSqliteArticleLibrary,
   createSqliteArchiveStore,
+  createSqliteContentTaxonomy,
+  createSqliteEnrichmentQueue,
+  createSqliteInterestProfileRepository,
   createSqliteSubscriptionRepository,
   OutboxBatchSizeSchema,
   parseOutboxLimit,
@@ -18,6 +21,13 @@ import {
 } from "../adapters/index.js"
 import type { ArticleCatalog } from "../application/article-catalog-ports.js"
 import type { ArticleLibraryRepository } from "../application/article-library.js"
+import {
+  createEnrichmentOperations,
+  type EnrichmentProvider,
+  type EnrichmentSource,
+} from "../application/enrichment.js"
+import { createContentTaxonomy } from "../application/content-taxonomy.js"
+import { createInterestProfileOperations } from "../application/interest-profile.js"
 import type { SubscriptionRepository } from "../application/subscription-ports.js"
 import {
   openHttpS3ArticleCaptureUnsafe,
@@ -28,7 +38,9 @@ import { openS3MarkdownObjectReaderUnsafe } from "../infrastructure/unsafe/s3-ma
 import type { CapturedAt } from "../domain/article.js"
 import {
   currentCapturedAtUnsafe,
+  randomEnrichmentLeaseTokenUnsafe,
   randomMessageIdUnsafe,
+  randomTagIdUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import {
   connectJetStreamUnsafe,
@@ -45,6 +57,11 @@ import {
   runOutboxRelayLoop,
   type OutboxRelayLoopRuntime,
 } from "./outbox-relay-loop.js"
+import {
+  makeEnrichmentSource,
+  unavailableEnrichmentProvider,
+} from "./enrichment-runtime.js"
+import { runEnrichmentWorkerLoop } from "./enrichment-worker-loop.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -72,6 +89,10 @@ const PositiveBytesSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(10 * 1_024 * 1_024)
 )
+const DailyLimitSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(10_000)
+)
 const S3TextSchema = Schema.NonEmptyString.check(Schema.isMaxLength(1_024))
 export const NodeServiceConfigSchema = Schema.Struct({
   sqlitePath: SqlitePathSchema,
@@ -94,6 +115,14 @@ export const NodeServiceConfigSchema = Schema.Struct({
       timeoutMillis: RelayDelaySchema,
       maximumBytes: PositiveBytesSchema,
     }),
+    loop: Schema.Struct({
+      intervalMillis: RelayDelaySchema,
+      initialBackoffMillis: RelayDelaySchema,
+      maximumBackoffMillis: RelayDelaySchema,
+    }),
+  }),
+  enrichment: Schema.Struct({
+    dailyLimit: DailyLimitSchema,
     loop: Schema.Struct({
       intervalMillis: RelayDelaySchema,
       initialBackoffMillis: RelayDelaySchema,
@@ -131,7 +160,9 @@ export const parseNodeServiceConfig = (input: unknown) =>
         config.relay.initialBackoffMillis <=
           config.relay.maximumBackoffMillis &&
         config.feedPoller.loop.initialBackoffMillis <=
-          config.feedPoller.loop.maximumBackoffMillis,
+          config.feedPoller.loop.maximumBackoffMillis &&
+        config.enrichment.loop.initialBackoffMillis <=
+          config.enrichment.loop.maximumBackoffMillis,
       () => deepFreeze({ _tag: "InvalidBackoffRange" as const })
     )
   )
@@ -146,6 +177,13 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
   readonly articles: ArticleCatalog
   readonly library: ArticleLibraryRepository
   readonly subscriptions: SubscriptionRepository
+  readonly taxonomy: ReturnType<typeof createContentTaxonomy>
+  readonly interestProfiles: ReturnType<typeof createInterestProfileOperations>
+  readonly createEnrichment: (input: {
+    readonly source: EnrichmentSource
+    readonly provider: EnrichmentProvider
+    readonly dailyLimit: number
+  }) => ReturnType<typeof createEnrichmentOperations>
   readonly relayOnce: (
     input: unknown
   ) => Effect.Effect<
@@ -162,6 +200,8 @@ export type NodeRuntimeDependencies = DeepReadonly<{
   ) => Promise<UnsafeJetStream>
   readonly newMessageId: typeof randomMessageIdUnsafe
   readonly now: () => CapturedAt
+  readonly newTagId: typeof randomTagIdUnsafe
+  readonly newEnrichmentLeaseToken: typeof randomEnrichmentLeaseTokenUnsafe
 }>
 
 export type NodeServiceDependencies = Readonly<{
@@ -175,6 +215,8 @@ export type NodeServiceDependencies = Readonly<{
   readonly openMarkdownReader: typeof openS3MarkdownObjectReaderUnsafe
   readonly runRpc: typeof runNatsContentKnowledgeRpc
   readonly runPoller: typeof runContentFeedPoller
+  readonly enrichmentProvider: EnrichmentProvider
+  readonly runEnrichment: typeof runEnrichmentWorkerLoop
   readonly onReady?: () => void
 }>
 
@@ -183,6 +225,8 @@ const defaultDependencies: NodeRuntimeDependencies = deepFreeze({
   connectJetStream: connectJetStreamUnsafe,
   newMessageId: randomMessageIdUnsafe,
   now: currentCapturedAtUnsafe,
+  newTagId: randomTagIdUnsafe,
+  newEnrichmentLeaseToken: randomEnrichmentLeaseTokenUnsafe,
 })
 const jsonInterop = deepFreeze({
   parse: parseJsonUnsafe,
@@ -225,53 +269,94 @@ export const startNodeRuntime = (
                 createSqliteArticleCatalog(database, jsonInterop),
                 createSqliteArticleLibrary(database),
                 createSqliteSubscriptionRepository(database),
+                createSqliteContentTaxonomy(database),
+                createSqliteEnrichmentQueue(database),
+                createSqliteInterestProfileRepository(
+                  database,
+                  dependencies.now
+                ),
               ]).pipe(
                 Effect.mapError(() => runtimeError("Sqlite")),
-                Effect.flatMap(([articles, library, subscriptions]) =>
-                  Effect.tryPromise({
-                    try: () =>
-                      dependencies.connectJetStream(config.natsServers),
-                    catch: () => runtimeError("Nats"),
-                  }).pipe(
-                    Effect.map((jetStream) => {
-                      const publisher = createJetStreamPublisher(jetStream)
-                      const relay = relayOutbox({
-                        store,
-                        publisher,
-                        now: dependencies.now,
-                      })
-                      const relayOnce = (batchSize: unknown) =>
-                        parseOutboxLimit(batchSize).pipe(
-                          Effect.mapError(() => runtimeError("Outbox")),
-                          Effect.flatMap(relay)
-                        )
-                      const close = () =>
-                        Effect.tryPromise({
-                          try: () => jetStream.close(),
-                          catch: () => runtimeError("Nats"),
-                        }).pipe(
-                          Effect.matchEffect({
-                            onFailure: (natsError) =>
-                              closeSqlite(database).pipe(
-                                Effect.matchEffect({
-                                  onFailure: () => Effect.fail(natsError),
-                                  onSuccess: () => Effect.fail(natsError),
-                                })
-                              ),
-                            onSuccess: () => closeSqlite(database),
+                Effect.flatMap(
+                  ([
+                    articles,
+                    library,
+                    subscriptions,
+                    taxonomyRepository,
+                    enrichmentQueue,
+                    interestProfileRepository,
+                  ]) =>
+                    Effect.tryPromise({
+                      try: () =>
+                        dependencies.connectJetStream(config.natsServers),
+                      catch: () => runtimeError("Nats"),
+                    }).pipe(
+                      Effect.map((jetStream) => {
+                        const publisher = createJetStreamPublisher(jetStream)
+                        const relay = relayOutbox({
+                          store,
+                          publisher,
+                          now: dependencies.now,
+                        })
+                        const relayOnce = (batchSize: unknown) =>
+                          parseOutboxLimit(batchSize).pipe(
+                            Effect.mapError(() => runtimeError("Outbox")),
+                            Effect.flatMap(relay)
+                          )
+                        const taxonomy = createContentTaxonomy({
+                          repository: taxonomyRepository,
+                          newTagId: dependencies.newTagId,
+                          now: dependencies.now,
+                        })
+                        const interestProfiles =
+                          createInterestProfileOperations(
+                            interestProfileRepository
+                          )
+                        const createEnrichment = (input: {
+                          readonly source: EnrichmentSource
+                          readonly provider: EnrichmentProvider
+                          readonly dailyLimit: number
+                        }) =>
+                          createEnrichmentOperations({
+                            queue: enrichmentQueue,
+                            taxonomy: taxonomyRepository,
+                            interestProfiles,
+                            source: input.source,
+                            provider: input.provider,
+                            dailyLimit: input.dailyLimit,
+                            now: dependencies.now,
+                            newLeaseToken: dependencies.newEnrichmentLeaseToken,
                           })
-                        )
+                        const close = () =>
+                          Effect.tryPromise({
+                            try: () => jetStream.close(),
+                            catch: () => runtimeError("Nats"),
+                          }).pipe(
+                            Effect.matchEffect({
+                              onFailure: (natsError) =>
+                                closeSqlite(database).pipe(
+                                  Effect.matchEffect({
+                                    onFailure: () => Effect.fail(natsError),
+                                    onSuccess: () => Effect.fail(natsError),
+                                  })
+                                ),
+                              onSuccess: () => closeSqlite(database),
+                            })
+                          )
 
-                      return deepFreeze({
-                        store,
-                        articles,
-                        library,
-                        subscriptions,
-                        relayOnce,
-                        close,
+                        return deepFreeze({
+                          store,
+                          articles,
+                          library,
+                          subscriptions,
+                          taxonomy,
+                          interestProfiles,
+                          createEnrichment,
+                          relayOnce,
+                          close,
+                        })
                       })
-                    })
-                  )
+                    )
                 )
               )
             ),
@@ -290,6 +375,8 @@ export const defaultNodeServiceDependencies: NodeServiceDependencies =
     openMarkdownReader: openS3MarkdownObjectReaderUnsafe,
     runRpc: runNatsContentKnowledgeRpc,
     runPoller: runContentFeedPoller,
+    enrichmentProvider: unavailableEnrichmentProvider,
+    runEnrichment: runEnrichmentWorkerLoop,
   })
 
 /** Owns the continuously running relay and releases SQLite/NATS on interruption. */
@@ -334,6 +421,11 @@ export const runNodeService = (
                   (markdown) => markdown.close
                 ).pipe(
                   Effect.flatMap((markdown) => {
+                    const enrichment = runtime.createEnrichment({
+                      source: makeEnrichmentSource(markdown.reader),
+                      provider: dependencies.enrichmentProvider,
+                      dailyLimit: config.enrichment.dailyLimit,
+                    })
                     dependencies.onReady?.()
                     return Effect.all(
                       [
@@ -354,6 +446,10 @@ export const runNodeService = (
                           config.feedPoller,
                           runtime,
                           capture
+                        ),
+                        dependencies.runEnrichment(
+                          config.enrichment.loop,
+                          enrichment.runCycle
                         ),
                       ],
                       { concurrency: "unbounded", discard: true }

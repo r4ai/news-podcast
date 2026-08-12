@@ -14,6 +14,7 @@ import type {
   CapturedAt,
   SnapshotId,
 } from "../../domain/article.js"
+import type { TagId } from "../../domain/content-taxonomy.js"
 import type { FeedId, SubscriptionId } from "../../domain/subscription.js"
 
 /** Platform guarantees UUID v4 and ISO UTC output; casts remain confined to unsafe. */
@@ -22,6 +23,8 @@ export const randomCorrelationIdUnsafe = (): CorrelationId =>
   randomUUID() as CorrelationId
 export const randomSnapshotIdUnsafe = (): SnapshotId =>
   randomUUID() as SnapshotId
+export const randomTagIdUnsafe = (): TagId => randomUUID() as TagId
+export const randomEnrichmentLeaseTokenUnsafe = (): string => randomUUID()
 export const randomTraceparentUnsafe = (): Traceparent => {
   const traceId = createHash("sha256")
     .update(randomUUID())

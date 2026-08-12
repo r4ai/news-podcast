@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { UnsafeJetStream } from "../infrastructure/unsafe/nats-jetstream.js"
 import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
+import { unavailableEnrichmentProvider } from "./enrichment-runtime.js"
 import {
   parseNodeRuntimeConfig,
   runNodeService,
@@ -27,6 +28,14 @@ const validServiceConfig = {
   rpc: { queueGroup: "content-rpc" },
   feedPoller: {
     http: { timeoutMillis: 1_000, maximumBytes: 8_192 },
+    loop: {
+      intervalMillis: 1_000,
+      initialBackoffMillis: 100,
+      maximumBackoffMillis: 1_000,
+    },
+  },
+  enrichment: {
+    dailyLimit: 200,
     loop: {
       intervalMillis: 1_000,
       initialBackoffMillis: 100,
@@ -58,6 +67,8 @@ const makeDependencies = (
   connectJetStream: vi.fn(async () => jetStream),
   newMessageId: vi.fn(() => "8fb12955-2175-4675-be63-e42227d5ed19" as never),
   now: vi.fn(() => "2026-08-12T00:01:00.000Z" as never),
+  newTagId: vi.fn(() => "8fb12955-2175-4675-be63-e42227d5ed20" as never),
+  newEnrichmentLeaseToken: vi.fn(() => "lease-token-0001"),
 })
 
 describe("content-knowledge Node runtime", () => {
@@ -106,6 +117,9 @@ describe("content-knowledge Node runtime", () => {
       startNodeRuntime(validConfig, dependencies)
     )
 
+    expect(runtime.taxonomy).toBeDefined()
+    expect(runtime.interestProfiles).toBeDefined()
+    expect(runtime.createEnrichment).toBeTypeOf("function")
     const relayed = await Effect.runPromise(runtime.relayOnce(10))
     await Effect.runPromise(runtime.close())
 
@@ -140,6 +154,53 @@ describe("content-knowledge Node runtime", () => {
     database.close()
   })
 
+  it("durably records failure when the enrichment provider is unavailable", async () => {
+    const database = openSqliteUnsafe(":memory:")
+    const runtime = await Effect.runPromise(
+      startNodeRuntime(validConfig, {
+        ...makeDependencies(makeJetStream()),
+        openSqlite: () => database,
+      })
+    )
+    database.execute(`
+      INSERT INTO feed_catalog VALUES ('feed-a', 'https://a.example/feed', '2026-08-12T00:00:00.000Z');
+      INSERT INTO feed_subscriptions VALUES ('sub-a', 'owner-a', 'feed-a', '2026-08-12T00:00:00.000Z');
+      INSERT INTO feed_items VALUES (
+        '5af55f2e-ff0b-475c-866a-f2cff48c101d', 'feed-a', 'external-a',
+        'https://a.example/article', 'Article', NULL, '2026-08-12T00:00:00.000Z'
+      );
+      INSERT INTO article_snapshots VALUES (
+        'request-a', 'snapshot-a',
+        '{"articleId":"5af55f2e-ff0b-475c-866a-f2cff48c101d","capture":{"markdown":{"key":"articles/a/article.md"}}}',
+        '2026-08-12T00:00:00.000Z'
+      );
+    `)
+    const enrichment = runtime.createEnrichment({
+      source: { read: () => Effect.succeed("markdown") },
+      provider: unavailableEnrichmentProvider,
+      dailyLimit: 200,
+    })
+
+    expect(await Effect.runPromise(enrichment.runCycle())).toEqual({
+      processed: 0,
+    })
+    expect(
+      await Effect.runPromise(enrichment.status("owner-a" as never))
+    ).toMatchObject({
+      failed: {
+        count: 1,
+        items: [
+          {
+            status: "Failed",
+            attempt: 4,
+            error: "enrichment provider unavailable",
+          },
+        ],
+      },
+    })
+    await Effect.runPromise(runtime.close())
+  })
+
   it("closes NATS and SQLite when the continuous service is interrupted", async () => {
     const closeNats = vi.fn(async () => undefined)
     const closeSqlite = vi.fn()
@@ -168,6 +229,10 @@ describe("content-knowledge Node runtime", () => {
           }) as never,
         runRpc: () => Effect.never,
         runPoller: () => Effect.never,
+        enrichmentProvider: {
+          enrich: () => Effect.die("unused"),
+        },
+        runEnrichment: () => Effect.never,
         relayRuntime: {
           observe: () =>
             Effect.sync(() => {

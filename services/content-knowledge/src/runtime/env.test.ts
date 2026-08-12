@@ -16,6 +16,10 @@ const validEnvironment = {
   CONTENT_RSS_INTERVAL_MS: "60000",
   CONTENT_RSS_INITIAL_BACKOFF_MS: "1000",
   CONTENT_RSS_MAX_BACKOFF_MS: "30000",
+  CONTENT_ENRICH_DAILY_LIMIT: "200",
+  CONTENT_ENRICH_INTERVAL_MS: "60000",
+  CONTENT_ENRICH_INITIAL_BACKOFF_MS: "1000",
+  CONTENT_ENRICH_MAX_BACKOFF_MS: "30000",
   CONTENT_ARCHIVE_TIMEOUT_MS: "20000",
   CONTENT_ARCHIVE_MAX_HTML_BYTES: "2097152",
   S3_ENDPOINT: "http://seaweedfs:8333",
@@ -43,6 +47,14 @@ describe("content-knowledge environment boundary", () => {
       rpc: { queueGroup: "content-rpc" },
       feedPoller: {
         http: { timeoutMillis: 15_000, maximumBytes: 5_242_880 },
+        loop: {
+          intervalMillis: 60_000,
+          initialBackoffMillis: 1_000,
+          maximumBackoffMillis: 30_000,
+        },
+      },
+      enrichment: {
+        dailyLimit: 200,
         loop: {
           intervalMillis: 60_000,
           initialBackoffMillis: 1_000,
@@ -91,6 +103,14 @@ describe("content-knowledge environment boundary", () => {
     [
       "backoff inversion",
       { ...validEnvironment, CONTENT_OUTBOX_INITIAL_BACKOFF_MS: "40000" },
+    ],
+    [
+      "enrichment backoff inversion",
+      { ...validEnvironment, CONTENT_ENRICH_INITIAL_BACKOFF_MS: "40000" },
+    ],
+    [
+      "out-of-range enrichment budget",
+      { ...validEnvironment, CONTENT_ENRICH_DAILY_LIMIT: "10001" },
     ],
   ])("rejects %s", async (_name, environment) => {
     const exit = await Effect.runPromiseExit(

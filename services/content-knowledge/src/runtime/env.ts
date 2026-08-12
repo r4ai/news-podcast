@@ -55,6 +55,16 @@ export const readContentKnowledgeConfig = (
         maximumBackoffMillis: decimalInteger(env.CONTENT_RSS_MAX_BACKOFF_MS),
       },
     },
+    enrichment: {
+      dailyLimit: decimalInteger(env.CONTENT_ENRICH_DAILY_LIMIT),
+      loop: {
+        intervalMillis: decimalInteger(env.CONTENT_ENRICH_INTERVAL_MS),
+        initialBackoffMillis: decimalInteger(
+          env.CONTENT_ENRICH_INITIAL_BACKOFF_MS
+        ),
+        maximumBackoffMillis: decimalInteger(env.CONTENT_ENRICH_MAX_BACKOFF_MS),
+      },
+    },
     archive: {
       endpoint: env.S3_ENDPOINT?.trim() ?? "",
       region: env.S3_REGION?.trim() ?? "",
