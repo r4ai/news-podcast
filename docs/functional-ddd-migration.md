@@ -1,11 +1,11 @@
 # 関数型DDDマイクロサービス移行ガイド
 
-- 更新日: 2026-08-12
+- 更新日: 2026-08-13
 - 状態: 移行中
 - 対象判断: 新旧どちらへ実装するか、旧実装をいつ削除できるか
 - 関連: [システムアーキテクチャ](architecture.md) / [開発ガイド](development.md) / [ADR-0032](adr/0032-grafana-correlated-observability.md) / [ADR-0033](adr/0033-colocate-bounded-context-with-service.md) / [ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)
 
-> 関数型DDDの基盤と各Contextの縦断スライスは実装済みだが、機能移植は完了していない。現在の`docker compose`で動く正本は旧`apps/api` / `apps/worker`であり、新系は機能同等性と運用受け入れを満たすまで併存する。
+> 関数型DDDの基盤と、購読→記事取り込み→番組生成→Library公開のP0縦断フローは実装済み。新Gatewayと4 servicesはComposeで起動できるが、記事管理等の公開APIとWeb切替が残るため、旧`apps/api` / `apps/worker`も比較用に併存する。
 
 ## 1. 移行の正本と依存方向
 
@@ -57,6 +57,10 @@ flowchart TB
 | Gatewayの縦断スライス | Effect HttpApi契約、handler、NATS port | `apps/gateway` |
 | Architecture gate | 逆向きimport、Context横断import、新規自己定義classをCIで拒否 | `scripts/check-architecture.mjs` |
 | Observability基盤 | OTel、Grafana、Prometheus、Loki、Tempo、Collector、5 dashboard、7 alert | `packages/observability`、`infra/observability` |
+| 実行topology | Gateway + 4 services、service別SQLite、readiness、JetStream provision | `compose.yaml`、`packages/service-runtime` |
+| P0業務縦断 | 認証、購読CRUD、RSS/HTML安全取得、OpenAI、VOICEVOX、S3、完成Library | `pnpm test:e2e:functional` |
+| 耐障害性 | outbox/inbox、durable ack/nack、provider deadline/retry、fenced lease heartbeat | Production/Library/Content integration tests |
+| coverage gate | 8つの関数型packageで最低lines 75%、branches 60% | `pnpm test:coverage:functional` |
 
 「縦断スライス完了」は、そのContextの全ユースケース移植完了を意味しない。
 
@@ -64,15 +68,24 @@ flowchart TB
 
 | 優先度 | 未完了 | 完了の判定 |
 | --- | --- | --- |
-| P0 | 4サービスすべての実行entrypoint、NATS接続、health/readiness、Compose配備 | clean environmentでGateway + 4 servicesを起動し、停止・再接続を含むsmokeが通る |
-| P0 | 認証、購読/RSS/archive、生成pipeline、ライブラリ/音声アクセスの機能同等性 | owner scope・冪等性・再試行を含む状態遷移表とservice間E2Eが通る |
-| P0 | 新4サービスのOTel実配線 | 1リクエストをmetrics → exemplar → trace → logs → service graphで追跡できる |
-| P1 | Gateway OpenAPIの生成物とWeb client切替 | contract diffがcleanでWebの主要E2Eが新Gatewayだけで通る |
+| P0 | 公開APIの残存業務slice（記事管理、job状態/制御、episode詳細） | owner scope・状態遷移・NATS RPCを含むservice/Gateway E2Eが通る |
+| P0 | 新topologyの相関監視受入 | 1リクエストをmetrics → exemplar → trace → logs → service graphで追跡できる |
+| P1 | 設定、タグ、辞書、enrichment、agent memory/runの移植 | 旧routeとのユースケースmatrixが全て新GatewayでGreen |
+| P1 | Gateway OpenAPI生成物とWeb client切替 | contract diffがcleanでWebの主要E2Eが新Gatewayだけで通る |
 | P1 | service別migration/backup/restore | 各serviceが所有DBを空状態から作成し、backup/restore試験が通る |
-| P1 | provider、Object Store、scheduler、Agent harnessの移植 | 旧Workerを使わずfake/liveの受け入れ条件を満たす |
+| P1 | Agent harnessとWeb検索の移植 | 旧Workerを使わずfake/liveの受け入れ条件を満たす |
 | P2 | Cloud runtimeの扱い | 継続か廃止を決定し、選択したruntimeのcontract testが通る |
 
 細かなロジックを先回りして移すより、P0の配備・契約・相関監視を先に閉じ、以降はContextごとの縦断ユースケース単位で移植する。
+
+### 進捗の数え方
+
+```mermaid
+flowchart LR
+  Foundation["基盤・配備"] --> Core["P0縦断フロー"] --> Parity["公開API parity"] --> Cutover["Web切替・旧系削除"]
+```
+
+2026-08-13時点でP0縦断フローは約95%、旧公開API完全置換を含む全移行は約72%である。進捗はtest数やファイル数ではなく、上図4 gateの受入条件で更新する。
 
 ## 4. Grafanaでの障害切り分け
 
