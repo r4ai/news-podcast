@@ -662,6 +662,9 @@ importers:
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@news-podcast/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@news-podcast/protocols':
         specifier: workspace:*
         version: link:../../packages/protocols
