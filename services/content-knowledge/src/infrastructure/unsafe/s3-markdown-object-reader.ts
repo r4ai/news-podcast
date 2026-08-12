@@ -15,6 +15,7 @@ export type S3MarkdownReaderConfig = DeepReadonly<{
   readonly bucket: string
   readonly accessKeyId: string
   readonly secretAccessKey: string
+  readonly timeoutMillis: number
 }>
 
 type UnsafeClient = Readonly<{
@@ -24,6 +25,14 @@ type UnsafeClient = Readonly<{
 
 const failure = (reason: MarkdownObjectError["reason"]): MarkdownObjectError =>
   deepFreeze({ _tag: "MarkdownObjectFailed", reason })
+
+const isMarkdownObjectError = (
+  error: unknown
+): error is MarkdownObjectError =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  error._tag === "MarkdownObjectFailed"
 
 const boundedBody = async (body: unknown): Promise<Uint8Array> => {
   if (
@@ -87,58 +96,53 @@ export const openS3MarkdownObjectReaderUnsafe = (
   const reader: MarkdownObjectReader = Object.freeze({
     read: (key) =>
       Effect.tryPromise({
-        try: async () =>
-          resource.client.send(
+        try: async (effectSignal) => {
+          const timeout = new AbortController()
+          const timer = setTimeout(() => timeout.abort(), config.timeoutMillis)
+          timer.unref()
+          const signal = AbortSignal.any([effectSignal, timeout.signal])
+          try {
+            const response = await resource.client.send(
             new GetObjectCommand({
               Bucket: config.bucket,
               Key: key,
-            })
-          ),
+            }),
+              { abortSignal: signal }
+            )
+            if (
+              response.ContentLength !== undefined &&
+              response.ContentLength > MAXIMUM_MARKDOWN_BYTES
+            )
+              throw failure("ResourceLimit")
+            if (
+              response.ContentType !== undefined &&
+              !response.ContentType.startsWith("text/markdown")
+            )
+              throw failure("CorruptObject")
+            if (response.Body === undefined) throw failure("NotFound")
+            const bytes = await boundedBody(response.Body)
+            let markdown: string
+            try {
+              markdown = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+            } catch {
+              throw failure("CorruptObject")
+            }
+            if (!/\S/.test(markdown)) throw failure("CorruptObject")
+            return markdown
+          } finally {
+            clearTimeout(timer)
+          }
+        },
         catch: (error) =>
-          typeof error === "object" &&
+          isMarkdownObjectError(error)
+            ? error
+            : typeof error === "object" &&
           error !== null &&
           "name" in error &&
           (error.name === "NoSuchKey" || error.name === "NotFound")
             ? failure("NotFound")
             : failure("Unavailable"),
-      }).pipe(
-        Effect.flatMap((response) => {
-          if (
-            response.ContentLength !== undefined &&
-            response.ContentLength > MAXIMUM_MARKDOWN_BYTES
-          ) {
-            return Effect.fail(failure("ResourceLimit"))
-          }
-          if (
-            response.ContentType !== undefined &&
-            !response.ContentType.startsWith("text/markdown")
-          ) {
-            return Effect.fail(failure("CorruptObject"))
-          }
-          if (response.Body === undefined)
-            return Effect.fail(failure("NotFound"))
-          return Effect.tryPromise({
-            try: () => boundedBody(response.Body),
-            catch: (error) =>
-              typeof error === "object" && error !== null && "_tag" in error
-                ? (error as MarkdownObjectError)
-                : failure("Unavailable"),
-          }).pipe(
-            Effect.map((bytes) =>
-              new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-            ),
-            Effect.mapError((error) =>
-              typeof error === "object" && error !== null && "_tag" in error
-                ? (error as MarkdownObjectError)
-                : failure("CorruptObject")
-            ),
-            Effect.filterOrFail(
-              (markdown) => /\S/.test(markdown),
-              () => failure("CorruptObject")
-            )
-          )
-        })
-      ),
+      }),
   })
   return Object.freeze({
     reader,

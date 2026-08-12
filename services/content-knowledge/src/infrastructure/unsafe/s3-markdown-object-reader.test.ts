@@ -12,6 +12,7 @@ const config = {
   bucket: "news-podcast",
   accessKeyId: "access",
   secretAccessKey: "secret",
+  timeoutMillis: 1_000,
 }
 
 describe("S3 Markdown object reader", () => {
@@ -94,5 +95,30 @@ describe("S3 Markdown object reader", () => {
         Effect.flip(resource.reader.read("articles/a/article.md" as never))
       )
     ).toEqual({ _tag: "MarkdownObjectFailed", reason: "ResourceLimit" })
+  })
+
+  it("aborts an Object Store request at the configured deadline", async () => {
+    const resource = openS3MarkdownObjectReaderUnsafe(
+      { ...config, timeoutMillis: 1 },
+      () => ({
+        client: {
+          send: async (_command: unknown, options: { abortSignal: AbortSignal }) =>
+            new Promise((_resolve, reject) =>
+              options.abortSignal.addEventListener(
+                "abort",
+                () => reject(new Error("timed out")),
+                { once: true }
+              )
+            ),
+        } as never,
+        close: vi.fn(),
+      })
+    )
+
+    expect(
+      await Effect.runPromise(
+        Effect.flip(resource.reader.read("articles/a/article.md" as never))
+      )
+    ).toEqual({ _tag: "MarkdownObjectFailed", reason: "Unavailable" })
   })
 })

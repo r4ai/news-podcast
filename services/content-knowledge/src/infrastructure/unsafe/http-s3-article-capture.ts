@@ -160,10 +160,11 @@ export const openHttpS3ArticleCaptureUnsafe = (
         const timeout = new AbortController()
         const timer = setTimeout(() => timeout.abort(), config.timeoutMillis)
         timer.unref()
+        const signal = AbortSignal.any([effectSignal, timeout.signal])
         try {
           const response = await safe.fetch(sourceUrl, {
             headers: { "User-Agent": "NewsPodcastArchive/0.1 (+self-hosted)" },
-            signal: AbortSignal.any([effectSignal, timeout.signal]),
+            signal,
           })
           if (!response.ok) throw failure("Unavailable")
           const contentType =
@@ -203,7 +204,8 @@ export const openHttpS3ArticleCaptureUnsafe = (
                   Body: value.body,
                   ContentLength: value.body.byteLength,
                   ContentType: value.mediaType,
-                })
+                }),
+                { abortSignal: signal }
               )
             )
           )
