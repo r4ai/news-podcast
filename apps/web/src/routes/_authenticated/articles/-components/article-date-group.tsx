@@ -24,7 +24,7 @@ export function ArticleDateGroup({
   return (
     <div>
       {showHeader ? (
-        <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur">
+        <div className="sticky top-10 z-[5] border-b bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur">
           {group.label}
         </div>
       ) : null}

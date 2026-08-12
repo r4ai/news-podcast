@@ -50,7 +50,7 @@ export function ArticleToolbarSticky({
   onToggleSearch,
 }: ArticleToolbarStickyProps) {
   return (
-    <div className="sticky top-0 z-10 -mx-3 flex items-center justify-between gap-2 border-b bg-background/70 px-3 py-1.5 backdrop-blur-md">
+    <div className="sticky top-0 z-20 -mx-3 flex h-10 items-center justify-between gap-2 border-b bg-background/70 px-3 py-1 backdrop-blur-md">
       <ToggleGroup
         aria-label="記事の状態"
         className="gap-0.5"
