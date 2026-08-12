@@ -4,6 +4,10 @@ export const subjects = {
   },
   content: {
     articleArchived: "content.article-archived.v1",
+    addSubscription: "content.add-subscription.v1",
+    listSubscriptions: "content.list-subscriptions.v1",
+    deleteSubscription: "content.delete-subscription.v1",
+    materializeArticles: "content.materialize-articles.v1",
   },
   production: {
     createJob: "production.create-job.v1",
