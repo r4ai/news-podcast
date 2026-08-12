@@ -15,6 +15,11 @@ import {
   randomMessageIdUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import { makeResolveSessionRpcHandler } from "./resolve-session-rpc.js"
+import {
+  makeIdentitySettingsRpcHandler,
+  type IdentitySettingsRpcDelivery,
+  type IdentitySettingsRpcOperations,
+} from "./settings-rpc.js"
 
 const NatsServerSchema = Schema.String.check(
   Schema.isPattern(/^nats:\/\/[\w.-]+(?::\d{1,5})?$/)
@@ -48,11 +53,12 @@ export type NodeResolveSessionRpcDependencies = DeepReadonly<{
   readonly onReady?: () => void
 }>
 
-export const defaultNodeResolveSessionRpcDependencies: NodeResolveSessionRpcDependencies = deepFreeze({
-  connectNats: connectNatsRpcUnsafe,
-  newMessageId: randomMessageIdUnsafe,
-  now: currentUtcInstantUnsafe,
-})
+export const defaultNodeResolveSessionRpcDependencies: NodeResolveSessionRpcDependencies =
+  deepFreeze({
+    connectNats: connectNatsRpcUnsafe,
+    newMessageId: randomMessageIdUnsafe,
+    now: currentUtcInstantUnsafe,
+  })
 
 const runtimeError = (
   component: NodeResolveSessionRpcError["component"]
@@ -121,3 +127,115 @@ export const runNodeResolveSessionRpc = (
       )
     )
   )
+
+type SettingsHandler = (
+  delivery: IdentitySettingsRpcDelivery<NodeResolveSessionRpcError>
+) => Effect.Effect<void, unknown, never>
+
+const runNodeSettingsRpc = (
+  input: unknown,
+  settings: IdentitySettingsRpcOperations,
+  dependencies: NodeResolveSessionRpcDependencies
+): Effect.Effect<void, NodeResolveSessionRpcError> =>
+  parseNodeResolveSessionRpcConfig(input).pipe(
+    Effect.mapError(() => runtimeError("Config")),
+    Effect.flatMap((config) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const handlers: readonly (readonly [string, SettingsHandler])[] = [
+            [
+              subjects.identity.getGenerationSettings,
+              makeIdentitySettingsRpcHandler(
+                subjects.identity.getGenerationSettings,
+                settings,
+                dependencies
+              ),
+            ],
+            [
+              subjects.identity.updateGenerationSettings,
+              makeIdentitySettingsRpcHandler(
+                subjects.identity.updateGenerationSettings,
+                settings,
+                dependencies
+              ),
+            ],
+          ]
+
+          yield* Effect.all(
+            handlers.map(([subject, handler]) =>
+              Effect.gen(function* () {
+                const server = yield* Effect.acquireRelease(
+                  Effect.tryPromise({
+                    try: () =>
+                      dependencies.connectNats(
+                        config.natsServers,
+                        subject,
+                        config.queueGroup
+                      ),
+                    catch: () => runtimeError("Nats"),
+                  }),
+                  (resource) =>
+                    Effect.tryPromise(() => resource.drain()).pipe(
+                      Effect.ignore
+                    )
+                )
+                while (true) {
+                  const delivery = yield* Effect.tryPromise({
+                    try: () => server.receive(),
+                    catch: () => runtimeError("Nats"),
+                  })
+                  if (delivery === undefined) return
+                  yield* handler({
+                    payload: delivery.payload,
+                    reply: (payload) =>
+                      Effect.tryPromise({
+                        try: () => delivery.reply(payload),
+                        catch: () => runtimeError("Reply"),
+                      }),
+                  }).pipe(
+                    Effect.mapError((failure) =>
+                      isRuntimeError(failure)
+                        ? failure
+                        : runtimeError("Handler")
+                    )
+                  )
+                }
+              })
+            ),
+            { concurrency: "unbounded", discard: true }
+          )
+        })
+      )
+    )
+  )
+
+/** Runs session resolution and both owner-scoped settings subjects together. */
+export const runNodeIdentityRpc = (
+  input: unknown,
+  api: BetterAuthSessionApi,
+  settings: IdentitySettingsRpcOperations,
+  dependencies: NodeResolveSessionRpcDependencies = defaultNodeResolveSessionRpcDependencies
+): Effect.Effect<void, NodeResolveSessionRpcError> => {
+  let connected = 0
+  let ready = false
+  const { onReady: _onReady, ...runtimeDependencies } = dependencies
+  const coordinated: NodeResolveSessionRpcDependencies = {
+    ...runtimeDependencies,
+    connectNats: async (...args) => {
+      const server = await dependencies.connectNats(...args)
+      connected += 1
+      if (!ready && connected === 3) {
+        ready = true
+        dependencies.onReady?.()
+      }
+      return server
+    },
+  }
+  return Effect.all(
+    [
+      runNodeResolveSessionRpc(input, api, coordinated),
+      runNodeSettingsRpc(input, settings, coordinated),
+    ],
+    { concurrency: "unbounded", discard: true }
+  )
+}

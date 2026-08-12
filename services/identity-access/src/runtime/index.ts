@@ -7,9 +7,16 @@ export {
   NodeResolveSessionRpcConfigSchema,
   parseNodeResolveSessionRpcConfig,
   runNodeResolveSessionRpc,
+  runNodeIdentityRpc,
   type NodeResolveSessionRpcDependencies,
   type NodeResolveSessionRpcError,
 } from "./node.js"
+export {
+  makeIdentitySettingsRpcHandler,
+  type IdentitySettingsRpcDelivery,
+  type IdentitySettingsRpcDependencies,
+  type IdentitySettingsRpcOperations,
+} from "./settings-rpc.js"
 export {
   makeResolveSessionRpcHandler,
   type ResolveSessionRpcDelivery,

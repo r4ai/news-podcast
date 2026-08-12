@@ -11,7 +11,7 @@ import {
 import { toIdentityAuthConfig, type IdentityAccessConfig } from "./env.js"
 import {
   defaultNodeResolveSessionRpcDependencies,
-  runNodeResolveSessionRpc,
+  runNodeIdentityRpc,
   type NodeResolveSessionRpcError,
 } from "./node.js"
 import {
@@ -60,6 +60,7 @@ export type IdentityAccessServiceDependencies = Readonly<{
       readonly queueGroup: string
     }>,
     api: BetterAuthSessionApi,
+    settings: Pick<IdentityAccessRuntime["settings"], "get" | "update">,
     onReady?: () => void
   ) => Effect.Effect<void, NodeResolveSessionRpcError>
   readonly onReady?: () => void
@@ -68,8 +69,8 @@ export type IdentityAccessServiceDependencies = Readonly<{
 export const defaultIdentityAccessServiceDependencies: IdentityAccessServiceDependencies =
   deepFreeze({
     startRuntime: (config) => startIdentityAccessRuntime(config),
-    runRpc: (config, api, onReady) =>
-      runNodeResolveSessionRpc(config, api, {
+    runRpc: (config, api, settings, onReady) =>
+      runNodeIdentityRpc(config, api, settings, {
         ...defaultNodeResolveSessionRpcDependencies,
         ...(onReady === undefined ? {} : { onReady }),
       }),
@@ -148,6 +149,7 @@ export const runIdentityAccessService = (
           queueGroup: config.queueGroup,
         },
         runtime.api,
+        runtime.settings,
         dependencies.onReady
       )
     })

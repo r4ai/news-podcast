@@ -1,6 +1,7 @@
 import {
   parseMessageEnvelope,
   parseResolveSessionReply,
+  subjects,
 } from "@news-podcast/protocols"
 import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
@@ -9,6 +10,7 @@ import type { BetterAuthSessionApi } from "../adapters/better-auth-session-reade
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
 import {
   parseNodeResolveSessionRpcConfig,
+  runNodeIdentityRpc,
   runNodeResolveSessionRpc,
 } from "./node.js"
 
@@ -51,6 +53,53 @@ describe("identity-access Node RPC runtime", () => {
     expect(parsed).toEqual(config)
     expect(Object.isFrozen(parsed)).toBe(true)
     expect(Object.isFrozen(parsed.natsServers)).toBe(true)
+  })
+
+  it("runs session and both settings subjects in one scoped runtime", async () => {
+    const connected: string[] = []
+    const drained: string[] = []
+    const onReady = vi.fn()
+    await Effect.runPromise(
+      runNodeIdentityRpc(
+        config,
+        { getSession: () => Promise.resolve(null) },
+        {
+          get: () =>
+            Effect.succeed({
+              enabled: false,
+              localTime: "07:30" as never,
+              timeZone: "Asia/Tokyo" as never,
+            }),
+          update: () =>
+            Effect.succeed({
+              enabled: false,
+              localTime: "07:30" as never,
+              timeZone: "Asia/Tokyo" as never,
+            }),
+        },
+        {
+          connectNats: async (_servers, subject) => {
+            connected.push(subject)
+            return {
+              receive: async () => undefined,
+              drain: async () => void drained.push(subject),
+            }
+          },
+          newMessageId: () => "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+          now: () => "2026-08-12T00:00:01.000Z",
+          onReady,
+        }
+      )
+    )
+
+    const expected = [
+      subjects.identity.resolveSession,
+      subjects.identity.getGenerationSettings,
+      subjects.identity.updateGenerationSettings,
+    ]
+    expect(connected.sort()).toEqual([...expected].sort())
+    expect(drained.sort()).toEqual([...expected].sort())
+    expect(onReady).toHaveBeenCalledOnce()
   })
 
   it.each([

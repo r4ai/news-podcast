@@ -76,12 +76,14 @@ describe("Identity Access service composition", () => {
             openRuntime: vi.fn(async () => auth),
             createSettings: vi.fn(() => Effect.succeed(repository)),
           }),
-        runRpc: (rpcConfig, receivedApi) => {
+        runRpc: (rpcConfig, receivedApi, receivedSettings) => {
           expect(rpcConfig).toEqual({
             natsServers: ["nats://nats:4222"],
             queueGroup: "identity-access",
           })
           expect(receivedApi).toBe(api)
+          expect(receivedSettings.get).toBeTypeOf("function")
+          expect(receivedSettings.update).toBeTypeOf("function")
           return Effect.acquireRelease(
             Effect.sync(() => {
               events.push("nats.started")
