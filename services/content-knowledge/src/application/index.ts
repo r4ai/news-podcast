@@ -1,2 +1,6 @@
 export * from "./archive-article.js"
+export * from "./article-catalog-ports.js"
+export * from "./materialize-articles.js"
+export * from "./poll-subscriptions.js"
 export * from "./ports.js"
+export * from "./subscription-ports.js"

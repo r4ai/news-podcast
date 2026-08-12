@@ -24,6 +24,24 @@ const validServiceConfig = {
     initialBackoffMillis: 100,
     maximumBackoffMillis: 1_000,
   },
+  rpc: { queueGroup: "content-rpc" },
+  feedPoller: {
+    http: { timeoutMillis: 1_000, maximumBytes: 8_192 },
+    loop: {
+      intervalMillis: 1_000,
+      initialBackoffMillis: 100,
+      maximumBackoffMillis: 1_000,
+    },
+  },
+  archive: {
+    endpoint: "http://127.0.0.1:9000",
+    region: "us-east-1",
+    bucket: "news-podcast",
+    accessKeyId: "access-key",
+    secretAccessKey: "secret-key",
+    timeoutMillis: 1_000,
+    maximumHtmlBytes: 8_192,
+  },
 }
 
 const makeJetStream = (close = vi.fn(async () => undefined)): UnsafeJetStream =>
@@ -138,6 +156,18 @@ describe("content-knowledge Node runtime", () => {
     const fiber = Effect.runFork(
       runNodeService(validServiceConfig, {
         startRuntime: (input) => startNodeRuntime(input, runtimeDependencies),
+        openCapture: () => ({
+          capture: vi.fn(),
+          fetcher: vi.fn() as never,
+          close: Effect.void,
+        }),
+        openMarkdownReader: () =>
+          ({
+            reader: { read: vi.fn() },
+            close: Effect.void,
+          }) as never,
+        runRpc: () => Effect.never,
+        runPoller: () => Effect.never,
         relayRuntime: {
           observe: () =>
             Effect.sync(() => {

@@ -1,0 +1,188 @@
+import { Effect, Schema } from "effect"
+import { describe, expect, it, vi } from "vitest"
+
+import {
+  ArchiveCaptureSchema,
+  ArchiveCommandSchema,
+  CapturedAtSchema,
+  SnapshotIdSchema,
+  createArticleSnapshot,
+} from "../domain/article.js"
+import {
+  CreatedAtSchema,
+  FeedIdSchema,
+  FeedUrlSchema,
+  OwnerIdSchema,
+  SubscriptionIdSchema,
+} from "../domain/subscription.js"
+import { createSqliteArchiveStore } from "./sqlite-archive-store.js"
+import { createSqliteArticleCatalog } from "./sqlite-article-catalog.js"
+import { createSqliteSubscriptionRepository } from "./sqlite-subscription-repository.js"
+import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
+import {
+  parseJsonUnsafe,
+  stringifyJsonUnsafe,
+} from "../infrastructure/unsafe/json.js"
+import { materializeArticles } from "../application/materialize-articles.js"
+
+const decode = <S extends Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: unknown
+) => Schema.decodeUnknownSync(schema)(value)
+const ownerA = decode(OwnerIdSchema, "owner-a")
+const ownerB = decode(OwnerIdSchema, "owner-b")
+const feedId = decode(FeedIdSchema, "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd")
+const articleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never
+
+describe("article materialization", () => {
+  it("returns Markdown only for archived articles owned through a subscription", async () => {
+    const database = openSqliteUnsafe(":memory:")
+    try {
+      const subscriptions = await Effect.runPromise(
+        createSqliteSubscriptionRepository(database)
+      )
+      const catalog = await Effect.runPromise(
+        createSqliteArticleCatalog(database, {
+          parse: parseJsonUnsafe,
+        })
+      )
+      const archiveStore = await Effect.runPromise(
+        createSqliteArchiveStore(
+          database,
+          () => "8fb12955-2175-4675-be63-e42227d5ed19" as never,
+          { parse: parseJsonUnsafe, stringify: stringifyJsonUnsafe }
+        )
+      )
+      await Effect.runPromise(
+        subscriptions.add({
+          subscriptionId: decode(
+            SubscriptionIdSchema,
+            "9aa2225d-07e7-4af4-a8e6-e4788f801a91"
+          ),
+          feedId,
+          ownerId: ownerA,
+          feedUrl: decode(FeedUrlSchema, "https://feeds.example.com/news.xml"),
+          createdAt: decode(CreatedAtSchema, "2026-08-13T01:00:00.000Z"),
+        })
+      )
+      await Effect.runPromise(
+        catalog.upsert({
+          articleId,
+          feedId,
+          externalId: "entry-1",
+          sourceUrl: "https://news.example.com/stable" as never,
+          title: "Stable article" as never,
+          publishedAt: "2026-08-13T00:00:00.000Z",
+          discoveredAt: "2026-08-13T01:01:00.000Z",
+        })
+      )
+      const command = decode(ArchiveCommandSchema, {
+        archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
+        articleId,
+        sourceUrl: "https://news.example.com/stable",
+        title: "Stable article",
+      })
+      const snapshot = createArticleSnapshot({
+        command,
+        snapshotId: decode(
+          SnapshotIdSchema,
+          "46c2eef5-a205-4526-8640-dc3ea84d88b4"
+        ),
+        capturedAt: decode(CapturedAtSchema, "2026-08-13T01:02:00.000Z"),
+        capture: decode(ArchiveCaptureSchema, {
+          rawResponse: {
+            _tag: "RawResponse",
+            key: "articles/a/raw.html",
+            sha256: "1".repeat(64),
+            mediaType: "text/html",
+            byteLength: 10,
+          },
+          replay: {
+            _tag: "Replay",
+            key: "articles/a/replay.html",
+            sha256: "2".repeat(64),
+            mediaType: "text/html",
+            byteLength: 10,
+          },
+          markdown: {
+            _tag: "Markdown",
+            key: "articles/a/article.md",
+            sha256: "3".repeat(64),
+            mediaType: "text/markdown",
+            byteLength: 10,
+          },
+          assets: [],
+        }),
+      })
+      await Effect.runPromise(
+        archiveStore.commit({
+          snapshot,
+          event: {
+            _tag: "ArticleArchived",
+            archiveRequestId: snapshot.archiveRequestId,
+            articleId: snapshot.articleId,
+            snapshotId: snapshot.snapshotId,
+            sourceUrl: snapshot.sourceUrl,
+            title: snapshot.title,
+            archivedAt: snapshot.capturedAt,
+            markdown: snapshot.capture.markdown,
+          },
+          context: {
+            messageId: "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4" as never,
+            correlationId: "ea122752-73d0-4851-9664-7d3e63e76859" as never,
+            traceparent:
+              "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" as never,
+            actor: { _tag: "Service", service: "content-knowledge" as never },
+          },
+        })
+      )
+      const read = vi.fn(() => Effect.succeed("# Stable\n\nArchived body"))
+      const materialize = materializeArticles({ catalog, objects: { read } })
+
+      const automatic = await Effect.runPromise(
+        materialize({ ownerId: ownerA, selection: { _tag: "Automatic" } })
+      )
+      expect(automatic).toEqual({
+        _tag: "Materialized",
+        articles: [
+          {
+            articleId,
+            snapshotId: snapshot.snapshotId,
+            title: "Stable article",
+            url: "https://news.example.com/stable",
+            markdown: "# Stable\n\nArchived body",
+            publishedAt: "2026-08-13T00:00:00.000Z",
+          },
+        ],
+      })
+      expect(read).toHaveBeenCalledWith("articles/a/article.md")
+      expect(
+        await Effect.runPromise(
+          materialize({
+            ownerId: ownerB,
+            selection: { _tag: "Selected", articleIds: [articleId] },
+          })
+        )
+      ).toEqual({ _tag: "NotFound" })
+    } finally {
+      database.close()
+    }
+  })
+
+  it("does not return partial selected results or partial object reads", async () => {
+    const catalog = {
+      findAutomatic: vi.fn(),
+      findSelected: vi.fn(() => Effect.succeed([])),
+      upsert: vi.fn(),
+    }
+    const read = vi.fn()
+    const result = await Effect.runPromise(
+      materializeArticles({ catalog: catalog as never, objects: { read } })({
+        ownerId: ownerA,
+        selection: { _tag: "Selected", articleIds: [articleId] },
+      })
+    )
+    expect(result).toEqual({ _tag: "NotFound" })
+    expect(read).not.toHaveBeenCalled()
+  })
+})

@@ -17,6 +17,12 @@ import {
 } from "../adapters/index.js"
 import type { ArticleCatalog } from "../application/article-catalog-ports.js"
 import type { SubscriptionRepository } from "../application/subscription-ports.js"
+import {
+  openHttpS3ArticleCaptureUnsafe,
+  type HttpS3ArticleCaptureConfig,
+  type HttpS3ArticleCaptureResource,
+} from "../infrastructure/unsafe/http-s3-article-capture.js"
+import { openS3MarkdownObjectReaderUnsafe } from "../infrastructure/unsafe/s3-markdown-object-reader.js"
 import type { CapturedAt } from "../domain/article.js"
 import {
   currentCapturedAtUnsafe,
@@ -31,6 +37,8 @@ import {
   stringifyJsonUnsafe,
 } from "../infrastructure/unsafe/json.js"
 import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
+import { runContentFeedPoller } from "./content-feed-poller.js"
+import { runNatsContentKnowledgeRpc } from "./nats-content-knowledge-rpc.js"
 import {
   runOutboxRelayLoop,
   type OutboxRelayLoopRuntime,
@@ -58,6 +66,11 @@ const RelayDelaySchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(300_000)
 )
+const PositiveBytesSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(10 * 1_024 * 1_024)
+)
+const S3TextSchema = Schema.NonEmptyString.check(Schema.isMaxLength(1_024))
 export const NodeServiceConfigSchema = Schema.Struct({
   sqlitePath: SqlitePathSchema,
   natsServers: Schema.NonEmptyArray(NatsServerSchema).check(
@@ -69,20 +82,61 @@ export const NodeServiceConfigSchema = Schema.Struct({
     initialBackoffMillis: RelayDelaySchema,
     maximumBackoffMillis: RelayDelaySchema,
   }),
+  rpc: Schema.Struct({
+    queueGroup: Schema.NonEmptyString.check(
+      Schema.isPattern(/^[a-z][a-z0-9-]{0,62}$/)
+    ),
+  }),
+  feedPoller: Schema.Struct({
+    http: Schema.Struct({
+      timeoutMillis: RelayDelaySchema,
+      maximumBytes: PositiveBytesSchema,
+    }),
+    loop: Schema.Struct({
+      intervalMillis: RelayDelaySchema,
+      initialBackoffMillis: RelayDelaySchema,
+      maximumBackoffMillis: RelayDelaySchema,
+    }),
+  }),
+  archive: Schema.Struct({
+    endpoint: Schema.String.check(
+      Schema.makeFilter((value: string) => {
+        try {
+          const url = new URL(value)
+          return (
+            (url.protocol === "http:" || url.protocol === "https:") &&
+            url.username === "" &&
+            url.password === ""
+          )
+        } catch {
+          return false
+        }
+      })
+    ),
+    region: S3TextSchema,
+    bucket: S3TextSchema,
+    accessKeyId: S3TextSchema,
+    secretAccessKey: S3TextSchema,
+    timeoutMillis: RelayDelaySchema,
+    maximumHtmlBytes: PositiveBytesSchema,
+  }),
 })
 const parseNodeServiceStructure = parse(NodeServiceConfigSchema)
 export const parseNodeServiceConfig = (input: unknown) =>
   parseNodeServiceStructure(input).pipe(
     Effect.filterOrFail(
       (config) =>
-        config.relay.initialBackoffMillis <= config.relay.maximumBackoffMillis,
+        config.relay.initialBackoffMillis <=
+          config.relay.maximumBackoffMillis &&
+        config.feedPoller.loop.initialBackoffMillis <=
+          config.feedPoller.loop.maximumBackoffMillis,
       () => deepFreeze({ _tag: "InvalidBackoffRange" as const })
     )
   )
 
 export type NodeRuntimeError = DeepReadonly<{
   readonly _tag: "ContentKnowledgeRuntimeFailed"
-  readonly component: "Config" | "Nats" | "Outbox" | "Sqlite"
+  readonly component: "Config" | "Nats" | "ObjectStore" | "Outbox" | "Sqlite"
 }>
 
 export type NodeContentKnowledgeRuntime = DeepReadonly<{
@@ -112,6 +166,12 @@ export type NodeServiceDependencies = Readonly<{
     input: unknown
   ) => Effect.Effect<NodeContentKnowledgeRuntime, NodeRuntimeError>
   readonly relayRuntime: Partial<OutboxRelayLoopRuntime>
+  readonly openCapture: (
+    config: HttpS3ArticleCaptureConfig
+  ) => HttpS3ArticleCaptureResource
+  readonly openMarkdownReader: typeof openS3MarkdownObjectReaderUnsafe
+  readonly runRpc: typeof runNatsContentKnowledgeRpc
+  readonly runPoller: typeof runContentFeedPoller
   readonly onReady?: () => void
 }>
 
@@ -221,6 +281,10 @@ export const defaultNodeServiceDependencies: NodeServiceDependencies =
   Object.freeze({
     startRuntime: startNodeRuntime,
     relayRuntime: Object.freeze({}),
+    openCapture: openHttpS3ArticleCaptureUnsafe,
+    openMarkdownReader: openS3MarkdownObjectReaderUnsafe,
+    runRpc: runNatsContentKnowledgeRpc,
+    runPoller: runContentFeedPoller,
   })
 
 /** Owns the continuously running relay and releases SQLite/NATS on interruption. */
@@ -248,14 +312,53 @@ export const runNodeService = (
               Effect.ignore
             )
         ).pipe(
-          Effect.flatMap((runtime) => {
-            dependencies.onReady?.()
-            return runOutboxRelayLoop(
-              config.relay,
-              runtime.relayOnce,
-              dependencies.relayRuntime
+          Effect.flatMap((runtime) =>
+            Effect.acquireRelease(
+              Effect.try({
+                try: () => dependencies.openCapture(config.archive),
+                catch: () => runtimeError("ObjectStore"),
+              }),
+              (capture) => capture.close
+            ).pipe(
+              Effect.flatMap((capture) =>
+                Effect.acquireRelease(
+                  Effect.try({
+                    try: () =>
+                      dependencies.openMarkdownReader(config.archive),
+                    catch: () => runtimeError("ObjectStore"),
+                  }),
+                  (markdown) => markdown.close
+                ).pipe(
+                  Effect.flatMap((markdown) => {
+                    dependencies.onReady?.()
+                    return Effect.all(
+                      [
+                        runOutboxRelayLoop(
+                          config.relay,
+                          runtime.relayOnce,
+                          dependencies.relayRuntime
+                        ),
+                        dependencies.runRpc(
+                          {
+                            natsServers: config.natsServers,
+                            queueGroup: config.rpc.queueGroup,
+                          },
+                          runtime,
+                          markdown.reader
+                        ),
+                        dependencies.runPoller(
+                          config.feedPoller,
+                          runtime,
+                          capture
+                        ),
+                      ],
+                      { concurrency: "unbounded", discard: true }
+                    )
+                  })
+                )
+              )
             )
-          })
+          )
         )
       )
     )
