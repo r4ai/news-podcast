@@ -55,6 +55,13 @@ export {
   type NodeCreateJobRpcError,
 } from "./runtime/node.js"
 export {
+  NodeEpisodeProductionServiceConfigSchema,
+  parseNodeEpisodeProductionServiceConfig,
+  runNodeEpisodeProductionService,
+  type NodeEpisodeProductionServiceConfig,
+  type NodeEpisodeProductionServiceError,
+} from "./runtime/service.js"
+export {
   runSingleWriterLoop,
   type SingleWriterSource,
 } from "./runtime/single-writer-loop.js"

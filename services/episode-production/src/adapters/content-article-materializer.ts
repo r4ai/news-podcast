@@ -28,30 +28,35 @@ export const makeContentArticleMaterializer = (
   deepFreeze({
     materialize: (input) => {
       const messageId = dependencies.newMessageId()
-      const request = {
-        messageId,
-        correlationId: messageId,
-        causationId: messageId,
-        occurredAt: dependencies.now(),
-        producer: "episode-production",
-        traceparent:
-          "00-00000000000000000000000000000001-0000000000000001-01",
-        actor: { _tag: "User", userId: input.ownerId },
-        payload: { selection: input.selection },
-      }
-      return Effect.tryPromise({
-        try: () =>
-          client.request(
-            subjects.content.materializeArticles,
-            new TextEncoder().encode(JSON.stringify(request)),
-            dependencies.timeoutMillis,
-            input.signal
-          ),
-        catch: () =>
-          input.signal?.aborted
-            ? failure("content_materialization_canceled", false)
-            : failure("content_materialization_unavailable", true),
-      }).pipe(
+      const request = Effect.currentSpan.pipe(
+        Effect.map((span) => ({
+          messageId,
+          correlationId: messageId,
+          causationId: messageId,
+          occurredAt: dependencies.now(),
+          producer: "episode-production",
+          traceparent: `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`,
+          actor: { _tag: "User", userId: input.ownerId },
+          payload: { selection: input.selection },
+        })),
+        Effect.orDie
+      )
+      return request.pipe(
+        Effect.flatMap((envelope) =>
+          Effect.tryPromise({
+            try: () =>
+              client.request(
+                subjects.content.materializeArticles,
+                new TextEncoder().encode(JSON.stringify(envelope)),
+                dependencies.timeoutMillis,
+                input.signal
+              ),
+            catch: () =>
+              input.signal?.aborted
+                ? failure("content_materialization_canceled", false)
+                : failure("content_materialization_unavailable", true),
+          })
+        ),
         Effect.flatMap((bytes) =>
           Effect.try({
             try: () => JSON.parse(new TextDecoder().decode(bytes)) as unknown,
@@ -81,7 +86,8 @@ export const makeContentArticleMaterializer = (
               reply._tag === "Rejected" && reply.code === "STORAGE_FAILURE"
             )
           )
-        })
+        }),
+        Effect.withSpan("episodeProduction.materializeArticles")
       )
     },
   })

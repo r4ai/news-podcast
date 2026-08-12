@@ -1,16 +1,16 @@
 import { getNodeObservability } from "@news-podcast/observability/node/register"
 import { Effect } from "effect"
 
-import { readEpisodeProductionConfig } from "./runtime/env.js"
-import { runNodeCreateJobRpc } from "./runtime/node.js"
+import { readEpisodeProductionServiceConfig } from "./runtime/env.js"
+import { runNodeEpisodeProductionService } from "./runtime/service.js"
 import { startEpisodeProductionProcess } from "./runtime/process.js"
 
 const observability = getNodeObservability({
   serviceName: "episode-production",
   traceSampleRate: 1,
 })
-const program = readEpisodeProductionConfig(process.env).pipe(
-  Effect.flatMap(runNodeCreateJobRpc)
+const program = readEpisodeProductionServiceConfig(process.env).pipe(
+  Effect.flatMap(runNodeEpisodeProductionService)
 )
 
 startEpisodeProductionProcess(program, {

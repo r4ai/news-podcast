@@ -1,9 +1,48 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { readEpisodeProductionConfig } from "./env.js"
+import {
+  readEpisodeProductionConfig,
+  readEpisodeProductionServiceConfig,
+} from "./env.js"
 
 describe("Episode Production environment configuration", () => {
+  it("parses every provider and worker boundary for the executable service", async () => {
+    const config = await Effect.runPromise(
+      readEpisodeProductionServiceConfig({
+        EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
+        NATS_SERVERS: "nats://nats:4222",
+        EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
+        OPENAI_API_KEY: "test-openai-key",
+        OPENAI_MODEL: "gpt-test",
+        VOICEVOX_BASE_URL: "http://voicevox:50021",
+        VOICEVOX_CHARACTER_NAME: "ずんだもん",
+        S3_ENDPOINT: "http://seaweedfs:8333",
+        S3_REGION: "us-east-1",
+        S3_BUCKET: "news-podcast",
+        S3_ACCESS_KEY_ID: "access",
+        S3_SECRET_ACCESS_KEY: "secret",
+      })
+    )
+
+    expect(config.rpc.sqlitePath).toBe("/data/production.sqlite")
+    expect(config.openAi).toMatchObject({ model: "gpt-test" })
+    expect(config.voicevox.baseUrl).toBe("http://voicevox:50021")
+    expect(config.completionRelay.batchSize).toBe(50)
+    expect(Object.isFrozen(config.s3)).toBe(true)
+  })
+
+  it("rejects an executable service without provider credentials", async () => {
+    const exit = await Effect.runPromiseExit(
+      readEpisodeProductionServiceConfig({
+        EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
+        NATS_SERVERS: "nats://nats:4222",
+        EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
+      })
+    )
+    expect(exit._tag).toBe("Failure")
+  })
+
   it("parses a dedicated database, NATS servers, and queue group", async () => {
     const config = await Effect.runPromise(
       readEpisodeProductionConfig({
