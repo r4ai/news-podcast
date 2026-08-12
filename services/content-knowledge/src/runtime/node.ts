@@ -3,7 +3,9 @@ import { Effect, Schema } from "effect"
 
 import {
   createJetStreamPublisher,
+  createSqliteArticleCatalog,
   createSqliteArchiveStore,
+  createSqliteSubscriptionRepository,
   OutboxBatchSizeSchema,
   parseOutboxLimit,
   relayOutbox,
@@ -13,6 +15,8 @@ import {
   type SqlitePort,
   type SqliteArchiveStore,
 } from "../adapters/index.js"
+import type { ArticleCatalog } from "../application/article-catalog-ports.js"
+import type { SubscriptionRepository } from "../application/subscription-ports.js"
 import type { CapturedAt } from "../domain/article.js"
 import {
   currentCapturedAtUnsafe,
@@ -83,6 +87,8 @@ export type NodeRuntimeError = DeepReadonly<{
 
 export type NodeContentKnowledgeRuntime = DeepReadonly<{
   readonly store: SqliteArchiveStore
+  readonly articles: ArticleCatalog
+  readonly subscriptions: SubscriptionRepository
   readonly relayOnce: (
     input: unknown
   ) => Effect.Effect<
@@ -106,6 +112,7 @@ export type NodeServiceDependencies = Readonly<{
     input: unknown
   ) => Effect.Effect<NodeContentKnowledgeRuntime, NodeRuntimeError>
   readonly relayRuntime: Partial<OutboxRelayLoopRuntime>
+  readonly onReady?: () => void
 }>
 
 const defaultDependencies: NodeRuntimeDependencies = deepFreeze({
@@ -151,41 +158,56 @@ export const startNodeRuntime = (
           ).pipe(
             Effect.mapError(() => runtimeError("Sqlite")),
             Effect.flatMap((store) =>
-              Effect.tryPromise({
-                try: () => dependencies.connectJetStream(config.natsServers),
-                catch: () => runtimeError("Nats"),
-              }).pipe(
-                Effect.map((jetStream) => {
-                  const publisher = createJetStreamPublisher(jetStream)
-                  const relay = relayOutbox({
-                    store,
-                    publisher,
-                    now: dependencies.now,
-                  })
-                  const relayOnce = (batchSize: unknown) =>
-                    parseOutboxLimit(batchSize).pipe(
-                      Effect.mapError(() => runtimeError("Outbox")),
-                      Effect.flatMap(relay)
-                    )
-                  const close = () =>
-                    Effect.tryPromise({
-                      try: () => jetStream.close(),
-                      catch: () => runtimeError("Nats"),
-                    }).pipe(
-                      Effect.matchEffect({
-                        onFailure: (natsError) =>
-                          closeSqlite(database).pipe(
-                            Effect.matchEffect({
-                              onFailure: () => Effect.fail(natsError),
-                              onSuccess: () => Effect.fail(natsError),
-                            })
-                          ),
-                        onSuccess: () => closeSqlite(database),
+              Effect.all([
+                createSqliteArticleCatalog(database, jsonInterop),
+                createSqliteSubscriptionRepository(database),
+              ]).pipe(
+                Effect.mapError(() => runtimeError("Sqlite")),
+                Effect.flatMap(([articles, subscriptions]) =>
+                  Effect.tryPromise({
+                    try: () =>
+                      dependencies.connectJetStream(config.natsServers),
+                    catch: () => runtimeError("Nats"),
+                  }).pipe(
+                    Effect.map((jetStream) => {
+                      const publisher = createJetStreamPublisher(jetStream)
+                      const relay = relayOutbox({
+                        store,
+                        publisher,
+                        now: dependencies.now,
                       })
-                    )
+                      const relayOnce = (batchSize: unknown) =>
+                        parseOutboxLimit(batchSize).pipe(
+                          Effect.mapError(() => runtimeError("Outbox")),
+                          Effect.flatMap(relay)
+                        )
+                      const close = () =>
+                        Effect.tryPromise({
+                          try: () => jetStream.close(),
+                          catch: () => runtimeError("Nats"),
+                        }).pipe(
+                          Effect.matchEffect({
+                            onFailure: (natsError) =>
+                              closeSqlite(database).pipe(
+                                Effect.matchEffect({
+                                  onFailure: () => Effect.fail(natsError),
+                                  onSuccess: () => Effect.fail(natsError),
+                                })
+                              ),
+                            onSuccess: () => closeSqlite(database),
+                          })
+                        )
 
-                  return deepFreeze({ store, relayOnce, close })
-                })
+                      return deepFreeze({
+                        store,
+                        articles,
+                        subscriptions,
+                        relayOnce,
+                        close,
+                      })
+                    })
+                  )
+                )
               )
             ),
             Effect.tapError(() => closeSqlite(database).pipe(Effect.ignore))
@@ -195,15 +217,16 @@ export const startNodeRuntime = (
     )
   )
 
-const defaultServiceDependencies: NodeServiceDependencies = Object.freeze({
-  startRuntime: startNodeRuntime,
-  relayRuntime: Object.freeze({}),
-})
+export const defaultNodeServiceDependencies: NodeServiceDependencies =
+  Object.freeze({
+    startRuntime: startNodeRuntime,
+    relayRuntime: Object.freeze({}),
+  })
 
 /** Owns the continuously running relay and releases SQLite/NATS on interruption. */
 export const runNodeService = (
   input: unknown,
-  dependencies: NodeServiceDependencies = defaultServiceDependencies
+  dependencies: NodeServiceDependencies = defaultNodeServiceDependencies
 ): Effect.Effect<void, NodeRuntimeError> =>
   parseNodeServiceConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
@@ -225,13 +248,14 @@ export const runNodeService = (
               Effect.ignore
             )
         ).pipe(
-          Effect.flatMap((runtime) =>
-            runOutboxRelayLoop(
+          Effect.flatMap((runtime) => {
+            dependencies.onReady?.()
+            return runOutboxRelayLoop(
               config.relay,
               runtime.relayOnce,
               dependencies.relayRuntime
             )
-          )
+          })
         )
       )
     )

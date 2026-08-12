@@ -54,6 +54,7 @@ export type NodeGatewayDependencies = Readonly<{
   readonly listen: (input: ListenInput) => Promise<UnsafeGatewayHttpServer>
   readonly nextMessageId: () => string
   readonly now: () => string
+  readonly onReady?: () => void
 }>
 
 const runtimeError = (
@@ -98,6 +99,7 @@ export const runNodeGateway = (
             }),
             (server) => Effect.promise(() => server.close()).pipe(Effect.ignore)
           )
+          dependencies.onReady?.()
           return yield* Effect.never
         })
       )

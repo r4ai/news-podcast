@@ -8,6 +8,7 @@ import {
 } from "../infrastructure/unsafe/better-auth.js"
 import { toIdentityAuthConfig, type IdentityAccessConfig } from "./env.js"
 import {
+  defaultNodeResolveSessionRpcDependencies,
   runNodeResolveSessionRpc,
   type NodeResolveSessionRpcError,
 } from "./node.js"
@@ -28,13 +29,19 @@ export type IdentityAccessServiceDependencies = Readonly<{
       readonly natsServers: readonly string[]
       readonly queueGroup: string
     }>,
-    api: BetterAuthSessionApi
+    api: BetterAuthSessionApi,
+    onReady?: () => void
   ) => Effect.Effect<void, NodeResolveSessionRpcError>
+  readonly onReady?: () => void
 }>
 
-const defaultDependencies: IdentityAccessServiceDependencies = deepFreeze({
+export const defaultIdentityAccessServiceDependencies: IdentityAccessServiceDependencies = deepFreeze({
   createAuth: createIdentityAuthUnsafe,
-  runRpc: runNodeResolveSessionRpc,
+  runRpc: (config, api, onReady) =>
+    runNodeResolveSessionRpc(config, api, {
+      ...defaultNodeResolveSessionRpcDependencies,
+      ...(onReady === undefined ? {} : { onReady }),
+    }),
 })
 
 const authFailure = (): IdentityAccessServiceError =>
@@ -46,7 +53,7 @@ const authFailure = (): IdentityAccessServiceError =>
 /** NATS scope is nested inside auth ownership, so NATS drains before DB close. */
 export const runIdentityAccessService = (
   config: IdentityAccessConfig,
-  dependencies: IdentityAccessServiceDependencies = defaultDependencies
+  dependencies: IdentityAccessServiceDependencies = defaultIdentityAccessServiceDependencies
 ): Effect.Effect<void, IdentityAccessServiceError> =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -63,7 +70,8 @@ export const runIdentityAccessService = (
           natsServers: config.natsServers,
           queueGroup: config.queueGroup,
         },
-        auth.api
+        auth.api,
+        dependencies.onReady
       )
     })
   )

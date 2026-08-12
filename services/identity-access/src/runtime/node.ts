@@ -45,9 +45,10 @@ export type NodeResolveSessionRpcDependencies = DeepReadonly<{
   ) => Promise<UnsafeNatsRpcServer>
   readonly newMessageId: () => string
   readonly now: () => string
+  readonly onReady?: () => void
 }>
 
-const defaultDependencies: NodeResolveSessionRpcDependencies = deepFreeze({
+export const defaultNodeResolveSessionRpcDependencies: NodeResolveSessionRpcDependencies = deepFreeze({
   connectNats: connectNatsRpcUnsafe,
   newMessageId: randomMessageIdUnsafe,
   now: currentUtcInstantUnsafe,
@@ -70,7 +71,7 @@ const isRuntimeError = (
 export const runNodeResolveSessionRpc = (
   input: unknown,
   api: BetterAuthSessionApi,
-  dependencies: NodeResolveSessionRpcDependencies = defaultDependencies
+  dependencies: NodeResolveSessionRpcDependencies = defaultNodeResolveSessionRpcDependencies
 ): Effect.Effect<void, NodeResolveSessionRpcError> =>
   parseNodeResolveSessionRpcConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
@@ -94,6 +95,7 @@ export const runNodeResolveSessionRpc = (
             makeBetterAuthSessionReader(api),
             dependencies
           )
+          dependencies.onReady?.()
 
           while (true) {
             const delivery = yield* Effect.tryPromise({

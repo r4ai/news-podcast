@@ -149,6 +149,7 @@ export type NodeEpisodeLibraryServiceDependencies = Readonly<{
     config: S3AudioAccessSignerConfig
   ) => S3AudioAccessSignerResource
   readonly rpcDependencies: NodeEpisodeLibraryRpcDependencies
+  readonly onReady?: () => void
   readonly connectCompletionConsumer: (
     config: Parameters<typeof connectEpisodeCompletedConsumerUnsafe>[0]
   ) => Promise<UnsafeEpisodeCompletedConsumer>
@@ -162,7 +163,7 @@ const defaultDependencies: NodeEpisodeLibraryRpcDependencies = deepFreeze({
   makeRepository: makeSqliteEpisodeRepository,
 })
 
-const defaultServiceDependencies: NodeEpisodeLibraryServiceDependencies =
+export const defaultNodeEpisodeLibraryServiceDependencies: NodeEpisodeLibraryServiceDependencies =
   Object.freeze({
     openSigner: openS3AudioAccessSignerUnsafe,
     rpcDependencies: defaultDependencies,
@@ -288,7 +289,7 @@ const makeCompletionPorts = (
 /** Adds scoped S3 signing to the existing scoped SQLite/NATS RPC runtime. */
 export const runNodeEpisodeLibraryService = (
   input: unknown,
-  dependencies: NodeEpisodeLibraryServiceDependencies = defaultServiceDependencies
+  dependencies: NodeEpisodeLibraryServiceDependencies = defaultNodeEpisodeLibraryServiceDependencies
 ): Effect.Effect<void, NodeEpisodeLibraryRpcError> =>
   parseNodeEpisodeLibraryServiceConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
@@ -357,6 +358,7 @@ export const runNodeEpisodeLibraryService = (
             makeCompletionPorts(repository),
             config.completionConsumer
           ).pipe(Effect.mapError(() => runtimeError("Nats")))
+          dependencies.onReady?.()
           return yield* Effect.raceFirst(rpc, completions)
         })
       )

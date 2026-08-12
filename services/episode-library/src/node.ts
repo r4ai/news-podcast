@@ -1,16 +1,32 @@
 import { getNodeObservability } from "@news-podcast/observability/node/register"
+import { createHealthState, healthServerScoped } from "@news-podcast/service-runtime"
 import { Effect } from "effect"
 
 import { readEpisodeLibraryConfig } from "./runtime/env.js"
-import { runNodeEpisodeLibraryService } from "./runtime/node.js"
+import {
+  defaultNodeEpisodeLibraryServiceDependencies,
+  runNodeEpisodeLibraryService,
+} from "./runtime/node.js"
 import { startEpisodeLibraryProcess } from "./runtime/process.js"
 
 const observability = getNodeObservability({
   serviceName: "episode-library",
   traceSampleRate: 1,
 })
-const program = readEpisodeLibraryConfig(process.env).pipe(
-  Effect.flatMap(runNodeEpisodeLibraryService)
+const health = createHealthState()
+const core = readEpisodeLibraryConfig(process.env).pipe(
+  Effect.flatMap((config) =>
+    runNodeEpisodeLibraryService(config, {
+      ...defaultNodeEpisodeLibraryServiceDependencies,
+      onReady: health.ready,
+    })
+  )
+)
+const program = Effect.scoped(
+  healthServerScoped(Number(process.env.EPISODE_LIBRARY_HEALTH_PORT ?? "4105"), health).pipe(
+    Effect.andThen(core),
+    Effect.ensuring(Effect.sync(health.notReady))
+  )
 )
 
 startEpisodeLibraryProcess(program, {

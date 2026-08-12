@@ -106,7 +106,8 @@ const addMillis = (value: DateTime.Utc, milliseconds: number) =>
 
 /** Runs RPC, one fenced worker, and the completion relay in one scoped process. */
 export const runNodeEpisodeProductionService = (
-  input: unknown
+  input: unknown,
+  onReady: () => void = () => undefined
 ): Effect.Effect<void, NodeEpisodeProductionServiceError | unknown> =>
   parseNodeEpisodeProductionServiceConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
@@ -202,6 +203,8 @@ export const runNodeEpisodeProductionService = (
           const rpc = runNodeCreateJobRpc(config.rpc).pipe(
             Effect.mapError(() => runtimeError("Execution"))
           )
+
+          onReady()
 
           yield* Effect.all([rpc, worker, relay], {
             concurrency: "unbounded",
