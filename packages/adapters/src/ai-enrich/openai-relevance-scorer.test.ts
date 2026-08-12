@@ -125,9 +125,9 @@ describe("OpenAiRelevanceScorer", () => {
       ],
     },
   ])("rejects a response with $name", async ({ scores }) => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonSchemaResponse(scores)
-    )
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() => Promise.resolve(jsonSchemaResponse(scores)))
     const scorer = new OpenAiRelevanceScorer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
       fetcher,
@@ -313,5 +313,31 @@ describe("OpenAiRelevanceScorer", () => {
         "Unsupported parameter: 'temperature' is not supported with this model."
       )
     )
+  })
+
+  it("retries one malformed response body within an on-demand call", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("not-json", { status: 200 }))
+      .mockResolvedValueOnce(
+        jsonSchemaResponse([
+          { feed_item_id: "a", score: 80, reason: "回復したから" },
+          { feed_item_id: "b", score: 40, reason: "中立だから" },
+        ])
+      )
+    const scorer = new OpenAiRelevanceScorer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await expect(
+      scorer.score({
+        profile: { include: "AI", exclude: "" },
+        candidates,
+        tagVocabulary: [],
+      })
+    ).resolves.toMatchObject({ scores: [{ feedItemId: "a" }, { feedItemId: "b" }] })
+    expect(fetcher).toHaveBeenCalledTimes(2)
   })
 })

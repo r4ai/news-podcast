@@ -74,12 +74,24 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
     let tokensOut = 0
 
     for (let attempt = 0; attempt < MAX_SUMMARY_ATTEMPTS; attempt += 1) {
-      const result = await this.requestSummary(
-        input.title,
-        markdown,
-        invalidSummary,
-        signal
-      )
+      let result: { summary: string; tokensIn: number; tokensOut: number }
+      try {
+        result = await this.requestSummary(
+          input.title,
+          markdown,
+          invalidSummary,
+          signal
+        )
+      } catch (error) {
+        if (
+          error instanceof ArticleSummaryError &&
+          error.retryable &&
+          attempt < MAX_SUMMARY_ATTEMPTS - 1
+        ) {
+          continue
+        }
+        throw error
+      }
       tokensIn += result.tokensIn
       tokensOut += result.tokensOut
       const summary = flattenSummaryHeadings(result.summary)
@@ -179,7 +191,14 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
       )
     }
 
-    const providerResponse = (await response.json()) as OpenAiResponse
+    let providerResponse: OpenAiResponse
+    try {
+      providerResponse = (await response.json()) as OpenAiResponse
+    } catch {
+      throw new ArticleSummaryError(
+        "OpenAI response body was not valid JSON"
+      )
+    }
     const outputText = providerResponse.output
       ?.flatMap((item) => item.content ?? [])
       .find((item) => item.type === "output_text")?.text

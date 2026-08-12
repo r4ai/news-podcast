@@ -216,4 +216,21 @@ describe("OpenAiArticleSummarizer", () => {
     expect(error).toBeInstanceOf(ArticleSummaryError)
     expect(error).toMatchObject({ retryable: false })
   })
+
+  it("retries one transient empty response within an on-demand call", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ status: "completed", output: [] }))
+      .mockResolvedValueOnce(jsonSchemaResponse("回復後の要約"))
+    const summarizer = new OpenAiArticleSummarizer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await expect(
+      summarizer.summarize({ title: "t", markdown: "m" })
+    ).resolves.toMatchObject({ markdown: "回復後の要約" })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
 })

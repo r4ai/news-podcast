@@ -51,6 +51,14 @@ const ScorePayload = z.object({
   ),
 })
 
+type RelevanceScoreInput = {
+  readonly profile: InterestProfile
+  readonly candidates: readonly RelevanceCandidate[]
+  readonly tagVocabulary: readonly string[]
+}
+
+const MAX_RESPONSE_ATTEMPTS = 2
+
 export class RelevanceScoreError extends Error {
   constructor(
     message: string,
@@ -69,16 +77,33 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
   ) {}
 
   async score(
-    input: {
-      readonly profile: InterestProfile
-      readonly candidates: readonly RelevanceCandidate[]
-      readonly tagVocabulary: readonly string[]
-    },
+    input: RelevanceScoreInput,
     signal?: AbortSignal
   ): Promise<RelevanceBatchResult> {
     if (input.candidates.length === 0) {
       throw new RelevanceScoreError("At least one candidate is required", false)
     }
+
+    for (let attempt = 0; attempt < MAX_RESPONSE_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.scoreOnce(input, signal)
+      } catch (error) {
+        if (
+          !(error instanceof RelevanceScoreError) ||
+          !error.retryable ||
+          attempt === MAX_RESPONSE_ATTEMPTS - 1
+        ) {
+          throw error
+        }
+      }
+    }
+    throw new RelevanceScoreError("OpenAI response retry limit exceeded")
+  }
+
+  private async scoreOnce(
+    input: RelevanceScoreInput,
+    signal?: AbortSignal
+  ): Promise<RelevanceBatchResult> {
 
     // タグ付与はスコア付けと同じ1コールに相乗りさせる（コール数を増やさない）。
     // 語彙が空ならenumが空になり構造化出力が壊れるため、tags関連フィールド自体を
@@ -196,7 +221,14 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
       )
     }
 
-    const providerResponse = (await response.json()) as OpenAiResponse
+    let providerResponse: OpenAiResponse
+    try {
+      providerResponse = (await response.json()) as OpenAiResponse
+    } catch {
+      throw new RelevanceScoreError(
+        "OpenAI response body was not valid JSON"
+      )
+    }
     const outputText = providerResponse.output
       ?.flatMap((item) => item.content ?? [])
       .find((item) => item.type === "output_text")?.text
