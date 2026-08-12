@@ -197,6 +197,31 @@ describe("OpenAI ScriptGenerator HTTP boundary", () => {
     }
   )
 
+  it.each([
+    [
+      "a non-JSON media type",
+      { headers: { "content-type": "text/plain" }, body: "{}" },
+    ],
+    [
+      "an oversized declared response",
+      {
+        headers: {
+          "content-type": "application/json",
+          "content-length": "1048577",
+        },
+        body: "{}",
+      },
+    ],
+  ])(
+    "rejects %s before provider data enters the domain",
+    async (_case, reply) => {
+      const fake = await startScriptedServer([reply])
+      await expect(
+        Effect.runPromise(Effect.flip(generate(makeGenerator(fake.endpoint))))
+      ).resolves.toEqual({ _tag: "MalformedResponse" })
+    }
+  )
+
   it("classifies a refusal without retaining refusal text", async () => {
     const fake = await startScriptedServer([
       {

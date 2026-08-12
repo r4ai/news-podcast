@@ -18,6 +18,7 @@ import type {
 const MAXIMUM_TITLE_CHARACTERS = 200
 const MAXIMUM_SCRIPT_CHARACTERS = 6_000
 const MAXIMUM_SOURCE_COUNT = 20
+const MAXIMUM_RESPONSE_BYTES = 1_048_576
 
 const OutputTextSchema = Schema.Struct({
   type: Schema.Literal("output_text"),
@@ -133,6 +134,50 @@ const requestBody = (
   },
 })
 
+const malformed = () => failure({ _tag: "MalformedResponse" })
+
+const readBoundedJson = async (response: Response): Promise<unknown> => {
+  const contentType = response.headers.get("content-type")?.toLowerCase()
+  if (!contentType?.startsWith("application/json")) throw malformed()
+  const declared = response.headers.get("content-length")
+  if (declared !== null) {
+    const length = Number(declared)
+    if (
+      !Number.isSafeInteger(length) ||
+      length < 0 ||
+      length > MAXIMUM_RESPONSE_BYTES
+    )
+      throw malformed()
+  }
+  const reader = response.body?.getReader()
+  if (!reader) throw malformed()
+  const chunks: Uint8Array[] = []
+  let length = 0
+  for (;;) {
+    const result = await reader.read()
+    if (result.done) break
+    length += result.value.byteLength
+    if (length > MAXIMUM_RESPONSE_BYTES) {
+      await reader.cancel()
+      throw malformed()
+    }
+    chunks.push(result.value)
+  }
+  const bytes = new Uint8Array(length)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  try {
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+    ) as unknown
+  } catch {
+    throw malformed()
+  }
+}
+
 const fetchResponse = (
   config: OpenAiScriptGeneratorConfig,
   request: ScriptGenerationRequest,
@@ -169,12 +214,7 @@ const fetchResponse = (
             ...(retryAfter ? { retryAfter } : {}),
           })
         }
-        const body = await response.text()
-        try {
-          return JSON.parse(body) as unknown
-        } catch {
-          throw failure({ _tag: "MalformedResponse" })
-        }
+        return await readBoundedJson(response)
       } catch (error) {
         if (isProviderFailure(error)) throw error
         if (request.signal?.aborted) {
