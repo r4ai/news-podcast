@@ -1,6 +1,6 @@
 # システムアーキテクチャ
 
-- 更新日: 2026-08-12
+- 更新日: 2026-08-13
 - 対象: 関数型マイクロサービスへの移行中（新旧の正本を明記）
 - 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
@@ -21,19 +21,24 @@
 
 ```mermaid
 flowchart LR
-  User["利用者"] --> Web["React Web"]
-  Web -->|"Session Cookie / REST"| API["Hono API"]
-  API --> DB[("Job・購読・番組DB")]
-  Worker["Episode Worker"] --> DB
-  Worker --> RSS["RSS配信元"]
-  Worker --> OpenAI["OpenAI Responses API / Web Search"]
-  Worker --> Voicevox["VOICEVOX Engine"]
-  Worker --> Objects[("SeaweedFS / S3")]
-  API --> Objects
-  Worker --> Articles["記事HTML・assets"]
-  API -.->|"OTLP"| Obs["Collector / Grafana LGTM"]
-  Worker -.->|"OTLP"| Obs
-  Web -.->|"認証済みAPI Gateway経由"| Obs
+  User["利用者"] --> Web["React Web<br/>切替中"]
+  Web --> Gateway["Effect API Gateway"]
+  Gateway <-->|"NATS RPC"| Identity["Identity Access"]
+  Gateway <-->|"NATS RPC"| Content["Content Knowledge"]
+  Gateway <-->|"NATS RPC"| Production["Episode Production"]
+  Gateway <-->|"NATS RPC"| Library["Episode Library"]
+  Content --> RSS["RSS / Article origins"]
+  Production --> OpenAI["OpenAI Responses API"]
+  Production --> Voicevox["VOICEVOX"]
+  Content --> Objects[("SeaweedFS / S3")]
+  Production --> Objects
+  Library --> Objects
+  Production -->|"v2 completion / JetStream"| Library
+  Gateway -.->|"OTLP"| Obs["Collector / Grafana LGTM"]
+  Identity -.-> Obs
+  Content -.-> Obs
+  Production -.-> Obs
+  Library -.-> Obs
 ```
 
 ## 2. ドメイン境界
@@ -199,9 +204,9 @@ flowchart LR
 | --- | --- | --- |
 | immutable kernel / protocol | Done | strict parse、deep freeze、correlation envelope、version付きsubject |
 | 4 Context vertical slice | Foundation done | `services/*/src/{domain,application,adapters,runtime}`。全ユースケースの機能同等性は未完了 |
-| SQLite/NATS runtime | In progress | service別single-writer、outbox/inbox adapter。全serviceのentrypoint/Compose接続は未完了 |
-| Effect HttpApi Gateway | Foundation done | HttpApi契約、handler、NATS port。配備とWeb切替は未完了 |
-| Grafana相関監視 | Foundation done | LGTM provisioningと検証script。新4サービスの実配線E2Eは未完了 |
+| SQLite/NATS runtime | P0 done | service別single-writer、outbox/inbox、durable consumer、fenced heartbeat、Compose readiness |
+| Effect HttpApi Gateway | Core flow done | 認証、購読、生成依頼、Library/音声。残存公開APIとWeb切替は未完了 |
+| Grafana相関監視 | P0 done | LGTM provisioning、Effect/Node OTLP、Gateway/Identity/NATS span smoke |
 | Web生成client | Pending | Gateway OpenAPI確定後 |
 | 旧API/Worker削除 | Pending | E2E parity後 |
 
@@ -215,27 +220,31 @@ flowchart LR
 sequenceDiagram
   actor User as 利用者
   participant Web
-  participant API
-  participant DB as SQLite / D1
-  participant Worker
+  participant Gateway
+  participant Content
+  participant Production
+  participant Library
   participant Providers as Agent tools / OpenAI / VOICEVOX
   participant Objects as SeaweedFS / R2
 
   User->>Web: 番組を生成
-  Web->>API: POST /v1/episode-jobs<br/>Idempotency-Key
-  API->>API: SessionからownerIdを解決
-  API->>DB: 購読snapshotとqueued jobを保存
-  API-->>Web: 202 Accepted + Location
+  Web->>Gateway: POST /v1/episode-jobs<br/>Idempotency-Key
+  Gateway->>Production: owner付きNATS RPC
+  Production->>Production: queued jobを冪等保存
+  Gateway-->>Web: 202 Accepted + Location
   loop 状態をpolling
-    Web->>API: GET /v1/episode-jobs/{id}
-    API-->>Web: status / stage / attempt
+    Web->>Gateway: GET /v1/episode-jobs/{id}
+    Gateway->>Production: owner-scoped query
+    Gateway-->>Web: status / stage / attempt
   end
-  Worker->>DB: jobを60秒lease
-  Worker->>Providers: 保存記事調査 → Web補足 → 台本 → 音声合成
-  Worker->>Objects: WAVを保存
-  Worker->>DB: Episode・出典を保存しsucceededへ更新
-  Web->>API: POST /v1/episodes/{id}/audio-access
-  API-->>Web: 5分間の音声アクセスURL
+  Production->>Production: token付きlease + heartbeat
+  Production->>Content: 保存Markdownをmaterialize
+  Production->>Providers: 台本 → 音声合成
+  Production->>Objects: WAVを保存
+  Production->>Library: durable completion event
+  Web->>Gateway: POST /v1/episodes/{id}/audio-access
+  Gateway->>Library: owner-scoped access RPC
+  Gateway-->>Web: 5分間の音声アクセスURL
 ```
 
 定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Node Workerは1秒ごとにschedule確認とjob leaseを行い、IANA time zone上で同じローカル日付に二重生成しない。
@@ -253,7 +262,7 @@ flowchart LR
   Store --> Commit["Episode・出典・Jobをcommit"]
 ```
 
-外部provider由来の一時障害は5秒、30秒、120秒のbackoffで再試行する。初回を含め最大4回試行し、DB制約も5回目のleaseを拒否する。60秒leaseは15秒ごとに更新し、全状態変更とEpisode確定をlease tokenでfenceする。停止したWorkerのjobは期限後に再取得し、検証済み台本とVOICEVOX chunkのcheckpointから再開する。台本、各provider request、stage、job全体、応答byteには上限を設ける。
+外部provider由来の一時障害は設定済みの指数backoffと総経過時間で再試行する。初回を含めjobは最大4回試行し、DB制約も5回目のleaseを拒否する。既定300秒leaseは60秒ごとに更新し、全状態変更とEpisode確定をlease tokenでfenceする。停止したprocessのjobは期限後に再取得し、検証済み台本と音声checkpointから再開する。台本、各provider request、job、応答byteには上限を設ける。
 
 ### 4.3 ジョブ状態
 
