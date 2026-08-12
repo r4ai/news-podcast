@@ -1,3 +1,5 @@
+import { z } from "zod"
+
 import type {
   AgentArticle,
   EpisodeScriptDraft,
@@ -5,10 +7,90 @@ import type {
   PodcastAgentRunner,
 } from "@news-podcast/application"
 import type { OpenAiConfig } from "./config.js"
-import { OpenAiPodcastAgent, type AgentAudit } from "./openai-podcast-agent.js"
+import {
+  OpenAiPodcastAgent,
+  PodcastAgentError,
+  type AgentAudit,
+} from "./openai-podcast-agent.js"
 
 const MIN_ARTICLES_FOR_SECTIONAL = 6
 const MAX_ARTICLES_PER_SECTION = 6
+const MAX_SCRIPT_LENGTH = 6_000
+
+const TopicGroupsResponse = z
+  .object({
+    groups: z
+      .array(
+        z
+          .object({
+            topic: z.string().min(1).max(100),
+            articleIds: z
+              .array(z.string().uuid())
+              .min(1)
+              .max(MAX_ARTICLES_PER_SECTION),
+          })
+          .strict()
+      )
+      .min(1),
+  })
+  .strict()
+
+const MergedDraftResponse = z
+  .object({
+    title: z.string().min(1).max(200),
+    script: z.string().min(100).max(MAX_SCRIPT_LENGTH),
+  })
+  .strict()
+
+const TOPIC_GROUPS_FORMAT = {
+  type: "json_schema",
+  name: "podcast_topic_groups",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["groups"],
+    properties: {
+      groups: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["topic", "articleIds"],
+          properties: {
+            topic: { type: "string", minLength: 1, maxLength: 100 },
+            articleIds: {
+              type: "array",
+              minItems: 1,
+              maxItems: MAX_ARTICLES_PER_SECTION,
+              items: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
+
+const MERGED_DRAFT_FORMAT = {
+  type: "json_schema",
+  name: "merged_podcast_draft",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["title", "script"],
+    properties: {
+      title: { type: "string", minLength: 1, maxLength: 200 },
+      script: {
+        type: "string",
+        minLength: 100,
+        maxLength: MAX_SCRIPT_LENGTH,
+      },
+    },
+  },
+} as const
 
 interface TopicGroup {
   readonly topic: string
@@ -30,7 +112,7 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
     config: OpenAiConfig,
     private readonly context: PodcastAgentContext,
     private readonly audit: AgentAudit,
-    private readonly fetcher: typeof fetch = fetch,
+    private readonly fetcher: typeof fetch = fetch
   ) {
     this.config = config
     this.singleAgent = new OpenAiPodcastAgent(config, context, audit, fetcher)
@@ -69,12 +151,12 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
 
   private async classifyTopics(
     articles: readonly AgentArticle[],
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<readonly TopicGroup[]> {
     const articleList = articles
       .map(
         (a, i) =>
-          `${i + 1}. [${a.id}] ${a.title}（${a.sourceName}）${a.summary ? `\n   概要: ${a.summary}` : ""}`,
+          `${i + 1}. [${a.id}] ${a.title}（${a.sourceName}）${a.summary ? `\n   概要: ${a.summary}` : ""}`
       )
       .join("\n")
 
@@ -90,43 +172,37 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
       articleList,
     ].join("\n")
 
-    const result = await this.callOpenAi(prompt, signal)
-    const parsed = parseTopicGroups(result)
+    const parsed = parseStructuredOutput(
+      TopicGroupsResponse,
+      await this.callOpenAi(prompt, TOPIC_GROUPS_FORMAT, signal)
+    ).groups
 
+    const knownIds = new Set(articles.map((article) => article.id))
     const assigned = new Set<string>()
+    const groups: TopicGroup[] = []
     for (const group of parsed) {
+      const uniqueIds: string[] = []
       for (const id of group.articleIds) {
-        if (assigned.has(id)) continue
-        if (!articles.some((a) => a.id === id)) continue
+        if (assigned.has(id) || !knownIds.has(id)) continue
         assigned.add(id)
+        uniqueIds.push(id)
+      }
+      if (uniqueIds.length > 0) {
+        groups.push({ topic: group.topic, articleIds: uniqueIds })
       }
     }
 
     const unassigned = articles
       .filter((a) => !assigned.has(a.id))
       .map((a) => a.id)
-    if (unassigned.length > 0) {
-      if (parsed.length > 0) {
-        return [
-          ...parsed.filter((g) =>
-            g.articleIds.some((id) => articles.some((a) => a.id === id)),
-          ),
-          { topic: "その他の話題", articleIds: unassigned },
-        ]
-      }
-      for (
-        let i = 0;
-        i < unassigned.length;
-        i += MAX_ARTICLES_PER_SECTION
-      ) {
-        parsed.push({
-          topic: "ニュース",
-          articleIds: unassigned.slice(i, i + MAX_ARTICLES_PER_SECTION),
-        })
-      }
+    for (let i = 0; i < unassigned.length; i += MAX_ARTICLES_PER_SECTION) {
+      groups.push({
+        topic: groups.length > 0 ? "その他の話題" : "ニュース",
+        articleIds: unassigned.slice(i, i + MAX_ARTICLES_PER_SECTION),
+      })
     }
 
-    return parsed.filter((g) => g.articleIds.length > 0)
+    return groups
   }
 
   private async generateSection(
@@ -136,7 +212,7 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
       readonly feedIds: readonly string[]
       readonly signal?: AbortSignal
     },
-    group: TopicGroup,
+    group: TopicGroup
   ): Promise<{ title: string; script: string; sourceUrls: readonly URL[] }> {
     const draft = await this.singleAgent.run({
       jobId: input.jobId,
@@ -157,7 +233,7 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
     input: {
       readonly jobId: string
       readonly signal?: AbortSignal
-    },
+    }
   ): Promise<EpisodeScriptDraft> {
     if (sections.length === 0) {
       throw new Error("No sections generated")
@@ -174,7 +250,7 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
     const sectionText = sections
       .map(
         (s, i) =>
-          `### セクション${i + 1}: ${s.topic}\nタイトル: ${s.title}\n\n${s.script}`,
+          `### セクション${i + 1}: ${s.topic}\nタイトル: ${s.title}\n\n${s.script}`
       )
       .join("\n\n---\n\n")
 
@@ -184,14 +260,13 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
       "同じ情報の重複は排除せよ。全体のタイトルも設定せよ。",
       "前置き・免責事項・定型文は一切省け。句読点は読み上げて自然な位置にだけ打て。",
       "",
-      "JSON形式で出力せよ:",
-      '{ "title": "全体タイトル", "script": "統合台本", "source_urls": ["url1", ...] }',
-      "",
       sectionText,
     ].join("\n")
 
-    const result = await this.callOpenAi(prompt, input.signal)
-    const merged = parseMergedDraft(result)
+    const merged = parseStructuredOutput(
+      MergedDraftResponse,
+      await this.callOpenAi(prompt, MERGED_DRAFT_FORMAT, input.signal)
+    )
 
     const allSourceUrls = new Map<string, URL>()
     for (const section of sections) {
@@ -199,10 +274,6 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
         allSourceUrls.set(url.href, url)
       }
     }
-    for (const url of merged.sourceUrls) {
-      allSourceUrls.set(url.href, url)
-    }
-
     return {
       title: merged.title,
       script: merged.script,
@@ -212,81 +283,77 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
 
   private async callOpenAi(
     prompt: string,
-    signal?: AbortSignal,
-  ): Promise<string> {
-    const response = await this.fetcher(
-      "https://api.openai.com/v1/responses",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
-          : AbortSignal.timeout(120_000),
-        body: JSON.stringify({
-          model: this.config.model,
-          instructions:
-            "簡潔なJSONだけを出力せよ。説明や前置きは一切不要。",
-          input: prompt,
-        }),
+    format: typeof TOPIC_GROUPS_FORMAT | typeof MERGED_DRAFT_FORMAT,
+    signal?: AbortSignal
+  ): Promise<unknown> {
+    const response = await this.fetcher("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        "Content-Type": "application/json",
       },
-    )
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
+        : AbortSignal.timeout(120_000),
+      body: JSON.stringify({
+        model: this.config.model,
+        instructions: "簡潔なJSONだけを出力せよ。説明や前置きは一切不要。",
+        input: prompt,
+        text: { format },
+      }),
+    })
 
     if (!response.ok) {
-      throw new Error(
+      throw new PodcastAgentError(
         `OpenAI request failed with ${response.status}: ${response.statusText}`,
+        isRetryableProviderStatus(response.status)
       )
     }
 
     const data = (await response.json()) as {
-      output?: readonly { content?: readonly { text?: string }[] }[]
+      status?: string
+      incomplete_details?: { reason?: string }
+      output?: readonly {
+        type?: string
+        content?: readonly { type?: string; text?: string; refusal?: string }[]
+      }[]
     }
-    const output = data.output?.[0]
-    const content = output?.content?.[0]?.text
-    if (!content) {
-      throw new Error("OpenAI returned empty response")
-    }
-    return content
-  }
-}
-
-function parseTopicGroups(
-  raw: string,
-): { topic: string; articleIds: string[] }[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/)
-  if (!jsonMatch) return []
-  try {
-    const parsed = JSON.parse(jsonMatch[0]) as unknown[]
-    if (!Array.isArray(parsed)) return []
-    return parsed.map((item) => {
-      const obj = item as Record<string, unknown>
-      return {
-        topic: String(obj.topic ?? "ニュース"),
-        articleIds: Array.isArray(obj.articleIds)
-          ? obj.articleIds.map(String)
-          : [],
+    const outputText = data.output
+      ?.flatMap((item) => item.content ?? [])
+      .find(
+        (content) =>
+          content.type === "output_text" && typeof content.text === "string"
+      )?.text
+    if (!outputText) {
+      const refusal = data.output
+        ?.flatMap((item) => item.content ?? [])
+        .find((content) => content.type === "refusal")?.refusal
+      if (refusal) {
+        throw new PodcastAgentError("OpenAI refused structured output", false)
       }
-    })
-  } catch {
-    return []
+      const reason = data.incomplete_details?.reason ?? data.status ?? "unknown"
+      throw new PodcastAgentError(
+        `OpenAI response contained no output text (${reason})`
+      )
+    }
+    try {
+      return JSON.parse(outputText)
+    } catch {
+      throw new PodcastAgentError("OpenAI returned malformed structured output")
+    }
   }
 }
 
-function parseMergedDraft(raw: string): {
-  title: string
-  script: string
-  sourceUrls: URL[]
-} {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error("Failed to parse merged draft")
-  const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
-  return {
-    title: String(parsed.title ?? ""),
-    script: String(parsed.script ?? ""),
-    sourceUrls: Array.isArray(parsed.source_urls)
-      ? parsed.source_urls.map((u: unknown) => new URL(String(u)))
-      : [],
+function parseStructuredOutput<T>(schema: z.ZodType<T>, value: unknown): T {
+  const result = schema.safeParse(value)
+  if (!result.success) {
+    throw new PodcastAgentError(
+      "OpenAI structured output did not satisfy the application contract"
+    )
   }
+  return result.data
+}
+
+function isRetryableProviderStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 429 || status >= 500
 }
