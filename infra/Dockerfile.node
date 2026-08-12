@@ -38,5 +38,6 @@ COPY apps ./apps
 COPY packages ./packages
 COPY services ./services
 COPY scripts/sqlite-state.mjs ./scripts/sqlite-state.mjs
+COPY scripts/migrate-functional-ddd.mjs ./scripts/migrate-functional-ddd.mjs
 
 CMD ["pnpm", "build"]

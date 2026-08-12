@@ -23,6 +23,8 @@
     "test:e2e:functional": "bash scripts/run-functional-e2e.sh",
     "test:coverage:functional": "bash scripts/run-functional-coverage.sh",
     "test:sqlite-state": "node --test scripts/sqlite-state.test.mjs",
+    "state:migrate:functional-ddd": "node scripts/migrate-functional-ddd.mjs",
+    "test:state-migration": "node --experimental-test-coverage --test scripts/migrate-functional-ddd.test.mjs",
     "test:visual": "pnpm --filter web test:visual",
     "storybook:build": "pnpm --filter web build-storybook",
     "setup:env": "node scripts/setup-env.mjs",
