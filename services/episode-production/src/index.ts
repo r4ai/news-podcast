@@ -11,7 +11,13 @@ export {
   type SqliteJobRepository,
 } from "./adapters/sqlite-job-repository.js"
 export { createJob, type CreateJobPorts } from "./application/create-job.js"
+export {
+  retryProvider,
+  type ProviderRetryExhausted,
+  type ProviderRetryRuntime,
+} from "./application/retry-provider.js"
 export * from "./domain/episode-job.js"
+export * from "./domain/provider-reliability.js"
 export {
   NodeCreateJobRpcConfigSchema,
   parseNodeCreateJobRpcConfig,
