@@ -34,6 +34,10 @@ export {
   type SqliteExecutionRepository,
 } from "./adapters/sqlite-execution-repository.js"
 export {
+  sqliteAgentAuditMemoryRepository,
+  type SqliteAgentAuditMemoryRepository,
+} from "./adapters/sqlite-agent-audit-memory.js"
+export {
   sqliteReadingDictionaryRepository,
   type SqliteReadingDictionaryRepository,
 } from "./adapters/sqlite-reading-dictionary.js"
@@ -46,6 +50,27 @@ export {
   type S3AudioObjectStoreResource,
 } from "./infrastructure/unsafe/s3-audio-object-store.js"
 export { createJob, type CreateJobPorts } from "./application/create-job.js"
+export {
+  appendAgentAuditEvent,
+  decideAgentMemory,
+  ensureAgentInstance,
+  getOwnedAgentRun,
+  listAgentInstances,
+  listAgentMemories,
+  proposeAgentMemory,
+  recordAgentRun,
+  replayAgentAuditEvents,
+  softDeleteAgentMemory,
+  transitionOwnedAgentRun,
+  type AgentAuditMemoryRepository,
+  type AgentAuditMemoryStoreError,
+  type AppendAgentAuditEventResult,
+  type DecideAgentMemoryResult,
+  type DeleteAgentMemoryResult,
+  type ListAgentMemoriesResult,
+  type RecordAgentRunResult,
+  type TransitionAgentRunResult,
+} from "./application/agent-audit-memory.js"
 export {
   cancelOwnedJob,
   getOwnedJob,
@@ -83,6 +108,7 @@ export {
 export * from "./application/script-generator.js"
 export * from "./application/speech-synthesizer.js"
 export * from "./domain/episode-job.js"
+export * from "./domain/agent-audit-memory.js"
 export * from "./domain/provider-reliability.js"
 export * from "./domain/reading-dictionary.js"
 export {
