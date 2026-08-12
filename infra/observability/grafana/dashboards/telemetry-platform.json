@@ -1,0 +1,106 @@
+{
+  "annotations": { "list": [] },
+  "description": "Health and saturation of the OTel Collector and Grafana metrics/logs/traces backends.",
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [{ "title": "Application overview", "type": "link", "url": "/d/news-podcast-overview", "keepTime": true }],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "showUnfilled": true },
+      "targets": [{ "editorMode": "code", "expr": "up{job=~\"prometheus|otel-collector|loki|tempo|grafana\"}", "legendFormat": "{{job}}", "range": true, "refId": "A" }],
+      "title": "Backend readiness",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["sum"], "values": false }, "textMode": "auto" },
+      "targets": [{ "editorMode": "code", "expr": "sum(increase({__name__=~\"otelcol_exporter_send_failed_(spans|metric_points|log_records)_total\"}[$__range]))", "legendFormat": "failed exports", "range": true, "refId": "A" }],
+      "title": "Collector export failures",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["sum"], "values": false }, "textMode": "auto" },
+      "targets": [{ "editorMode": "code", "expr": "sum(increase({__name__=~\"otelcol_receiver_refused_(spans|metric_points|log_records)_total\"}[$__range]))", "legendFormat": "refused", "range": true, "refId": "A" }],
+      "title": "Collector refused telemetry",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "editorMode": "code", "expr": "sum by (receiver, transport) (rate(otelcol_receiver_accepted_spans_total[5m]))", "legendFormat": "spans {{receiver}}/{{transport}}", "range": true, "refId": "A" },
+        { "editorMode": "code", "expr": "sum by (receiver, transport) (rate(otelcol_receiver_accepted_metric_points_total[5m]))", "legendFormat": "metrics {{receiver}}/{{transport}}", "range": true, "refId": "B" },
+        { "editorMode": "code", "expr": "sum by (receiver, transport) (rate(otelcol_receiver_accepted_log_records_total[5m]))", "legendFormat": "logs {{receiver}}/{{transport}}", "range": true, "refId": "C" }
+      ],
+      "title": "OTLP accepted rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "editorMode": "code", "expr": "sum by (exporter) (otelcol_exporter_queue_size)", "legendFormat": "size {{exporter}}", "range": true, "refId": "A" },
+        { "editorMode": "code", "expr": "sum by (exporter) (otelcol_exporter_queue_capacity)", "legendFormat": "capacity {{exporter}}", "range": true, "refId": "B" }
+      ],
+      "title": "Collector exporter queues",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }, "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "1 - avg(rate(system_cpu_time_seconds_total{state=\"idle\"}[5m]))", "legendFormat": "host cpu", "range": true, "refId": "A" }],
+      "title": "Host CPU utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }, "unit": "bytes" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "sum by (state) (system_memory_usage_bytes)", "legendFormat": "{{state}}", "range": true, "refId": "A" }],
+      "title": "Host memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }, "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "id": 8,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "max by (mountpoint) (system_filesystem_utilization{state=\"used\"})", "legendFormat": "{{mountpoint}}", "range": true, "refId": "A" }],
+      "title": "Host filesystem utilization",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["news-podcast", "otel", "platform", "managed"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "News Podcast / Telemetry Platform",
+  "uid": "news-podcast-platform",
+  "version": 1
+}

@@ -17,7 +17,7 @@ export interface TelemetryEvent {
 export interface SpanOptions {
   readonly parent?: TraceContext
   readonly link?: TraceContext
-  readonly kind?: "internal" | "client"
+  readonly kind?: "internal" | "server" | "client" | "producer" | "consumer"
 }
 
 export interface Observability {

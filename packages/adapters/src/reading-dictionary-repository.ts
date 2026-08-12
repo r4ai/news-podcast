@@ -5,12 +5,10 @@ import type {
 import type { LocalStore, ReadingDictionaryDto } from "./db/local-store.js"
 import type { VoicevoxDictionaryClient } from "./voicevox-dictionary-client.js"
 
-export class SqliteReadingDictionaryRepository
-  implements ReadingDictionaryRepository
-{
+export class SqliteReadingDictionaryRepository implements ReadingDictionaryRepository {
   constructor(
     private readonly store: LocalStore,
-    private readonly voicevoxClient?: VoicevoxDictionaryClient,
+    private readonly voicevoxClient?: VoicevoxDictionaryClient
   ) {}
 
   async list(ownerId: string): Promise<readonly ReadingDictionaryEntry[]> {
@@ -31,7 +29,7 @@ export class SqliteReadingDictionaryRepository
         wordUuid = await this.voicevoxClient.addWord(
           input.surface,
           input.reading,
-          input.accentType ?? 0,
+          input.accentType ?? 0
         )
       } catch {
         // VOICEVOX unavailable
@@ -54,17 +52,13 @@ export class SqliteReadingDictionaryRepository
     readonly reading?: string
     readonly accentType?: number
   }): Promise<ReadingDictionaryEntry> {
-    const dto = this.store.updateReadingDictionary(
-      input.ownerId,
-      input.id,
-      {
-        ...(input.surface !== undefined ? { surface: input.surface } : {}),
-        ...(input.reading !== undefined ? { reading: input.reading } : {}),
-        ...(input.accentType !== undefined
-          ? { accentType: input.accentType }
-          : {}),
-      },
-    )
+    const dto = this.store.updateReadingDictionary(input.ownerId, input.id, {
+      ...(input.surface !== undefined ? { surface: input.surface } : {}),
+      ...(input.reading !== undefined ? { reading: input.reading } : {}),
+      ...(input.accentType !== undefined
+        ? { accentType: input.accentType }
+        : {}),
+    })
     if (!dto) throw new Error("Reading dictionary entry not found")
 
     if (this.voicevoxClient) {
@@ -74,13 +68,13 @@ export class SqliteReadingDictionaryRepository
             dto.wordUuid,
             dto.surface,
             dto.reading,
-            dto.accentType,
+            dto.accentType
           )
         } else {
           const uuid = await this.voicevoxClient.addWord(
             dto.surface,
             dto.reading,
-            dto.accentType,
+            dto.accentType
           )
           this.store.updateReadingDictionary(input.ownerId, dto.id, {
             wordUuid: uuid,
@@ -114,12 +108,8 @@ export class SqliteReadingDictionaryRepository
     const remoteWords = await this.voicevoxClient
       .listWords()
       .catch(() => [] as const)
-    const remoteBySurface = new Map(
-      remoteWords.map((w) => [w.surface, w]),
-    )
-    const localBySurface = new Map(
-      entries.map((e) => [e.surface, e]),
-    )
+    const remoteBySurface = new Map(remoteWords.map((w) => [w.surface, w]))
+    const localBySurface = new Map(entries.map((e) => [e.surface, e]))
 
     for (const [surface, entry] of localBySurface) {
       const remote = remoteBySurface.get(surface)
@@ -128,7 +118,7 @@ export class SqliteReadingDictionaryRepository
           const uuid = await this.voicevoxClient.addWord(
             entry.surface,
             entry.reading,
-            entry.accentType,
+            entry.accentType
           )
           this.store.updateReadingDictionary(ownerId, entry.id, {
             wordUuid: uuid,
@@ -153,9 +143,7 @@ function toEntry(dto: ReadingDictionaryDto): ReadingDictionaryEntry {
     accentType: dto.accentType,
     ...(dto.wordUuid !== null ? { wordUuid: dto.wordUuid } : {}),
     source: dto.source,
-    ...(dto.episodeJobId !== null
-      ? { episodeJobId: dto.episodeJobId }
-      : {}),
+    ...(dto.episodeJobId !== null ? { episodeJobId: dto.episodeJobId } : {}),
     createdAt: new Date(dto.createdAt),
     updatedAt: new Date(dto.updatedAt),
   }

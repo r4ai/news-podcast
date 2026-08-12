@@ -1,5 +1,11 @@
 import { describe, expect, it, beforeEach } from "vitest"
-import { SpanKind, SpanStatusCode, metrics, trace } from "@opentelemetry/api"
+import {
+  ROOT_CONTEXT,
+  SpanKind,
+  SpanStatusCode,
+  metrics,
+  trace,
+} from "@opentelemetry/api"
 import { logs } from "@opentelemetry/api-logs"
 import { InMemoryLogRecordExporter } from "@opentelemetry/sdk-logs"
 import {
@@ -10,11 +16,13 @@ import {
 import {
   InMemorySpanExporter,
   BasicTracerProvider,
+  SamplingDecision,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base"
 
 import {
   createNodeObservability,
+  createNodeSampler,
   readNodeObservabilityConfig,
 } from "./node-adapter.js"
 
@@ -32,8 +40,28 @@ describe("Node observability configuration", () => {
     expect(readNodeObservabilityConfig({}, "api")).toMatchObject({
       enabled: false,
       serviceName: "api",
-      traceSampleRate: 0.2,
+      traceSampleRate: 1,
     })
+  })
+
+  it("samples backend roots even when a browser parent was not sampled", () => {
+    const parent = trace.setSpanContext(ROOT_CONTEXT, {
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      spanId: "00f067aa0ba902b7",
+      traceFlags: 0,
+      isRemote: true,
+    })
+
+    expect(
+      createNodeSampler(1).shouldSample(
+        parent,
+        "4bf92f3577b34da6a3ce929d0e0e4736",
+        "GET /health",
+        SpanKind.SERVER,
+        {},
+        []
+      ).decision
+    ).toBe(SamplingDecision.RECORD_AND_SAMPLED)
   })
 
   it("requires an endpoint and a valid sampling ratio when enabled", () => {
@@ -194,6 +222,104 @@ describe("Node observability configuration", () => {
       "error.message": "boom [url]",
     })
     expect(log.attributes).not.toHaveProperty("error.stack")
+    await tracerProvider.shutdown()
+    await observability.shutdown()
+  })
+
+  it("correlates logs with the active trace and models every service boundary kind", async () => {
+    const traceExporter = new InMemorySpanExporter()
+    const tracerProvider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(traceExporter)],
+    })
+    const logExporter = new InMemoryLogRecordExporter()
+    const observability = createNodeObservability(
+      {
+        enabled: true,
+        endpoint: "http://unused.test",
+        serviceName: "test",
+        serviceVersion: "test",
+        environment: "test",
+        traceSampleRate: 1,
+        autoInstrumentation: false,
+        propagationAllowlist: new Set<string>(),
+      },
+      { tracer: tracerProvider.getTracer("test"), logExporter }
+    )
+
+    for (const kind of ["server", "producer", "consumer"] as const) {
+      await observability.withSpan(
+        `boundary.${kind}`,
+        {},
+        async () => observability.log({ name: "api.request" }),
+        { kind }
+      )
+    }
+    await (
+      logs.getLoggerProvider() as unknown as {
+        forceFlush(): Promise<void>
+      }
+    ).forceFlush()
+
+    expect(traceExporter.getFinishedSpans().map((span) => span.kind)).toEqual([
+      SpanKind.SERVER,
+      SpanKind.PRODUCER,
+      SpanKind.CONSUMER,
+    ])
+    expect(
+      logExporter
+        .getFinishedLogRecords()
+        .map((record) => record.spanContext)
+        .every((spanContext) =>
+          traceExporter
+            .getFinishedSpans()
+            .some(
+              (span) =>
+                span.spanContext().traceId === spanContext?.traceId &&
+                span.spanContext().spanId === spanContext.spanId
+            )
+        )
+    ).toBe(true)
+    await tracerProvider.shutdown()
+    await observability.shutdown()
+  })
+
+  it("retains low-cardinality semantic attributes needed by service graphs", async () => {
+    const traceExporter = new InMemorySpanExporter()
+    const tracerProvider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(traceExporter)],
+    })
+    const observability = createNodeObservability(
+      {
+        enabled: true,
+        endpoint: "http://unused.test",
+        serviceName: "test",
+        serviceVersion: "test",
+        environment: "test",
+        traceSampleRate: 1,
+        autoInstrumentation: false,
+        propagationAllowlist: new Set<string>(),
+      },
+      { tracer: tracerProvider.getTracer("test") }
+    )
+
+    await observability.withSpan(
+      "nats.publish",
+      {
+        "messaging.system": "nats",
+        "messaging.destination.name": "episode.requested.v1",
+        "messaging.operation.type": "publish",
+        "server.address": "nats",
+      },
+      async () => undefined,
+      { kind: "producer" }
+    )
+
+    expect(traceExporter.getFinishedSpans()[0]?.attributes).toMatchObject({
+      "messaging.system": "nats",
+      "messaging.destination.name": "episode.requested.v1",
+      "messaging.operation.type": "publish",
+      "server.address": "nats",
+    })
     await tracerProvider.shutdown()
     await observability.shutdown()
   })

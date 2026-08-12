@@ -22,9 +22,8 @@ const targets = [
     url: process.env.WATCHDOG_VOICEVOX_URL ?? "http://127.0.0.1:50021/version",
   },
   {
-    name: "signoz",
-    url:
-      process.env.WATCHDOG_SIGNOZ_URL ?? "http://127.0.0.1:8100/api/v1/health",
+    name: "grafana",
+    url: process.env.WATCHDOG_GRAFANA_URL ?? "http://127.0.0.1:3100/api/health",
   },
 ]
 const collectorMetricsUrl =

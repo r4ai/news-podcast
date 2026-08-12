@@ -40,7 +40,7 @@ export type ReadingDictionaryManagerViewProps = {
   readonly addEntry: () => void
   readonly updateEntry: (
     id: string,
-    patch: { surface?: string; reading?: string; accentType?: number },
+    patch: { surface?: string; reading?: string; accentType?: number }
   ) => void
   readonly deleteEntry: (id: string) => void
 }
@@ -134,7 +134,7 @@ function ReadingDictionaryItem({
   onDelete: () => void
   onUpdate: (
     id: string,
-    patch: { surface?: string; reading?: string; accentType?: number },
+    patch: { surface?: string; reading?: string; accentType?: number }
   ) => void
 }) {
   const [editing, setEditing] = useState(false)

@@ -3,6 +3,8 @@
 このガイドは、News Podcastをローカルで動かし、変更を検証するための手順をまとめたものです。
 初回はfake providerで一連の操作を確認し、必要になった段階でOpenAIとVOICEVOXを使う構成へ切り替えます。
 
+> 現在のクイックスタートは移行元の`apps/api` / `apps/worker`を起動する。関数型Gateway/4サービスは縦断スライスまで実装済みだが、全機能のCompose配備は未完了である。新規実装先、未移植範囲、旧実装の削除条件は[関数型DDDマイクロサービス移行ガイド](functional-ddd-migration.md)を参照する。
+
 ## クイックスタート
 
 ### 必要なもの
@@ -11,7 +13,7 @@
 | --- | --- | --- |
 | Node.js | 24以上 | セットアップ、テスト、ビルド |
 | pnpm | 11.16.0 | ワークスペースの依存関係とコマンドの管理 |
-| Docker | Docker Composeを利用できる版 | Web、API、Worker、VOICEVOX、SeaweedFSの起動 |
+| Docker | Docker Composeを利用できる版 | Web、API、Worker、NATS JetStream、VOICEVOX、SeaweedFSの起動 |
 
 バージョンを確認します。
 
@@ -64,6 +66,8 @@ container内だけ名前解決が数秒以上遅い場合は、containerの`/etc
 | Webアプリ | <http://localhost:4173> |
 | APIヘルスチェック | <http://localhost:4000/health> |
 | OpenAPIドキュメント | <http://localhost:4000/openapi.json> |
+| NATS client | `nats://127.0.0.1:4222` |
+| NATS monitoring | <http://localhost:8222> |
 | VOICEVOX Engine | <http://localhost:50021> |
 | SeaweedFS S3 API | <http://localhost:8333> |
 | SeaweedFS Master UI | <http://localhost:9333> |
@@ -110,6 +114,23 @@ flowchart LR
 APIは生成要求をSQLiteへ保存し、Workerはジョブを定期的に取得します。
 APIとWorkerはSQLiteをメタデータの正本とし、記事HTML、Markdown、asset、音声をSeaweedFSへ保存します。従来のローカル音声は初回再生時にObjectStoreへ遅延移行します。
 
+### NATS JetStreamを確認する
+
+`pnpm dev:up`は、version固定したNATSをJetStream有効で起動する。client portと認証なしのmonitoring portはどちらもloopbackだけへ公開し、JetStreamの状態は`nats-data` volumeへ永続化する。
+
+NATSだけを起動して健全性を確認する場合は次を使う。
+
+```bash
+docker compose up -d nats
+docker compose ps nats
+curl --fail --silent --show-error \
+  'http://127.0.0.1:8222/healthz?js-enabled-only=true'
+```
+
+期待する応答は`{"status":"ok"}`である。詳細なJetStream状態が必要な場合だけ、`http://127.0.0.1:8222/jsz?streams=true`を確認する。Compose内のプロセスは`.env`既定値の`NATS_SERVERS=nats://nats:4222`、host上のプロセスは`NATS_SERVERS=nats://127.0.0.1:4222`を使う。
+
+現時点の`compose.yaml`はNATS基盤だけを提供し、新しい4 context serviceは実行entrypointが揃うまで登録しない。従来のAPI/WorkerがNATSへ依存しているようには扱わず、配備可能なserviceから順にhealthcheck付きで追加する。
+
 ## 技術スタックとリポジトリ構成
 
 | 領域 | 主な技術 |
@@ -140,16 +161,16 @@ scripts/        開発用スクリプト
 
 依存関係の向きと配備構成は[設計書](design.md)を参照してください。
 
-## OpenTelemetryをローカルで有効にする
+## OpenTelemetryとGrafanaをローカルで有効にする
 
-既定の`OTEL_ENABLED=false`ではno-op adapterを使うため、SigNozなしで通常のbuild、test、E2Eを実行できる。Collectorへ送る場合だけ`.env`へ次を設定する。
+既定の`OTEL_ENABLED=false`ではno-op adapterを使うため、監視基盤なしで通常のbuild、test、E2Eを実行できる。外部Collectorへ送る場合だけ`.env`へ次を設定する。
 
 ```dotenv
 OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer replace-me
 OTEL_SERVICE_VERSION=git-sha-or-release
-OTEL_TRACE_SAMPLE_RATE=0.2
+OTEL_TRACE_SAMPLE_RATE=1
 TELEMETRY_PROXY_ORIGIN=https://otel.example.com
 TELEMETRY_PROXY_TOKEN=replace-me
 VITE_TELEMETRY_ENABLED=true
@@ -157,76 +178,50 @@ VITE_TELEMETRY_ENABLED=true
 
 Node SDKはAPI/Workerのcomposition rootでアプリ本体より先に初期化する。Browserは同意設定とDNTを確認してから動的importされ、OTLPを`/v1/telemetry/{traces|logs|metrics}`へ送る。このgatewayはアプリsession、same-origin、Content-Type、256KB、所有者単位60 request/分を検証する。
 
-セルフホスト手順、公開port、保持期間、dashboard、alert、backupは[`infra/observability/README.md`](../infra/observability/README.md)を参照する。Windowsの通常検証にSigNozは不要で、SigNoz smoke/restore試験はLinuxまたはWSL2内のnative Docker Engineで行う。
+セルフホスト手順、公開port、保持期間、dashboard、alert、backupは[`infra/observability/README.md`](../infra/observability/README.md)を参照する。Grafana LGTM smoke/restore試験はLinuxまたはWSL2内のnative Docker Engineで行う。
 
-### ローカルのSigNozを起動する
+### ローカルのGrafana LGTM stackを起動する
 
-初回だけFoundry CLIを導入する。
-
-```bash
-curl -fsSL https://signoz.io/foundry.sh | bash
-```
-
-リポジトリのルートで監視基盤とアプリをまとめて起動する。生成されたComposeとデータはGit管理外に置かれる。
+リポジトリのルートで、provisioning済みの監視基盤とアプリをまとめて起動する。
 
 ```bash
 pnpm dev:up:observed
 ```
 
-`.env`ではNodeプロセスとbrowser telemetry proxyの送信先を、Docker hostで公開されたOTLP HTTP endpointへ向ける。
+Compose overrideがNodeプロセスとbrowser telemetry proxyの送信先をCollectorへ設定する。個別起動時は次を使う。
 
 ```dotenv
 OTEL_ENABLED=true
-OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-ingester:4318
-TELEMETRY_PROXY_ORIGIN=http://signoz-ingester:4318
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+TELEMETRY_PROXY_ORIGIN=http://otel-collector:4318
 TELEMETRY_PROXY_TOKEN=news-podcast-local-observability
 ```
 
-このコマンドはFoundryで監視基盤を生成・起動した後、監視用Compose overrideでAPIとWorkerを`signoz-network`へ接続する。監視基盤なしの通常起動には`pnpm dev:up`を使う。
-
-本番相当のdashboard・alert検証は`SIGNOZ_ENDPOINT`とAdmin service accountの`SIGNOZ_ACCESS_TOKEN`をexportし、`infra/observability/terraform`で`terraform init / validate / plan`を実行する。SMTP channel bootstrap、Terraform apply、watchdog synthetic試験の正確な順序は[監視運用手順](../infra/observability/README.md)に従う。
+このコマンドはPrometheus、Loki、Tempo、Grafana、Collectorを起動し、APIとWorkerを`news-podcast-observability` networkへ接続する。監視基盤なしの通常起動には`pnpm dev:up`を使う。ダッシュボード、データソース、アラート、通知経路は起動時にファイルからprovisioningされ、UIでの手作業を必要としない。
 
 | 接続先 | URL |
 | --- | --- |
-| SigNoz UI | <http://localhost:8100> |
+| Grafana UI | <http://localhost:3100> |
+| Prometheus | <http://localhost:9090> |
 | OTLP gRPC | `localhost:4317` |
 | OTLP HTTP | `localhost:4318` |
 
-開発用ComposeはWeb、API、SigNoz UI、OTLP endpoint、SeaweedFS、VOICEVOXをすべて`127.0.0.1`へbindする。LANやInternetへ直接公開せず、SSH先では必要なportだけをforwardする。
+開発用ComposeはWeb、API、Grafana、Prometheus、OTLP endpoint、SeaweedFS、VOICEVOXをすべて`127.0.0.1`へbindする。LANやInternetへ直接公開せず、SSH先では必要なportだけをforwardする。
 
 #### SSH先で起動したサービスへ接続する
 
-通常利用ではWebアプリの4173番とSigNoz UIの8100番だけをforwardする。WebがAPIをproxyするため、APIの4000番を直接forwardする必要はない。
+通常利用ではWebアプリの4173番とGrafana UIの3100番だけをforwardする。WebがAPIをproxyするため、APIの4000番を直接forwardする必要はない。
 
 ```bash
 ssh -N \
   -o ExitOnForwardFailure=yes \
   -o ServerAliveInterval=30 \
   -L 4173:127.0.0.1:4173 \
-  -L 8100:127.0.0.1:8100 \
+  -L 3100:127.0.0.1:3100 \
   user@ssh-host
 ```
 
-接続後はWebアプリを<http://localhost:4173>、SigNozを<http://localhost:8100>で開く。
-
-#### CodexからSigNoz MCPを使う
-
-公式の[SigNoz MCP Server](https://github.com/SigNoz/signoz-mcp-server)をユーザー領域へ配置し、SigNoz UIの`Settings → API Keys`で作成したviewer service account keyを[Codex MCP設定](https://developers.openai.com/codex/mcp)へ登録する。API keyはrepositoryや`.env`へ保存しない。
-
-```bash
-export SIGNOZ_URL=http://127.0.0.1:8100
-export SIGNOZ_API_KEY=replace-with-viewer-key
-
-codex mcp add signoz \
-  --env SIGNOZ_URL="$SIGNOZ_URL" \
-  --env SIGNOZ_API_KEY="$SIGNOZ_API_KEY" \
-  --env LOG_LEVEL=warn \
-  -- /absolute/path/to/signoz-mcp-server
-
-codex mcp list
-```
-
-Codexは展開後のkeyをpermission `0600`の`~/.codex/config.toml`へ保存する。登録後はCodexを再起動し、`/mcp`で`signoz`が有効か確認する。MCPからのdashboard・alert変更はviewer keyでは拒否されるため、通常の障害調査はread-onlyのまま行える。
+接続後はWebアプリを<http://localhost:4173>、Grafanaを<http://localhost:3100>で開く。Overviewからservice map、Tempo trace、同じ`trace_id`のLoki logへ順に掘り下げる。
 
 直接確認やデバッグが必要な場合だけ、次のportを追加でforwardする。
 
@@ -336,10 +331,10 @@ OpenAIの利用料金が発生し、RSS、OpenAI、VOICEVOXへのネットワー
 | `pnpm setup:env` | `.env` がない場合にローカル用シークレットを生成する |
 | `pnpm dev:up` | ローカルの全サービスをbuildしてバックグラウンド起動する |
 | `pnpm dev:down` | アプリのコンテナとnetworkを削除する。volumeは残す |
-| `pnpm dev:up:observed` | SigNozと、監視networkへ接続したアプリをまとめて起動する |
-| `pnpm dev:down:observed` | アプリとSigNozを停止・削除する。volumeは残す |
-| `pnpm observability:infra:up` | FoundryでSigNoz構成を生成し、監視基盤だけを起動する |
-| `pnpm observability:infra:down` | SigNozコンテナだけを停止・削除する。volumeは残す |
+| `pnpm dev:up:observed` | Grafana LGTM stackと、監視networkへ接続したアプリをまとめて起動する |
+| `pnpm dev:down:observed` | アプリとGrafana LGTM stackを停止・削除する。volumeは残す |
+| `pnpm observability:infra:up` | provisioning済みの監視基盤だけを起動する |
+| `pnpm observability:infra:down` | 監視基盤コンテナだけを停止・削除する。volumeは残す |
 | `pnpm dev` | 全ワークスペースの開発プロセスを起動する。環境変数と依存サービスは別途用意する |
 | `pnpm --filter web dev` | WebだけをViteで起動する |
 | `pnpm --filter web storybook` | Storybookを起動する |

@@ -1,56 +1,86 @@
-# Self-hosted observability
+# Grafana Observability
 
-SigNoz本体はFoundryで生成し、外部公開はこのdirectoryのOTLP ingressだけに限定する。Dashboard、alert rule、routing policyの正本は`terraform/`であり、UIでの手作業変更は禁止する。
+OpenTelemetryを唯一の計装契約とし、Prometheus・Loki・TempoをGrafanaから横断する。UIで作った設定は正本にせず、データソース、ダッシュボード、アラート、通知経路をこのディレクトリでprovisioningする。
+
+```mermaid
+flowchart LR
+  Entry["HTTP / NATS / Scheduler"] --> App["API / Context Services"]
+  App -->|"OTLP metrics + logs + traces"| Collector["OTel Collector"]
+  Collector --> Prometheus["Prometheus · 180d"]
+  Collector --> Loki["Loki · 30d"]
+  Collector --> Tempo["Tempo · 15d"]
+  Tempo -->|"span metrics + service graph"| Prometheus
+  Grafana["Grafana"] --> Prometheus
+  Grafana --> Loki
+  Grafana --> Tempo
+  Watchdog["Independent watchdog"] -. "direct SMTP" .-> OnCall["On-call"]
+```
+
+## ローカル起動
 
 ```bash
-cd infra/observability
-foundryctl gauge -f casting.yaml
-foundryctl forge -f casting.yaml
-foundryctl cast -f casting.yaml
-docker compose -f pours/deployment/compose.yaml -f compose.smtp.yaml up -d
+pnpm setup:env
+pnpm dev:up:observed
+```
+
+| 接続先 | URL |
+| --- | --- |
+| Grafana | <http://localhost:3100> |
+| Prometheus | <http://localhost:9090> |
+| OTLP gRPC | `127.0.0.1:4317` |
+| OTLP HTTP | `127.0.0.1:4318` |
+| Collector metrics | <http://localhost:8888/metrics> |
+
+Grafanaの初期ユーザーは`GRAFANA_ADMIN_USER`、passwordは`GRAFANA_ADMIN_PASSWORD`で指定する。未指定時のpasswordはローカル専用の`local-only-change-me`であり、本番では必ずsecretへ置換する。匿名アクセスは無効で、全ポートはローカルloopbackへbindする。
+
+## 調査フロー
+
+```mermaid
+flowchart LR
+  Alert["Alert"] --> Overview["Overview / Episode dashboard"]
+  Overview --> Graph["Service Map edge"]
+  Graph --> Trace["Tempo trace"]
+  Trace -->|"trace_id + span_id"| Logs["Loki correlated logs"]
+  Trace -->|"exemplar"| Metrics["Prometheus metric window"]
+```
+
+すべてのサービス入口をserver/consumer span、外向き依存をclient/producer spanとして記録する。HTTPはW3C `traceparent`、NATSはmessage headerでcontextを伝播し、非同期consumerはenqueue spanへのlinkを保持する。ログは同じ`trace_id`と`span_id`を持つため、TempoからLokiへ、LokiからTempoへ移動できる。ユーザーID、認証header、cookie、完全URL、DB statement、message bodyはCollectorで削除する。
+
+provisioningされるダッシュボード:
+
+- `Overview`: RED指標、サービス別traffic/error/latency、警告ログ
+- `Service Map & Tracing`: サービス依存、edge別RED、代表trace
+- `Correlated Logs`: level別volume、trace coverage、traceへ戻れるログ
+- `Episode Production`: queue、stage、retry、provider、storage、lease
+- `Telemetry Platform`: Collector queue/export、backend、host resource
+
+## アラートと独立監視
+
+Grafana Alertingはservice error/latency、API 5xx、episode failure/queue age、Collector export failure、未計装入口を1分ごとに評価する。SMTPは`GRAFANA_SMTP_*`で設定し、解消通知を含めて30分ごとに再通知する。
+
+watchdogはGrafana経由ではなくSMTPへ直接通知する。API、Worker、VOICEVOX、Grafana、Collector exporter進捗を監視し、監視基盤そのものの停止も通知対象にする。ホスト全停止とネットワーク全断を検知するには別ホストの外形監視を追加する。
+
+## 本番OTLP ingress
+
+443以外を外部公開せず、GrafanaはVPNまたはSSH tunnelから利用する。証明書を`/etc/letsencrypt/live/$OTLP_DOMAIN`へ配置してから、base構成へgateway overrideを重ねる。
+
+```bash
+GRAFANA_ADMIN_PASSWORD=... \
 OTLP_DOMAIN=otel.example.com TELEMETRY_PROXY_TOKEN=... \
-  WATCHDOG_SMTP_HOST=... WATCHDOG_SMTP_USERNAME=... WATCHDOG_SMTP_PASSWORD=... \
-  WATCHDOG_SMTP_FROM=... WATCHDOG_SMTP_TO=... \
-  docker compose -f compose.gateway.yaml up -d
+WATCHDOG_SMTP_HOST=... WATCHDOG_SMTP_USERNAME=... WATCHDOG_SMTP_PASSWORD=... \
+WATCHDOG_SMTP_FROM=... WATCHDOG_SMTP_TO=... \
+docker compose \
+  -f infra/observability/compose.yaml \
+  -f infra/observability/compose.gateway.yaml \
+  up -d --wait
 ```
 
-Host firewallでは443だけを公開し、4317、4318、8080、ClickHouse/Postgresのportを閉じる。SigNoz UIはVPNまたはSSH tunnelから利用する。TLS certificateは`/etc/letsencrypt/live/$OTLP_DOMAIN`へ配置する。
+## 合格基準
 
-SMTP server設定は`compose.smtp.yaml`へsecret環境変数で渡す。公式provider v0.1.0はnotification channel resourceをまだ持たないため、channelだけを公式APIで冪等bootstrapし、それ以外をTerraformで管理する。
+1. 5ダッシュボード、7アラート、3データソースが起動時に自動生成される。
+2. Prometheus、Loki、Tempoのhealth checkとCollectorの全exporterが成功する。
+3. synthetic requestをサービス間で流し、service graph、trace、同一`trace_id`のログ、metric exemplarを辿れる。
+4. CollectorまたはGrafanaを停止し、watchdogの障害通知と復旧通知を確認する。
+5. metrics 180日、logs 30日、traces 15日のretentionとvolume backup/restoreを定期的に確認する。
 
-```bash
-export SIGNOZ_ENDPOINT=https://signoz.example.com
-export SIGNOZ_ACCESS_TOKEN=... # Admin service account key
-export SIGNOZ_SMTP_TO=oncall@example.com
-node bootstrap-smtp-channel.mjs
-
-terraform -chdir=terraform init
-terraform -chdir=terraform fmt -check
-terraform -chdir=terraform validate
-terraform -chdir=terraform plan -out=signoz.tfplan
-terraform -chdir=terraform apply signoz.tfplan
-```
-
-`SIGNOZ_ACCESS_TOKEN`、SMTP password、宛先はrepository・tfvars・stateへ保存しない。channelは`send_resolved=true`、critical ruleは1分ごとに評価し、firing中は30分ごとに再通知する。Generation dashboardはservice、environment、version、stage filter、source/grain/freshness、100%収集されたWorker traceへの導線を持つ。
-
-## トレース保証（自動計装）
-
-Node API/Workerは`@news-podcast/observability/node/register`を最初にimportして自動計装（http/undici）を登録する。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）は手動計装なしでspanが自動生成される。W3C trace headerの注入先はallowlistで制御し、既定は`api.openai.com`・`localhost`・`127.0.0.1`。環境変数`OTEL_PROPAGATION_ALLOWLIST`にカンマ区切りのhostnameで拡張できる。allowlist外（任意RSSサイト等）への注入は抑止されるが、span自体は記録され続ける。詳細は[ADR-0025](../docs/adr/0025-automatic-instrumentation-and-trace-guarantee.md)。
-
-- `trace.entry.synthesized` — 非HTTP入口（Worker tick）の保証root合成を計数。未計装の入口はruleで通知する。
-- `http.server.error` — APIの5xx応答を計数。dashboard panelとruleの対象。
-- `process.error` — uncaughtException/unhandledRejectionを計数。クラッシュは構造化log（`process.uncaught_exception` / `process.unhandled_rejection`）とともにflush後にexit(1)する。
-- `error.message`はredact済みでlogs/tracesにのみ記録され、metric属性には含まれない（高cardinality回避）。障害調査はtraceまたはlogから行う。
-
-watchdogはSigNozと同じホスト上の独立processで、API、Worker、VOICEVOX、SigNoz、Collector exporterの進捗を60秒ごとに確認する。異常はSigNozを経由せずSMTPへ直接送り、30分再通知と復旧通知を行う。状態は`watchdog-data` volumeに保存する。ホスト全停止とネットワーク全断はこの構成では通知できないため、別ホスト監視を追加するまで残余リスクとして扱う。
-
-適用後は次を合格証拠として保存する。
-
-1. synthetic counterで全ruleが2分以内に発火し、SMTP受信・30分再通知・復旧通知を確認する。
-2. SigNoz containerを停止し、watchdogから直接メールが届くことを確認する。
-3. 各panel値を同時間窓のMetrics Explorerと照合し、filterとtrace linkを確認する。
-4. logs 30日、traces 15日、metrics 180日のretentionと、ClickHouse backup/restoreを確認する。
-
-rollbackはTerraformの直前commitをcheckoutして再度`plan/apply`する。DB migrationを伴うリリースでは先にSQLite backupを取得し、短時間Workerを止め、`PRAGMA integrity_check`とsynthetic長時間生成を確認してから再開する。migration後DBを旧binaryで開かず、rollback時はbackup DBと旧binaryを対で戻す。
-
-Cloudflare Dashboardでは`self-hosted-traces`と`self-hosted-logs`のdestinationを作成し、endpointとBearer tokenをsecretとして登録する。Wranglerにはdestination名とsampling/persist方針だけを置く。
+設定の構文検証は各公式imageで行い、Grafana APIでdatasource healthとprovisioning結果を確認する。rollbackは直前commitの設定へ戻してComposeを再適用する。volumeは`docker compose down`では削除されない。

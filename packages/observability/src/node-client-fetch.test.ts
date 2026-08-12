@@ -28,7 +28,7 @@ describe("traced provider fetch", () => {
     ).resolves.toMatchObject({ status: 204 })
     expect(exporter.getFinishedSpans()[0]).toMatchObject({
       name: "provider.voicevox.speakers",
-      kind: SpanKind.CLIENT,
+      kind: SpanKind.INTERNAL,
       status: { code: SpanStatusCode.UNSET },
       attributes: {
         "provider.outcome": "succeeded",
@@ -68,7 +68,7 @@ describe("traced provider fetch", () => {
     const [span] = exporter.getFinishedSpans()
     expect(span).toMatchObject({
       name: "provider.openai.responses",
-      kind: SpanKind.CLIENT,
+      kind: SpanKind.INTERNAL,
       status: { code: SpanStatusCode.ERROR },
       attributes: {
         "provider.name": "openai",
@@ -108,7 +108,7 @@ describe("traced provider fetch", () => {
     const [span] = exporter.getFinishedSpans()
     expect(span).toMatchObject({
       name: "provider.voicevox.synthesis",
-      kind: SpanKind.CLIENT,
+      kind: SpanKind.INTERNAL,
       status: { code: SpanStatusCode.ERROR },
       attributes: {
         "error.type": "TypeError",

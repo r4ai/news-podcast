@@ -9,17 +9,14 @@ const DICTIONARY_KEY = ["get", "/v1/me/reading-dictionary"] as const
 export function useReadingDictionary() {
   const queryClient = useQueryClient()
   const listQuery = api.useQuery("get", "/v1/me/reading-dictionary")
-  const createMutation = api.useMutation(
-    "post",
-    "/v1/me/reading-dictionary",
-  )
+  const createMutation = api.useMutation("post", "/v1/me/reading-dictionary")
   const updateMutation = api.useMutation(
     "put",
-    "/v1/me/reading-dictionary/{id}",
+    "/v1/me/reading-dictionary/{id}"
   )
   const deleteMutation = api.useMutation(
     "delete",
-    "/v1/me/reading-dictionary/{id}",
+    "/v1/me/reading-dictionary/{id}"
   )
 
   const [surface, setSurface] = useState("")
@@ -55,7 +52,7 @@ export function useReadingDictionary() {
 
   function updateEntry(
     id: string,
-    patch: { surface?: string; reading?: string; accentType?: number },
+    patch: { surface?: string; reading?: string; accentType?: number }
   ) {
     startTransition(async () => {
       try {

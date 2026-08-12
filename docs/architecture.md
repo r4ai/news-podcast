@@ -1,14 +1,16 @@
 # システムアーキテクチャ
 
-- 更新日: 2026-08-11
-- 対象: 現在のリポジトリ実装
-- 関連文書: [詳細設計](design.md) / [ADR](adr/) / [開発ガイド](development.md)
+- 更新日: 2026-08-12
+- 対象: 関数型マイクロサービスへの移行中（新旧の正本を明記）
+- 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
 ## 1. 全体像
 
-本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、tool駆動Agentが記事本文と補足Web検索から出典付きPodcastを制作する**モジュラーモノリス**である。長時間処理はWorkerへ分離し、本文・asset・音声はSeaweedFSへ保存する。
+本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、tool駆動Agentが記事本文と補足Web検索から出典付きPodcastを制作する**関数型マイクロサービス**である。4 Bounded Contextを独立サービスとし、Gatewayとサービス間はNATS RPC、状態伝播はJetStream eventを使う。本文・asset・音声はSeaweedFSへ保存する。
 
 設計の軸は次の4点である。
+
+> 新規の正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。旧`apps/api`、`apps/worker`、`packages/domain|application|adapters`は外部ユースケースの移植完了まで動作比較にだけ使い、新規依存を追加しない。現在の完成/未移植/削除条件は[関数型DDDマイクロサービス移行ガイド](functional-ddd-migration.md)を正本とする。
 
 | 設計方針 | 要点 |
 | --- | --- |
@@ -29,21 +31,19 @@ flowchart LR
   Worker --> Objects[("SeaweedFS / S3")]
   API --> Objects
   Worker --> Articles["記事HTML・assets"]
-  API -.->|"OTLP"| Obs["Collector / SigNoz"]
+  API -.->|"OTLP"| Obs["Collector / Grafana LGTM"]
   Worker -.->|"OTLP"| Obs
   Web -.->|"認証済みAPI Gateway経由"| Obs
 ```
 
 ## 2. ドメイン境界
 
-現在は単一のDomain packageを共有しているが、業務上は次の境界に分かれる。境界は「別サービス」ではなく、同じモノリス内で変更理由を分離するためのものとする。
+業務規則は次の4 Bounded Contextが所有し、Contextごとに独立サービスとして配備する。Context間でdomain型やDBを共有しない。
 
 | 境界づけられた領域 | 責務 | 主なデータ・操作 |
 | --- | --- | --- |
-| Identity & Access | ログイン、セッション、所有者の特定 | Better Auth、Google OIDC、`ownerId` |
-| Feed Management | RSSカタログとユーザー別購読 | Feed、Subscription、有効/無効 |
-| Content Archive | 記事版、安全なreplay、Markdown | FeedItem、ArticleSnapshot、ArchiveAsset |
-| Agent Runtime | tool権限、実行上限、承認、Memory、隔離実行 | AgentRun、AgentEvent、Approval、Memory、SandboxSession |
+| Identity & Access | ログイン、セッション、主体の特定 | Better Auth、Google OIDC、Actor |
+| Content Knowledge | RSS購読、記事snapshot、安全なreplay、Markdown | Feed、Subscription、ArticleSnapshot、ArchiveAsset |
 | Episode Production | 生成要求、Agent実行、状態遷移、生成パイプライン | EpisodeJob、AgentRun、Script、Audio |
 | Episode Library | 完成番組、出典、所有者別アクセス | Episode、EpisodeSource、短期音声URL |
 
@@ -58,7 +58,7 @@ flowchart LR
 
 ## 3. レイヤー構成と依存方向
 
-### 3.1 オニオン構造
+### 3.1 旧モジュラーモノリスのオニオン構造（移行元）
 
 ```mermaid
 flowchart TB
@@ -84,7 +84,7 @@ flowchart TB
 
 矢印はcompile-timeの依存方向であり、すべて外側から内側へ向く。DomainはHTTP、DB、OpenAI、VOICEVOX、Cloudflareを知らない。Applicationが必要な外部能力をinterface（ポート）として定義し、Adaptersが実装する。
 
-### 3.2 ディレクトリと責務
+### 3.2 移行元ディレクトリと責務
 
 | パス | レイヤー | 現在の責務 |
 | --- | --- | --- |
@@ -93,14 +93,14 @@ flowchart TB
 | `packages/adapters` | Infrastructure Adapter | SQLite、Better Auth、RSS、OpenAI、VOICEVOX、local音声保存 |
 | `apps/api` | Delivery / Composition Root | Hono route、認証・認可、OpenAPI schema、Node/Cloudflareの組み立て |
 | `apps/worker` | Driver / Composition Root | scheduler、lease、生成パイプライン、Node/Cloudflare entrypoint |
-| `apps/watchdog` | Operations | SigNoz非依存health/freshness監視、SMTP通知state |
+| `apps/watchdog` | Operations | Grafana非依存health/freshness監視、SMTP通知state |
 | `apps/web` | Presentation | React、TanStack Router/Query、生成OpenAPI client |
 | `packages/contracts` | Published Contract | Hono schemaから生成したOpenAPI JSONとTypeScript型 |
 | `packages/ui` | Presentation Shared | shadcn/Base UIベースの共通UI部品とtoken |
 | `packages/observability` | Cross-cutting Adapter | OpenTelemetry契約、Node adapter、privacy filter |
-| `infra` | Deployment / Operations | Node image、Collector、SigNoz向け設定・dashboard・alert |
+| `infra` | Deployment / Operations | Node image、Collector、Grafana/Prometheus/Loki/Tempo設定・dashboard・alert |
 
-### 3.3 package依存関係
+### 3.3 移行元package依存関係
 
 ```mermaid
 flowchart LR
@@ -145,6 +145,67 @@ apps/api/src/
 ```
 
 `routes/<resource>/<verb>.ts` は `createRoute` 定義と `app.openapi(route, handler)` を同一ファイルに持つ。ルート定義がHono route(=契約)である以上、契約とその実装を分けて別ファイルに置くと差分の把握がかえって難しくなるため、意図して併置している。
+
+### 3.5 関数型マイクロサービスへの移行後構成
+
+Bounded Contextと配備サービスは1対1にし、純粋な中核と実行shellを別top-level directoryへ分散させず、同じ所有単位へコロケーションする。Context間はdomain型をimportせず、version付きNATS protocolだけで通信する。
+
+```text
+apps/
+  gateway/                  # 外部Effect HttpApi / OpenAPI
+  web/
+  watchdog/
+services/
+  identity-access/src/{domain,application,adapters,runtime}
+  content-knowledge/src/{domain,application,adapters,runtime}
+  episode-production/src/{domain,application,adapters,runtime}
+  episode-library/src/{domain,application,adapters,runtime}
+packages/
+  protocols/                # NATS RPC/event Schema
+  contracts/                # Gateway HttpApi/OpenAPI生成物
+  observability/            # OTel contractとEffect Layer
+  kernel/                   # Context非依存の最小primitive
+```
+
+```mermaid
+flowchart LR
+  Gateway["API Gateway"] <-->|"NATS RPC"| Identity["Identity Access"]
+  Gateway <-->|"NATS RPC"| Content["Content Knowledge"]
+  Gateway <-->|"NATS RPC"| Production["Episode Production"]
+  Gateway <-->|"NATS RPC"| Library["Episode Library"]
+  Content -->|"JetStream events"| Production
+  Production -->|"JetStream events"| Library
+```
+
+各service内の依存は`runtime/adapters → application → domain`のみとし、package export、lint、architecture testで逆向きimportとContext横断importを拒否する。詳細は[ADR-0033](adr/0033-colocate-bounded-context-with-service.md)を正本とする。
+
+### 3.6 型と副作用の境界
+
+```mermaid
+flowchart LR
+  Wire["HTTP / NATS / SQLite: unknown"] --> Parse["Effect Schema parse"]
+  Parse --> Frozen["branded + deep frozen value"]
+  Frozen --> Transition["pure state transition"]
+  Transition --> UseCase["Effect use case"]
+  UseCase --> Port["application-owned port"]
+  Port --> Infra["adapter / unsafe interop"]
+```
+
+`parse, don't validate`を適用し、検査結果をBooleanで返して元の型を使い続けるAPIは作らない。外部入力、永続JSON、NATS messageは`unknown`として受け、余剰propertyも拒否する共通parserの成功値だけを内側へ渡す。job状態はdiscriminated unionで表し、例えば4回目の`Running`を`Retrying`へ渡せないことを型で保証する。詳細は[ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)を正本とする。
+
+### 3.7 移行進捗
+
+| Surface | 状態 | 現在の証拠 |
+| --- | --- | --- |
+| immutable kernel / protocol | Done | strict parse、deep freeze、correlation envelope、version付きsubject |
+| 4 Context vertical slice | Foundation done | `services/*/src/{domain,application,adapters,runtime}`。全ユースケースの機能同等性は未完了 |
+| SQLite/NATS runtime | In progress | service別single-writer、outbox/inbox adapter。全serviceのentrypoint/Compose接続は未完了 |
+| Effect HttpApi Gateway | Foundation done | HttpApi契約、handler、NATS port。配備とWeb切替は未完了 |
+| Grafana相関監視 | Foundation done | LGTM provisioningと検証script。新4サービスの実配線E2Eは未完了 |
+| Web生成client | Pending | Gateway OpenAPI確定後 |
+| 旧API/Worker削除 | Pending | E2E parity後 |
+
+移行順序と削除ゲートの詳細は[移行ガイド](functional-ddd-migration.md)を参照する。`Foundation done`を機能移植完了とはみなさない。
 
 ## 4. 主要なシステムフロー
 
@@ -272,12 +333,12 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 | 認証 | Better Authのsession cookie。Google OIDCはログイン上流であり、Google tokenをAPI bearerとして扱わない |
 | 認可 | 全 `/v1` resourceをowner scopeで検索し、他人のIDと存在しないIDをともに404へ正規化 |
 | API契約 | Hono/Zod code-first OpenAPI、RFC 9457 Problem Details、生成型の差分検査 |
-| 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、Collector経由でSigNozへ送る。自動計装（http/undici）を正本とし、入り口HTTPと全outbound HTTP（OpenAI・VOICEVOX・RSS・archive・AI enrich・S3）をspan自動生成する。W3C trace headerの注入はallowlist（既定api.openai.com・localhost・127.0.0.1、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは送らない。非HTTP入口（Worker定期処理）は保証root spanでtraceを合成し、`trace.entry.synthesized`で監視する |
+| 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |
 
-## 8. 現状評価と設計上の注意点
+## 8. 移行元の評価と設計上の注意点
 
 目標アーキテクチャと現在の実装には、次の意図的な差分がある。
 
@@ -302,9 +363,11 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 - [ADR-0007: 事実ベース台本と出典追跡](adr/0007-factual-provenance.md)
 - [ADR-0008: Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)
 - [ADR-0009: TanStack Router/Query](adr/0009-async-react-tanstack.md)
-- [ADR-0010: OpenTelemetryとSigNoz](adr/0010-opentelemetry-signoz.md)
+- [ADR-0032: Grafana相関監視基盤](adr/0032-grafana-correlated-observability.md)
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
 - [ADR-0015: Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)
 - [ADR-0025: 自動計装を正本とするトレース保証](adr/0025-automatic-instrumentation-and-trace-guarantee.md)
+- [ADR-0033: Bounded Contextとサービスのコロケーション](adr/0033-colocate-bounded-context-with-service.md)
+- [ADR-0034: 関数型ドメインモデルとEffect境界](adr/0034-functional-domain-model-and-effect-boundaries.md)

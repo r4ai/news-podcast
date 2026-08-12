@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest"
 import { createObservedObjectStore } from "./observed-object-store.js"
 
 describe("observed object store", () => {
-  it("wraps S3 operations in client spans without recording object keys", async () => {
+  it("wraps S3 operations in semantic spans without recording object keys", async () => {
     const spans: Array<{
       name: string
       attributes: Readonly<Record<string, string | number | boolean>>
@@ -45,12 +45,12 @@ describe("observed object store", () => {
       {
         name: "provider.s3.put",
         attributes: { "provider.name": "s3", "provider.operation": "put" },
-        options: { kind: "client" },
+        options: { kind: "internal" },
       },
       {
         name: "provider.s3.get",
         attributes: { "provider.name": "s3", "provider.operation": "get" },
-        options: { kind: "client" },
+        options: { kind: "internal" },
       },
       {
         name: "provider.s3.delete",
@@ -58,7 +58,7 @@ describe("observed object store", () => {
           "provider.name": "s3",
           "provider.operation": "delete",
         },
-        options: { kind: "client" },
+        options: { kind: "internal" },
       },
     ])
     expect(JSON.stringify(spans)).not.toContain("private/job/chunk.wav")

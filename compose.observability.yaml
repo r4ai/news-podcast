@@ -1,15 +1,24 @@
 services:
   api:
+    environment:
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACE_SAMPLE_RATE: "1"
+      TELEMETRY_PROXY_ORIGIN: http://otel-collector:4318
+      TELEMETRY_PROXY_TOKEN: ${TELEMETRY_PROXY_TOKEN:-local-observability-only}
     networks:
       - default
-      - signoz
+      - observability
 
   worker:
+    environment:
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks:
       - default
-      - signoz
+      - observability
 
 networks:
-  signoz:
+  observability:
     external: true
-    name: signoz-network
+    name: news-podcast-observability

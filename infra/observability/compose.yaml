@@ -1,0 +1,123 @@
+name: news-podcast-observability
+
+services:
+  otel-storage-init:
+    image: busybox:1.37.0
+    command: ["sh", "-c", "chown -R 10001:10001 /storage"]
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    restart: "no"
+    volumes:
+      - otel-collector-storage:/storage
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - ./collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel-collector-storage:/var/lib/otelcol/storage
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:8888:8888"
+    depends_on:
+      otel-storage-init:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks: [observability]
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-180d}
+      - --storage.tsdb.wal-compression
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [observability]
+
+  loki:
+    image: grafana/loki:3.7.2
+    command: ["-config.file=/etc/loki/config.yaml"]
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    networks: [observability]
+
+  tempo:
+    image: grafana/tempo:2.10.7
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    volumes:
+      - ./tempo/config.yaml:/etc/tempo/config.yaml:ro
+      - tempo-data:/var/tempo
+    networks: [observability]
+
+  grafana:
+    image: grafana/grafana:13.1.0
+    restart: unless-stopped
+    read_only: true
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-local-only-change-me}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+      GF_SMTP_ENABLED: ${GRAFANA_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GRAFANA_SMTP_HOST:-localhost:25}
+      GF_SMTP_USER: ${GRAFANA_SMTP_USERNAME:-}
+      GF_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM:-grafana@localhost.local}
+      GF_SMTP_FROM_NAME: News Podcast Grafana
+      GRAFANA_SMTP_TO: ${GRAFANA_SMTP_TO:-oncall@localhost.local}
+    tmpfs:
+      - /tmp
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3100:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    networks: [observability]
+
+networks:
+  observability:
+    name: news-podcast-observability
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  otel-collector-storage:

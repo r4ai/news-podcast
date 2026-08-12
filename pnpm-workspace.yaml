@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "services/*"
 
 overrides:
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.9"
@@ -30,6 +31,7 @@ strictDepBuilds: true
 allowBuilds:
   "@scarf/scarf": false
   esbuild: true
+  msgpackr-extract: false
   protobufjs: true
   workerd: true
 

@@ -27,7 +27,9 @@ import {
 } from "@opentelemetry/sdk-metrics"
 import { NodeSDK } from "@opentelemetry/sdk-node"
 import {
+  AlwaysOnSampler,
   ParentBasedSampler,
+  type Sampler,
   TraceIdRatioBasedSampler,
 } from "@opentelemetry/sdk-trace-base"
 import {
@@ -40,6 +42,7 @@ import type { RequestOptions } from "node:http"
 import type {
   MetricName,
   Observability,
+  SpanOptions,
   TelemetryEvent,
   TraceContext,
 } from "./contract.js"
@@ -50,7 +53,7 @@ import {
   sanitizeMetricAttributes,
 } from "./privacy.js"
 import {
-  AllowlistTextMapPropagator,
+  makeAllowlistTextMapPropagator,
   installPropagationGate,
   readPropagationAllowlist,
 } from "./propagation.js"
@@ -89,7 +92,7 @@ export function readNodeObservabilityConfig(
       "OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL is enabled"
     )
   }
-  const traceSampleRate = Number(environment.OTEL_TRACE_SAMPLE_RATE ?? "0.2")
+  const traceSampleRate = Number(environment.OTEL_TRACE_SAMPLE_RATE ?? "1")
   if (
     !Number.isFinite(traceSampleRate) ||
     traceSampleRate < 0 ||
@@ -132,7 +135,7 @@ export function createNodeObservability(
     resource,
     instrumentations,
     ...(config.autoInstrumentation
-      ? { textMapPropagator: new AllowlistTextMapPropagator() }
+      ? { textMapPropagator: makeAllowlistTextMapPropagator() }
       : {}),
     traceExporter: new OTLPTraceExporter({
       url: signalUrl(config.endpoint, "traces"),
@@ -159,9 +162,7 @@ export function createNodeObservability(
           }),
       }),
     ],
-    sampler: new ParentBasedSampler({
-      root: new TraceIdRatioBasedSampler(config.traceSampleRate),
-    }),
+    sampler: createNodeSampler(config.traceSampleRate),
   })
   sdk.start()
 
@@ -209,8 +210,7 @@ export function createNodeObservability(
         {
           attributes: sanitizeAttributes(attributes),
           links: link ? [{ context: link }] : [],
-          kind:
-            options?.kind === "client" ? SpanKind.CLIENT : SpanKind.INTERNAL,
+          kind: spanKind(options?.kind),
         },
         parent,
         async (span) => {
@@ -354,4 +354,20 @@ function severityNumber(level: TelemetryEvent["level"]): SeverityNumber {
   return SeverityNumber.INFO
 }
 
+function spanKind(kind: SpanOptions["kind"]): SpanKind {
+  if (kind === "server") return SpanKind.SERVER
+  if (kind === "client") return SpanKind.CLIENT
+  if (kind === "producer") return SpanKind.PRODUCER
+  if (kind === "consumer") return SpanKind.CONSUMER
+  return SpanKind.INTERNAL
+}
+
 export * from "./node-client-fetch.js"
+
+export function createNodeSampler(traceSampleRate: number): Sampler {
+  const root =
+    traceSampleRate === 1
+      ? new AlwaysOnSampler()
+      : new TraceIdRatioBasedSampler(traceSampleRate)
+  return new ParentBasedSampler({ root, remoteParentNotSampled: root })
+}

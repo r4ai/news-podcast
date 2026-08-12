@@ -70,8 +70,7 @@ export function ArticleRow({
             {compactArticleTimestamp(articleTimestamp(article))}
           </time>
           {meta ? <span>{meta}</span> : null}
-          {showRelevanceScore &&
-          typeof article.relevanceScore === "number" ? (
+          {showRelevanceScore && typeof article.relevanceScore === "number" ? (
             <Badge
               aria-label={`適合度スコア ${article.relevanceScore}`}
               className="tabular-nums"
@@ -117,10 +116,7 @@ export function ArticleRow({
         {article.saved ? (
           <BookmarkCheck aria-hidden="true" className="text-primary" />
         ) : (
-          <Bookmark
-            aria-hidden="true"
-            className="text-muted-foreground/60"
-          />
+          <Bookmark aria-hidden="true" className="text-muted-foreground/60" />
         )}
       </Button>
     </div>

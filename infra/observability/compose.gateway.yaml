@@ -1,17 +1,6 @@
 services:
-  otel-gateway:
-    image: otel/opentelemetry-collector-contrib:0.135.0
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
-    network_mode: host
-    restart: unless-stopped
-    read_only: true
-    volumes:
-      - ./collector.yaml:/etc/otelcol-contrib/config.yaml:ro
-      - /:/hostfs:ro
-
   otlp-ingress:
     image: nginx:1.29.1-alpine
-    network_mode: host
     restart: unless-stopped
     read_only: true
     environment:
@@ -21,11 +10,15 @@ services:
     tmpfs:
       - /var/cache/nginx
       - /var/run
+    ports:
+      - "443:443"
     volumes:
       - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
-      - otel-gateway
+      otel-collector:
+        condition: service_started
+    networks: [observability]
 
   watchdog:
     build:
@@ -33,14 +26,15 @@ services:
       dockerfile: infra/Dockerfile.node
       network: host
     command: ["pnpm", "--filter", "@news-podcast/watchdog", "start"]
-    network_mode: host
     restart: unless-stopped
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
-      WATCHDOG_API_URL: http://127.0.0.1:4000/health
-      WATCHDOG_WORKER_URL: http://127.0.0.1:3001/health
-      WATCHDOG_VOICEVOX_URL: http://127.0.0.1:50021/version
-      WATCHDOG_SIGNOZ_URL: http://127.0.0.1:8100/api/v1/health
-      WATCHDOG_COLLECTOR_METRICS_URL: http://127.0.0.1:8888/metrics
+      WATCHDOG_API_URL: http://host.docker.internal:4000/health
+      WATCHDOG_WORKER_URL: http://host.docker.internal:3001/health
+      WATCHDOG_VOICEVOX_URL: http://host.docker.internal:50021/version
+      WATCHDOG_GRAFANA_URL: http://grafana:3000/api/health
+      WATCHDOG_COLLECTOR_METRICS_URL: http://otel-collector:8888/metrics
       WATCHDOG_SMTP_HOST: ${WATCHDOG_SMTP_HOST:?set WATCHDOG_SMTP_HOST}
       WATCHDOG_SMTP_PORT: ${WATCHDOG_SMTP_PORT:-587}
       WATCHDOG_SMTP_SECURE: ${WATCHDOG_SMTP_SECURE:-false}
@@ -51,8 +45,7 @@ services:
       WATCHDOG_STATE_PATH: /var/lib/news-podcast-watchdog/state.json
     volumes:
       - watchdog-data:/var/lib/news-podcast-watchdog
-    depends_on:
-      - otel-gateway
+    networks: [observability]
 
 volumes:
   watchdog-data:
