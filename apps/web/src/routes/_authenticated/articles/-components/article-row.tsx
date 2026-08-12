@@ -30,7 +30,6 @@ export function ArticleRow({
 }: ArticleRowProps) {
   const meta = archiveMetaLabel(article.archiveStatus)
   const snippet = articleSnippet(article)
-  const visibleTags = article.tags.slice(0, 3)
 
   return (
     <div
@@ -63,7 +62,7 @@ export function ArticleRow({
         >
           {article.title}
         </span>
-        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+        <span className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
           <span className="font-medium text-foreground/80">
             {article.sourceName}
           </span>
@@ -71,16 +70,8 @@ export function ArticleRow({
             {compactArticleTimestamp(articleTimestamp(article))}
           </time>
           {meta ? <span>{meta}</span> : null}
-          {visibleTags.map((tag) => (
-            <Badge
-              className="text-[0.625rem]"
-              key={tag}
-              variant="secondary"
-            >
-              {tag}
-            </Badge>
-          ))}
-          {showRelevanceScore && typeof article.relevanceScore === "number" ? (
+          {showRelevanceScore &&
+          typeof article.relevanceScore === "number" ? (
             <Badge
               aria-label={`適合度スコア ${article.relevanceScore}`}
               className="tabular-nums"
@@ -100,6 +91,19 @@ export function ArticleRow({
         {snippet ? (
           <span className="line-clamp-1 text-xs text-muted-foreground">
             {snippet}
+          </span>
+        ) : null}
+        {article.tags.length > 0 ? (
+          <span className="flex flex-wrap items-center gap-1 overflow-hidden">
+            {article.tags.map((tag) => (
+              <Badge
+                className="max-w-28 truncate text-[0.625rem]"
+                key={tag}
+                variant="secondary"
+              >
+                {tag}
+              </Badge>
+            ))}
           </span>
         ) : null}
       </button>

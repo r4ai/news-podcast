@@ -41,7 +41,7 @@ export function ArticleList({
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-h-full flex-col">
       <ArticleToolbarSticky
         facets={list.facets}
         onStateChange={list.setState}
@@ -226,7 +226,7 @@ export function ArticleListView({
   const showRelevanceScore = shouldShowRelevanceScore(search.sort)
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-lg border bg-background">
+    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border bg-background">
       {groups.map((group) => (
         <ArticleDateGroup
           group={group}

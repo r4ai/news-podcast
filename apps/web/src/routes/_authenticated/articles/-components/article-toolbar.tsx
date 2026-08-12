@@ -50,10 +50,10 @@ export function ArticleToolbarSticky({
   onToggleSearch,
 }: ArticleToolbarStickyProps) {
   return (
-    <div className="sticky top-0 z-20 -mx-3 flex h-10 items-center justify-between gap-2 border-b bg-background/70 px-3 py-1 backdrop-blur-md">
+    <div className="sticky top-0 z-20 -mx-3 flex h-10 items-center justify-between gap-2 border-b px-3 py-1 backdrop-blur-md">
       <ToggleGroup
         aria-label="記事の状態"
-        className="gap-0.5"
+        className="gap-0.5 overflow-hidden"
         onValueChange={(value) => {
           const [next] = value
           if (next) onStateChange(next as ArticleState)

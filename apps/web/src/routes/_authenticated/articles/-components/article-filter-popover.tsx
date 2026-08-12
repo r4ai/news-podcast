@@ -162,15 +162,17 @@ export function ArticleFilterPopover({
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="article-period">期間</Label>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="shrink-0 text-sm" htmlFor="article-period">
+              期間
+            </Label>
             <Select
               items={periodOptions}
               onValueChange={(value) => onPeriodChange(value as ArticlePeriod)}
               value={search.period}
             >
-              <SelectTrigger id="article-period">
+              <SelectTrigger className="w-36" id="article-period">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -183,8 +185,10 @@ export function ArticleFilterPopover({
             </Select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="article-archive-status">アーカイブ状態</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="shrink-0 text-sm" htmlFor="article-archive-status">
+              アーカイブ状態
+            </Label>
             <Select
               items={archiveStatusOptions}
               onValueChange={(value) =>
@@ -192,7 +196,7 @@ export function ArticleFilterPopover({
               }
               value={search.archiveStatusFilter}
             >
-              <SelectTrigger id="article-archive-status">
+              <SelectTrigger className="w-36" id="article-archive-status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
