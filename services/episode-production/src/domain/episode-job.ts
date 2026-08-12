@@ -187,6 +187,21 @@ export const leaseRetryingJob = (
     lease: { token: lease.token, leasedUntil: lease.leasedUntil },
   })
 
+/** Replaces an expired lease without consuming another delivery attempt. */
+export const recoverRunningJob = (
+  job: RunningJob,
+  lease: {
+    readonly token: RunningJob["lease"]["token"]
+    readonly leasedUntil: UtcTimestamp
+    readonly startedAt: UtcTimestamp
+  }
+): RunningJob =>
+  deepFreeze({
+    ...job,
+    startedAt: lease.startedAt,
+    lease: { token: lease.token, leasedUntil: lease.leasedUntil },
+  })
+
 export const retryRunningJob = (
   job: RetryableRunningJob,
   retry: { readonly retryAt: UtcTimestamp; readonly failure: RetryableFailure }

@@ -5,6 +5,11 @@ export {
   type OpenAiScriptGeneratorDependencies,
 } from "./adapters/openai-script-generator.js"
 export {
+  makeVoicevoxSpeechSynthesizer,
+  type VoicevoxSpeechSynthesizerConfig,
+  type VoicevoxSpeechSynthesizerDependencies,
+} from "./adapters/voicevox-speech-synthesizer.js"
+export {
   CreateJobRpcReplySchema,
   handleCreateJobRpc,
   type CreateJobRpcDelivery,
@@ -15,6 +20,18 @@ export {
   type IdempotencyConflict,
   type SqliteJobRepository,
 } from "./adapters/sqlite-job-repository.js"
+export {
+  sqliteExecutionRepository,
+  type SqliteExecutionRepository,
+} from "./adapters/sqlite-execution-repository.js"
+export {
+  MAX_WAV_BYTES,
+  openS3AudioObjectStoreUnsafe,
+  s3AudioObjectStoreScoped,
+  type S3AudioObjectStoreConfig,
+  type S3AudioObjectStoreDependencies,
+  type S3AudioObjectStoreResource,
+} from "./infrastructure/unsafe/s3-audio-object-store.js"
 export { createJob, type CreateJobPorts } from "./application/create-job.js"
 export {
   executeEpisodeJob,
@@ -27,6 +44,7 @@ export {
   type ProviderRetryRuntime,
 } from "./application/retry-provider.js"
 export * from "./application/script-generator.js"
+export * from "./application/speech-synthesizer.js"
 export * from "./domain/episode-job.js"
 export * from "./domain/provider-reliability.js"
 export {
@@ -40,3 +58,8 @@ export {
   runSingleWriterLoop,
   type SingleWriterSource,
 } from "./runtime/single-writer-loop.js"
+export {
+  runEpisodeWorkerLoop,
+  type EpisodeWorkerEvent,
+  type EpisodeWorkerPorts,
+} from "./runtime/worker-loop.js"
