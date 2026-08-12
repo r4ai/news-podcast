@@ -37,5 +37,6 @@ RUN --network=none \
 COPY apps ./apps
 COPY packages ./packages
 COPY services ./services
+COPY scripts/sqlite-state.mjs ./scripts/sqlite-state.mjs
 
 CMD ["pnpm", "build"]

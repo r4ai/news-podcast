@@ -458,4 +458,5 @@ pnpm dev:down
 
 - [設計書](design.md)
 - [品質ベースライン](quality-baseline.md)
+- [Service state backup / restore](operations/service-state-recovery.md)
 - [Architecture Decision Records](adr/)
