@@ -74,10 +74,12 @@ describe("Identity Access process lifecycle", () => {
       })
     )
     const service = runIdentityAccessService(config, {
-      createAuth: async () => ({
-        api: { getSession: () => Promise.resolve(null) },
-        close: () => void events.push("auth.closed"),
-      }),
+      startRuntime: () =>
+        Effect.succeed({
+          api: { getSession: () => Promise.resolve(null) },
+          settings: {} as never,
+          close: () => Effect.sync(() => void events.push("auth.closed")),
+        }),
       runRpc: () =>
         Effect.acquireRelease(
           Effect.sync(() => {

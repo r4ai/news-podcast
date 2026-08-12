@@ -3,8 +3,10 @@ import { deepFreeze } from "@news-podcast/kernel"
 import type { IdentitySqlitePort } from "../../adapters/sqlite-port.js"
 
 /** Throwing SQLite and mutable connection state stay behind this unsafe boundary. */
-export const openIdentitySqliteUnsafe = (path: string): IdentitySqlitePort => {
-  const database = new DatabaseSync(path)
+export const createIdentitySqlitePortUnsafe = (
+  database: DatabaseSync,
+  path: string
+): IdentitySqlitePort => {
   database.exec("PRAGMA foreign_keys = ON")
   database.exec("PRAGMA busy_timeout = 5000")
   if (path !== ":memory:") database.exec("PRAGMA journal_mode = WAL")
@@ -37,3 +39,6 @@ export const openIdentitySqliteUnsafe = (path: string): IdentitySqlitePort => {
   const close = (): void => database.close()
   return deepFreeze({ execute, get, all, run, transaction, close })
 }
+
+export const openIdentitySqliteUnsafe = (path: string): IdentitySqlitePort =>
+  createIdentitySqlitePortUnsafe(new DatabaseSync(path), path)

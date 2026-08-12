@@ -2,9 +2,13 @@ import { Effect, Fiber } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import type { BetterAuthSessionApi } from "../adapters/better-auth-session-reader.js"
-import type { UnsafeIdentityAuth } from "../infrastructure/unsafe/better-auth.js"
+import type { GenerationSettingsRepository } from "../application/generation-settings.js"
+import type { UnsafeIdentityRuntimeResource } from "../infrastructure/unsafe/better-auth.js"
 import { readIdentityAccessConfig } from "./env.js"
-import { runIdentityAccessService } from "./service.js"
+import {
+  runIdentityAccessService,
+  startIdentityAccessRuntime,
+} from "./service.js"
 
 const config = Effect.runSync(
   readIdentityAccessConfig({
@@ -19,6 +23,38 @@ const config = Effect.runSync(
 )
 
 describe("Identity Access service composition", () => {
+  const repository: GenerationSettingsRepository = {
+    find: vi.fn(() => Effect.succeedNone),
+    save: vi.fn((_ownerId, schedule) => Effect.succeed(schedule)),
+    listEnabled: vi.fn(() => Effect.succeed([])),
+    markScheduled: vi.fn(() => Effect.void),
+  }
+
+  it("builds session and settings handlers over one owned SQLite resource", async () => {
+    const close = vi.fn()
+    const resource: UnsafeIdentityRuntimeResource = {
+      api: { getSession: () => Promise.resolve(null) },
+      database: {} as never,
+      close,
+    }
+    const runtime = await Effect.runPromise(
+      startIdentityAccessRuntime(config, {
+        openRuntime: vi.fn(async () => resource),
+        createSettings: vi.fn(() => Effect.succeed(repository)),
+      })
+    )
+
+    expect(
+      await Effect.runPromise(runtime.settings.get({ ownerId: "owner-a" }))
+    ).toEqual({
+      enabled: false,
+      localTime: "07:30",
+      timeZone: "Asia/Tokyo",
+    })
+    await Effect.runPromise(runtime.close())
+    expect(close).toHaveBeenCalledOnce()
+  })
+
   it("releases the NATS runtime before closing the auth database", async () => {
     const events: string[] = []
     let resolveStarted!: () => void
@@ -28,13 +64,18 @@ describe("Identity Access service composition", () => {
     const api: BetterAuthSessionApi = {
       getSession: () => Promise.resolve(null),
     }
-    const auth: UnsafeIdentityAuth = {
+    const auth: UnsafeIdentityRuntimeResource = {
       api,
+      database: {} as never,
       close: () => void events.push("auth.closed"),
     }
     const fiber = Effect.runFork(
       runIdentityAccessService(config, {
-        createAuth: vi.fn(async () => auth),
+        startRuntime: () =>
+          startIdentityAccessRuntime(config, {
+            openRuntime: vi.fn(async () => auth),
+            createSettings: vi.fn(() => Effect.succeed(repository)),
+          }),
         runRpc: (rpcConfig, receivedApi) => {
           expect(rpcConfig).toEqual({
             natsServers: ["nats://nats:4222"],
@@ -62,7 +103,11 @@ describe("Identity Access service composition", () => {
     const runRpc = vi.fn()
     const exit = await Effect.runPromiseExit(
       runIdentityAccessService(config, {
-        createAuth: () => Promise.reject(new Error("migration failed")),
+        startRuntime: () =>
+          Effect.fail({
+            _tag: "IdentityAccessServiceFailed",
+            component: "Auth",
+          }),
         runRpc,
       })
     )

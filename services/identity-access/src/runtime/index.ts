@@ -30,8 +30,11 @@ export {
 } from "./process.js"
 export {
   runIdentityAccessService,
+  startIdentityAccessRuntime,
   type IdentityAccessServiceDependencies,
   type IdentityAccessServiceError,
+  type IdentityAccessRuntime,
+  type IdentityAccessRuntimeDependencies,
 } from "./service.js"
 export {
   CompleteScheduledGenerationRequestSchema,
