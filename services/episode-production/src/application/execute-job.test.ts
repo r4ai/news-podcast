@@ -10,6 +10,7 @@ import {
   leaseQueuedJob,
   newQueuedJob,
 } from "../domain/episode-job.js"
+import { ReadingDictionarySnapshotSchema } from "../domain/reading-dictionary.js"
 import { executeEpisodeJob } from "./execute-job.js"
 import type {
   EpisodeExecutionCheckpoint,
@@ -47,6 +48,9 @@ const article = {
 
 const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
   let checkpoint: EpisodeExecutionCheckpoint | undefined
+  let dictionarySnapshot:
+    | Schema.Schema.Type<typeof ReadingDictionarySnapshotSchema>
+    | undefined
   const ports: EpisodeExecutionPorts = {
     articles: {
       materialize: vi.fn(() => Effect.succeed([article] as const)),
@@ -73,10 +77,29 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
         })
       ),
     },
+    dictionary: {
+      capture: vi.fn(() =>
+        Effect.succeed(
+          Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)({
+            ownerId: running.request.ownerId,
+            fingerprint: "a".repeat(64),
+            entries: [],
+          })
+        )
+      ),
+    },
     persistence: {
       renewLease: () => Effect.succeed("Applied"),
       assertLease: vi.fn(() => Effect.void),
       loadCheckpoint: vi.fn(() => Effect.succeed(checkpoint as never)),
+      loadDictionarySnapshot: vi.fn(() =>
+        Effect.succeed(dictionarySnapshot)
+      ),
+      saveDictionarySnapshot: vi.fn((input) =>
+        Effect.sync(() => {
+          dictionarySnapshot ??= input.snapshot
+        })
+      ),
       saveScriptCheckpoint: vi.fn((input) =>
         Effect.sync(() => {
           checkpoint = { ...checkpoint, script: input.script }
@@ -102,6 +125,41 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
 }
 
 describe("executeEpisodeJob", () => {
+  it("captures and fences one immutable dictionary snapshot per job", async () => {
+    const first = makePorts()
+
+    await Effect.runPromise(executeEpisodeJob(first)({ job: running }))
+
+    expect(first.dictionary.capture).toHaveBeenCalledTimes(1)
+    expect(first.dictionary.capture).toHaveBeenCalledWith("owner-1")
+    expect(first.persistence.saveDictionarySnapshot).toHaveBeenCalledWith({
+      jobId: running.jobId,
+      leaseToken: running.lease.token,
+      snapshot: expect.objectContaining({ fingerprint: "a".repeat(64) }),
+    })
+    expect(first.speech.synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dictionarySnapshot: expect.objectContaining({
+          fingerprint: "a".repeat(64),
+        }),
+      })
+    )
+
+    const saved = vi.mocked(first.persistence.saveDictionarySnapshot).mock
+      .calls[0]![0].snapshot
+    const resumed = makePorts({
+      dictionary: {
+        capture: vi.fn(() => Effect.die("must use persisted snapshot")),
+      },
+      persistence: {
+        ...first.persistence,
+        loadDictionarySnapshot: () => Effect.succeed(saved),
+      },
+    })
+    await Effect.runPromise(executeEpisodeJob(resumed)({ job: running }))
+    expect(resumed.dictionary.capture).not.toHaveBeenCalled()
+  })
+
   it("uses owner-scoped automatic materialization when no articles are selected", async () => {
     const automaticJob = {
       ...running,

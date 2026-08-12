@@ -52,6 +52,7 @@ const rejected = (
 
 const commonProjection = (job: EpisodeJob) => ({
   jobId: job.jobId,
+  createdAt: encodeTimestamp(job.createdAt),
   trigger: job.request.trigger,
   ...(job.request.articleIds === undefined
     ? {}

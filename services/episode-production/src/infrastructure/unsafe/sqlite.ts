@@ -65,6 +65,12 @@ export type SqliteJobHandle = Readonly<{
     readonly leasedUntil: string
   }) => boolean
   loadCheckpoint: (jobId: string) => StoredCheckpointRow | undefined
+  loadDictionarySnapshot: (jobId: string) => string | undefined
+  saveDictionarySnapshot: (input: {
+    readonly jobId: string
+    readonly leaseToken: string
+    readonly snapshot: string
+  }) => "Applied" | "StaleLease" | "Conflict"
   saveScriptCheckpoint: (input: {
     readonly jobId: string
     readonly leaseToken: string
@@ -116,6 +122,10 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
       script TEXT NOT NULL,
       audio TEXT
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS episode_dictionary_snapshots (
+      job_id TEXT PRIMARY KEY REFERENCES episode_jobs(job_id) ON DELETE CASCADE,
+      snapshot TEXT NOT NULL
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS episode_completion_outbox (
       job_id TEXT PRIMARY KEY REFERENCES episode_jobs(job_id) ON DELETE CASCADE,
       episode_id TEXT NOT NULL UNIQUE,
@@ -149,6 +159,57 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
       ON episode_job_status_events(owner_id, job_id, sequence);
     CREATE INDEX IF NOT EXISTS episode_completion_outbox_pending
       ON episode_completion_outbox(published_at, created_at);
+  `)
+
+  database.exec(`
+    UPDATE episode_jobs
+    SET document = json_set(
+      document,
+      '$.createdAt',
+      COALESCE(
+        (
+          SELECT COALESCE(
+            json_extract(first_event.document, '$.enqueuedAt'),
+            json_extract(first_event.document, '$.createdAt')
+          )
+          FROM episode_job_status_events AS first_event
+          WHERE first_event.job_id = episode_jobs.job_id
+          ORDER BY first_event.sequence
+          LIMIT 1
+        ),
+        json_extract(document, '$.enqueuedAt'),
+        json_extract(document, '$.startedAt'),
+        json_extract(document, '$.retryAt'),
+        json_extract(document, '$.completedAt'),
+        json_extract(document, '$.failedAt'),
+        json_extract(document, '$.canceledAt')
+      )
+    )
+    WHERE json_extract(document, '$.createdAt') IS NULL;
+    UPDATE episode_job_status_events
+    SET document = json_set(
+      document,
+      '$.createdAt',
+      COALESCE(
+        (
+          SELECT COALESCE(
+            json_extract(first_event.document, '$.enqueuedAt'),
+            json_extract(first_event.document, '$.createdAt')
+          )
+          FROM episode_job_status_events AS first_event
+          WHERE first_event.job_id = episode_job_status_events.job_id
+          ORDER BY first_event.sequence
+          LIMIT 1
+        ),
+        json_extract(document, '$.enqueuedAt'),
+        json_extract(document, '$.startedAt'),
+        json_extract(document, '$.retryAt'),
+        json_extract(document, '$.completedAt'),
+        json_extract(document, '$.failedAt'),
+        json_extract(document, '$.canceledAt')
+      )
+    )
+    WHERE json_extract(document, '$.createdAt') IS NULL;
   `)
 
   const transaction = <Value>(body: () => Value): Value => {
@@ -231,6 +292,14 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
   `)
   const loadCheckpoint = database.prepare(`
     SELECT script, audio FROM episode_execution_checkpoints WHERE job_id = ?
+  `)
+  const loadDictionarySnapshot = database.prepare(`
+    SELECT snapshot FROM episode_dictionary_snapshots WHERE job_id = ?
+  `)
+  const insertDictionarySnapshot = database.prepare(`
+    INSERT INTO episode_dictionary_snapshots(job_id, snapshot)
+    VALUES (?, ?)
+    ON CONFLICT(job_id) DO NOTHING
   `)
   const insertScriptCheckpoint = database.prepare(`
     INSERT INTO episode_execution_checkpoints(job_id, script, audio)
@@ -366,6 +435,23 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
             ...(row.audio === null ? {} : { audio: row.audio }),
           }
     },
+    loadDictionarySnapshot: (jobId) =>
+      (
+        loadDictionarySnapshot.get(jobId) as
+          | { readonly snapshot: string }
+          | undefined
+      )?.snapshot,
+    saveDictionarySnapshot: (input) =>
+      transaction(() => {
+        if (hasLease.get(input.jobId, input.leaseToken) === undefined) {
+          return "StaleLease"
+        }
+        insertDictionarySnapshot.run(input.jobId, input.snapshot)
+        const stored = loadDictionarySnapshot.get(input.jobId) as
+          | { readonly snapshot: string }
+          | undefined
+        return stored?.snapshot === input.snapshot ? "Applied" : "Conflict"
+      }),
     saveScriptCheckpoint: (input) =>
       transaction(() => {
         if (hasLease.get(input.jobId, input.leaseToken) === undefined) {

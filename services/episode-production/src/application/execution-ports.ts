@@ -11,6 +11,7 @@ import type {
   RunningJob,
   UtcTimestamp,
 } from "../domain/episode-job.js"
+import type { ReadingDictionarySnapshot } from "../domain/reading-dictionary.js"
 import type { GeneratedScript, ScriptGenerator } from "./script-generator.js"
 import type { SpeechSynthesizer } from "./speech-synthesizer.js"
 import type { Schema } from "effect"
@@ -121,6 +122,12 @@ export type EpisodeExecutionPorts = DeepReadonly<{
   script: ScriptGenerator
   speech: SpeechSynthesizer
   audio: AudioObjectStore
+  dictionary: {
+    /** Captures the complete owner lexicon; the execution persists it before generation. */
+    capture: (
+      ownerId: OwnerId
+    ) => Effect.Effect<ReadingDictionarySnapshot, PipelineFailure>
+  }
   persistence: {
     /** Extends only the current, still-live fencing token. */
     renewLease: (
@@ -133,6 +140,15 @@ export type EpisodeExecutionPorts = DeepReadonly<{
     loadCheckpoint: (
       jobId: JobId
     ) => Effect.Effect<EpisodeExecutionCheckpoint | undefined, PipelineFailure>
+    loadDictionarySnapshot: (
+      jobId: JobId
+    ) => Effect.Effect<ReadingDictionarySnapshot | undefined, PipelineFailure>
+    /** First write wins, so retries cannot change pronunciation mid-job. */
+    saveDictionarySnapshot: (input: {
+      jobId: JobId
+      leaseToken: LeaseToken
+      snapshot: ReadingDictionarySnapshot
+    }) => Effect.Effect<void, PipelineFailure | LeaseFailure>
     saveScriptCheckpoint: (input: {
       jobId: JobId
       leaseToken: LeaseToken

@@ -72,6 +72,12 @@ describe("episode job state machine", () => {
 
     expect(running).toMatchObject({ _tag: "Running", attempt: 1 })
     expect(succeeded).toMatchObject({ _tag: "Succeeded", episodeId })
+    expect(Schema.encodeSync(UtcTimestampSchema)(running.createdAt)).toBe(
+      "2026-08-12T00:00:00.000Z"
+    )
+    expect(Schema.encodeSync(UtcTimestampSchema)(succeeded.createdAt)).toBe(
+      "2026-08-12T00:00:00.000Z"
+    )
     expect(Object.isFrozen(succeeded)).toBe(true)
   })
 
@@ -92,6 +98,13 @@ describe("episode job state machine", () => {
       canceledAt: time("2026-08-12T00:00:02.000Z"),
       reason: "requested_by_user",
     })
+
+    expect(Schema.encodeSync(UtcTimestampSchema)(retrying.createdAt)).toBe(
+      "2026-08-12T00:00:00.000Z"
+    )
+    expect(Schema.encodeSync(UtcTimestampSchema)(canceled.createdAt)).toBe(
+      "2026-08-12T00:00:00.000Z"
+    )
 
     expect(retrying).toMatchObject({ _tag: "Retrying", attempt: 1 })
     expect(canceled).toMatchObject({

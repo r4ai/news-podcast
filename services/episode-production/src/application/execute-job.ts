@@ -165,6 +165,39 @@ export const executeEpisodeJob =
     const run = Effect.gen(function* () {
       yield* assertLease()
       const checkpoint = yield* ports.persistence.loadCheckpoint(job.jobId)
+      let dictionarySnapshot =
+        yield* ports.persistence.loadDictionarySnapshot(job.jobId)
+      if (
+        dictionarySnapshot !== undefined &&
+        dictionarySnapshot.ownerId !== job.request.ownerId
+      ) {
+        return yield* Effect.fail<PipelineFailure>(
+          deepFreeze({
+            _tag: "PipelineFailure",
+            code: "dictionary_snapshot_owner_mismatch",
+            retryable: false,
+          })
+        )
+      }
+      if (dictionarySnapshot === undefined) {
+        const dictionary = yield* ports.dictionary.capture(job.request.ownerId)
+        if (dictionary.ownerId !== job.request.ownerId) {
+          return yield* Effect.fail<PipelineFailure>(
+            deepFreeze({
+              _tag: "PipelineFailure",
+              code: "dictionary_snapshot_owner_mismatch",
+              retryable: false,
+            })
+          )
+        }
+        yield* assertLease()
+        yield* ports.persistence.saveDictionarySnapshot({
+          jobId: job.jobId,
+          leaseToken: job.lease.token,
+          snapshot: dictionary,
+        })
+        dictionarySnapshot = dictionary
+      }
       const selection =
         job.request.articleIds === undefined
           ? deepFreeze({ _tag: "Automatic" as const })
@@ -202,6 +235,7 @@ export const executeEpisodeJob =
         yield* assertLease()
         const bytes = yield* ports.speech.synthesize({
           text: script.script,
+          dictionarySnapshot,
           ...(signal === undefined ? {} : { signal }),
         })
         yield* assertLease()

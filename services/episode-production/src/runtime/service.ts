@@ -7,6 +7,7 @@ import { makeCompletionPublisher } from "../adapters/completion-publisher.js"
 import { makeContentArticleMaterializer } from "../adapters/content-article-materializer.js"
 import { makeOpenAiScriptGenerator } from "../adapters/openai-script-generator.js"
 import { sqliteExecutionRepository } from "../adapters/sqlite-execution-repository.js"
+import { sqliteReadingDictionaryRepository } from "../adapters/sqlite-reading-dictionary.js"
 import { makeVoicevoxSpeechSynthesizer } from "../adapters/voicevox-speech-synthesizer.js"
 import { relayCompletionOutbox } from "../application/completion-outbox.js"
 import { executeEpisodeJob } from "../application/execute-job.js"
@@ -127,6 +128,9 @@ export const runNodeEpisodeProductionService = (
           const execution = yield* sqliteExecutionRepository(
             config.rpc.sqlitePath
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
+          const dictionary = yield* sqliteReadingDictionaryRepository(
+            config.rpc.sqlitePath
+          ).pipe(Effect.mapError(() => runtimeError("Execution")))
           const content = yield* Effect.acquireRelease(
             Effect.tryPromise({
               try: () => connectNatsRequestUnsafe(config.rpc.natsServers),
@@ -170,6 +174,18 @@ export const runNodeEpisodeProductionService = (
             script,
             speech,
             audio,
+            dictionary: {
+              capture: (ownerId) =>
+                dictionary.captureSnapshot(ownerId).pipe(
+                  Effect.mapError(() =>
+                    deepFreeze({
+                      _tag: "PipelineFailure" as const,
+                      code: "sqlite_dictionary_snapshot",
+                      retryable: true,
+                    })
+                  )
+                ),
+            },
             persistence: execution,
             nextEpisodeId: randomEpisodeIdUnsafe,
             now,

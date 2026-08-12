@@ -34,6 +34,10 @@ export {
   type SqliteExecutionRepository,
 } from "./adapters/sqlite-execution-repository.js"
 export {
+  sqliteReadingDictionaryRepository,
+  type SqliteReadingDictionaryRepository,
+} from "./adapters/sqlite-reading-dictionary.js"
+export {
   MAX_WAV_BYTES,
   openS3AudioObjectStoreUnsafe,
   s3AudioObjectStoreScoped,
@@ -63,10 +67,24 @@ export {
   type ProviderRetryExhausted,
   type ProviderRetryRuntime,
 } from "./application/retry-provider.js"
+export {
+  captureReadingDictionarySnapshot,
+  createReadingDictionaryEntry,
+  deleteReadingDictionaryEntry,
+  listReadingDictionaryEntries,
+  updateReadingDictionaryEntry,
+  type CreateReadingDictionaryResult,
+  type DeleteReadingDictionaryResult,
+  type ReadingDictionaryPatch,
+  type ReadingDictionaryRepository,
+  type ReadingDictionaryStoreError,
+  type UpdateReadingDictionaryResult,
+} from "./application/reading-dictionary.js"
 export * from "./application/script-generator.js"
 export * from "./application/speech-synthesizer.js"
 export * from "./domain/episode-job.js"
 export * from "./domain/provider-reliability.js"
+export * from "./domain/reading-dictionary.js"
 export {
   NodeCreateJobRpcConfigSchema,
   parseNodeCreateJobRpcConfig,

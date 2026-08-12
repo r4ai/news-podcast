@@ -1,12 +1,14 @@
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
 import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { sqliteJobRepository } from "./sqlite-job-repository.js"
 import { sqliteExecutionRepository } from "./sqlite-execution-repository.js"
+import { openSqliteJobHandle } from "../infrastructure/unsafe/sqlite.js"
 import {
   ArticleIdSchema,
   LeaseTokenSchema,
@@ -49,6 +51,68 @@ const job = (
   })
 
 describe("SQLite job repository", () => {
+  it("backfills the original queued timestamp into legacy state documents", () => {
+    const path = join(
+      mkdtempSync(join(tmpdir(), "episode-production-migration-")),
+      "jobs.sqlite"
+    )
+    const database = new DatabaseSync(path)
+    database.exec(`
+      CREATE TABLE episode_jobs (
+        job_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        request_fingerprint TEXT NOT NULL,
+        document TEXT NOT NULL,
+        UNIQUE(owner_id, idempotency_key)
+      ) STRICT;
+      CREATE TABLE episode_job_status_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT NOT NULL REFERENCES episode_jobs(job_id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL,
+        document TEXT NOT NULL
+      ) STRICT;
+    `)
+    const queuedDocument = JSON.stringify({
+      _tag: "Queued",
+      enqueuedAt: "2026-08-12T00:00:00.000Z",
+    })
+    const runningDocument = JSON.stringify({
+      _tag: "Running",
+      startedAt: "2026-08-12T00:05:00.000Z",
+    })
+    database.prepare(
+      "INSERT INTO episode_jobs VALUES (?, ?, ?, ?, ?)"
+    ).run("legacy-job", "owner", "key", "fingerprint", runningDocument)
+    database.prepare(
+      "INSERT INTO episode_job_status_events(job_id, owner_id, document) VALUES (?, ?, ?)"
+    ).run("legacy-job", "owner", queuedDocument)
+    database.prepare(
+      "INSERT INTO episode_job_status_events(job_id, owner_id, document) VALUES (?, ?, ?)"
+    ).run("legacy-job", "owner", runningDocument)
+    database.close()
+
+    const handle = openSqliteJobHandle(path)
+    try {
+      expect(JSON.parse(handle.findById("legacy-job")!)).toMatchObject({
+        createdAt: "2026-08-12T00:00:00.000Z",
+      })
+      expect(
+        handle.listOwnedStatusEvents({
+          ownerId: "owner",
+          jobId: "legacy-job",
+          afterSequence: 0,
+          limit: 10,
+        }).map(({ document }) => JSON.parse(document).createdAt)
+      ).toEqual([
+        "2026-08-12T00:00:00.000Z",
+        "2026-08-12T00:00:00.000Z",
+      ])
+    } finally {
+      handle.close()
+    }
+  })
+
   it("returns the original immutable job for an idempotent replay", async () => {
     const original = job("10e2d4e1-c127-479f-a124-2ea037bd9319")
     const replay = job("6518412b-ce2f-4641-9f2c-a02dd515bc31")

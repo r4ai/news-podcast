@@ -38,6 +38,7 @@ export type CreateJobCommand = Schema.Schema.Type<typeof CreateJobCommandSchema>
 const baseFields = {
   jobId: JobIdSchema,
   request: CreateJobCommandSchema,
+  createdAt: UtcTimestampSchema,
 }
 
 export const QueuedJobSchema = Schema.TaggedStruct("Queued", {
@@ -130,6 +131,7 @@ export const newQueuedJob = (input: {
   deepFreeze({
     _tag: "Queued",
     jobId: input.jobId,
+    createdAt: input.enqueuedAt,
     request: {
       ownerId: input.ownerId,
       idempotencyKey: input.idempotencyKey,
@@ -153,6 +155,7 @@ export const leaseQueuedJob = (
   deepFreeze({
     _tag: "Running",
     jobId: job.jobId,
+    createdAt: job.createdAt,
     request: job.request,
     attempt: 1,
     startedAt: lease.startedAt,
@@ -181,6 +184,7 @@ export const leaseRetryingJob = (
   deepFreeze({
     _tag: "Running",
     jobId: job.jobId,
+    createdAt: job.createdAt,
     request: job.request,
     attempt: nextAttempt(job.attempt),
     startedAt: lease.startedAt,
@@ -209,6 +213,7 @@ export const retryRunningJob = (
   deepFreeze({
     _tag: "Retrying",
     jobId: job.jobId,
+    createdAt: job.createdAt,
     request: job.request,
     attempt: job.attempt,
     retryAt: retry.retryAt,
@@ -225,6 +230,7 @@ export const completeRunningJob = (
   deepFreeze({
     _tag: "Succeeded",
     jobId: job.jobId,
+    createdAt: job.createdAt,
     request: job.request,
     attempt: job.attempt,
     episodeId: completed.episodeId,
@@ -238,6 +244,7 @@ export const failRunningJob = (
   deepFreeze({
     _tag: "Failed",
     jobId: job.jobId,
+    createdAt: job.createdAt,
     request: job.request,
     attempt: job.attempt,
     failedAt: failed.failedAt,
@@ -256,6 +263,7 @@ export const cancelJob = (
   deepFreeze({
     _tag: "Canceled",
     jobId: job.jobId,
+    createdAt: job.createdAt,
     request: job.request,
     attempt: job.attempt,
     canceledAt: canceled.canceledAt,

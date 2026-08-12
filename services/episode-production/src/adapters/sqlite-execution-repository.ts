@@ -6,6 +6,7 @@ import type {
   EpisodeExecutionCheckpoint,
   EpisodeExecutionPorts,
   LeaseNextInput,
+  LeaseFailure,
   PipelineFailure,
   StoredAudioCheckpoint,
 } from "../application/execution-ports.js"
@@ -23,6 +24,10 @@ import {
   type RunningJob,
   type UtcTimestamp,
 } from "../domain/episode-job.js"
+import {
+  ReadingDictionarySnapshotSchema,
+  type ReadingDictionarySnapshot,
+} from "../domain/reading-dictionary.js"
 import {
   openSqliteJobHandle,
   type SqliteJobHandle,
@@ -140,6 +145,49 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
               }) as EpisodeExecutionCheckpoint
           )
         })
+      ),
+    loadDictionarySnapshot: (jobId) =>
+      tryPersistence("load_dictionary_snapshot", () =>
+        handle.loadDictionarySnapshot(jobId)
+      ).pipe(
+        Effect.flatMap((document) =>
+          document === undefined
+            ? Effect.succeed(undefined)
+            : tryPersistence(
+                "decode_dictionary_snapshot",
+                () =>
+                  deepFreeze(
+                    Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)(
+                      parseJson(document)
+                    ) as ReadingDictionarySnapshot
+                  )
+              )
+        )
+      ),
+    saveDictionarySnapshot: (input) =>
+      tryPersistence("save_dictionary_snapshot", () =>
+        handle.saveDictionarySnapshot({
+          jobId: input.jobId,
+          leaseToken: input.leaseToken,
+          snapshot: stringify(input.snapshot),
+        })
+      ).pipe(
+        Effect.flatMap(
+          (
+            result
+          ): Effect.Effect<void, PipelineFailure | LeaseFailure> => {
+            switch (result) {
+              case "Applied":
+                return Effect.void
+              case "StaleLease":
+                return Effect.fail(staleLease())
+              case "Conflict":
+                return Effect.fail(
+                  pipelineFailure("sqlite_dictionary_snapshot_conflict", false)
+                )
+            }
+          }
+        )
       ),
     saveScriptCheckpoint: (input) =>
       tryPersistence("save_script_checkpoint", () =>

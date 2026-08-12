@@ -75,6 +75,7 @@ describe("episode job-control NATS RPC", () => {
       _tag: "Found",
       job: {
         jobId,
+        createdAt: "2026-08-13T00:00:00.000Z",
         status: "queued",
         trigger: "manual",
         attempt: 0,

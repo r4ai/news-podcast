@@ -20,6 +20,7 @@ import {
   retryRunningJob,
   type RunningJob,
 } from "../domain/episode-job.js"
+import { ReadingDictionarySnapshotSchema } from "../domain/reading-dictionary.js"
 
 const timestamp = (value: string) =>
   Schema.decodeUnknownSync(UtcTimestampSchema)(value)
@@ -73,6 +74,26 @@ describe("SQLite execution repository", () => {
           })
           expect(leased?.recovered).toBe(false)
           const running = leased!.job
+
+          const dictionarySnapshot = Schema.decodeUnknownSync(
+            ReadingDictionarySnapshotSchema
+          )({ ownerId, fingerprint: "a".repeat(64), entries: [] })
+          yield* execution.saveDictionarySnapshot({
+            jobId,
+            leaseToken: token("lease-1"),
+            snapshot: dictionarySnapshot,
+          })
+          const staleDictionaryExit = yield* Effect.exit(
+            execution.saveDictionarySnapshot({
+              jobId,
+              leaseToken: token("stale"),
+              snapshot: {
+                ...dictionarySnapshot,
+                fingerprint: "b".repeat(64) as never,
+              },
+            })
+          )
+          const loadedDictionary = yield* execution.loadDictionarySnapshot(jobId)
 
           yield* execution.saveScriptCheckpoint({
             jobId,
@@ -130,6 +151,8 @@ describe("SQLite execution repository", () => {
           const afterPublish = yield* execution.listPendingCompletionOutbox(10)
           return {
             staleExit,
+            staleDictionaryExit,
+            loadedDictionary,
             checkpoint,
             applied,
             duplicate,
@@ -142,6 +165,10 @@ describe("SQLite execution repository", () => {
     )
 
     expect(result.staleExit._tag).toBe("Failure")
+    expect(result.staleDictionaryExit._tag).toBe("Failure")
+    expect(result.loadedDictionary?.fingerprint).toBe("a".repeat(64))
+    expect(Object.isFrozen(result.loadedDictionary)).toBe(true)
+    expect(Object.isFrozen(result.loadedDictionary?.entries)).toBe(true)
     expect(result.checkpoint).toEqual({ script, audio })
     expect(result.applied).toBe("Applied")
     expect(result.duplicate).toBe("Duplicate")
