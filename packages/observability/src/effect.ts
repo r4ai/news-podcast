@@ -25,6 +25,23 @@ export const makeEffectOtlpLayer = (config: EffectOtlpConfig) =>
     loggerMergeWithExisting: true,
   }).pipe(Layer.provide(FetchHttpClient.layer))
 
+/** Uses the same service identity and OTLP endpoint as the Node SDK boundary. */
+export const makeEffectOtlpLayerFromEnvironment = (
+  environment: Readonly<Record<string, string | undefined>>,
+  serviceName: string
+) => {
+  if (environment.OTEL_ENABLED !== "true") return Layer.empty
+  const endpoint = environment.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
+  if (!endpoint)
+    throw new Error("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL is enabled")
+  return makeEffectOtlpLayer({
+    serviceName,
+    serviceVersion: environment.OTEL_SERVICE_VERSION?.trim() || "development",
+    environment: environment.APP_ENV?.trim() || "development",
+    endpoint,
+  })
+}
+
 export const traceparentToExternalSpan = (
   traceparent: string
 ): Tracer.ExternalSpan | undefined => {

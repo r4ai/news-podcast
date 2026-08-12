@@ -129,7 +129,14 @@ export function createNodeObservability(
     "telemetry.schema.version": "1",
   })
   const instrumentations = config.autoInstrumentation
-    ? [createHttpInstrumentation(config), new UndiciInstrumentation({})]
+    ? [
+        createHttpInstrumentation(config),
+        new UndiciInstrumentation({
+          // OTLP JSON exporters use fetch/Undici; tracing those requests would
+          // turn telemetry transport into misleading business dependencies.
+          ignoreRequestHook: (request) => isOtlpUndiciRequest(config, request),
+        }),
+      ]
     : []
   const sdk = new NodeSDK({
     resource,
@@ -308,6 +315,15 @@ function createHttpInstrumentation(
     // telemetry自身のexportはclient spanにしない（自己計装の回避）。
     ignoreOutgoingRequestHook: isOtlpExport,
   })
+}
+
+function isOtlpUndiciRequest(
+  config: NodeObservabilityConfig,
+  request: { readonly origin: string; readonly path: string }
+): boolean {
+  if (!config.endpoint) return false
+  const endpoint = new URL(config.endpoint)
+  return request.origin === endpoint.origin && request.path.startsWith("/v1/")
 }
 
 function recordErrorOnSpan(span: Span, error: unknown): void {

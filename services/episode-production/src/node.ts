@@ -1,4 +1,5 @@
 import { getNodeObservability } from "@news-podcast/observability/node/register"
+import { makeEffectOtlpLayerFromEnvironment } from "@news-podcast/observability"
 import { createHealthState, healthServerScoped } from "@news-podcast/service-runtime"
 import { Effect } from "effect"
 
@@ -10,12 +11,16 @@ const observability = getNodeObservability({
   serviceName: "episode-production",
   traceSampleRate: 1,
 })
+const effectTelemetry = makeEffectOtlpLayerFromEnvironment(
+  process.env,
+  "episode-production"
+)
 const health = createHealthState()
 const core = readEpisodeProductionServiceConfig(process.env).pipe(
   Effect.flatMap((config) =>
     runNodeEpisodeProductionService(config, health.ready)
   )
-)
+).pipe(Effect.provide(effectTelemetry))
 const program = Effect.scoped(
   healthServerScoped(Number(process.env.EPISODE_PRODUCTION_HEALTH_PORT ?? "4104"), health).pipe(
     Effect.andThen(core),

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   makeEffectOtlpLayer,
+  makeEffectOtlpLayerFromEnvironment,
   traceparentToExternalSpan,
   withMessagingSpan,
   withRemoteTraceparent,
@@ -50,5 +51,25 @@ describe("Effect telemetry", () => {
         endpoint: "http://collector:4318",
       })
     ).toBeDefined()
+  })
+
+  it("builds the Effect OTLP layer from the service runtime environment", () => {
+    expect(
+      makeEffectOtlpLayerFromEnvironment(
+        {
+          OTEL_ENABLED: "true",
+          OTEL_EXPORTER_OTLP_ENDPOINT: "http://collector:4318",
+          OTEL_SERVICE_VERSION: "1.2.3",
+          APP_ENV: "production",
+        },
+        "gateway"
+      )
+    ).toBeDefined()
+    expect(
+      makeEffectOtlpLayerFromEnvironment({ OTEL_ENABLED: "false" }, "gateway")
+    ).toBeDefined()
+    expect(() =>
+      makeEffectOtlpLayerFromEnvironment({ OTEL_ENABLED: "true" }, "gateway")
+    ).toThrow("OTEL_EXPORTER_OTLP_ENDPOINT")
   })
 })

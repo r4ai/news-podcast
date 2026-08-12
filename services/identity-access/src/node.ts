@@ -1,4 +1,5 @@
 import { getNodeObservability } from "@news-podcast/observability/node/register"
+import { makeEffectOtlpLayerFromEnvironment } from "@news-podcast/observability"
 import { createHealthState, healthServerScoped } from "@news-podcast/service-runtime"
 import { Effect } from "effect"
 
@@ -13,6 +14,10 @@ const observability = getNodeObservability({
   serviceName: "identity-access",
   traceSampleRate: 1,
 })
+const effectTelemetry = makeEffectOtlpLayerFromEnvironment(
+  process.env,
+  "identity-access"
+)
 const health = createHealthState()
 const core = readIdentityAccessConfig(process.env).pipe(
   Effect.flatMap((config) =>
@@ -21,7 +26,7 @@ const core = readIdentityAccessConfig(process.env).pipe(
       onReady: health.ready,
     })
   )
-)
+).pipe(Effect.provide(effectTelemetry))
 const program = Effect.scoped(
   healthServerScoped(Number(process.env.IDENTITY_HEALTH_PORT ?? "4102"), health).pipe(
     Effect.andThen(core),
