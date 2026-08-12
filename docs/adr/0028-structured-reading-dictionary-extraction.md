@@ -5,7 +5,7 @@
 - Decision owners: Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: `docs/design.md`§8、`apps/worker/src/reading-term-extractor.ts`
+- Related: `docs/design.md`§8、`apps/worker/src/reading-term-extractor.ts`、ADR-0031
 
 ## Context and change trigger
 
@@ -16,8 +16,9 @@
 - 台本生成後・音声合成前に、Responses APIのstrict JSON Schemaで最大30件を抽出する
 - 対象を英略語、英数字技術語、製品・サービス・企業・人・地名、複数読みの固有名詞とする
 - 全角カタカナ、長さ、アクセント範囲を検証し、NFKC＋case foldで重複を除く
+- `surface`が入力台本に存在する候補だけを受理し、モデルが作った未出語を永続化しない
 - ownerの既存辞書とも同じ正規化キーで照合する
-- 抽出失敗を`reading_dictionary.extraction_failed`、登録成功を`reading_dictionary.term_added`で観測する
+- 非2xx・空応答・不正JSONを正常な0件と区別し、抽出失敗を`reading_dictionary.extraction_failed`、登録成功を`reading_dictionary.term_added`で観測する
 
 ```mermaid
 flowchart LR

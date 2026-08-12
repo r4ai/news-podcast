@@ -5,7 +5,7 @@
 - Decision owners: Platform / Editorial
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: ADR-0013、ADR-0026、`docs/design.md` §8.3、[OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+- Related: ADR-0013、ADR-0026、ADR-0031、`docs/design.md` §8.3、[OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
 
 ## Context and change trigger
 
@@ -38,6 +38,8 @@ flowchart LR
 - 分類結果は選択記事との集合演算で正規化し、重複・未知IDを除外して未割当記事を最大6件単位で補完する
 - 統合モデルにはsource URLを生成させず、各sectionでprovenance検証済みのURLだけを継承する
 - HTTP 408/409/429/5xx、空・不完全・schema不適合応答は一時障害として既存の最大4attemptへ渡す。refusalとその他4xxは再試行しない
+- transport failureも一時障害へ統一し、caller cancellation・lease喪失・job deadlineの理由はprovider errorへ変換せず伝播する
+- 選択記事は全件の`read_article`実行と全URLの引用を提出条件とし、不足は同一run内の構造化修正へ返す
 - AG-UIの`job.retrying`、`RUN_ERROR`、`RUN_FINISHED`は未完了timelineを必ず閉じる。次attemptの`RUN_STARTED`と`STEP_STARTED`だけが再開する
 
 ## Decision drivers
