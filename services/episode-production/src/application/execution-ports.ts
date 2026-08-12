@@ -57,14 +57,22 @@ export type EpisodeCompletionIntent = DeepReadonly<{
   title: string
   script: string
   audio: StoredAudioCheckpoint
-  sources: readonly {
+  sources: readonly [{
     articleId: string
     snapshotId: string
     url: string
     title: string
     publishedAt?: string
-  }[]
+  }, ...{
+    articleId: string
+    snapshotId: string
+    url: string
+    title: string
+    publishedAt?: string
+  }[]]
   completedAt: UtcTimestamp
+  /** Captured from the generation span so delayed outbox publication links traces. */
+  traceparent: string
 }>
 
 export type PersistenceResult = "Applied" | "Duplicate" | "StaleLease"

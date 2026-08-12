@@ -109,6 +109,8 @@ describe("SQLite execution repository", () => {
               },
             ],
             completedAt,
+            traceparent:
+              "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
           }
           const applied = yield* execution.completeWithOutbox({
             jobId,
@@ -123,7 +125,18 @@ describe("SQLite execution repository", () => {
             completion,
           })
           const outbox = yield* execution.findCompletionOutbox(jobId)
-          return { staleExit, checkpoint, applied, duplicate, outbox }
+          const pending = yield* execution.listPendingCompletionOutbox(10)
+          yield* execution.markCompletionPublished(jobId, completedAt)
+          const afterPublish = yield* execution.listPendingCompletionOutbox(10)
+          return {
+            staleExit,
+            checkpoint,
+            applied,
+            duplicate,
+            outbox,
+            pending,
+            afterPublish,
+          }
         })
       )
     )
@@ -133,6 +146,9 @@ describe("SQLite execution repository", () => {
     expect(result.applied).toBe("Applied")
     expect(result.duplicate).toBe("Duplicate")
     expect(result.outbox?.episodeId).toBe(episodeId)
+    expect(result.pending).toHaveLength(1)
+    expect(result.pending[0]?.jobId).toBe(jobId)
+    expect(result.afterPublish).toEqual([])
   })
 
   it("recovers an expired lease without consuming another attempt", async () => {
@@ -243,6 +259,8 @@ describe("SQLite execution repository", () => {
           },
         ],
         completedAt,
+        traceparent:
+          "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
       },
     })
 

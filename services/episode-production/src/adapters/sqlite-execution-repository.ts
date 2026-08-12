@@ -21,6 +21,7 @@ import {
   type EpisodeJob,
   type JobId,
   type RunningJob,
+  type UtcTimestamp,
 } from "../domain/episode-job.js"
 import {
   openSqliteJobHandle,
@@ -58,6 +59,11 @@ const CompletionSchema = Schema.Struct({
     })
   ),
   completedAt: UtcTimestampSchema,
+  traceparent: Schema.String.check(
+    Schema.isPattern(
+      /^(?!ff)[\da-f]{2}-(?!0{32})[\da-f]{32}-(?!0{16})[\da-f]{16}-[\da-f]{2}$/
+    )
+  ),
 })
 
 const pipelineFailure = (code: string, retryable = true): PipelineFailure =>
@@ -229,6 +235,29 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             : (Schema.decodeUnknownSync(CompletionSchema)(
                 parseJson(row.payload)
               ) as EpisodeCompletionIntent)
+        )
+      ),
+    listPendingCompletionOutbox: (limit: number) =>
+      tryPersistence("list_completion_outbox", () =>
+        handle.listPendingCompletionOutbox(limit)
+      ).pipe(
+        Effect.map((rows) =>
+          rows.map((row) => ({
+            jobId: row.jobId as JobId,
+            completion: Schema.decodeUnknownSync(CompletionSchema)(
+              parseJson(row.payload)
+            ) as EpisodeCompletionIntent,
+          }))
+        )
+      ),
+    markCompletionPublished: (jobId: JobId, publishedAt: UtcTimestamp) =>
+      tryPersistence("mark_completion_published", () =>
+        handle.markCompletionPublished(jobId, encodeTimestamp(publishedAt))
+      ).pipe(
+        Effect.flatMap((applied) =>
+          applied
+            ? Effect.void
+            : Effect.fail(pipelineFailure("completion_outbox_missing", false))
         )
       ),
   }

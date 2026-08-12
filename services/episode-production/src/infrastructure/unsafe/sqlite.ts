@@ -16,6 +16,7 @@ export type StoredCheckpointRow = Readonly<{
 }>
 
 export type StoredCompletionOutboxRow = Readonly<{
+  jobId?: string
   episodeId: string
   payload: string
 }>
@@ -61,6 +62,10 @@ export type SqliteJobHandle = Readonly<{
     readonly createdAt: string
   }) => "Applied" | "Duplicate" | "StaleLease"
   findCompletionOutbox: (jobId: string) => StoredCompletionOutboxRow | undefined
+  listPendingCompletionOutbox: (
+    limit: number
+  ) => readonly Required<StoredCompletionOutboxRow>[]
+  markCompletionPublished: (jobId: string, publishedAt: string) => boolean
   close: () => void
 }>
 
@@ -169,6 +174,17 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
     INSERT INTO episode_completion_outbox(
       job_id, episode_id, payload, created_at, published_at
     ) VALUES (?, ?, ?, ?, NULL)
+  `)
+  const listPendingCompletionOutbox = database.prepare(`
+    SELECT job_id, episode_id, payload
+    FROM episode_completion_outbox
+    WHERE published_at IS NULL
+    ORDER BY created_at, job_id
+    LIMIT ?
+  `)
+  const markCompletionPublished = database.prepare(`
+    UPDATE episode_completion_outbox SET published_at = ?
+    WHERE job_id = ? AND published_at IS NULL
   `)
 
   return {
@@ -296,6 +312,20 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
         ? undefined
         : { episodeId: row.episode_id, payload: row.payload }
     },
+    listPendingCompletionOutbox: (limit) =>
+      (
+        listPendingCompletionOutbox.all(limit) as unknown as readonly {
+          readonly job_id: string
+          readonly episode_id: string
+          readonly payload: string
+        }[]
+      ).map((row) => ({
+        jobId: row.job_id,
+        episodeId: row.episode_id,
+        payload: row.payload,
+      })),
+    markCompletionPublished: (jobId, publishedAt) =>
+      markCompletionPublished.run(publishedAt, jobId).changes === 1,
     close: () => database.close(),
   }
 }

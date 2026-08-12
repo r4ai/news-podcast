@@ -13,6 +13,7 @@ import {
 import { classifyProviderFailure } from "../domain/provider-reliability.js"
 import type { ScriptGenerationFailure } from "./script-generator.js"
 import type {
+  EpisodeCompletionIntent,
   EpisodeExecutionPorts,
   ExecuteEpisodeJobInput,
   LeaseFailure,
@@ -232,6 +233,7 @@ export const executeEpisodeJob =
         )
       }
       const completedAt = ports.now()
+      const span = yield* Effect.orDie(Effect.currentSpan)
       const state = completeRunningJob(job, {
         episodeId: audio.episodeId,
         completedAt,
@@ -254,8 +256,9 @@ export const executeEpisodeJob =
             ...(source!.publishedAt === undefined
               ? {}
               : { publishedAt: source!.publishedAt }),
-          })),
+          })) as unknown as EpisodeCompletionIntent["sources"],
           completedAt,
+          traceparent: `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`,
         }),
       })
       return result === "Duplicate"
@@ -269,6 +272,7 @@ export const executeEpisodeJob =
       Effect.matchEffect({
         onFailure: (failure) => transitionFailure(ports, job, failure),
         onSuccess: Effect.succeed,
-      })
+      }),
+      Effect.withSpan("episodeProduction.executeJob")
     )
   }
