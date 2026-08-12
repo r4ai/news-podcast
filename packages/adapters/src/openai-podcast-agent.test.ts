@@ -242,6 +242,62 @@ describe("OpenAiPodcastAgent", () => {
     ).rejects.toBe(reason)
   })
 
+  it("finishes the audit run when selected-article loading fails", async () => {
+    const audit = {
+      start: vi.fn(() => "run-1"),
+      tool: vi.fn(),
+      finish: vi.fn(),
+    }
+    const agent = new OpenAiPodcastAgent(
+      { apiKey: "test", model: "test-model" },
+      {
+        listArticles: vi.fn(() => Promise.reject(new Error("store unavailable"))),
+        readArticle: vi.fn(),
+      },
+      audit,
+      vi.fn() as unknown as typeof fetch
+    )
+
+    await expect(
+      agent.run({
+        jobId: "job-1",
+        ownerId: "owner",
+        feedIds: [],
+        articleIds: ["00000000-0000-4000-8000-000000000010"],
+      })
+    ).rejects.toMatchObject({ retryable: true })
+    expect(audit.finish).toHaveBeenCalledWith("run-1", "agent-run-failed")
+  })
+
+  it("rejects an unavailable selected article before calling the model", async () => {
+    const audit = {
+      start: vi.fn(() => "run-1"),
+      tool: vi.fn(),
+      finish: vi.fn(),
+    }
+    const fetcher = vi.fn()
+    const agent = new OpenAiPodcastAgent(
+      { apiKey: "test", model: "test-model" },
+      { listArticles: vi.fn(() => Promise.resolve([])), readArticle: vi.fn() },
+      audit,
+      fetcher as unknown as typeof fetch
+    )
+
+    const error = await agent
+      .run({
+        jobId: "job-1",
+        ownerId: "owner",
+        feedIds: [],
+        articleIds: ["00000000-0000-4000-8000-000000000010"],
+      })
+      .catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(PodcastAgentError)
+    expect(error).toMatchObject({ retryable: false })
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(audit.finish).toHaveBeenCalledWith("run-1", "agent-run-failed")
+  })
+
   it("accepts only URLs reported by the hosted web search source list", async () => {
     const sourceUrl = "https://example.com/official-source"
     const fetcherMock = vi.fn().mockResolvedValue(

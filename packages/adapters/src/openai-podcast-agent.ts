@@ -186,13 +186,14 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     const readArticleIds = new Set<string>()
     const observedWebUrls = new Set<string>()
     let previousResponseId: string | undefined
-    let nextInput: unknown = selectedArticleIds.size
-      ? await this.buildSelectedArticlesPrompt(input)
-      : "購読中のRSS記事から、今聴く価値のあるニュースを選び、本文を読んで要点を抽出せよ。事実確認に必要な時だけweb_searchを使え。台本が完成したらsubmit_episode_draftを呼べ。"
+    let nextInput: unknown
     let toolCalls = 0
     let sourceCorrections = 0
 
     try {
+      nextInput = selectedArticleIds.size
+        ? await this.buildSelectedArticlesPrompt(input)
+        : "購読中のRSS記事から、今聴く価値のあるニュースを選び、本文を読んで要点を抽出せよ。事実確認に必要な時だけweb_searchを使え。台本が完成したらsubmit_episode_draftを呼べ。"
       for (let turn = 0; turn < MAX_TURNS; turn += 1) {
         const response = await this.request({
           input: nextInput,
@@ -342,6 +343,16 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
       limit: MAX_SELECTED_ARTICLES,
       ...(input.articleIds ? { articleIds: input.articleIds } : {}),
     })
+    const availableIds = new Set(articles.map((article) => article.id))
+    const missingSelectedArticles = (input.articleIds ?? []).filter(
+      (articleId) => !availableIds.has(articleId)
+    )
+    if (missingSelectedArticles.length > 0) {
+      throw new PodcastAgentError(
+        `Selected article set is incomplete (${missingSelectedArticles.length} unavailable)`,
+        false
+      )
+    }
     const list = articles
       .map(
         (article, index) =>
