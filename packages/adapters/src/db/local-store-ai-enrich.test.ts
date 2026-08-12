@@ -577,7 +577,7 @@ describe("LocalStore enrich_queue", () => {
       tokensIn: 0,
       tokensOut: 0,
     })
-    store.incrementEnrichProcessed("2026-08-11", 3)
+    store.incrementEnrichProcessed(new Date().toISOString().slice(0, 10), 3)
     store.reconcileEnrichQueue(NOW)
 
     const status = store.listEnrichQueueStatus(owner, 200)
