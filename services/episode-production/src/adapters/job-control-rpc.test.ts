@@ -31,6 +31,14 @@ const command = Schema.decodeUnknownSync(CreateJobCommandSchema)({
   trigger: "manual",
 })
 const queued = newQueuedJob({ jobId, ...command, enqueuedAt: now })
+const replyDependencies = {
+  newMessageId: () => "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+  now: () => "2026-08-13T00:00:01.000Z",
+}
+const replyPayload = (reply: string): Record<string, unknown> => {
+  const decoded = JSON.parse(reply) as Record<string, unknown>
+  return (decoded.payload ?? decoded) as Record<string, unknown>
+}
 
 const envelope = (
   payload: unknown,
@@ -61,17 +69,25 @@ describe("episode job-control NATS RPC", () => {
     const listOwned = vi.fn(() => Effect.succeed([queued]))
 
     await Effect.runPromise(
-      handleGetJobRpc({ findOwned })(delivery(envelope({ jobId }), replies))
+      handleGetJobRpc({ findOwned, replyDependencies })(
+        delivery(envelope({ jobId }), replies)
+      )
     )
     await Effect.runPromise(
-      handleListJobsRpc({ listOwned })(
+      handleListJobsRpc({ listOwned, replyDependencies })(
         delivery(envelope({ limit: 10 }), replies)
       )
     )
 
     expect(findOwned).toHaveBeenCalledWith(command.ownerId, jobId)
     expect(listOwned).toHaveBeenCalledWith(command.ownerId, 10)
-    expect(JSON.parse(replies[0]!)).toEqual({
+    expect(JSON.parse(replies[0]!)).toMatchObject({
+      correlationId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+      causationId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+      producer: "episode-production",
+      actor: { _tag: "Service", service: "episode-production" },
+    })
+    expect(replyPayload(replies[0]!)).toEqual({
       _tag: "Found",
       job: {
         jobId,
@@ -84,7 +100,7 @@ describe("episode job-control NATS RPC", () => {
       },
     })
     expect(JSON.stringify(replies)).not.toContain("owner-1")
-    expect(JSON.parse(replies[1]!)).toMatchObject({ _tag: "Listed" })
+    expect(replyPayload(replies[1]!)).toMatchObject({ _tag: "Listed" })
   })
 
   it("replays durable state events strictly after the supplied cursor", async () => {
@@ -95,9 +111,11 @@ describe("episode job-control NATS RPC", () => {
     )
 
     await Effect.runPromise(
-      handleListJobEventsRpc({ findOwned, listOwnedStatusEvents })(
-        delivery(envelope({ jobId, afterSequence: 41, limit: 20 }), replies)
-      )
+      handleListJobEventsRpc({
+        findOwned,
+        listOwnedStatusEvents,
+        replyDependencies,
+      })(delivery(envelope({ jobId, afterSequence: 41, limit: 20 }), replies))
     )
 
     expect(listOwnedStatusEvents).toHaveBeenCalledWith({
@@ -106,7 +124,7 @@ describe("episode job-control NATS RPC", () => {
       afterSequence: 41,
       limit: 20,
     })
-    expect(JSON.parse(replies[0]!)).toMatchObject({
+    expect(replyPayload(replies[0]!)).toMatchObject({
       _tag: "Events",
       events: [{ sequence: 42, job: { status: "queued" } }],
     })
@@ -122,11 +140,12 @@ describe("episode job-control NATS RPC", () => {
     const handler = handleCancelJobRpc({
       cancelOwned,
       now: Effect.succeed(now),
+      replyDependencies,
     })
     await Effect.runPromise(handler(delivery(envelope({ jobId }), replies)))
     await Effect.runPromise(handler(delivery(envelope({ jobId }), replies)))
 
-    expect(replies.map((reply) => JSON.parse(reply))).toEqual([
+    expect(replies.map(replyPayload)).toEqual([
       { _tag: "NotFound" },
       { _tag: "Conflict", code: "JOB_TERMINAL" },
     ])
@@ -143,13 +162,13 @@ describe("episode job-control NATS RPC", () => {
     const retry = vi.fn(() => Effect.succeed(retried))
 
     await Effect.runPromise(
-      handleRetryJobRpc({ retry })(
+      handleRetryJobRpc({ retry, replyDependencies })(
         delivery(envelope({ jobId, idempotencyKey: "retry-1" }), replies)
       )
     )
 
     expect(retry).toHaveBeenCalledWith(command.ownerId, jobId, "retry-1")
-    expect(JSON.parse(replies[0]!)).toMatchObject({
+    expect(replyPayload(replies[0]!)).toMatchObject({
       _tag: "Retried",
       job: { jobId: retriedId, status: "queued" },
     })
@@ -158,7 +177,7 @@ describe("episode job-control NATS RPC", () => {
   it("rejects anonymous, forged-owner, and malformed requests before storage", async () => {
     const replies: string[] = []
     const findOwned = vi.fn()
-    const handler = handleGetJobRpc({ findOwned })
+    const handler = handleGetJobRpc({ findOwned, replyDependencies })
 
     await Effect.runPromise(
       handler(delivery(envelope({ jobId }, { _tag: "Anonymous" }), replies))
@@ -174,7 +193,7 @@ describe("episode job-control NATS RPC", () => {
     )
 
     expect(findOwned).not.toHaveBeenCalled()
-    expect(replies.map((reply) => JSON.parse(reply).code)).toEqual([
+    expect(replies.map((reply) => replyPayload(reply).code)).toEqual([
       "UNAUTHENTICATED",
       "INVALID_REQUEST",
       "INVALID_REQUEST",

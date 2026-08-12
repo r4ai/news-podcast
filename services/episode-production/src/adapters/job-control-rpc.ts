@@ -5,6 +5,7 @@ import {
 } from "@news-podcast/observability"
 import {
   EpisodeJobControlReplySchema,
+  MessageEnvelopeSchema,
   ProductionEpisodeJobSchema,
   parseCancelEpisodeJobRequest,
   parseGetEpisodeJobRequest,
@@ -44,6 +45,11 @@ const parseOwnerId = parse(OwnerIdSchema)
 export type JobControlRpcDelivery<ReplyError = never> = Readonly<{
   readonly payload: string
   readonly reply: (payload: string) => Effect.Effect<void, ReplyError>
+}>
+
+export type JobControlRpcReplyDependencies = Readonly<{
+  readonly newMessageId: () => string
+  readonly now: () => string
 }>
 
 const rejected = (
@@ -122,20 +128,43 @@ const handleAuthenticated = <Request, ReplyError>(input: {
   readonly subject: string
   readonly delivery: JobControlRpcDelivery<ReplyError>
   readonly parseRequest: (value: unknown) => Effect.Effect<Request, unknown>
+  readonly replyDependencies: JobControlRpcReplyDependencies
   readonly execute: (
     ownerId: OwnerId,
     request: Request
   ) => Effect.Effect<EpisodeJobControlReply, unknown>
 }): Effect.Effect<void, ReplyError> => {
-  const reply = (value: EpisodeJobControlReply) =>
+  const rawReply = (value: EpisodeJobControlReply) =>
     input.delivery.reply(JSON.stringify(encodeReply(value)))
-  const invalid = reply(rejected("INVALID_REQUEST"))
+  const invalid = rawReply(rejected("INVALID_REQUEST"))
 
   return decodeJson(input.delivery.payload).pipe(
     Effect.flatMap(parseMessageEnvelope),
     Effect.matchEffect({
       onFailure: () => invalid,
       onSuccess: (envelope) => {
+        const reply = (value: EpisodeJobControlReply) =>
+          Effect.currentSpan.pipe(
+            Effect.orDie,
+            Effect.flatMap((span) =>
+              parse(MessageEnvelopeSchema)({
+                messageId: input.replyDependencies.newMessageId(),
+                correlationId: envelope.correlationId,
+                causationId: envelope.messageId,
+                occurredAt: input.replyDependencies.now(),
+                producer: "episode-production",
+                traceparent: `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`,
+                actor: { _tag: "Service", service: "episode-production" },
+                payload: encodeReply(value),
+              }).pipe(
+                Effect.orDie,
+                Effect.flatMap(Schema.encodeEffect(MessageEnvelopeSchema)),
+                Effect.orDie
+              )
+            ),
+            Effect.map(JSON.stringify),
+            Effect.flatMap(input.delivery.reply)
+          )
         const process =
           envelope.actor._tag !== "User"
             ? reply(rejected("UNAUTHENTICATED"))
@@ -144,7 +173,7 @@ const handleAuthenticated = <Request, ReplyError>(input: {
                 input.parseRequest(envelope.payload),
               ]).pipe(
                 Effect.matchEffect({
-                  onFailure: () => invalid,
+                  onFailure: () => reply(rejected("INVALID_REQUEST")),
                   onSuccess: ([ownerId, request]) =>
                     input.execute(ownerId, request).pipe(
                       Effect.matchEffect({
@@ -169,12 +198,14 @@ export const handleGetJobRpc =
       ownerId: OwnerId,
       jobId: JobId
     ) => Effect.Effect<EpisodeJob | undefined, StorageError>
+    readonly replyDependencies: JobControlRpcReplyDependencies
   }) =>
   <ReplyError>(delivery: JobControlRpcDelivery<ReplyError>) =>
     handleAuthenticated({
       subject: subjects.production.getJob,
       delivery,
       parseRequest: parseGetEpisodeJobRequest,
+      replyDependencies: ports.replyDependencies,
       execute: (ownerId, request) =>
         ports
           .findOwned(ownerId, decodeJobId(request.jobId))
@@ -193,12 +224,14 @@ export const handleListJobsRpc =
       ownerId: OwnerId,
       limit: number
     ) => Effect.Effect<readonly EpisodeJob[], StorageError>
+    readonly replyDependencies: JobControlRpcReplyDependencies
   }) =>
   <ReplyError>(delivery: JobControlRpcDelivery<ReplyError>) =>
     handleAuthenticated({
       subject: subjects.production.listJobs,
       delivery,
       parseRequest: parseListEpisodeJobsRequest,
+      replyDependencies: ports.replyDependencies,
       execute: (ownerId, request) =>
         ports.listOwned(ownerId, request.limit ?? 100).pipe(
           Effect.map((jobs): EpisodeJobControlReply => ({
@@ -226,12 +259,14 @@ export const handleListJobEventsRpc =
       }>[],
       StorageError
     >
+    readonly replyDependencies: JobControlRpcReplyDependencies
   }) =>
   <ReplyError>(delivery: JobControlRpcDelivery<ReplyError>) =>
     handleAuthenticated({
       subject: subjects.production.listJobEvents,
       delivery,
       parseRequest: parseListEpisodeJobEventsRequest,
+      replyDependencies: ports.replyDependencies,
       execute: (ownerId, request) => {
         const jobId = decodeJobId(request.jobId)
         return ports.findOwned(ownerId, jobId).pipe(
@@ -267,12 +302,14 @@ export const handleCancelJobRpc =
       jobId: JobId,
       canceledAt: UtcTimestamp
     ) => Effect.Effect<CancelOwnedJobResult, StorageError>
+    readonly replyDependencies: JobControlRpcReplyDependencies
   }) =>
   <ReplyError>(delivery: JobControlRpcDelivery<ReplyError>) =>
     handleAuthenticated({
       subject: subjects.production.cancelJob,
       delivery,
       parseRequest: parseCancelEpisodeJobRequest,
+      replyDependencies: ports.replyDependencies,
       execute: (ownerId, request) =>
         ports.now.pipe(
           Effect.flatMap((now) =>
@@ -298,12 +335,14 @@ export const handleRetryJobRpc =
       jobId: JobId,
       idempotencyKey: IdempotencyKey
     ) => Effect.Effect<RetryFailedJobResult, RetryError>
+    readonly replyDependencies: JobControlRpcReplyDependencies
   }) =>
   <ReplyError>(delivery: JobControlRpcDelivery<ReplyError>) =>
     handleAuthenticated({
       subject: subjects.production.retryJob,
       delivery,
       parseRequest: parseRetryEpisodeJobRequest,
+      replyDependencies: ports.replyDependencies,
       execute: (ownerId, request) =>
         ports
           .retry(

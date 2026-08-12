@@ -13,7 +13,11 @@ import {
 } from "../adapters/job-control-rpc.js"
 import { retryFailedJob } from "../application/job-control.js"
 import { sqliteJobRepository } from "../adapters/sqlite-job-repository.js"
-import type { JobId, UtcTimestamp } from "../domain/episode-job.js"
+import {
+  UtcTimestampSchema,
+  type JobId,
+  type UtcTimestamp,
+} from "../domain/episode-job.js"
 import {
   currentUtcTimestampUnsafe,
   randomJobIdUnsafe,
@@ -137,6 +141,11 @@ export const runNodeProductionRpc = (
             Effect.mapError(() => runtimeError("Sqlite"))
           )
           const now = Effect.sync(dependencies.now)
+          const replyDependencies = {
+            newMessageId: () => dependencies.newJobId(),
+            now: () =>
+              Schema.encodeSync(UtcTimestampSchema)(dependencies.now()),
+          }
           const handlers: readonly (readonly [string, RpcHandler])[] = [
             [
               subjects.production.createJob,
@@ -148,22 +157,33 @@ export const runNodeProductionRpc = (
             ],
             [
               subjects.production.getJob,
-              handleGetJobRpc({ findOwned: repository.findOwned }),
+              handleGetJobRpc({
+                findOwned: repository.findOwned,
+                replyDependencies,
+              }),
             ],
             [
               subjects.production.listJobs,
-              handleListJobsRpc({ listOwned: repository.listOwned }),
+              handleListJobsRpc({
+                listOwned: repository.listOwned,
+                replyDependencies,
+              }),
             ],
             [
               subjects.production.listJobEvents,
               handleListJobEventsRpc({
                 findOwned: repository.findOwned,
                 listOwnedStatusEvents: repository.listOwnedStatusEvents,
+                replyDependencies,
               }),
             ],
             [
               subjects.production.cancelJob,
-              handleCancelJobRpc({ now, cancelOwned: repository.cancelOwned }),
+              handleCancelJobRpc({
+                now,
+                cancelOwned: repository.cancelOwned,
+                replyDependencies,
+              }),
             ],
             [
               subjects.production.retryJob,
@@ -180,6 +200,7 @@ export const runNodeProductionRpc = (
                     jobId,
                     idempotencyKey
                   ),
+                replyDependencies,
               }),
             ],
           ]
