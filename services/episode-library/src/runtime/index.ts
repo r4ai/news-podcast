@@ -1,5 +1,13 @@
 export {
+  runEpisodeCompletedConsumerLoop,
+  type EpisodeCompletedConsumerFailure,
+  type EpisodeCompletedConsumerLoopConfig,
+  type EpisodeCompletedConsumerOutcome,
+} from "./episode-completed-consumer-loop.js"
+export {
   handleNatsEpisodeCompleted,
+  episodeCompletedNackDelay,
+  type EpisodeCompletedNackBackoff,
   type NatsEpisodeCompletedDelivery,
   type NatsPayloadDecodeFailure,
 } from "./nats-episode-completed.js"

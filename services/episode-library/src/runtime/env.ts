@@ -28,6 +28,22 @@ export const readEpisodeLibraryConfig = (
       .map((value) => value.trim())
       .filter((value) => value.length > 0),
     queueGroup: env.EPISODE_LIBRARY_QUEUE_GROUP?.trim() ?? "",
+    completionConsumer: {
+      stream: env.EPISODE_LIBRARY_COMPLETION_STREAM?.trim() ?? "",
+      durableName: env.EPISODE_LIBRARY_COMPLETION_DURABLE_NAME?.trim() ?? "",
+      ackWaitMillis: Number(
+        env.EPISODE_LIBRARY_COMPLETION_ACK_WAIT_MILLIS ?? ""
+      ),
+      maximumDeliveries: Number(
+        env.EPISODE_LIBRARY_COMPLETION_MAXIMUM_DELIVERIES ?? ""
+      ),
+      initialNackDelayMillis: Number(
+        env.EPISODE_LIBRARY_COMPLETION_INITIAL_NACK_DELAY_MILLIS ?? ""
+      ),
+      maximumNackDelayMillis: Number(
+        env.EPISODE_LIBRARY_COMPLETION_MAXIMUM_NACK_DELAY_MILLIS ?? ""
+      ),
+    },
     s3: {
       endpoint: env.S3_ENDPOINT?.trim() ?? "",
       region: env.S3_REGION?.trim() ?? "",

@@ -1,4 +1,10 @@
 export {
+  connectEpisodeCompletedConsumerUnsafe,
+  type UnsafeEpisodeCompletedConsumer,
+  type UnsafeEpisodeCompletedConsumerConfig,
+  type UnsafeEpisodeCompletedDelivery,
+} from "./unsafe/nats-episode-completed-consumer.js"
+export {
   makeSqliteEpisodeRepository,
   type SqliteEpisodeRepository,
 } from "./unsafe/sqlite-episode-repository.js"

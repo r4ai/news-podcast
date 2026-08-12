@@ -17,6 +17,7 @@ import { InboxMessageIdSchema } from "../domain/episode-completion.js"
 import { CompletedEpisodeSchema } from "../domain/episode.js"
 import { makeSqliteEpisodeRepository } from "../infrastructure/index.js"
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
+import type { UnsafeEpisodeCompletedConsumer } from "../infrastructure/unsafe/nats-episode-completed-consumer.js"
 import {
   parseNodeEpisodeLibraryRpcConfig,
   runNodeEpisodeLibraryService,
@@ -37,6 +38,17 @@ const config = {
   natsServers: ["nats://127.0.0.1:4222"],
   queueGroup: "episode-library",
 }
+const serviceConfig = {
+  ...config,
+  completionConsumer: {
+    stream: "EPISODE_PRODUCTION",
+    durableName: "episode-library-completions",
+    ackWaitMillis: 30_000,
+    maximumDeliveries: 10,
+    initialNackDelayMillis: 1_000,
+    maximumNackDelayMillis: 30_000,
+  },
+}
 
 const request = (subject: string, payload: unknown, messageId: string) => ({
   subject,
@@ -52,7 +64,131 @@ const request = (subject: string, payload: unknown, messageId: string) => ({
   }),
 })
 
+const completionMessage = {
+  messageId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+  correlationId: "f8f15e30-6877-4b4d-9568-76bfa3dc3a40",
+  causationId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
+  occurredAt: "2026-08-12T00:00:00.000Z",
+  producer: "episode-production",
+  traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  actor: { _tag: "Service", service: "episode-production" },
+  payload: {
+    episodeId,
+    ownerId,
+    title: "Daily news",
+    script: "Full script",
+    audio: {
+      objectKey: `episodes/${episodeId}.wav`,
+      byteLength: 42,
+      contentType: "audio/wav",
+    },
+    sources: [
+      {
+        sourceKind: "rss",
+        snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
+        url: "https://example.com/news/1",
+        title: "News 1",
+      },
+    ],
+    completedAt: "2026-08-12T00:00:00.000Z",
+  },
+}
+
 describe("episode-library Node RPC runtime", () => {
+  it("materializes a completion before serving it from the same SQLite service scope", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "episode-library-service-"))
+    directories.push(directory)
+    const sqlitePath = join(directory, "library.sqlite")
+    const events: string[] = []
+    let resolveAcknowledged!: () => void
+    const acknowledged = new Promise<void>((resolve) => {
+      resolveAcknowledged = resolve
+    })
+    let completionDelivered = false
+    const completionConsumer: UnsafeEpisodeCompletedConsumer = {
+      receive: async () => {
+        if (completionDelivered) return new Promise(() => undefined)
+        completionDelivered = true
+        return {
+          data: new TextEncoder().encode(JSON.stringify(completionMessage)),
+          deliveryCount: 1,
+          ack: async () => {
+            events.push("completion.ack")
+            resolveAcknowledged()
+          },
+          nack: async (delayMillis) =>
+            void events.push(`completion.nack:${delayMillis}`),
+        }
+      },
+      drain: async () => void events.push("completion.drain"),
+    }
+    const replies: string[] = []
+    let rpcDelivered = false
+    const rpcServer: UnsafeNatsRpcServer = {
+      receive: async () => {
+        if (rpcDelivered) return undefined
+        await acknowledged
+        rpcDelivered = true
+        return {
+          ...request(
+            subjects.library.listEpisodes,
+            {},
+            "10e2d4e1-c127-479f-a124-2ea037bd9319"
+          ),
+          reply: async (payload) => void replies.push(payload),
+        }
+      },
+      drain: async () => void events.push("rpc.drain"),
+    }
+
+    await Effect.runPromise(
+      runNodeEpisodeLibraryService(
+        {
+          ...serviceConfig,
+          sqlitePath,
+          s3: {
+            endpoint: "http://seaweedfs:8333",
+            region: "us-east-1",
+            bucket: "private-audio",
+            accessKeyId: "access-id",
+            secretAccessKey: "secret-key",
+          },
+        },
+        {
+          openSigner: () => ({
+            signer: { issue: vi.fn() },
+            close: Effect.sync(() => void events.push("signer.close")),
+          }),
+          connectCompletionConsumer: async () => completionConsumer,
+          rpcDependencies: {
+            connectNats: async () => rpcServer,
+            newMessageId: () => "b3ec6a98-bc73-4c94-a3bf-7e8cc8e5f02a",
+            now: () => "2026-08-12T00:00:01.000Z",
+            nowEpochMillis: () => Date.parse("2026-08-12T00:00:00.000Z"),
+          },
+        }
+      )
+    )
+
+    const envelope = await Effect.runPromise(
+      parseMessageEnvelope(JSON.parse(replies[0]!) as unknown)
+    )
+    const listed = await Effect.runPromise(
+      parseListEpisodesReply(envelope.payload)
+    )
+    expect(listed).toMatchObject({
+      _tag: "Listed",
+      page: { items: [{ id: episodeId, title: "Daily news" }] },
+    })
+    expect(JSON.stringify(listed)).not.toContain(ownerId)
+    expect(events).toEqual([
+      "completion.ack",
+      "completion.drain",
+      "rpc.drain",
+      "signer.close",
+    ])
+  })
+
   it("uses SQLite, handles both subjects sequentially, and drains NATS", async () => {
     const directory = mkdtempSync(join(tmpdir(), "episode-library-rpc-"))
     directories.push(directory)
@@ -261,7 +397,7 @@ describe("episode-library Node RPC runtime", () => {
     const fiber = Effect.runFork(
       runNodeEpisodeLibraryService(
         {
-          ...config,
+          ...serviceConfig,
           sqlitePath: ":memory:",
           s3: {
             endpoint: "http://seaweedfs:8333",
@@ -291,6 +427,11 @@ describe("episode-library Node RPC runtime", () => {
               close: Effect.sync(() => void events.push("sqlite.closed")),
             }),
           },
+          connectCompletionConsumer: async () =>
+            ({
+              receive: () => new Promise(() => undefined),
+              drain: async () => void events.push("consumer.closed"),
+            }) satisfies UnsafeEpisodeCompletedConsumer,
         }
       )
     )
@@ -300,6 +441,7 @@ describe("episode-library Node RPC runtime", () => {
 
     expect(events).toEqual([
       "nats.opened",
+      "consumer.closed",
       "nats.closed",
       "sqlite.closed",
       "signer.closed",

@@ -17,11 +17,32 @@ export type NatsPayloadDecodeFailure = Readonly<{
 
 export interface NatsEpisodeCompletedDelivery<AckError, NackError> {
   readonly data: Uint8Array
+  /** One-based JetStream delivery count used to bound redelivery delay. */
+  readonly deliveryCount: number
   /** Acknowledges only after the inbox/episode transaction has committed. */
   readonly ack: Effect.Effect<void, AckError>
   /** Leaves the message eligible for redelivery. */
-  readonly nack: Effect.Effect<void, NackError>
+  readonly nack: (delayMillis: number) => Effect.Effect<void, NackError>
 }
+
+export type EpisodeCompletedNackBackoff = Readonly<{
+  readonly initialDelayMillis: number
+  readonly maximumDelayMillis: number
+}>
+
+const defaultNackBackoff: EpisodeCompletedNackBackoff = Object.freeze({
+  initialDelayMillis: 1_000,
+  maximumDelayMillis: 30_000,
+})
+
+export const episodeCompletedNackDelay = (
+  deliveryCount: number,
+  backoff: EpisodeCompletedNackBackoff = defaultNackBackoff
+): number =>
+  Math.min(
+    backoff.initialDelayMillis * 2 ** Math.max(0, deliveryCount - 1),
+    backoff.maximumDelayMillis
+  )
 
 const decodeJson = (data: Uint8Array) =>
   Effect.try({
@@ -31,7 +52,10 @@ const decodeJson = (data: Uint8Array) =>
     }),
   })
 
-export const handleNatsEpisodeCompleted = (ports: EpisodeCompletionPorts) =>
+export const handleNatsEpisodeCompleted = (
+  ports: EpisodeCompletionPorts,
+  nackBackoff: EpisodeCompletedNackBackoff = defaultNackBackoff
+) =>
   Effect.fn("episodeLibrary.nats.episodeCompleted")(function* <
     AckError,
     NackError,
@@ -64,7 +88,11 @@ export const handleNatsEpisodeCompleted = (ports: EpisodeCompletionPorts) =>
     return yield* consume.pipe(
       Effect.matchEffect({
         onFailure: (failure) =>
-          delivery.nack.pipe(Effect.andThen(Effect.fail(failure))),
+          delivery
+            .nack(
+              episodeCompletedNackDelay(delivery.deliveryCount, nackBackoff)
+            )
+            .pipe(Effect.andThen(Effect.fail(failure))),
         onSuccess: () => delivery.ack,
       })
     )

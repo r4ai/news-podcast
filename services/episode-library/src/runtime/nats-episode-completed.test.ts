@@ -82,7 +82,8 @@ describe("NATS EpisodeCompleted runtime", () => {
         handleNatsEpisodeCompleted(makePorts(events, result))({
           data: data(validMessage),
           ack: Effect.sync(ack).pipe(Effect.asVoid),
-          nack: Effect.sync(nack).pipe(Effect.asVoid),
+          deliveryCount: 1,
+          nack: () => Effect.sync(nack).pipe(Effect.asVoid),
         })
       )
 
@@ -104,12 +105,14 @@ describe("NATS EpisodeCompleted runtime", () => {
       handleNatsEpisodeCompleted(ports)({
         data: data(validMessage),
         ack: Effect.sync(ack).pipe(Effect.asVoid),
-        nack: Effect.sync(nack).pipe(Effect.asVoid),
+        deliveryCount: 3,
+        nack: (delayMillis) =>
+          Effect.sync(() => nack(delayMillis)).pipe(Effect.asVoid),
       })
     )
 
     expect(exit._tag).toBe("Failure")
-    expect(nack).toHaveBeenCalledOnce()
+    expect(nack).toHaveBeenCalledWith(4_000)
     expect(ack).not.toHaveBeenCalled()
   })
 
@@ -125,12 +128,14 @@ describe("NATS EpisodeCompleted runtime", () => {
       handleNatsEpisodeCompleted(ports)({
         data: new TextEncoder().encode("not-json"),
         ack: Effect.void,
-        nack: Effect.sync(nack).pipe(Effect.asVoid),
+        deliveryCount: 50,
+        nack: (delayMillis) =>
+          Effect.sync(() => nack(delayMillis)).pipe(Effect.asVoid),
       })
     )
 
     expect(exit._tag).toBe("Failure")
-    expect(nack).toHaveBeenCalledOnce()
+    expect(nack).toHaveBeenCalledWith(30_000)
     expect(materialize).not.toHaveBeenCalled()
   })
 
@@ -143,7 +148,8 @@ describe("NATS EpisodeCompleted runtime", () => {
       handleNatsEpisodeCompleted(ports)({
         data: data(validMessage),
         ack: Effect.void,
-        nack: Effect.void,
+        deliveryCount: 1,
+        nack: () => Effect.void,
       })
     )
 
