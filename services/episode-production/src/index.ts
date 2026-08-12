@@ -17,6 +17,11 @@ export {
 } from "./adapters/sqlite-job-repository.js"
 export { createJob, type CreateJobPorts } from "./application/create-job.js"
 export {
+  executeEpisodeJob,
+  type EpisodeExecutionOutcome,
+} from "./application/execute-job.js"
+export * from "./application/execution-ports.js"
+export {
   retryProvider,
   type ProviderRetryExhausted,
   type ProviderRetryRuntime,
