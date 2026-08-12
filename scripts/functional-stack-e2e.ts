@@ -26,7 +26,7 @@ import {
   JobIdSchema,
   OwnerIdSchema,
   UtcTimestampSchema,
-  runNodeCreateJobRpc,
+  runNodeProductionRpc,
 } from "../services/episode-production/src/index.js"
 import { runNodeResolveSessionRpc } from "../services/identity-access/src/runtime/index.js"
 
@@ -98,7 +98,7 @@ const main = Effect.scoped(
       )
     )
     yield* Effect.forkScoped(
-      runNodeCreateJobRpc({
+      runNodeProductionRpc({
         sqlitePath: join(directory, "production.sqlite"),
         natsServers,
         queueGroup: "production-e2e",
@@ -193,20 +193,25 @@ const main = Effect.scoped(
             }),
           }
         )
-        if (response.status === 503)
-          throw new Error("Content RPC not ready")
+        if (response.status === 503) throw new Error("Content RPC not ready")
         return response
       })
       assert(addSubscription.status === 201, "subscription was not added")
       const added = await json(addSubscription)
-      assert(typeof added.subscriptionId === "string", "subscription ID missing")
+      assert(
+        typeof added.subscriptionId === "string",
+        "subscription ID missing"
+      )
 
       const subscriptionsResponse = await request(
         web.handler,
         "/v1/me/feed-subscriptions",
         { headers }
       )
-      assert(subscriptionsResponse.status === 200, "subscriptions were not listed")
+      assert(
+        subscriptionsResponse.status === 200,
+        "subscriptions were not listed"
+      )
       const subscriptions = await json(subscriptionsResponse)
       assert(
         Array.isArray(subscriptions.items) && subscriptions.items.length === 1,
@@ -231,14 +236,82 @@ const main = Effect.scoped(
       const conflict = await create([articleA])
       assert(conflict.status === 409, "changed selection did not conflict")
 
+      const jobId = String(first.id)
+      const jobResponse = await withRetry(async () => {
+        const response = await request(
+          web.handler,
+          `/v1/episode-jobs/${jobId}`,
+          { headers }
+        )
+        if (response.status === 503) throw new Error("Job control RPC not ready")
+        return response
+      })
+      assert(
+        jobResponse.status === 200,
+        `accepted job was not readable: ${jobResponse.status} ${await jobResponse.clone().text()}`
+      )
+      const job = await json(jobResponse)
+      assert(job.id === jobId, "job detail returned another job")
+      assert(typeof job.createdAt === "string", "job creation time was lost")
+
+      const jobsResponse = await request(web.handler, "/v1/episode-jobs", {
+        headers,
+      })
+      assert(jobsResponse.status === 200, "jobs were not listed")
+      const jobs = await json(jobsResponse)
+      assert(
+        Array.isArray(jobs.items) &&
+          jobs.items.some(
+            (candidate) =>
+              typeof candidate === "object" &&
+              candidate !== null &&
+              (candidate as Record<string, unknown>).id === jobId
+          ),
+        "accepted job was absent from its owner list"
+      )
+
+      const eventsResponse = await request(
+        web.handler,
+        `/v1/episode-jobs/${jobId}/events`,
+        { headers: { ...headers, "last-event-id": "0" } }
+      )
+      assert(eventsResponse.status === 200, "job events were not replayed")
+      const eventStream = await eventsResponse.text()
+      assert(
+        eventStream.includes("STATE_SNAPSHOT") && eventStream.includes(jobId),
+        "job event replay omitted the state snapshot"
+      )
+
+      const canceledResponse = await request(
+        web.handler,
+        `/v1/episode-jobs/${jobId}/cancel`,
+        { method: "POST", headers }
+      )
+      assert(canceledResponse.status === 200, "queued job was not canceled")
+      const canceled = await json(canceledResponse)
+      assert(
+        canceled.status === "canceled",
+        "cancel did not persist terminal state"
+      )
+
+      const retryCanceled = await request(
+        web.handler,
+        `/v1/episode-jobs/${jobId}/retry`,
+        {
+          method: "POST",
+          headers: { ...headers, "idempotency-key": "retry-canceled" },
+        }
+      )
+      assert(retryCanceled.status === 409, "non-failed job was retried")
+
       const publisher = await connectProductionJetStreamUnsafe(natsServers)
       try {
         let marked = false
         const jobId = Schema.decodeUnknownSync(JobIdSchema)(first.id)
-        const completedEpisodeId = Schema.decodeUnknownSync(EpisodeIdSchema)(
-          episodeId
-        )
-        const completedOwnerId = Schema.decodeUnknownSync(OwnerIdSchema)(ownerId)
+        const completedEpisodeId =
+          Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId)
+        const completedOwnerId =
+          Schema.decodeUnknownSync(OwnerIdSchema)(ownerId)
         const completedAt = Schema.decodeUnknownSync(UtcTimestampSchema)(
           "2026-08-13T00:02:00.000Z"
         )
@@ -300,6 +373,30 @@ const main = Effect.scoped(
         "completed episode did not reach the owner library"
       )
 
+      const episodeResponse = await request(
+        web.handler,
+        `/v1/episodes/${episodeId}`,
+        { headers }
+      )
+      assert(episodeResponse.status === 200, "episode detail was not readable")
+      const episodeDetail = await json(episodeResponse)
+      assert(
+        episodeDetail.id === episodeId,
+        "episode detail returned another episode"
+      )
+
+      const audioAccessResponse = await request(
+        web.handler,
+        `/v1/episodes/${episodeId}/audio-access`,
+        { method: "POST", headers }
+      )
+      assert(audioAccessResponse.status === 200, "audio access was not issued")
+      const audioAccess = await json(audioAccessResponse)
+      assert(
+        audioAccess.url === "https://audio.e2e.invalid/signed",
+        "audio access URL was not owner-scoped through Library"
+      )
+
       const anonymous = await request(web.handler, "/v1/episodes")
       assert(anonymous.status === 401, "anonymous owner boundary was bypassed")
 
@@ -307,9 +404,11 @@ const main = Effect.scoped(
         session: "authenticated",
         idempotency: "replayed",
         conflict: "rejected",
+        jobControl: "read-replay-cancel-fenced",
         subscription: "owner-scoped",
         ownerBoundary: "enforced",
         completion: "jetstream-materialized",
+        episodeDetail: "readable-with-audio-access",
       }
     })
   })
