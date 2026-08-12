@@ -1,0 +1,37 @@
+import { Effect, Fiber } from "effect"
+import { describe, expect, it, vi } from "vitest"
+
+import {
+  runCompletionRelayLoop,
+  type CompletionRelayEvent,
+} from "./completion-relay-loop.js"
+
+describe("completion relay loop", () => {
+  it("backs off transient failures, caps delay, and resets after success", async () => {
+    const events: CompletionRelayEvent[] = []
+    const delays: number[] = []
+    const results = [
+      Effect.fail({ _tag: "PipelineFailure" as const, code: "nats", retryable: true }),
+      Effect.fail({ _tag: "PipelineFailure" as const, code: "nats", retryable: true }),
+      Effect.succeed({ published: 1, duplicates: 0 }),
+    ]
+    const fiber = Effect.runFork(
+      runCompletionRelayLoop(
+        {
+          relay: () => results.shift()!,
+          observe: (event) => Effect.sync(() => events.push(event)),
+          wait: (delay) => {
+            delays.push(delay)
+            return events.length === 3 ? Effect.never : Effect.void
+          },
+        },
+        { intervalMillis: 1_000, initialBackoffMillis: 100, maximumBackoffMillis: 150 }
+      )
+    )
+
+    await vi.waitFor(() => expect(events).toHaveLength(3))
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    expect(delays).toEqual([100, 150, 1_000])
+    expect(events.at(-1)).toMatchObject({ _tag: "CompletionRelaySucceeded" })
+  })
+})
