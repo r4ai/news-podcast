@@ -1,17 +1,14 @@
-import { parse } from "@news-podcast/kernel"
-import { Effect, Schema } from "effect"
+import {
+  ResolveSessionRequestSchema,
+  parseResolveSessionRequest,
+} from "@news-podcast/protocols"
+import { Effect } from "effect"
 
 import { resolveSession } from "../application/resolve-session.js"
 import type { SessionReader } from "../application/session-reader.js"
 
-const HeaderSchema = Schema.Struct({
-  name: Schema.NonEmptyString,
-  value: Schema.String,
-})
-export const SessionLookupRequestSchema = Schema.Struct({
-  headers: Schema.Array(HeaderSchema),
-})
-export const parseSessionLookupRequest = parse(SessionLookupRequestSchema)
+export const SessionLookupRequestSchema = ResolveSessionRequestSchema
+export const parseSessionLookupRequest = parseResolveSessionRequest
 
 export const makeResolveSessionHandler = (reader: SessionReader) => {
   const resolve = resolveSession(reader)

@@ -38,4 +38,11 @@ describe("Actor", () => {
 
     expect(exit._tag).toBe("Failure")
   })
+
+  it("rejects whitespace and oversized provider IDs", async () => {
+    for (const input of ["user id", "x".repeat(256)]) {
+      const exit = await Effect.runPromiseExit(parseUserId(input))
+      expect(exit._tag).toBe("Failure")
+    }
+  })
 })

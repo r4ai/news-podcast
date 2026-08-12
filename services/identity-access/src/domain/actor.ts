@@ -2,7 +2,7 @@ import { deepFreeze, parse } from "@news-podcast/kernel"
 import { Schema } from "effect"
 
 export const UserIdSchema = Schema.NonEmptyString.check(
-  Schema.isPattern(/\S/),
+  Schema.isPattern(/^\S+$/),
   Schema.isMaxLength(255)
 ).pipe(Schema.brand("IdentityUserId"))
 export type UserId = Schema.Schema.Type<typeof UserIdSchema>

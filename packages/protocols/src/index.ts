@@ -30,4 +30,14 @@ export {
   type ServiceName,
   type Traceparent,
 } from "./envelope.js"
+export {
+  parseResolveSessionReply,
+  parseResolveSessionRequest,
+  ResolveSessionRejectionSchema,
+  ResolveSessionReplySchema,
+  ResolveSessionRequestSchema,
+  type ResolveSessionRejection,
+  type ResolveSessionReply,
+  type ResolveSessionRequest,
+} from "./identity-rpc.js"
 export { subjects, type Subject } from "./subjects.js"

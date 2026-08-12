@@ -24,10 +24,32 @@ describe("MessageEnvelope", () => {
     expect(Object.isFrozen(parsed.payload)).toBe(true)
   })
 
+  it("accepts bounded opaque Better Auth user IDs", async () => {
+    const parsed = await Effect.runPromise(
+      parseMessageEnvelope({
+        ...validEnvelope,
+        actor: { _tag: "User", userId: "better-auth-user_01" },
+      })
+    )
+
+    expect(parsed.actor).toEqual({
+      _tag: "User",
+      userId: "better-auth-user_01",
+    })
+  })
+
   it.each([
     ["invalid message UUID", { ...validEnvelope, messageId: "message-1" }],
     ["invalid W3C trace context", { ...validEnvelope, traceparent: "invalid" }],
     ["unknown actor state", { ...validEnvelope, actor: { _tag: "Admin" } }],
+    [
+      "whitespace user ID",
+      { ...validEnvelope, actor: { _tag: "User", userId: "user id" } },
+    ],
+    [
+      "oversized user ID",
+      { ...validEnvelope, actor: { _tag: "User", userId: "x".repeat(256) } },
+    ],
     ["invalid UTC timestamp", { ...validEnvelope, occurredAt: "today" }],
   ])("rejects %s", async (_case, input) => {
     const exit = await Effect.runPromiseExit(parseMessageEnvelope(input))

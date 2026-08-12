@@ -26,7 +26,10 @@ export type ServiceName = Schema.Schema.Type<typeof ServiceNameSchema>
 export const ActorSchema = Schema.Union([
   Schema.TaggedStruct("Anonymous", {}),
   Schema.TaggedStruct("User", {
-    userId: Schema.String.check(Schema.isUUID(4)).pipe(Schema.brand("UserId")),
+    userId: Schema.NonEmptyString.check(
+      Schema.isPattern(/^\S+$/),
+      Schema.isMaxLength(255)
+    ).pipe(Schema.brand("UserId")),
   }),
   Schema.TaggedStruct("Service", { service: ServiceNameSchema }),
 ])
