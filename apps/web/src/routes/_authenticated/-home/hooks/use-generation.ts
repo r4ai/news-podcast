@@ -73,6 +73,13 @@ export function useGeneration() {
     })
   }, [stream.finished, queryClient])
 
+  // SSEのretrying eventには次回時刻がある一方、画面の正本はjobs API。
+  // 一度だけ再取得して、接続中でも再試行予定時刻とattemptを同期する。
+  useEffect(() => {
+    if (stream.state?.status !== "retrying") return
+    void queryClient.invalidateQueries({ queryKey: jobsQueryOptions.queryKey })
+  }, [stream.state?.status, queryClient])
+
   useEffect(() => {
     if (latestJob?.status === "succeeded") {
       void queryClient.invalidateQueries({

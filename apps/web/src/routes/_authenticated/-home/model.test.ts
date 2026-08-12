@@ -178,6 +178,31 @@ describe("reduceGenerationStream", () => {
     expect(result.timeline).toHaveLength(1)
   })
 
+  it("stops active work while retrying and resumes it on the next attempt", () => {
+    const result = reduceAll([
+      { ...at(), type: "STATE_SNAPSHOT", snapshot },
+      { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
+      {
+        ...at(),
+        type: "CUSTOM",
+        name: "job.retrying",
+        value: { nextAttemptAt: "2026-08-12T01:00:00.000Z" },
+      },
+    ])
+
+    expect(result.state?.status).toBe("retrying")
+    expect(result.timeline.every((entry) => entry.done)).toBe(true)
+
+    const resumed = (
+      [
+        { ...at(), type: "RUN_STARTED", threadId: "job-1", runId: "job-1" },
+        { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
+      ] satisfies AgUiEvent[]
+    ).reduce(reduceGenerationStream, result)
+    expect(resumed.state?.status).toBe("running")
+    expect(resumed.timeline.at(-1)?.done).toBe(false)
+  })
+
   it("keeps unknown events from breaking the stream", () => {
     const result = reduceAll([
       { ...at(), type: "CUSTOM", name: "job.retrying", value: {} },

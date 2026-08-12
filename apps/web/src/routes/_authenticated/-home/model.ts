@@ -151,10 +151,17 @@ export function reduceGenerationStream(
       return { ...current, state: event.snapshot, finished: false }
 
     case "RUN_STARTED":
-      return { ...current, finished: false }
+      return {
+        ...current,
+        finished: false,
+        ...(current.state
+          ? { state: { ...current.state, status: "running" } }
+          : {}),
+      }
 
     case "STEP_STARTED": {
-      if (current.timeline.some(isSameStep(event.stepName))) return current
+      const existing = current.timeline.find(isSameStep(event.stepName))
+      if (existing && !existing.done) return current
       const label = isJobStage(event.stepName)
         ? stageLabel(event.stepName)
         : event.stepName
@@ -163,10 +170,16 @@ export function reduceGenerationStream(
         ...(current.state
           ? { state: { ...current.state, stage: event.stepName } }
           : {}),
-        timeline: [
-          ...current.timeline,
-          { kind: "step", stepName: event.stepName, label, done: false },
-        ],
+        timeline: existing
+          ? current.timeline.map((entry) =>
+              isSameStep(event.stepName)(entry)
+                ? { ...entry, done: false }
+                : entry
+            )
+          : [
+              ...current.timeline,
+              { kind: "step", stepName: event.stepName, label, done: false },
+            ],
       }
     }
 
@@ -241,6 +254,16 @@ export function reduceGenerationStream(
                 },
               },
             }
+          : {}),
+      }
+
+    case "CUSTOM":
+      if (event.name !== "job.retrying") return current
+      return {
+        ...current,
+        timeline: finishTimeline(current.timeline),
+        ...(current.state
+          ? { state: { ...current.state, status: "retrying" } }
           : {}),
       }
 
