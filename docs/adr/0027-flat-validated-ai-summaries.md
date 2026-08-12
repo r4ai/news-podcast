@@ -4,7 +4,7 @@
 - Date: 2026-08-12
 - Decision owners: Platform
 - Supersedes: ADR-0021の要約形式とMermaid検証方針
-- Superseded by: N/A
+- Superseded by: ADR-0030（修復後も不正なMermaidの扱い）
 - Related: `packages/adapters/src/ai-enrich/openai-article-summarizer.ts`
 
 ## Context and change trigger
@@ -16,7 +16,7 @@
 - 要約本文は見出しを使わず、結論から始まるフラットな日本語Markdownとする
 - `要点・結論・概要・まとめ`の見出しラベルは生成指示と後処理の両方で除去する
 - MermaidコードブロックはMermaid 11のparserで検証する
-- 不正時の修復要求は1回だけとし、2回目も不正なら非再試行エラーにする
+- 不正時の修復要求は1回だけとする。2回目も不正な場合の縮退規則はADR-0030を正本とする
 - プロンプト版を`summary-v3`へ上げ、旧要約を再生成対象にする
 
 ```mermaid
