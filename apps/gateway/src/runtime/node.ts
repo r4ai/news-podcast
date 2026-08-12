@@ -1,5 +1,5 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 import { acquireNatsGatewayPorts } from "../adapters/nats-gateway-ports.js"
 import {
@@ -55,6 +55,7 @@ export type NodeGatewayDependencies = Readonly<{
   readonly nextMessageId: () => string
   readonly now: () => string
   readonly onReady?: () => void
+  readonly telemetry?: Layer.Layer<never, never, never>
 }>
 
 const runtimeError = (
@@ -83,7 +84,10 @@ export const runNodeGateway = (
               now: dependencies.now,
             }
           ).pipe(Effect.mapError(() => runtimeError("Nats")))
-          const web = makeGatewayWebHandler(ports)
+          const web = makeGatewayWebHandler(
+            ports,
+            dependencies.telemetry ?? Layer.empty
+          )
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => web.dispose()).pipe(Effect.ignore)
           )

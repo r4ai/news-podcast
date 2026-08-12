@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema, Tracer } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import { FeedSubscriptionSchema } from "../contract.js"
@@ -28,6 +28,38 @@ const ports: GatewayPorts = {
 }
 
 describe("Gateway HTTP runtime", () => {
+  it("runs request port effects with the supplied telemetry tracer", async () => {
+    const spans: string[] = []
+    const tracer = Tracer.make({
+      span: (options) => {
+        spans.push(options.name)
+        return new Tracer.NativeSpan(options)
+      },
+    })
+    const telemetry = Layer.succeed(Tracer.Tracer)(tracer)
+    const runtime = makeGatewayWebHandler(
+      {
+        ...ports,
+        health: () =>
+          Effect.succeed({ status: "ok" as const }).pipe(
+            Effect.withSpan("gateway.test.request")
+          ),
+      },
+      telemetry
+    )
+
+    try {
+      const response = await runtime.handler(
+        new Request("http://gateway.test/health")
+      )
+
+      expect(response.status).toBe(200)
+      expect(spans).toContain("gateway.test.request")
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
   it("serves the Effect HttpApi contract through a Fetch handler", async () => {
     const runtime = makeGatewayWebHandler(ports)
 

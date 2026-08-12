@@ -19,6 +19,7 @@ const core = readGatewayConfig(process.env).pipe(
     runNodeGateway(config, {
       ...defaultNodeGatewayDependencies,
       listen: listenNodeHttpUnsafe,
+      telemetry: effectTelemetry,
       onReady: health.ready,
     })
   )
@@ -28,7 +29,7 @@ const program = Effect.scoped(
     Effect.andThen(core),
     Effect.ensuring(Effect.sync(health.notReady))
   )
-).pipe(Effect.provide(effectTelemetry))
+)
 const fiber = Effect.runFork(program)
 let stopping = false
 
