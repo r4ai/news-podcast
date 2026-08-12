@@ -6,7 +6,10 @@ import {
   ArticleIdSchema,
 } from "../../domain/article.js"
 import { FeedIdSchema } from "../../domain/subscription.js"
-import { deriveArticleIdentityUnsafe } from "./identity.js"
+import {
+  deriveArticleIdentityUnsafe,
+  deriveManualArchiveRequestIdUnsafe,
+} from "./identity.js"
 
 describe("RSS item identities", () => {
   it("derives distinct stable UUIDs from feed and external ID", () => {
@@ -29,5 +32,17 @@ describe("RSS item identities", () => {
     expect(
       deriveArticleIdentityUnsafe({ ...input, externalId: "entry-2" })
     ).not.toEqual(first)
+  })
+
+  it("derives a stable manual archive intent from an article", () => {
+    const articleId = Schema.decodeUnknownSync(ArticleIdSchema)(
+      "5af55f2e-ff0b-475c-866a-f2cff48c101d"
+    )
+    const first = deriveManualArchiveRequestIdUnsafe(articleId)
+
+    expect(deriveManualArchiveRequestIdUnsafe(articleId)).toBe(first)
+    expect(() =>
+      Schema.decodeUnknownSync(ArchiveRequestIdSchema)(first)
+    ).not.toThrow()
   })
 })

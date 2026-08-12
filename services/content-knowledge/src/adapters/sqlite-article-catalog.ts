@@ -7,6 +7,7 @@ import type {
   CatalogArticle,
 } from "../application/article-catalog-ports.js"
 import { ArticleSnapshotSchema } from "../domain/article.js"
+import { articleOwnerStatesSchema } from "./sqlite-article-state-schema.js"
 import type { JsonInterop, SqlitePort } from "./sqlite-port.js"
 
 const schema = `
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS feed_items (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS feed_items_latest
   ON feed_items(feed_id, published_at DESC, discovered_at DESC, article_id DESC);
+${articleOwnerStatesSchema}
 `
 
 const rowSchema = Schema.Struct({
@@ -47,8 +49,10 @@ SELECT i.article_id AS articleId,
        s.snapshot_json AS snapshotJson
   FROM feed_items i
   JOIN feed_subscriptions sub ON sub.feed_id = i.feed_id
+  LEFT JOIN article_owner_states state
+    ON state.owner_id = sub.owner_id AND state.article_id = i.article_id
   JOIN article_snapshots s ON json_extract(s.snapshot_json, '$.articleId') = i.article_id
- WHERE sub.owner_id = ?`
+ WHERE sub.owner_id = ? AND COALESCE(state.hidden, 0) = 0`
 
 export const createSqliteArticleCatalog = (
   database: SqlitePort,

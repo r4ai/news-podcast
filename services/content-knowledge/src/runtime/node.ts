@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect"
 import {
   createJetStreamPublisher,
   createSqliteArticleCatalog,
+  createSqliteArticleLibrary,
   createSqliteArchiveStore,
   createSqliteSubscriptionRepository,
   OutboxBatchSizeSchema,
@@ -16,6 +17,7 @@ import {
   type SqliteArchiveStore,
 } from "../adapters/index.js"
 import type { ArticleCatalog } from "../application/article-catalog-ports.js"
+import type { ArticleLibraryRepository } from "../application/article-library.js"
 import type { SubscriptionRepository } from "../application/subscription-ports.js"
 import {
   openHttpS3ArticleCaptureUnsafe,
@@ -142,6 +144,7 @@ export type NodeRuntimeError = DeepReadonly<{
 export type NodeContentKnowledgeRuntime = DeepReadonly<{
   readonly store: SqliteArchiveStore
   readonly articles: ArticleCatalog
+  readonly library: ArticleLibraryRepository
   readonly subscriptions: SubscriptionRepository
   readonly relayOnce: (
     input: unknown
@@ -220,10 +223,11 @@ export const startNodeRuntime = (
             Effect.flatMap((store) =>
               Effect.all([
                 createSqliteArticleCatalog(database, jsonInterop),
+                createSqliteArticleLibrary(database),
                 createSqliteSubscriptionRepository(database),
               ]).pipe(
                 Effect.mapError(() => runtimeError("Sqlite")),
-                Effect.flatMap(([articles, subscriptions]) =>
+                Effect.flatMap(([articles, library, subscriptions]) =>
                   Effect.tryPromise({
                     try: () =>
                       dependencies.connectJetStream(config.natsServers),
@@ -261,6 +265,7 @@ export const startNodeRuntime = (
                       return deepFreeze({
                         store,
                         articles,
+                        library,
                         subscriptions,
                         relayOnce,
                         close,
@@ -323,8 +328,7 @@ export const runNodeService = (
               Effect.flatMap((capture) =>
                 Effect.acquireRelease(
                   Effect.try({
-                    try: () =>
-                      dependencies.openMarkdownReader(config.archive),
+                    try: () => dependencies.openMarkdownReader(config.archive),
                     catch: () => runtimeError("ObjectStore"),
                   }),
                   (markdown) => markdown.close

@@ -75,3 +75,12 @@ export const deriveArticleIdentityUnsafe = (input: {
     ) as ArchiveRequestId,
   }
 }
+
+/** Stable across retries while intentionally distinct from feed-poll capture intents. */
+export const deriveManualArchiveRequestIdUnsafe = (
+  articleId: ArticleId
+): ArchiveRequestId =>
+  deterministicUuidV4(
+    "content-manual-archive-request",
+    articleId
+  ) as ArchiveRequestId
