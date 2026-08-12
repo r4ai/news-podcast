@@ -4,4 +4,5 @@ export {
   makeNatsGatewayPorts,
 } from "./adapters/nats-gateway-ports.js"
 export { makeGatewayHandlerLayer, makeGatewayHandlers } from "./handlers.js"
+export * from "./runtime/index.js"
 export type { GatewayPorts } from "./ports.js"

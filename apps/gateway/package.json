@@ -9,12 +9,15 @@
     "./handlers": "./src/handlers.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/bootstrap.ts",
+    "start": "tsx src/bootstrap.ts",
     "build": "tsc --noEmit",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@hono/node-server": "2.0.10",
     "@nats-io/transport-node": "3.4.0",
     "@news-podcast/kernel": "workspace:*",
     "@news-podcast/observability": "workspace:*",
@@ -22,6 +25,8 @@
     "effect": "4.0.0-beta.102"
   },
   "devDependencies": {
+    "@types/node": "24.12.4",
+    "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }
