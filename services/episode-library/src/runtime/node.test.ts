@@ -282,7 +282,11 @@ describe("episode-library Node RPC runtime", () => {
 
     expect(connectNats).toHaveBeenCalledWith(
       config.natsServers,
-      [subjects.library.listEpisodes, subjects.library.createAudioAccess],
+      [
+        subjects.library.listEpisodes,
+        subjects.library.getEpisode,
+        subjects.library.createAudioAccess,
+      ],
       config.queueGroup
     )
     expect(events).toEqual([

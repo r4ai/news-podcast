@@ -5,6 +5,8 @@ import {
   AddFeedSubscriptionReplySchema,
   CreateAudioAccessReplySchema,
   DeleteFeedSubscriptionReplySchema,
+  EpisodeJobControlReplySchema,
+  GetEpisodeReplySchema,
   ListFeedSubscriptionsReplySchema,
   ListEpisodesReplySchema,
   subjects,
@@ -16,6 +18,7 @@ import {
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeIdSchema,
+  JobIdSchema,
   SessionHeadersSchema,
   SubscriptionIdSchema,
 } from "../contract.js"
@@ -107,6 +110,95 @@ const userSessionReply = (request: CapturedRequest) =>
   )
 
 describe("NATS GatewayPorts adapter", () => {
+  it("maps owner-scoped production job control and bounded replay RPCs", async () => {
+    const requests: CapturedRequest[] = []
+    const queued = {
+      jobId: ids[0],
+      trigger: "manual",
+      status: "queued",
+      attempt: 0,
+      maxAttempts: 4,
+      createdAt: "2026-08-12T00:00:00.000Z",
+      enqueuedAt: "2026-08-12T00:00:00.000Z",
+    }
+    const client = fakeClient(async (request) => {
+      requests.push(request)
+      if (request.subject === subjects.identity.resolveSession)
+        return userSessionReply(request)
+      const payload = request.envelope.payload as Record<string, unknown>
+      const reply = request.subject === subjects.production.listJobs
+        ? { _tag: "Listed", jobs: [queued] }
+        : request.subject === subjects.production.listJobEvents
+          ? { _tag: "Events", events: [{ sequence: 2, job: queued }] }
+          : request.subject === subjects.production.cancelJob
+            ? {
+                _tag: "Canceled",
+                job: {
+                  jobId: queued.jobId,
+                  trigger: queued.trigger,
+                  createdAt: queued.createdAt,
+                  status: "canceled",
+                  attempt: queued.attempt,
+                  maxAttempts: queued.maxAttempts,
+                  canceledAt: "2026-08-12T00:02:00.000Z",
+                  reason: "requested_by_user",
+                },
+              }
+            : request.subject === subjects.production.retryJob
+              ? { _tag: "Retried", job: queued }
+              : { _tag: "Found", job: queued }
+      expect(payload).not.toHaveProperty("ownerId")
+      return encodedReply(
+        request.envelope,
+        "episode-production",
+        EpisodeJobControlReplySchema,
+        reply
+      )
+    })
+    const ports = makeNatsGatewayPorts(client, dependencies())
+    const jobId = Schema.decodeUnknownSync(JobIdSchema)(ids[0])
+
+    const [listed, found, canceled, retried, replay] = await Effect.runPromise(
+      Effect.all([
+        ports.listEpisodeJobs({ headers: sessionHeaders, limit: 20 }),
+        ports.getEpisodeJob({ headers: sessionHeaders, jobId }),
+        ports.cancelEpisodeJob({ headers: sessionHeaders, jobId }),
+        ports.retryEpisodeJob({
+          headers: sessionHeaders,
+          jobId,
+          idempotencyKey: "retry-home",
+        }),
+        ports.replayEpisodeJobEvents({
+          headers: sessionHeaders,
+          jobId,
+          afterSequence: 1,
+        }),
+      ], { concurrency: 1 })
+    )
+
+    expect(listed.items).toHaveLength(1)
+    expect(found.id).toBe(ids[0])
+    expect(canceled.status).toBe("canceled")
+    expect(retried).toMatchObject({ status: "queued", attempt: 0 })
+    expect(replay.events).toMatchObject([{ sequence: 2 }])
+    const downstream = requests.filter(
+      ({ subject }) => subject !== subjects.identity.resolveSession
+    )
+    expect(downstream.map(({ subject }) => subject)).toEqual([
+      subjects.production.listJobs,
+      subjects.production.getJob,
+      subjects.production.cancelJob,
+      subjects.production.retryJob,
+      subjects.production.getJob,
+      subjects.production.listJobEvents,
+    ])
+    expect(downstream.at(-1)?.envelope.payload).toEqual({
+      jobId: ids[0],
+      afterSequence: 1,
+      limit: 100,
+    })
+  })
+
   it("resolves the HTTP session through a correlated versioned NATS envelope", async () => {
     const requests: CapturedRequest[] = []
     const client = fakeClient(async (request) => {
@@ -172,6 +264,27 @@ describe("NATS GatewayPorts adapter", () => {
           { _tag: "Listed", page: { items: [], page: { hasMore: false } } }
         )
       }
+      if (request.subject === subjects.library.getEpisode) {
+        return encodedReply(
+          request.envelope,
+          "episode-library",
+          GetEpisodeReplySchema,
+          {
+            _tag: "Found",
+            episode: {
+              id: episodeId,
+              title: "Daily news",
+              script: "Immutable script",
+              createdAt: "2026-08-12T00:00:00.000Z",
+              sources: [{
+                sourceKind: "web",
+                url: "https://example.com/story",
+                title: "Story",
+              }],
+            },
+          }
+        )
+      }
       return encodedReply(
         request.envelope,
         "episode-library",
@@ -199,7 +312,15 @@ describe("NATS GatewayPorts adapter", () => {
         }),
       })
     )
-    const page = await Effect.runPromise(ports.listEpisodes(sessionHeaders))
+    const page = await Effect.runPromise(
+      ports.listEpisodes({ headers: sessionHeaders, cursor: "opaque-cursor" })
+    )
+    const episode = await Effect.runPromise(
+      ports.getEpisode({
+        headers: sessionHeaders,
+        episodeId: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId),
+      })
+    )
     const access = await Effect.runPromise(
       ports.createAudioAccess({
         headers: sessionHeaders,
@@ -209,6 +330,7 @@ describe("NATS GatewayPorts adapter", () => {
 
     expect(receipt.status).toBe("queued")
     expect(page.items).toEqual([])
+    expect(episode.id).toBe(episodeId)
     expect(Schema.decodeUnknownSync(AudioAccessSchema)(access).expiresAt).toBe(
       "2026-08-12T00:05:00.000Z"
     )
@@ -218,6 +340,7 @@ describe("NATS GatewayPorts adapter", () => {
     expect(downstream.map(({ subject }) => subject)).toEqual([
       subjects.production.createJob,
       subjects.library.listEpisodes,
+      subjects.library.getEpisode,
       subjects.library.createAudioAccess,
     ])
     for (const request of downstream) {
@@ -235,6 +358,7 @@ describe("NATS GatewayPorts adapter", () => {
       trigger: "manual",
       articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
     })
+    expect(downstream[1]?.envelope.payload).toEqual({ cursor: "opaque-cursor" })
   })
 
   it("stops before the domain RPC when the resolved actor is anonymous", async () => {
@@ -251,7 +375,7 @@ describe("NATS GatewayPorts adapter", () => {
     const ports = makeNatsGatewayPorts(fakeClient(request), dependencies())
 
     const problem = await Effect.runPromise(
-      ports.listEpisodes(sessionHeaders).pipe(Effect.flip)
+      ports.listEpisodes({ headers: sessionHeaders }).pipe(Effect.flip)
     )
 
     expect(problem).toMatchObject({

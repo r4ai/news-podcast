@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest"
 import {
   parseCreateAudioAccessRequest,
   parseCreateAudioAccessReply,
+  parseGetEpisodeReply,
+  parseGetEpisodeRequest,
   parseListEpisodesReply,
   parseListEpisodesRequest,
 } from "./episode-library-rpc.js"
@@ -11,6 +13,33 @@ import {
 const episodeId = "8a76daf6-d3d7-47db-9644-228dc5328c84"
 
 describe("episode-library RPC contracts", () => {
+  it("parses owner-scoped episode lookup request/reply states", async () => {
+    const [request, found, missing] = await Effect.runPromise(
+      Effect.all([
+        parseGetEpisodeRequest({ episodeId }),
+        parseGetEpisodeReply({
+          _tag: "Found",
+          episode: {
+            id: episodeId,
+            title: "Daily briefing",
+            script: "A complete script.",
+            sources: [{
+              sourceKind: "web",
+              url: "https://example.com/story",
+              title: "Story",
+            }],
+            createdAt: "2026-08-13T00:00:00.000Z",
+          },
+        }),
+        parseGetEpisodeReply({ _tag: "NotFound" }),
+      ])
+    )
+
+    expect(request).toEqual({ episodeId })
+    expect(found._tag).toBe("Found")
+    expect(missing).toEqual({ _tag: "NotFound" })
+  })
+
   it("parses and freezes list and audio request/reply states", async () => {
     const [listRequest, audioRequest, listed, found, notFound, rejected] =
       await Effect.runPromise(

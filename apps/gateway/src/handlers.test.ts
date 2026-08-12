@@ -40,7 +40,13 @@ const makePorts = (): GatewayPorts => ({
   health: () => Effect.succeed(health),
   resolveSession: () => Effect.succeed(anonymous),
   createEpisodeJob: () => Effect.succeed(jobReceipt),
+  listEpisodeJobs: () => Effect.succeed({ items: [], page: { hasMore: false } }),
+  getEpisodeJob: () => Effect.fail({ status: 404, type: "about:blank", title: "Not found", code: "not_found" }),
+  cancelEpisodeJob: () => Effect.fail({ status: 404, type: "about:blank", title: "Not found", code: "not_found" }),
+  retryEpisodeJob: () => Effect.succeed(jobReceipt),
+  replayEpisodeJobEvents: () => Effect.fail({ status: 404, type: "about:blank", title: "Not found", code: "not_found" }),
   listEpisodes: () => Effect.succeed({ items: [], page: { hasMore: false } }),
+  getEpisode: () => Effect.fail({ status: 404, type: "about:blank", title: "Not found", code: "not_found" }),
   createAudioAccess: () => Effect.succeed(audioAccess),
   addFeedSubscription: () => Effect.succeed(subscription),
   listFeedSubscriptions: () =>
@@ -67,7 +73,7 @@ describe("gateway port handlers", () => {
       Effect.all([
         handlers.health(),
         handlers.resolveSession(headers),
-        handlers.listEpisodes(headers),
+        handlers.listEpisodes({ headers }),
         handlers.createAudioAccess({ headers, episodeId }),
         handlers.listFeedSubscriptions(headers),
       ])

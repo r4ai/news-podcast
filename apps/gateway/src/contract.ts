@@ -150,6 +150,95 @@ export const JobReceiptSchema = Schema.Struct({
   .annotate({ identifier: "JobReceipt" })
   .pipe(HttpApiSchema.status(202))
 
+const jobFields = {
+  id: JobIdSchema,
+  status: Schema.Literals([
+    "queued",
+    "running",
+    "retrying",
+    "succeeded",
+    "failed",
+    "canceled",
+  ]),
+  createdAt: UtcDateTimeStringSchema,
+  articleIds: Schema.optional(Schema.Array(ArticleIdSchema)),
+  attempt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+  maxAttempts: Schema.Literal(4),
+  startedAt: Schema.optional(UtcDateTimeStringSchema),
+  finishedAt: Schema.optional(UtcDateTimeStringSchema),
+  nextAttemptAt: Schema.optional(UtcDateTimeStringSchema),
+  episodeId: Schema.optional(EpisodeIdSchema),
+  failure: Schema.optional(
+    Schema.Struct({
+      code: boundedText(200),
+      message: boundedText(500),
+      retryable: Schema.Boolean,
+    })
+  ),
+} as const
+
+export const EpisodeJobSchema = Schema.Struct(jobFields).annotate({
+  identifier: "EpisodeJob",
+})
+export const EpisodeJobPageSchema = Schema.Struct({
+  items: Schema.Array(EpisodeJobSchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "EpisodeJobPage" })
+
+export const ListEpisodeJobsQuerySchema = Schema.Struct({
+  limit: Schema.optional(
+    Schema.NumberFromString.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(1),
+      Schema.isLessThanOrEqualTo(100)
+    )
+  ),
+}).annotate({ identifier: "ListEpisodeJobsQuery" })
+
+export const RetryEpisodeJobHeadersSchema = Schema.Struct({
+  authorization: Schema.optional(Schema.String),
+  cookie: Schema.optional(Schema.String),
+  "idempotency-key": Schema.optional(boundedText(128)),
+  traceparent: Schema.optional(TraceparentSchema),
+}).annotate({ identifier: "RetryEpisodeJobHeaders" })
+
+export const EpisodeJobEventsHeadersSchema = Schema.Struct({
+  authorization: Schema.optional(Schema.String),
+  cookie: Schema.optional(Schema.String),
+  "last-event-id": Schema.optional(Schema.String),
+  traceparent: Schema.optional(TraceparentSchema),
+}).annotate({ identifier: "EpisodeJobEventsHeaders" })
+export const EpisodeJobEventsQuerySchema = Schema.Struct({
+  lastEventId: Schema.optional(
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+  ),
+}).annotate({ identifier: "EpisodeJobEventsQuery" })
+
+const EpisodeJobStateSchema = Schema.Struct({
+  jobId: JobIdSchema,
+  status: jobFields.status,
+  attempt: jobFields.attempt,
+  maxAttempts: Schema.Literal(4),
+  adoptedArticles: Schema.Array(Schema.Unknown),
+  failure: Schema.optional(
+    Schema.Struct({ code: boundedText(200), message: boundedText(500) })
+  ),
+  episodeId: Schema.optional(EpisodeIdSchema),
+})
+export const EpisodeJobAgUiEventSchema = Schema.Struct({
+  type: Schema.Literal("STATE_SNAPSHOT"),
+  timestamp: Schema.Number,
+  snapshot: EpisodeJobStateSchema,
+})
+const EpisodeJobSseEventSchema = Schema.Struct({
+  id: Schema.UndefinedOr(Schema.String),
+  event: Schema.Literal("STATE_SNAPSHOT"),
+  data: Schema.fromJsonString(EpisodeJobAgUiEventSchema),
+})
+export const EpisodeJobEventStreamSchema = HttpApiSchema.StreamSse({
+  events: EpisodeJobSseEventSchema,
+})
+
 const EpisodeSourceSchema = Schema.Struct({
   url: AbsoluteHttpUrlSchema,
   title: boundedText(500),
@@ -283,6 +372,7 @@ export const listEpisodesEndpoint = HttpApiEndpoint.get(
   "/v1/episodes",
   {
     headers: SessionHeadersSchema,
+    query: Schema.Struct({ cursor: Schema.optional(boundedText(1_000)) }),
     success: EpisodePageSchema,
     error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
   }
@@ -292,6 +382,73 @@ export const listEpisodesEndpoint = HttpApiEndpoint.get(
     summary: "List completed episodes",
   })
 )
+
+export const listEpisodeJobsEndpoint = HttpApiEndpoint.get(
+  "listEpisodeJobs",
+  "/v1/episode-jobs",
+  {
+    headers: SessionHeadersSchema,
+    query: ListEpisodeJobsQuerySchema,
+    success: EpisodeJobPageSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(OpenApi.annotations({ identifier: "listEpisodeJobs", summary: "List episode jobs" }))
+
+export const getEpisodeJobEndpoint = HttpApiEndpoint.get(
+  "getEpisodeJob",
+  "/v1/episode-jobs/:jobId",
+  {
+    params: { jobId: JobIdSchema },
+    headers: SessionHeadersSchema,
+    success: EpisodeJobSchema,
+    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(OpenApi.annotations({ identifier: "getEpisodeJob", summary: "Get an episode job" }))
+
+export const cancelEpisodeJobEndpoint = HttpApiEndpoint.post(
+  "cancelEpisodeJob",
+  "/v1/episode-jobs/:jobId/cancel",
+  {
+    params: { jobId: JobIdSchema },
+    headers: SessionHeadersSchema,
+    success: EpisodeJobSchema,
+    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, ConflictProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(OpenApi.annotations({ identifier: "cancelEpisodeJob", summary: "Cancel an episode job" }))
+
+export const retryEpisodeJobEndpoint = HttpApiEndpoint.post(
+  "retryEpisodeJob",
+  "/v1/episode-jobs/:jobId/retry",
+  {
+    params: { jobId: JobIdSchema },
+    headers: RetryEpisodeJobHeadersSchema,
+    success: JobReceiptSchema,
+    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, ConflictProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(OpenApi.annotations({ identifier: "retryEpisodeJob", summary: "Retry an episode job" }))
+
+export const streamEpisodeJobEventsEndpoint = HttpApiEndpoint.get(
+  "streamEpisodeJobEvents",
+  "/v1/episode-jobs/:jobId/events",
+  {
+    params: { jobId: JobIdSchema },
+    headers: EpisodeJobEventsHeadersSchema,
+    query: EpisodeJobEventsQuerySchema,
+    success: EpisodeJobEventStreamSchema,
+    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(OpenApi.annotations({ identifier: "streamEpisodeJobEvents", summary: "Replay episode job events" }))
+
+export const getEpisodeEndpoint = HttpApiEndpoint.get(
+  "getEpisode",
+  "/v1/episodes/:episodeId",
+  {
+    params: { episodeId: EpisodeIdSchema },
+    headers: SessionHeadersSchema,
+    success: EpisodeSchema,
+    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(OpenApi.annotations({ identifier: "getEpisode", summary: "Get a completed episode" }))
 
 export const createAudioAccessEndpoint = HttpApiEndpoint.post(
   "createAudioAccess",
@@ -376,10 +533,17 @@ const sessionGroup = HttpApiGroup.make("session")
   .add(resolveSessionEndpoint)
   .annotateMerge(OpenApi.annotations({ title: "Session" }))
 const episodeJobsGroup = HttpApiGroup.make("episodeJobs")
-  .add(createEpisodeJobEndpoint)
+  .add(
+    createEpisodeJobEndpoint,
+    listEpisodeJobsEndpoint,
+    getEpisodeJobEndpoint,
+    cancelEpisodeJobEndpoint,
+    retryEpisodeJobEndpoint,
+    streamEpisodeJobEventsEndpoint
+  )
   .annotateMerge(OpenApi.annotations({ title: "Episode jobs" }))
 const episodesGroup = HttpApiGroup.make("episodes")
-  .add(listEpisodesEndpoint, createAudioAccessEndpoint)
+  .add(listEpisodesEndpoint, getEpisodeEndpoint, createAudioAccessEndpoint)
   .annotateMerge(OpenApi.annotations({ title: "Episodes" }))
 const feedSubscriptionsGroup = HttpApiGroup.make("feedSubscriptions")
   .add(

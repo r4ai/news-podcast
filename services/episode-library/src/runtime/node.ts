@@ -240,6 +240,7 @@ export const runNodeEpisodeLibraryRpc = (
                   config.natsServers,
                   [
                     subjects.library.listEpisodes,
+                    subjects.library.getEpisode,
                     subjects.library.createAudioAccess,
                   ],
                   config.queueGroup
@@ -321,6 +322,7 @@ export const runNodeEpisodeLibraryService = (
                   config.natsServers,
                   [
                     subjects.library.listEpisodes,
+                    subjects.library.getEpisode,
                     subjects.library.createAudioAccess,
                   ],
                   config.queueGroup

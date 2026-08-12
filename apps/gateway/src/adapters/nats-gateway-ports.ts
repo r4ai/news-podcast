@@ -14,6 +14,8 @@ import {
   parseAddFeedSubscriptionReply,
   parseCreateAudioAccessReply,
   parseDeleteFeedSubscriptionReply,
+  parseEpisodeJobControlReply,
+  parseGetEpisodeReply,
   parseListEpisodesReply,
   parseListFeedSubscriptionsReply,
   parseMessageEnvelope,
@@ -23,6 +25,9 @@ import { Effect, Schema, Scope } from "effect"
 
 import {
   AudioAccessSchema,
+  EpisodeJobPageSchema,
+  EpisodeJobSchema,
+  EpisodeSchema,
   EpisodePageSchema,
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
@@ -110,6 +115,19 @@ const subscriptionNotFound = () =>
     code: "feed_subscription_not_found",
   })
 
+type ParsedControlReply = Effect.Success<
+  ReturnType<typeof parseEpisodeJobControlReply>
+>
+type ParsedProductionJob = Extract<
+  ParsedControlReply,
+  { readonly _tag: "Found" }
+>["job"]
+type ParsedGetEpisodeReply = Effect.Success<
+  ReturnType<typeof parseGetEpisodeReply>
+>
+type PublicEpisodeJob = TypeOf<typeof EpisodeJobSchema>
+type PublicEpisode = TypeOf<typeof EpisodeSchema>
+
 type AudioAccess = TypeOf<typeof AudioAccessSchema>
 type AudioAccessFailure =
   | ReturnType<typeof notFound>
@@ -178,6 +196,103 @@ const toDeleted = (
   if (reply.code === "UNAUTHENTICATED") return Effect.fail(unauthorized())
   if (reply.code === "INVALID_REQUEST") return Effect.fail(badRequest())
   if (reply.code === "NOT_FOUND") return Effect.fail(subscriptionNotFound())
+  return Effect.fail(unavailable())
+}
+
+const jobNotFound = () =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Episode job not found",
+    status: 404 as const,
+    code: "episode_job_not_found",
+  })
+const jobConflict = (code: string) =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Episode job state conflict",
+    status: 409 as const,
+    code: code.toLowerCase(),
+  })
+
+const stateTimestamp = (job: ParsedProductionJob) => {
+  switch (job.status) {
+    case "queued":
+      return job.enqueuedAt
+    case "running":
+      return job.startedAt
+    case "retrying":
+      return job.retryAt
+    case "succeeded":
+      return job.completedAt
+    case "failed":
+      return job.failedAt
+    case "canceled":
+      return job.canceledAt
+  }
+}
+
+const toEpisodeJob = (
+  job: ParsedProductionJob
+): Effect.Effect<PublicEpisodeJob, ReturnType<typeof unavailable>> =>
+  parse(EpisodeJobSchema)({
+    id: job.jobId,
+    status: job.status,
+    createdAt: job.createdAt,
+    ...(job.articleIds === undefined ? {} : { articleIds: job.articleIds }),
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    ...(job.status === "running" ? { startedAt: job.startedAt } : {}),
+    ...(job.status === "retrying" ? { nextAttemptAt: job.retryAt } : {}),
+    ...(["succeeded", "failed", "canceled"].includes(job.status)
+      ? { finishedAt: stateTimestamp(job) }
+      : {}),
+    ...(job.status === "succeeded" ? { episodeId: job.episodeId } : {}),
+    ...(job.status === "retrying" || job.status === "failed"
+      ? {
+          failure: {
+            code: job.failure.code,
+            message: job.failure.code,
+            retryable: job.failure.retryable,
+          },
+        }
+      : {}),
+  }).pipe(Effect.mapError(unavailable))
+
+const requireFoundJob = (
+  reply: ParsedControlReply
+): Effect.Effect<
+  PublicEpisodeJob,
+  ReturnType<typeof unavailable> | ReturnType<typeof jobNotFound>
+> => {
+  if (reply._tag === "Found") return toEpisodeJob(reply.job)
+  if (reply._tag === "NotFound") return Effect.fail(jobNotFound())
+  return Effect.fail(unavailable())
+}
+
+const requireMutatedJob = (
+  reply: ParsedControlReply,
+  tag: "Canceled" | "Retried"
+): Effect.Effect<
+  PublicEpisodeJob,
+  | ReturnType<typeof unavailable>
+  | ReturnType<typeof jobNotFound>
+  | ReturnType<typeof jobConflict>
+> => {
+  if (reply._tag === tag) return toEpisodeJob(reply.job)
+  if (reply._tag === "NotFound") return Effect.fail(jobNotFound())
+  if (reply._tag === "Conflict") return Effect.fail(jobConflict(reply.code))
+  return Effect.fail(unavailable())
+}
+
+const toEpisode = (
+  reply: ParsedGetEpisodeReply
+): Effect.Effect<
+  PublicEpisode,
+  ReturnType<typeof unavailable> | ReturnType<typeof notFound>
+> => {
+  if (reply._tag === "Found")
+    return parse(EpisodeSchema)(reply.episode).pipe(Effect.mapError(unavailable))
+  if (reply._tag === "NotFound") return Effect.fail(notFound())
   return Effect.fail(unavailable())
 }
 
@@ -394,7 +509,148 @@ const makeAdapter = (
               )
         )
       ),
-    listEpisodes: (headers) =>
+    listEpisodeJobs: ({ headers, limit }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.production.listJobs,
+            "episode-production",
+            actor,
+            { ...(limit === undefined ? {} : { limit }) },
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) =>
+              parseEpisodeJobControlReply(reply.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap((reply) =>
+          reply._tag === "Listed"
+            ? Effect.forEach(reply.jobs, toEpisodeJob).pipe(
+                Effect.flatMap((items) =>
+                  parse(EpisodeJobPageSchema)({
+                    items,
+                    page: { hasMore: false },
+                  })
+                ),
+                Effect.mapError(unavailable)
+              )
+            : Effect.fail(unavailable())
+        )
+      ),
+    getEpisodeJob: ({ headers, jobId }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.production.getJob,
+            "episode-production",
+            actor,
+            { jobId },
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) =>
+              parseEpisodeJobControlReply(reply.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap(requireFoundJob)
+      ),
+    cancelEpisodeJob: ({ headers, jobId }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.production.cancelJob,
+            "episode-production",
+            actor,
+            { jobId },
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) =>
+              parseEpisodeJobControlReply(reply.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap((reply) => requireMutatedJob(reply, "Canceled"))
+      ),
+    retryEpisodeJob: ({ headers, jobId, idempotencyKey }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.production.retryJob,
+            "episode-production",
+            actor,
+            { jobId, idempotencyKey },
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) =>
+              parseEpisodeJobControlReply(reply.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap((reply) => requireMutatedJob(reply, "Retried")),
+        Effect.flatMap((job) =>
+          parse(JobReceiptSchema)({
+            id: job.id,
+            status: job.status,
+            createdAt: job.createdAt,
+            attempt: job.attempt,
+            maxAttempts: job.maxAttempts,
+          }).pipe(Effect.mapError(unavailable))
+        )
+      ),
+    replayEpisodeJobEvents: ({ headers, jobId, afterSequence }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const requestControl = (subject: string, payload: unknown) => {
+            const lineage = childLineage(parent, dependencies.nextMessageId())
+            return rpc(
+              subject,
+              "episode-production",
+              actor,
+              payload,
+              lineage
+            ).pipe(
+              Effect.flatMap((reply) =>
+                parseEpisodeJobControlReply(reply.payload)
+              ),
+              Effect.mapError(unavailable)
+            )
+          }
+          return Effect.all([
+            requestControl(subjects.production.getJob, { jobId }),
+            requestControl(subjects.production.listJobEvents, {
+              jobId,
+              afterSequence,
+              limit: 100,
+            }),
+          ])
+        }),
+        Effect.flatMap(([current, replay]) =>
+          Effect.all({
+            snapshot: requireFoundJob(current),
+            events:
+              replay._tag === "Events"
+                ? Effect.forEach(replay.events, ({ sequence, job }) =>
+                    toEpisodeJob(job).pipe(
+                      Effect.map((projected) => ({ sequence, job: projected }))
+                    )
+                  )
+                : replay._tag === "NotFound"
+                  ? Effect.fail(jobNotFound())
+                  : Effect.fail(unavailable()),
+          })
+        ),
+        Effect.map(deepFreeze)
+      ),
+    listEpisodes: ({ headers, cursor }) =>
       authenticated(headers).pipe(
         Effect.flatMap(({ actor, lineage: parent }) => {
           const lineage = childLineage(parent, dependencies.nextMessageId())
@@ -402,7 +658,7 @@ const makeAdapter = (
             subjects.library.listEpisodes,
             "episode-library",
             actor,
-            {},
+            { ...(cursor === undefined ? {} : { cursor }) },
             lineage
           ).pipe(
             Effect.flatMap((reply) => parseListEpisodesReply(reply.payload)),
@@ -416,6 +672,23 @@ const makeAdapter = (
               )
             : Effect.fail(unavailable())
         )
+      ),
+    getEpisode: ({ headers, episodeId }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.library.getEpisode,
+            "episode-library",
+            actor,
+            { episodeId },
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) => parseGetEpisodeReply(reply.payload)),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap(toEpisode)
       ),
     createAudioAccess: ({ headers, episodeId }) =>
       authenticated(headers).pipe(

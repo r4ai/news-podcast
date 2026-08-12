@@ -26,6 +26,7 @@ const IdempotencyKeySchema = boundedText(128).pipe(
 )
 const commonJobFields = {
   jobId: EpisodeJobIdSchema,
+  createdAt: UtcInstantSchema,
   trigger: Schema.Literals(["manual", "scheduled"]),
   articleIds: Schema.optional(
     Schema.NonEmptyArray(ArticleIdSchema).check(Schema.isMaxLength(20))

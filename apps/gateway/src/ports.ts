@@ -8,11 +8,15 @@ import {
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeIdSchema,
+  EpisodeSchema,
+  EpisodeJobSchema,
+  EpisodeJobPageSchema,
   EpisodePageSchema,
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
   HealthResponseSchema,
   JobReceiptSchema,
+  JobIdSchema,
   NotFoundProblemSchema,
   SessionHeadersSchema,
   SessionResponseSchema,
@@ -43,11 +47,75 @@ export type GatewayPorts = Readonly<{
     | TypeOf<typeof UnprocessableProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
-  listEpisodes: (
-    headers: TypeOf<typeof SessionHeadersSchema>
-  ) => Effect.Effect<
+  listEpisodeJobs: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly limit?: number
+  }) => Effect.Effect<
+    TypeOf<typeof EpisodeJobPageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getEpisodeJob: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly jobId: TypeOf<typeof JobIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof EpisodeJobSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  cancelEpisodeJob: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly jobId: TypeOf<typeof JobIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof EpisodeJobSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  retryEpisodeJob: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly jobId: TypeOf<typeof JobIdSchema>
+    readonly idempotencyKey: string
+  }) => Effect.Effect<
+    TypeOf<typeof JobReceiptSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  replayEpisodeJobEvents: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly jobId: TypeOf<typeof JobIdSchema>
+    readonly afterSequence: number
+  }) => Effect.Effect<
+    Readonly<{
+      snapshot: TypeOf<typeof EpisodeJobSchema>
+      events: readonly Readonly<{
+        sequence: number
+        job: TypeOf<typeof EpisodeJobSchema>
+      }>[]
+    }>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listEpisodes: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly cursor?: string
+  }) => Effect.Effect<
     TypeOf<typeof EpisodePageSchema>,
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getEpisode: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly episodeId: TypeOf<typeof EpisodeIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof EpisodeSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
   createAudioAccess: (input: {

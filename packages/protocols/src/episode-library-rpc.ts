@@ -83,6 +83,12 @@ export type ListEpisodesRequest = Schema.Schema.Type<
 >
 export const parseListEpisodesRequest = parse(ListEpisodesRequestSchema)
 
+export const GetEpisodeRequestSchema = Schema.Struct({
+  episodeId: EpisodeIdSchema,
+})
+export type GetEpisodeRequest = Schema.Schema.Type<typeof GetEpisodeRequestSchema>
+export const parseGetEpisodeRequest = parse(GetEpisodeRequestSchema)
+
 export const CreateAudioAccessRequestSchema = Schema.Struct({
   episodeId: EpisodeIdSchema,
 })
@@ -116,6 +122,14 @@ export type ListEpisodesReply = Schema.Schema.Type<
   typeof ListEpisodesReplySchema
 >
 export const parseListEpisodesReply = parse(ListEpisodesReplySchema)
+
+export const GetEpisodeReplySchema = Schema.Union([
+  Schema.TaggedStruct("Found", { episode: LibraryEpisodeSchema }),
+  Schema.TaggedStruct("NotFound", {}),
+  EpisodeLibraryRejectionSchema,
+])
+export type GetEpisodeReply = Schema.Schema.Type<typeof GetEpisodeReplySchema>
+export const parseGetEpisodeReply = parse(GetEpisodeReplySchema)
 
 export const AudioAccessSchema = Schema.Struct({
   url: HttpUrlSchema,

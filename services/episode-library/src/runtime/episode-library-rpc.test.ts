@@ -1,6 +1,7 @@
 import { parse } from "@news-podcast/kernel"
 import {
   parseCreateAudioAccessReply,
+  parseGetEpisodeReply,
   parseListEpisodesReply,
   parseMessageEnvelope,
   subjects,
@@ -75,6 +76,30 @@ const replyPayload = async (reply: string) => {
 }
 
 describe("episode-library RPC handler", () => {
+  it("returns one owner-scoped episode without storage metadata", async () => {
+    const owned = episode()
+    const reader: CompletedEpisodeReader = {
+      listPageByOwner: vi.fn(),
+      findByOwner: vi.fn(() => Effect.succeed(owned)),
+    }
+    const replies: string[] = []
+
+    await Effect.runPromise(
+      makeEpisodeLibraryRpcHandler(reader, { issue: vi.fn() }, dependencies)({
+        subject: subjects.library.getEpisode,
+        payload: JSON.stringify(request({ episodeId })),
+        reply: (payload) => Effect.sync(() => void replies.push(payload)),
+      })
+    )
+
+    expect(reader.findByOwner).toHaveBeenCalledWith(ownerId, episodeId)
+    const { payload } = await replyPayload(replies[0]!)
+    const parsed = await Effect.runPromise(parseGetEpisodeReply(payload))
+    expect(parsed).toMatchObject({ _tag: "Found", episode: { id: episodeId } })
+    expect(JSON.stringify(parsed)).not.toContain("ownerId")
+    expect(JSON.stringify(parsed)).not.toContain("objectKey")
+  })
+
   it("derives the owner from a trusted User actor and returns a correlated list envelope", async () => {
     const owned = episode()
     const reader: CompletedEpisodeReader = {
