@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Fiber, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
@@ -73,5 +73,35 @@ describe("episode-production Node RPC runtime", () => {
 
     expect(exit._tag).toBe("Failure")
     expect(connectNats).not.toHaveBeenCalled()
+  })
+
+  it("drains NATS when the process fiber is interrupted", async () => {
+    const drain = vi.fn(async () => undefined)
+    let resolveConnected!: () => void
+    const connected = new Promise<void>((resolve) => {
+      resolveConnected = resolve
+    })
+    const server: UnsafeNatsRpcServer = {
+      receive: () => new Promise(() => undefined),
+      drain,
+    }
+    const fiber = Effect.runFork(
+      runNodeCreateJobRpc(config, {
+        connectNats: async () => {
+          resolveConnected()
+          return server
+        },
+        newJobId: () => "10e2d4e1-c127-479f-a124-2ea037bd9319" as never,
+        now: () =>
+          Schema.decodeUnknownSync(UtcTimestampSchema)(
+            "2026-08-12T00:00:00.000Z"
+          ),
+      })
+    )
+
+    await connected
+    await Effect.runPromise(Fiber.interrupt(fiber))
+
+    expect(drain).toHaveBeenCalledOnce()
   })
 })
