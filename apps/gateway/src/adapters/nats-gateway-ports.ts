@@ -5,11 +5,17 @@ import {
 } from "@news-podcast/observability"
 import {
   ActorSchema,
+  type AddFeedSubscriptionReply,
   CorrelationIdSchema,
+  type DeleteFeedSubscriptionReply,
+  type ListFeedSubscriptionsReply,
   type CreateAudioAccessReply,
   MessageEnvelopeSchema,
+  parseAddFeedSubscriptionReply,
   parseCreateAudioAccessReply,
+  parseDeleteFeedSubscriptionReply,
   parseListEpisodesReply,
+  parseListFeedSubscriptionsReply,
   parseMessageEnvelope,
   subjects,
 } from "@news-podcast/protocols"
@@ -18,6 +24,8 @@ import { Effect, Schema, Scope } from "effect"
 import {
   AudioAccessSchema,
   EpisodePageSchema,
+  FeedSubscriptionPageSchema,
+  FeedSubscriptionSchema,
   JobReceiptSchema,
   SessionResponseSchema,
   type SessionHeadersSchema,
@@ -80,6 +88,27 @@ const notFound = () =>
     status: 404 as const,
     code: "episode_not_found",
   })
+const badRequest = () =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Invalid subscription request",
+    status: 400 as const,
+    code: "invalid_subscription_request",
+  })
+const unprocessable = () =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Feed subscription rejected",
+    status: 422 as const,
+    code: "feed_subscription_rejected",
+  })
+const subscriptionNotFound = () =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Feed subscription not found",
+    status: 404 as const,
+    code: "feed_subscription_not_found",
+  })
 
 type AudioAccess = TypeOf<typeof AudioAccessSchema>
 type AudioAccessFailure =
@@ -99,6 +128,57 @@ const toAudioAccess = (
     case "Rejected":
       return Effect.fail(unavailable())
   }
+}
+
+type FeedSubscription = TypeOf<typeof FeedSubscriptionSchema>
+type FeedSubscriptionPage = TypeOf<typeof FeedSubscriptionPageSchema>
+type AddSubscriptionFailure =
+  | ReturnType<typeof unauthorized>
+  | ReturnType<typeof unprocessable>
+  | ReturnType<typeof unavailable>
+type ListSubscriptionsFailure =
+  | ReturnType<typeof unauthorized>
+  | ReturnType<typeof unavailable>
+type DeleteSubscriptionFailure =
+  | ReturnType<typeof badRequest>
+  | ReturnType<typeof unauthorized>
+  | ReturnType<typeof subscriptionNotFound>
+  | ReturnType<typeof unavailable>
+
+const toAddedSubscription = (
+  reply: AddFeedSubscriptionReply
+): Effect.Effect<FeedSubscription, AddSubscriptionFailure> => {
+  if (reply._tag === "Added")
+    return parse(FeedSubscriptionSchema)(reply.subscription).pipe(
+      Effect.mapError(unavailable)
+    )
+  if (reply.code === "INVALID_REQUEST") return Effect.fail(unprocessable())
+  if (reply.code === "UNAUTHENTICATED") return Effect.fail(unauthorized())
+  return Effect.fail(unavailable())
+}
+
+const toSubscriptionPage = (
+  reply: ListFeedSubscriptionsReply
+): Effect.Effect<FeedSubscriptionPage, ListSubscriptionsFailure> => {
+  if (reply._tag === "Listed")
+    return parse(FeedSubscriptionPageSchema)({
+      items: reply.subscriptions,
+      page: { hasMore: false },
+    }).pipe(Effect.mapError(unavailable))
+  return reply.code === "UNAUTHENTICATED"
+    ? Effect.fail(unauthorized())
+    : Effect.fail(unavailable())
+}
+
+const toDeleted = (
+  reply: DeleteFeedSubscriptionReply
+): Effect.Effect<void, DeleteSubscriptionFailure> => {
+  if (reply._tag === "Deleted") return Effect.void
+  if (reply._tag === "NotFound") return Effect.fail(subscriptionNotFound())
+  if (reply.code === "UNAUTHENTICATED") return Effect.fail(unauthorized())
+  if (reply.code === "INVALID_REQUEST") return Effect.fail(badRequest())
+  if (reply.code === "NOT_FOUND") return Effect.fail(subscriptionNotFound())
+  return Effect.fail(unavailable())
 }
 
 type Dependencies = Readonly<{
@@ -325,9 +405,7 @@ const makeAdapter = (
             {},
             lineage
           ).pipe(
-            Effect.flatMap((reply) =>
-              parseListEpisodesReply(reply.payload)
-            ),
+            Effect.flatMap((reply) => parseListEpisodesReply(reply.payload)),
             Effect.mapError(unavailable)
           )
         }),
@@ -357,6 +435,63 @@ const makeAdapter = (
           )
         }),
         Effect.flatMap(toAudioAccess)
+      ),
+    addFeedSubscription: ({ headers, payload }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.content.addSubscription,
+            "content-knowledge",
+            actor,
+            payload,
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) =>
+              parseAddFeedSubscriptionReply(reply.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap(toAddedSubscription)
+      ),
+    listFeedSubscriptions: (headers) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.content.listSubscriptions,
+            "content-knowledge",
+            actor,
+            {},
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) =>
+              parseListFeedSubscriptionsReply(reply.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap(toSubscriptionPage)
+      ),
+    deleteFeedSubscription: ({ headers, subscriptionId }) =>
+      authenticated(headers).pipe(
+        Effect.flatMap(({ actor, lineage: parent }) => {
+          const lineage = childLineage(parent, dependencies.nextMessageId())
+          return rpc(
+            subjects.content.deleteSubscription,
+            "content-knowledge",
+            actor,
+            { subscriptionId },
+            lineage
+          ).pipe(
+            Effect.flatMap((reply) =>
+              parseDeleteFeedSubscriptionReply(reply.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        }),
+        Effect.flatMap(toDeleted)
       ),
   } satisfies GatewayPorts)
 }

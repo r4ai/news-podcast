@@ -1,6 +1,7 @@
-import { Effect } from "effect"
-import { describe, expect, it } from "vitest"
+import { Effect, Schema } from "effect"
+import { describe, expect, it, vi } from "vitest"
 
+import { FeedSubscriptionSchema } from "../contract.js"
 import type { GatewayPorts } from "../ports.js"
 import { makeGatewayWebHandler } from "./http.js"
 
@@ -21,6 +22,9 @@ const ports: GatewayPorts = {
   createEpisodeJob: () => Effect.fail(unavailable),
   listEpisodes: () => Effect.fail(unavailable),
   createAudioAccess: () => Effect.fail(unavailable),
+  addFeedSubscription: () => Effect.fail(unavailable),
+  listFeedSubscriptions: () => Effect.fail(unavailable),
+  deleteFeedSubscription: () => Effect.fail(unavailable),
 }
 
 describe("Gateway HTTP runtime", () => {
@@ -34,6 +38,63 @@ describe("Gateway HTTP runtime", () => {
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ status: "ok" })
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("serves the owner-scoped subscription lifecycle", async () => {
+    const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
+      subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
+      feedUrl: "https://feeds.example.com/news.xml",
+      createdAt: "2026-08-12T00:00:00.000Z",
+    })
+    const addFeedSubscription = vi.fn(() => Effect.succeed(subscription))
+    const listFeedSubscriptions = vi.fn(() =>
+      Effect.succeed({
+        items: [subscription],
+        page: { hasMore: false as const },
+      })
+    )
+    const deleteFeedSubscription = vi.fn(() => Effect.void)
+    const runtime = makeGatewayWebHandler({
+      ...ports,
+      addFeedSubscription,
+      listFeedSubscriptions,
+      deleteFeedSubscription,
+    })
+
+    try {
+      const created = await runtime.handler(
+        new Request("http://gateway.test/v1/me/feed-subscriptions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ feedUrl: subscription.feedUrl }),
+        })
+      )
+      const listed = await runtime.handler(
+        new Request("http://gateway.test/v1/me/feed-subscriptions")
+      )
+      const deleted = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/feed-subscriptions/${subscription.subscriptionId}`,
+          { method: "DELETE" }
+        )
+      )
+
+      expect(created.status).toBe(201)
+      expect(await created.json()).toEqual(subscription)
+      expect(listed.status).toBe(200)
+      expect(await listed.json()).toEqual({
+        items: [subscription],
+        page: { hasMore: false },
+      })
+      expect(deleted.status).toBe(204)
+      expect(await deleted.text()).toBe("")
+      expect(addFeedSubscription).toHaveBeenCalledOnce()
+      expect(listFeedSubscriptions).toHaveBeenCalledOnce()
+      expect(deleteFeedSubscription).toHaveBeenCalledOnce()
     } finally {
       await runtime.dispose()
     }

@@ -1,6 +1,7 @@
 import type { Effect, Schema } from "effect"
 
 import {
+  AddFeedSubscriptionRequestSchema,
   AudioAccessSchema,
   BadRequestProblemSchema,
   ConflictProblemSchema,
@@ -8,11 +9,14 @@ import {
   CreateEpisodeJobRequestSchema,
   EpisodeIdSchema,
   EpisodePageSchema,
+  FeedSubscriptionPageSchema,
+  FeedSubscriptionSchema,
   HealthResponseSchema,
   JobReceiptSchema,
   NotFoundProblemSchema,
   SessionHeadersSchema,
   SessionResponseSchema,
+  SubscriptionIdSchema,
   UnauthorizedProblemSchema,
   UnavailableProblemSchema,
   UnprocessableProblemSchema,
@@ -51,6 +55,33 @@ export type GatewayPorts = Readonly<{
     readonly episodeId: TypeOf<typeof EpisodeIdSchema>
   }) => Effect.Effect<
     TypeOf<typeof AudioAccessSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  addFeedSubscription: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly payload: TypeOf<typeof AddFeedSubscriptionRequestSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof FeedSubscriptionSchema>,
+    | TypeOf<typeof BadRequestProblemSchema>
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnprocessableProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listFeedSubscriptions: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    TypeOf<typeof FeedSubscriptionPageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  deleteFeedSubscription: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly subscriptionId: TypeOf<typeof SubscriptionIdSchema>
+  }) => Effect.Effect<
+    void,
+    | TypeOf<typeof BadRequestProblemSchema>
     | TypeOf<typeof UnauthorizedProblemSchema>
     | TypeOf<typeof NotFoundProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>

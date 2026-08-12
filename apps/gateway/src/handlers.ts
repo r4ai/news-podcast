@@ -22,6 +22,15 @@ export const makeGatewayHandlers = (ports: GatewayPorts) =>
     createAudioAccess: (
       input: Parameters<GatewayPorts["createAudioAccess"]>[0]
     ) => freezeSuccess(ports.createAudioAccess(deepFreeze(input))),
+    addFeedSubscription: (
+      input: Parameters<GatewayPorts["addFeedSubscription"]>[0]
+    ) => freezeSuccess(ports.addFeedSubscription(deepFreeze(input))),
+    listFeedSubscriptions: (
+      headers: Parameters<GatewayPorts["listFeedSubscriptions"]>[0]
+    ) => freezeSuccess(ports.listFeedSubscriptions(deepFreeze(headers))),
+    deleteFeedSubscription: (
+      input: Parameters<GatewayPorts["deleteFeedSubscription"]>[0]
+    ) => freezeSuccess(ports.deleteFeedSubscription(deepFreeze(input))),
   })
 
 export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
@@ -47,6 +56,21 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
           handlers.createAudioAccess({
             headers,
             episodeId: params.episodeId,
+          })
+        )
+    ),
+    HttpApiBuilder.group(gatewayApi, "feedSubscriptions", (group) =>
+      group
+        .handle("addFeedSubscription", ({ headers, payload }) =>
+          handlers.addFeedSubscription({ headers, payload })
+        )
+        .handle("listFeedSubscriptions", ({ headers }) =>
+          handlers.listFeedSubscriptions(headers)
+        )
+        .handle("deleteFeedSubscription", ({ headers, params }) =>
+          handlers.deleteFeedSubscription({
+            headers,
+            subscriptionId: params.subscriptionId,
           })
         )
     )

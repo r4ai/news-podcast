@@ -6,6 +6,7 @@ import {
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeIdSchema,
+  FeedSubscriptionSchema,
   JobReceiptSchema,
   SessionHeadersSchema,
 } from "./contract.js"
@@ -28,6 +29,12 @@ const audioAccess = Schema.decodeUnknownSync(AudioAccessSchema)({
   url: "https://audio.example.test/episode.mp3?token=secret",
   expiresAt: "2026-08-12T00:05:00.000Z",
 })
+const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
+  subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+  feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
+  feedUrl: "https://feeds.example.com/news.xml",
+  createdAt: "2026-08-12T00:00:00.000Z",
+})
 
 const makePorts = (): GatewayPorts => ({
   health: () => Effect.succeed(health),
@@ -35,6 +42,10 @@ const makePorts = (): GatewayPorts => ({
   createEpisodeJob: () => Effect.succeed(jobReceipt),
   listEpisodes: () => Effect.succeed({ items: [], page: { hasMore: false } }),
   createAudioAccess: () => Effect.succeed(audioAccess),
+  addFeedSubscription: () => Effect.succeed(subscription),
+  listFeedSubscriptions: () =>
+    Effect.succeed({ items: [subscription], page: { hasMore: false } }),
+  deleteFeedSubscription: () => Effect.void,
 })
 
 describe("gateway port handlers", () => {
@@ -58,6 +69,7 @@ describe("gateway port handlers", () => {
         handlers.resolveSession(headers),
         handlers.listEpisodes(headers),
         handlers.createAudioAccess({ headers, episodeId }),
+        handlers.listFeedSubscriptions(headers),
       ])
     )
 

@@ -2,17 +2,22 @@ import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  AddFeedSubscriptionReplySchema,
   CreateAudioAccessReplySchema,
+  DeleteFeedSubscriptionReplySchema,
+  ListFeedSubscriptionsReplySchema,
   ListEpisodesReplySchema,
   subjects,
 } from "@news-podcast/protocols"
 
 import {
   AudioAccessSchema,
+  AddFeedSubscriptionRequestSchema,
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeIdSchema,
   SessionHeadersSchema,
+  SubscriptionIdSchema,
 } from "../contract.js"
 import type { UnsafeNatsRequestClient } from "../infrastructure/unsafe/nats-request.js"
 import {
@@ -254,6 +259,132 @@ describe("NATS GatewayPorts adapter", () => {
       code: "authentication_required",
     })
     expect(request).toHaveBeenCalledOnce()
+  })
+
+  it("maps owner-scoped subscription commands through correlated content RPCs", async () => {
+    const requests: CapturedRequest[] = []
+    const subscription = {
+      subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
+      feedUrl: "https://feeds.example.com/news.xml",
+      createdAt: "2026-08-12T00:00:00.000Z",
+    }
+    const client = fakeClient(async (request) => {
+      requests.push(request)
+      if (request.subject === subjects.identity.resolveSession) {
+        return userSessionReply(request)
+      }
+      if (request.subject === subjects.content.addSubscription) {
+        return encodedReply(
+          request.envelope,
+          "content-knowledge",
+          AddFeedSubscriptionReplySchema,
+          {
+            _tag: "Added",
+            subscription,
+          }
+        )
+      }
+      if (request.subject === subjects.content.listSubscriptions) {
+        return encodedReply(
+          request.envelope,
+          "content-knowledge",
+          ListFeedSubscriptionsReplySchema,
+          {
+            _tag: "Listed",
+            subscriptions: [subscription],
+          }
+        )
+      }
+      return encodedReply(
+        request.envelope,
+        "content-knowledge",
+        DeleteFeedSubscriptionReplySchema,
+        {
+          _tag: "Deleted",
+        }
+      )
+    })
+    const ports = makeNatsGatewayPorts(client, dependencies())
+
+    await expect(
+      Effect.runPromise(
+        ports.addFeedSubscription({
+          headers: sessionHeaders,
+          payload: Schema.decodeUnknownSync(AddFeedSubscriptionRequestSchema)({
+            feedUrl: subscription.feedUrl,
+          }),
+        })
+      )
+    ).resolves.toEqual(subscription)
+    await expect(
+      Effect.runPromise(ports.listFeedSubscriptions(sessionHeaders))
+    ).resolves.toEqual({ items: [subscription], page: { hasMore: false } })
+    await expect(
+      Effect.runPromise(
+        ports.deleteFeedSubscription({
+          headers: sessionHeaders,
+          subscriptionId: Schema.decodeUnknownSync(SubscriptionIdSchema)(
+            subscription.subscriptionId
+          ),
+        })
+      )
+    ).resolves.toBeUndefined()
+
+    expect(
+      requests
+        .filter(({ subject }) => subject !== subjects.identity.resolveSession)
+        .map(({ subject, envelope }) => ({
+          subject,
+          payload: envelope.payload,
+        }))
+    ).toEqual([
+      {
+        subject: subjects.content.addSubscription,
+        payload: { feedUrl: subscription.feedUrl },
+      },
+      { subject: subjects.content.listSubscriptions, payload: {} },
+      {
+        subject: subjects.content.deleteSubscription,
+        payload: { subscriptionId: subscription.subscriptionId },
+      },
+    ])
+  })
+
+  it("maps content not-found and malformed replies without leaking boundary data", async () => {
+    const subscriptionId = Schema.decodeUnknownSync(SubscriptionIdSchema)(
+      "9aa2225d-07e7-4af4-a8e6-e4788f801a91"
+    )
+    const request = vi.fn(async (subject: string, data: Uint8Array) => {
+      const envelope = JSON.parse(new TextDecoder().decode(data)) as Record<
+        string,
+        unknown
+      >
+      const captured = { subject, timeoutMillis: 2_000, envelope }
+      if (subject === subjects.identity.resolveSession)
+        return userSessionReply(captured)
+      return encodedReply(
+        envelope,
+        "content-knowledge",
+        DeleteFeedSubscriptionReplySchema,
+        { _tag: "NotFound" }
+      )
+    })
+    const ports = makeNatsGatewayPorts(
+      { request, drain: async () => undefined },
+      dependencies()
+    )
+
+    const notFoundProblem = await Effect.runPromise(
+      ports
+        .deleteFeedSubscription({ headers: sessionHeaders, subscriptionId })
+        .pipe(Effect.flip)
+    )
+
+    expect(notFoundProblem).toMatchObject({
+      status: 404,
+      code: "feed_subscription_not_found",
+    })
   })
 
   it.each([

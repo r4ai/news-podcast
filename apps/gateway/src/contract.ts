@@ -45,6 +45,30 @@ const AbsoluteHttpUrlSchema = Schema.String.check(
   )
 ).pipe(Schema.brand("AbsoluteHttpUrl"))
 
+const CanonicalFeedUrlSchema = Schema.String.check(
+  Schema.isMaxLength(2_048),
+  Schema.makeFilter<string>(
+    (value) => {
+      try {
+        const url = new URL(value)
+        return (url.protocol === "http:" || url.protocol === "https:") &&
+          url.username === "" &&
+          url.password === "" &&
+          url.hash === "" &&
+          url.href === value
+          ? undefined
+          : "Expected a canonical credential-free HTTP(S) feed URL"
+      } catch {
+        return "Expected an absolute HTTP(S) feed URL"
+      }
+    },
+    {
+      format: "uri",
+      expected: "a canonical credential-free HTTP(S) feed URL",
+    }
+  )
+).pipe(Schema.brand("CanonicalFeedUrl"))
+
 export const ArticleIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("ArticleId")
 )
@@ -53,6 +77,12 @@ export const EpisodeIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
 )
 export const JobIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("EpisodeJobId")
+)
+export const SubscriptionIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
+  Schema.brand("ContentSubscriptionId")
+)
+const FeedIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
+  Schema.brand("ContentFeedId")
 )
 const SnapshotIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("SnapshotId")
@@ -148,6 +178,32 @@ export const AudioAccessSchema = Schema.Struct({
   url: AbsoluteHttpUrlSchema,
   expiresAt: UtcDateTimeStringSchema,
 }).annotate({ identifier: "AudioAccess" })
+
+export const AddFeedSubscriptionRequestSchema = Schema.Struct({
+  feedUrl: CanonicalFeedUrlSchema,
+}).annotate({ identifier: "AddFeedSubscriptionRequest" })
+
+const feedSubscriptionFields = {
+  subscriptionId: SubscriptionIdSchema,
+  feedId: FeedIdSchema,
+  feedUrl: CanonicalFeedUrlSchema,
+  createdAt: UtcDateTimeStringSchema,
+} as const
+
+export const FeedSubscriptionSchema = Schema.Struct(
+  feedSubscriptionFields
+).annotate({ identifier: "FeedSubscription" })
+
+export const CreatedFeedSubscriptionSchema = Schema.Struct(
+  feedSubscriptionFields
+)
+  .annotate({ identifier: "CreatedFeedSubscription" })
+  .pipe(HttpApiSchema.status(201))
+
+export const FeedSubscriptionPageSchema = Schema.Struct({
+  items: Schema.Array(FeedSubscriptionSchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "FeedSubscriptionPage" })
 
 const problemSchema = <const Status extends number>(
   status: Status,
@@ -257,6 +313,62 @@ export const createAudioAccessEndpoint = HttpApiEndpoint.post(
   })
 )
 
+export const addFeedSubscriptionEndpoint = HttpApiEndpoint.post(
+  "addFeedSubscription",
+  "/v1/me/feed-subscriptions",
+  {
+    headers: SessionHeadersSchema,
+    payload: AddFeedSubscriptionRequestSchema,
+    success: CreatedFeedSubscriptionSchema,
+    error: [
+      BadRequestProblemSchema,
+      UnauthorizedProblemSchema,
+      UnprocessableProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "addFeedSubscription",
+    summary: "Subscribe to an RSS feed URL",
+  })
+)
+
+export const listFeedSubscriptionsEndpoint = HttpApiEndpoint.get(
+  "listFeedSubscriptions",
+  "/v1/me/feed-subscriptions",
+  {
+    headers: SessionHeadersSchema,
+    success: FeedSubscriptionPageSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "listFeedSubscriptions",
+    summary: "List feed subscriptions",
+  })
+)
+
+export const deleteFeedSubscriptionEndpoint = HttpApiEndpoint.delete(
+  "deleteFeedSubscription",
+  "/v1/me/feed-subscriptions/:subscriptionId",
+  {
+    params: { subscriptionId: SubscriptionIdSchema },
+    headers: SessionHeadersSchema,
+    error: [
+      BadRequestProblemSchema,
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "deleteFeedSubscription",
+    summary: "Delete a feed subscription",
+  })
+)
+
 const systemGroup = HttpApiGroup.make("system")
   .add(healthEndpoint)
   .annotateMerge(OpenApi.annotations({ title: "System" }))
@@ -269,9 +381,22 @@ const episodeJobsGroup = HttpApiGroup.make("episodeJobs")
 const episodesGroup = HttpApiGroup.make("episodes")
   .add(listEpisodesEndpoint, createAudioAccessEndpoint)
   .annotateMerge(OpenApi.annotations({ title: "Episodes" }))
+const feedSubscriptionsGroup = HttpApiGroup.make("feedSubscriptions")
+  .add(
+    addFeedSubscriptionEndpoint,
+    listFeedSubscriptionsEndpoint,
+    deleteFeedSubscriptionEndpoint
+  )
+  .annotateMerge(OpenApi.annotations({ title: "Feed subscriptions" }))
 
 export const gatewayApi = HttpApi.make("gateway")
-  .add(systemGroup, sessionGroup, episodeJobsGroup, episodesGroup)
+  .add(
+    systemGroup,
+    sessionGroup,
+    episodeJobsGroup,
+    episodesGroup,
+    feedSubscriptionsGroup
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "RSS News Podcast API",
