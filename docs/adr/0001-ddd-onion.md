@@ -4,7 +4,7 @@
 - Date: 2026-08-09
 - Decision owners: Product owner / Architecture
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0034
 - Related: `docs/design.md` 3章
 
 ## コンテキストと変更契機

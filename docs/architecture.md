@@ -1,14 +1,16 @@
 # システムアーキテクチャ
 
-- 更新日: 2026-08-11
-- 対象: 現在のリポジトリ実装
+- 更新日: 2026-08-12
+- 対象: 関数型マイクロサービスへの移行中（新旧の正本を明記）
 - 関連文書: [詳細設計](design.md) / [ADR](adr/) / [開発ガイド](development.md)
 
 ## 1. 全体像
 
-本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、tool駆動Agentが記事本文と補足Web検索から出典付きPodcastを制作する**モジュラーモノリス**である。長時間処理はWorkerへ分離し、本文・asset・音声はSeaweedFSへ保存する。
+本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、tool駆動Agentが記事本文と補足Web検索から出典付きPodcastを制作する**関数型マイクロサービス**である。4 Bounded Contextを独立サービスとし、Gatewayとサービス間はNATS RPC、状態伝播はJetStream eventを使う。本文・asset・音声はSeaweedFSへ保存する。
 
 設計の軸は次の4点である。
+
+> 新規の正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。旧`apps/api`、`apps/worker`、`packages/domain|application|adapters`は外部ユースケースの移植完了まで動作比較にだけ使い、新規依存を追加しない。
 
 | 設計方針 | 要点 |
 | --- | --- |
@@ -36,14 +38,12 @@ flowchart LR
 
 ## 2. ドメイン境界
 
-現在は単一のDomain packageを共有しているが、業務上は次の境界に分かれる。境界は「別サービス」ではなく、同じモノリス内で変更理由を分離するためのものとする。
+業務規則は次の4 Bounded Contextが所有し、Contextごとに独立サービスとして配備する。Context間でdomain型やDBを共有しない。
 
 | 境界づけられた領域 | 責務 | 主なデータ・操作 |
 | --- | --- | --- |
-| Identity & Access | ログイン、セッション、所有者の特定 | Better Auth、Google OIDC、`ownerId` |
-| Feed Management | RSSカタログとユーザー別購読 | Feed、Subscription、有効/無効 |
-| Content Archive | 記事版、安全なreplay、Markdown | FeedItem、ArticleSnapshot、ArchiveAsset |
-| Agent Runtime | tool権限、実行上限、承認、Memory、隔離実行 | AgentRun、AgentEvent、Approval、Memory、SandboxSession |
+| Identity & Access | ログイン、セッション、主体の特定 | Better Auth、Google OIDC、Actor |
+| Content Knowledge | RSS購読、記事snapshot、安全なreplay、Markdown | Feed、Subscription、ArticleSnapshot、ArchiveAsset |
 | Episode Production | 生成要求、Agent実行、状態遷移、生成パイプライン | EpisodeJob、AgentRun、Script、Audio |
 | Episode Library | 完成番組、出典、所有者別アクセス | Episode、EpisodeSource、短期音声URL |
 
@@ -58,7 +58,7 @@ flowchart LR
 
 ## 3. レイヤー構成と依存方向
 
-### 3.1 オニオン構造
+### 3.1 旧モジュラーモノリスのオニオン構造（移行元）
 
 ```mermaid
 flowchart TB
@@ -84,7 +84,7 @@ flowchart TB
 
 矢印はcompile-timeの依存方向であり、すべて外側から内側へ向く。DomainはHTTP、DB、OpenAI、VOICEVOX、Cloudflareを知らない。Applicationが必要な外部能力をinterface（ポート）として定義し、Adaptersが実装する。
 
-### 3.2 ディレクトリと責務
+### 3.2 移行元ディレクトリと責務
 
 | パス | レイヤー | 現在の責務 |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ flowchart TB
 | `packages/observability` | Cross-cutting Adapter | OpenTelemetry契約、Node adapter、privacy filter |
 | `infra` | Deployment / Operations | Node image、Collector、Grafana/Prometheus/Loki/Tempo設定・dashboard・alert |
 
-### 3.3 package依存関係
+### 3.3 移行元package依存関係
 
 ```mermaid
 flowchart LR
@@ -178,6 +178,31 @@ flowchart LR
 ```
 
 各service内の依存は`runtime/adapters → application → domain`のみとし、package export、lint、architecture testで逆向きimportとContext横断importを拒否する。詳細は[ADR-0033](adr/0033-colocate-bounded-context-with-service.md)を正本とする。
+
+### 3.6 型と副作用の境界
+
+```mermaid
+flowchart LR
+  Wire["HTTP / NATS / SQLite: unknown"] --> Parse["Effect Schema parse"]
+  Parse --> Frozen["branded + deep frozen value"]
+  Frozen --> Transition["pure state transition"]
+  Transition --> UseCase["Effect use case"]
+  UseCase --> Port["application-owned port"]
+  Port --> Infra["adapter / unsafe interop"]
+```
+
+`parse, don't validate`を適用し、検査結果をBooleanで返して元の型を使い続けるAPIは作らない。外部入力、永続JSON、NATS messageは`unknown`として受け、余剰propertyも拒否する共通parserの成功値だけを内側へ渡す。job状態はdiscriminated unionで表し、例えば4回目の`Running`を`Retrying`へ渡せないことを型で保証する。詳細は[ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)を正本とする。
+
+### 3.7 移行進捗
+
+| Surface | 状態 | 現在の証拠 |
+| --- | --- | --- |
+| immutable kernel / protocol | Done | strict parse、deep freeze、correlation envelope、version付きsubject |
+| 4 Context domain/application slice | Done | `services/*/src/{domain,application,adapters}` |
+| SQLite/NATS runtime | In progress | service別single-writer、outbox/inbox adapter |
+| Effect HttpApi Gateway | In progress | `apps/gateway` |
+| Web生成client | Pending | Gateway OpenAPI確定後 |
+| 旧API/Worker削除 | Pending | E2E parity後 |
 
 ## 4. 主要なシステムフロー
 
@@ -310,7 +335,7 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |
 
-## 8. 現状評価と設計上の注意点
+## 8. 移行元の評価と設計上の注意点
 
 目標アーキテクチャと現在の実装には、次の意図的な差分がある。
 
@@ -342,3 +367,4 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 - [ADR-0015: Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)
 - [ADR-0025: 自動計装を正本とするトレース保証](adr/0025-automatic-instrumentation-and-trace-guarantee.md)
 - [ADR-0033: Bounded Contextとサービスのコロケーション](adr/0033-colocate-bounded-context-with-service.md)
+- [ADR-0034: 関数型ドメインモデルとEffect境界](adr/0034-functional-domain-model-and-effect-boundaries.md)

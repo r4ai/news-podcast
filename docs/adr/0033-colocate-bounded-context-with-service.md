@@ -56,14 +56,14 @@ services/<bounded-context>/
 | 対象 | 必要な変更 | 状態 | 証拠 |
 | --- | --- | --- | --- |
 | 設計書 | service treeと依存図 | Done | `docs/architecture.md` |
-| ドメイン/ユースケース | service配下へ移設 | Pending | `services/*/src` |
+| ドメイン/ユースケース | service配下へ移設 | In progress | `services/*/src`の関数型縦断slice |
 | OpenAPI/外部契約 | N/A — Gateway契約は独立 | Done | `packages/contracts` |
-| コード/ポート | architecture testとpackage export制限 | Pending | lint/test config |
+| コード/ポート | architecture testとpackage export制限 | Done | `scripts/check-architecture.mjs` |
 | データ/ストレージ | serviceごとのmigration所有 | Pending | `services/*/migrations` |
 | 実行/配備 | serviceごとのentrypoint | Pending | Compose |
-| 認証/セキュリティ | Context間protocolへActorを付与 | Pending | protocol schemas |
+| 認証/セキュリティ | Context間protocolへActorを付与 | Done | `packages/protocols/src/envelope.ts` |
 | フロント/品質保証 | N/A — Gatewayだけを利用 | Done | Web dependency rule |
-| テスト/運用 | import graph、context contract test | Pending | workspace tests |
+| テスト/運用 | import graph、context contract test | Done | architecture test、service unit tests |
 
 ## 再検討条件
 

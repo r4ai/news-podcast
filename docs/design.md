@@ -1,9 +1,10 @@
 # RSSニュース・ポッドキャスト 設計書
 
-- 状態: RSS Reader・記事アーカイブ・Agent生成 Accepted、実装中
+- 状態: 関数型マイクロサービスへ全面移行中
 - 更新日: 2026-08-11
-- 契約の正本: `apps/api/src/routes/**` のHono/Zod route schema
-- 生成契約: `packages/contracts/openapi/openapi.json`
+- 契約の正本: `apps/gateway` のEffect HttpApi（移行完了までは旧Hono契約とparity検査）
+- Context間契約: `packages/protocols` のEffect Schemaとversion付きNATS subject
+- 生成契約: Gateway HttpApiから生成するOpenAPI
 - 判断記録: `docs/adr/`
 
 ## 1. 目的と今回の停止位置
@@ -25,6 +26,8 @@ RSSからニュース項目を取得し、出典を追跡できる事実ベー�
 - 非同期生成: `POST /v1/episode-jobs`、`202 Accepted`、`Location`、`Idempotency-Key`、状態 `queued/running/retrying/succeeded/failed/canceled`。
 
 ## 3. モジュールと依存方向
+
+目標構成と移行規則は[システムアーキテクチャ](architecture.md) §3.5–3.7、型・副作用境界は[ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)を正本とする。以下は移行前の公開ユースケースとparity要件を保持するための記録である。
 
 ```mermaid
 flowchart LR
