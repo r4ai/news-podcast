@@ -10,6 +10,15 @@ const allowedAttributes = new Set([
   "http.request.method",
   "http.response.status_code",
   "http.route",
+  "messaging.destination.name",
+  "messaging.operation.type",
+  "messaging.system",
+  "db.operation.name",
+  "db.system.name",
+  "rpc.method",
+  "server.address",
+  "service.peer.name",
+  "peer.service",
   "operation.stage",
   "job.id",
   "job.attempt",
@@ -36,6 +45,15 @@ const allowedMetricAttributes = new Set([
   "http.request.method",
   "http.response.status_code",
   "http.route",
+  "messaging.destination.name",
+  "messaging.operation.type",
+  "messaging.system",
+  "db.operation.name",
+  "db.system.name",
+  "rpc.method",
+  "server.address",
+  "service.peer.name",
+  "peer.service",
   "operation.stage",
   "job.attempt",
   "job.max_attempts",
@@ -56,7 +74,14 @@ export function sanitizeAttributes(
   attributes: TelemetryAttributes
 ): TelemetryAttributes {
   return Object.fromEntries(
-    Object.entries(attributes).filter(([name]) => allowedAttributes.has(name))
+    Object.entries(attributes)
+      .filter(([name]) => allowedAttributes.has(name))
+      .map(([name, value]) => [
+        name,
+        name === "error.message" && typeof value === "string"
+          ? redact(value)
+          : value,
+      ])
   )
 }
 
@@ -84,6 +109,16 @@ function redact(message: string): string {
   return message
     .replaceAll(/https?:\/\/\S+/gi, "[url]")
     .replaceAll(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email]")
-    .replaceAll(/\b(?:sk|Bearer)[-_ A-Za-z0-9.]{8,}\b/g, "[secret]")
+    .replaceAll(
+      /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,
+      "[secret]"
+    )
+    .replaceAll(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, "[secret]")
+    .replaceAll(/\b(?:Basic|Bearer)\s+[A-Za-z0-9+/=_\-.]{8,}/gi, "[secret]")
+    .replaceAll(/\bsk[-_A-Za-z0-9.]{8,}\b/g, "[secret]")
+    .replaceAll(
+      /\b(x-api-key|api[_-]?key|password|passwd|access[_-]?token|refresh[_-]?token|secret)\s*[:=]\s*["']?[^\s,;"']+["']?/gi,
+      "$1=[secret]"
+    )
     .slice(0, 500)
 }

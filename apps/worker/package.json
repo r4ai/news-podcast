@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/node.ts",
-    "start": "tsx src/node.ts",
+    "dev": "tsx watch src/bootstrap.ts",
+    "start": "tsx src/bootstrap.ts",
     "build": "tsc --noEmit",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",

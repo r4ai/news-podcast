@@ -11,21 +11,21 @@ export function createObservedObjectStore(
         "provider.s3.put",
         { "provider.name": "s3", "provider.operation": "put" },
         () => delegate.put(input),
-        { kind: "client" }
+        { kind: "internal" }
       ),
     get: (key, signal) =>
       observability.withSpan(
         "provider.s3.get",
         { "provider.name": "s3", "provider.operation": "get" },
         () => delegate.get(key, signal),
-        { kind: "client" }
+        { kind: "internal" }
       ),
     delete: (key, signal) =>
       observability.withSpan(
         "provider.s3.delete",
         { "provider.name": "s3", "provider.operation": "delete" },
         () => delegate.delete(key, signal),
-        { kind: "client" }
+        { kind: "internal" }
       ),
   }
 }

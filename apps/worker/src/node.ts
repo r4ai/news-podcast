@@ -1,4 +1,3 @@
-// 自動計装を先に起動するため、registerを最初にimportする。
 import {
   createPropagationHook,
   getNodeObservability,

@@ -38,7 +38,9 @@ export function createTracedFetch(
     return tracer.startActiveSpan(
       `provider.${config.provider}.${operation}`,
       {
-        kind: SpanKind.CLIENT,
+        // HTTP/undici automatic instrumentation owns the network CLIENT span.
+        // This span adds provider semantics without double-counting requests.
+        kind: SpanKind.INTERNAL,
         attributes: sanitizeAttributes({
           "provider.name": config.provider,
           "provider.operation": operation,

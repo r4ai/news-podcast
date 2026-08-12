@@ -37,6 +37,24 @@ describe("observability privacy boundary", () => {
     })
   })
 
+  it("redacts every supported credential form at the central attribute boundary", () => {
+    const message = [
+      "Authorization: Basic dXNlcjpwYXNz",
+      "x-api-key=private-api-key",
+      "password=hunter2",
+      "AKIAIOSFODNN7EXAMPLE",
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature",
+    ].join(" ")
+
+    expect(sanitizeAttributes({ "error.message": message })).toEqual({
+      "error.message":
+        "Authorization: [secret] x-api-key=[secret] password=[secret] [secret] [secret]",
+    })
+    expect(normalizedError(new Error(message)).message).toBe(
+      "Authorization: [secret] x-api-key=[secret] password=[secret] [secret] [secret]"
+    )
+  })
+
   it("physically strips high-cardinality and content attributes from metrics", () => {
     expect(
       sanitizeMetricAttributes({
