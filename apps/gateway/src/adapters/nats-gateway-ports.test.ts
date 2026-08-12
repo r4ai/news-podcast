@@ -388,6 +388,52 @@ describe("NATS GatewayPorts adapter", () => {
   })
 
   it.each([
+    ["add invalid", subjects.content.addSubscription, "INVALID_REQUEST", 422],
+    ["add unauthenticated", subjects.content.addSubscription, "UNAUTHENTICATED", 401],
+    ["list unauthenticated", subjects.content.listSubscriptions, "UNAUTHENTICATED", 401],
+    ["delete invalid", subjects.content.deleteSubscription, "INVALID_REQUEST", 400],
+    ["delete protocol not-found", subjects.content.deleteSubscription, "NOT_FOUND", 404],
+    ["delete unavailable", subjects.content.deleteSubscription, "STORAGE_FAILURE", 503],
+  ] as const)("maps %s Content rejection", async (_case, subject, code, status) => {
+    const client = fakeClient(async (request) => {
+      if (request.subject === subjects.identity.resolveSession)
+        return userSessionReply(request)
+      return encodedReply(request.envelope, "content-knowledge", Schema.Unknown, {
+        _tag: "Rejected",
+        code,
+      })
+    })
+    const ports = makeNatsGatewayPorts(client, dependencies())
+    const problem =
+      subject === subjects.content.addSubscription
+        ? await Effect.runPromise(
+            ports
+              .addFeedSubscription({
+                headers: sessionHeaders,
+                payload: Schema.decodeUnknownSync(
+                  AddFeedSubscriptionRequestSchema
+                )({ feedUrl: "https://feeds.example.com/news.xml" }),
+              })
+              .pipe(Effect.flip)
+          )
+        : subject === subjects.content.listSubscriptions
+          ? await Effect.runPromise(
+              ports.listFeedSubscriptions(sessionHeaders).pipe(Effect.flip)
+            )
+          : await Effect.runPromise(
+              ports
+                .deleteFeedSubscription({
+                  headers: sessionHeaders,
+                  subscriptionId: Schema.decodeUnknownSync(
+                    SubscriptionIdSchema
+                  )("9aa2225d-07e7-4af4-a8e6-e4788f801a91"),
+                })
+                .pipe(Effect.flip)
+            )
+    expect(problem.status).toBe(status)
+  })
+
+  it.each([
     ["NATS timeout", async () => Promise.reject(new Error("TIMEOUT"))],
     ["invalid JSON", async () => new TextEncoder().encode("not-json")],
   ])("maps %s to the existing unavailable Problem", async (_case, request) => {
