@@ -23,9 +23,20 @@ describe("integration contracts", () => {
           trigger: "manual",
         }),
         parseArticleArchived({
+          _tag: "ArticleArchived",
+          archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
           articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
           snapshotId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
-          canonicalUrl: "https://example.com/news/1",
+          sourceUrl: "https://example.com/news/1",
+          title: "News 1",
+          archivedAt: "2026-08-12T00:00:00.000Z",
+          markdown: {
+            _tag: "Markdown",
+            key: "articles/snapshot/markdown/article.md",
+            sha256: "3".repeat(64),
+            mediaType: "text/markdown",
+            byteLength: 80,
+          },
         }),
         parseEpisodeCompleted({
           episodeId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
@@ -44,7 +55,8 @@ describe("integration contracts", () => {
 
     expect(session.actor._tag).toBe("User")
     expect(request.trigger).toBe("manual")
-    expect(article.canonicalUrl).toBe("https://example.com/news/1")
+    expect(article.sourceUrl).toBe("https://example.com/news/1")
+    expect(Object.isFrozen(article.markdown)).toBe(true)
     expect(Object.isFrozen(episode.sources[0])).toBe(true)
   })
 
@@ -68,9 +80,20 @@ describe("integration contracts", () => {
       "archive with non-http URL",
       () =>
         parseArticleArchived({
+          _tag: "ArticleArchived",
+          archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
           articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
           snapshotId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
-          canonicalUrl: "file:///etc/passwd",
+          sourceUrl: "file:///etc/passwd",
+          title: "News 1",
+          archivedAt: "2026-08-12T00:00:00.000Z",
+          markdown: {
+            _tag: "Markdown",
+            key: "articles/snapshot/markdown/article.md",
+            sha256: "3".repeat(64),
+            mediaType: "text/markdown",
+            byteLength: 80,
+          },
         }),
     ],
     [

@@ -4,6 +4,7 @@ import {
   CorrelationIdSchema,
   MessageIdSchema,
   TraceparentSchema,
+  parseArticleArchived,
 } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
@@ -106,10 +107,14 @@ describe("SQLite archive store", () => {
       )
       const limit = await Effect.runPromise(parseOutboxLimit(10))
       const pending = await Effect.runPromise(store.listPending(limit))
+      const publishedEvent = await Effect.runPromise(
+        parseArticleArchived(pending[0]?.envelope.payload)
+      )
 
       expect(result).toEqual({ _tag: "Committed" })
       expect(lookup).toEqual({ _tag: "Archived", snapshot })
       expect(pending).toHaveLength(1)
+      expect(publishedEvent).toEqual(commitInput.event)
       expect(pending[0]).toMatchObject({
         messageId: outboxMessageId,
         subject: "content.article-archived.v1",

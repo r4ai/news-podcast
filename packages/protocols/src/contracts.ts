@@ -10,6 +10,35 @@ const HttpUrlSchema = Schema.String.check(
   Schema.isPattern(/^https?:\/\/[^\s/$.?#].[^\s]*$/i)
 ).pipe(Schema.brand("HttpUrl"))
 
+const UtcInstantSchema = Schema.String.check(
+  Schema.makeFilter<string>(
+    (value) =>
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+      !Number.isNaN(Date.parse(value)) &&
+      new Date(value).toISOString() === value
+        ? undefined
+        : "Expected a canonical UTC instant",
+    { expected: "a canonical UTC instant" }
+  )
+).pipe(Schema.brand("UtcInstant"))
+
+const ObjectKeySchema = Schema.String.check(
+  Schema.isTrimmed(),
+  Schema.isMinLength(1),
+  Schema.isMaxLength(1_024),
+  Schema.isPattern(/^[\x21-\x7e]+$/),
+  Schema.makeFilter<string>((value) => {
+    const segments = value.split("/")
+    return !value.startsWith("/") &&
+      !value.endsWith("/") &&
+      !value.includes("\\") &&
+      !value.includes("//") &&
+      segments.every((segment) => segment !== "." && segment !== "..")
+      ? undefined
+      : "Expected a normalized relative object key"
+  })
+).pipe(Schema.brand("ObjectKey"))
+
 export const ResolveSessionResponseSchema = Schema.Struct({
   actor: ActorSchema,
 })
@@ -29,11 +58,33 @@ export type CreateEpisodeJobRequest = Schema.Schema.Type<
 >
 export const parseCreateEpisodeJobRequest = parse(CreateEpisodeJobRequestSchema)
 
-export const ArticleArchivedSchema = Schema.Struct({
+export const ArticleArchivedV1Schema = Schema.Struct({
+  _tag: Schema.Literal("ArticleArchived"),
+  archiveRequestId: uuid("ArchiveRequestId"),
   articleId: uuid("ArticleId"),
   snapshotId: uuid("ArticleSnapshotId"),
-  canonicalUrl: HttpUrlSchema,
+  sourceUrl: HttpUrlSchema,
+  title: Schema.NonEmptyString.check(Schema.isMaxLength(500)),
+  archivedAt: UtcInstantSchema,
+  markdown: Schema.Struct({
+    _tag: Schema.Literal("Markdown"),
+    key: ObjectKeySchema,
+    sha256: Schema.String.check(Schema.isPattern(/^[\da-f]{64}$/)).pipe(
+      Schema.brand("Sha256")
+    ),
+    mediaType: Schema.Literals([
+      "text/markdown",
+      "text/markdown; charset=utf-8",
+    ]),
+    byteLength: Schema.Int.check(Schema.isGreaterThan(0)),
+  }),
 })
+export type ArticleArchivedV1 = Schema.Schema.Type<
+  typeof ArticleArchivedV1Schema
+>
+
+/** Compatibility name; the wire version is fixed by the v1 subject. */
+export const ArticleArchivedSchema = ArticleArchivedV1Schema
 export type ArticleArchived = Schema.Schema.Type<typeof ArticleArchivedSchema>
 export const parseArticleArchived = parse(ArticleArchivedSchema)
 

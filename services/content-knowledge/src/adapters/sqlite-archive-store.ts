@@ -1,5 +1,6 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import {
+  ArticleArchivedV1Schema,
   MessageIdSchema,
   subjects,
   type MessageId,
@@ -52,6 +53,10 @@ const OutboxRowSchema = Schema.Struct({
   envelope_json: Schema.String,
 })
 const parseOutboxRow = parse(OutboxRowSchema)
+const decodeArticleArchived = Schema.decodeUnknownSync(ArticleArchivedV1Schema, {
+  errors: "all",
+  onExcessProperty: "error",
+})
 
 const archiveStoreError = (
   operation: ArchiveStoreError["operation"],
@@ -146,6 +151,7 @@ export const createSqliteArchiveStore = (
               }
 
               const messageId = newMessageId()
+              const wireEvent = decodeArticleArchived(input.event)
               const envelope: ArticleArchivedWireEnvelope = deepFreeze({
                 messageId,
                 correlationId: input.context.correlationId,
@@ -154,7 +160,7 @@ export const createSqliteArchiveStore = (
                 producer: "content-knowledge",
                 traceparent: input.context.traceparent,
                 actor: input.context.actor,
-                payload: input.event,
+                payload: wireEvent,
               })
               const snapshotJson = jsonInterop.stringify(input.snapshot)
               const envelopeJson = jsonInterop.stringify(envelope)

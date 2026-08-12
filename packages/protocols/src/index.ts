@@ -1,5 +1,6 @@
 export {
   ArticleArchivedSchema,
+  ArticleArchivedV1Schema,
   CreateEpisodeJobRequestSchema,
   EpisodeCompletedSchema,
   parseArticleArchived,
@@ -8,6 +9,7 @@ export {
   parseResolveSessionResponse,
   ResolveSessionResponseSchema,
   type ArticleArchived,
+  type ArticleArchivedV1,
   type CreateEpisodeJobRequest,
   type EpisodeCompleted,
   type ResolveSessionResponse,

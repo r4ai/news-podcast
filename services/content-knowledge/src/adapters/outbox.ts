@@ -1,6 +1,7 @@
 import { parse, type DeepReadonly } from "@news-podcast/kernel"
 import {
   ActorSchema,
+  ArticleArchivedV1Schema,
   CorrelationIdSchema,
   MessageIdSchema,
   TraceparentSchema,
@@ -8,7 +9,7 @@ import {
 } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 
-import { ArticleArchivedSchema, CapturedAtSchema } from "../domain/article.js"
+import { CapturedAtSchema } from "../domain/article.js"
 
 export const ArticleArchivedWireEnvelopeSchema = Schema.Struct({
   messageId: MessageIdSchema,
@@ -18,7 +19,7 @@ export const ArticleArchivedWireEnvelopeSchema = Schema.Struct({
   producer: Schema.Literal("content-knowledge"),
   traceparent: TraceparentSchema,
   actor: ActorSchema,
-  payload: ArticleArchivedSchema,
+  payload: ArticleArchivedV1Schema,
 })
 export type ArticleArchivedWireEnvelope = Schema.Schema.Type<
   typeof ArticleArchivedWireEnvelopeSchema
