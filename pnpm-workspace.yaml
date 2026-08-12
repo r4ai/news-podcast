@@ -30,6 +30,7 @@ strictDepBuilds: true
 allowBuilds:
   "@scarf/scarf": false
   esbuild: true
+  msgpackr-extract: false
   protobufjs: true
   workerd: true
 
