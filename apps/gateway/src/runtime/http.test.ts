@@ -2,10 +2,13 @@ import { Effect, Layer, Schema, Tracer } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  ArticleSchema,
   EpisodeIdSchema,
   EpisodeJobSchema,
   EpisodeSchema,
   FeedSubscriptionSchema,
+  RegisteredFeedSchema,
+  UpdatedFeedSubscriptionSchema,
   JobIdSchema,
   JobReceiptSchema,
 } from "../contract.js"
@@ -38,9 +41,149 @@ const ports: GatewayPorts = {
   addFeedSubscription: () => Effect.fail(unavailable),
   listFeedSubscriptions: () => Effect.fail(unavailable),
   deleteFeedSubscription: () => Effect.fail(unavailable),
+  updateFeedSubscription: () => Effect.fail(unavailable),
+  listFeeds: () => Effect.fail(unavailable),
+  registerFeed: () => Effect.fail(unavailable),
+  listArticles: () => Effect.fail(unavailable),
+  getArticle: () => Effect.fail(unavailable),
+  getArticleMarkdown: () => Effect.fail(unavailable),
+  patchArticle: () => Effect.fail(unavailable),
+  bulkPatchArticles: () => Effect.fail(unavailable),
+  getArticleFacets: () => Effect.fail(unavailable),
+  archiveArticle: () => Effect.fail(unavailable),
+  listArticleTags: () => Effect.fail(unavailable),
+  setArticleTags: () => Effect.fail(unavailable),
+  enrichArticle: () => Effect.fail(unavailable),
+  getSettings: () => Effect.fail(unavailable),
+  updateSettings: () => Effect.fail(unavailable),
+  listTags: () => Effect.fail(unavailable),
+  createTag: () => Effect.fail(unavailable),
+  deleteTag: () => Effect.fail(unavailable),
+  listTagSuggestions: () => Effect.fail(unavailable),
+  promoteTagSuggestion: () => Effect.fail(unavailable),
+  listReadingDictionary: () => Effect.fail(unavailable),
+  createReadingDictionary: () => Effect.fail(unavailable),
+  updateReadingDictionary: () => Effect.fail(unavailable),
+  deleteReadingDictionary: () => Effect.fail(unavailable),
+  getEnrichQueue: () => Effect.fail(unavailable),
+  enrichReprocess: () => Effect.fail(unavailable),
+  enrichResetDaily: () => Effect.fail(unavailable),
 }
 
 describe("Gateway HTTP runtime", () => {
+  it("serves feed catalog and owner article workflows", async () => {
+    const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
+      subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
+      feedUrl: "https://feeds.example.com/news.xml",
+      createdAt: "2026-08-12T00:00:00.000Z",
+    })
+    const article = Schema.decodeUnknownSync(ArticleSchema)({
+      id: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+      feedId: subscription.feedId,
+      title: "Stable article",
+      url: "https://example.com/article",
+      discoveredAt: "2026-08-12T00:00:00.000Z",
+      archiveStatus: "succeeded",
+      snapshotId: "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+      read: false,
+      saved: false,
+      readLater: false,
+      hidden: false,
+    })
+    const runtime = makeGatewayWebHandler({
+      ...ports,
+      listFeeds: () =>
+        Effect.succeed({
+          items: [{ id: subscription.feedId, feedUrl: subscription.feedUrl }],
+          page: { hasMore: false },
+        }),
+      registerFeed: () =>
+        Effect.succeed(
+          Schema.decodeUnknownSync(RegisteredFeedSchema)({
+            feed: { id: subscription.feedId, feedUrl: subscription.feedUrl },
+            subscription,
+          })
+        ),
+      updateFeedSubscription: () =>
+        Effect.succeed(
+          Schema.decodeUnknownSync(UpdatedFeedSubscriptionSchema)({
+            ...subscription,
+            enabled: false,
+          })
+        ),
+      listArticles: () =>
+        Effect.succeed({ items: [article], page: { hasMore: false } }),
+      getArticle: () => Effect.succeed(article),
+      getArticleMarkdown: () => Effect.succeed({ markdown: "# Article" }),
+      patchArticle: () => Effect.succeed({ ...article, saved: true }),
+      bulkPatchArticles: () => Effect.succeed({ updated: 1 }),
+      getArticleFacets: () =>
+        Effect.succeed({
+          states: { all: 1, unread: 1, saved: 0, later: 0 },
+          feeds: [{ feedId: subscription.feedId, count: 1 }],
+        }),
+      archiveArticle: () => Effect.succeed({ status: "already_archived" }),
+      listArticleTags: () => Effect.succeed({ items: [] }),
+      setArticleTags: () => Effect.succeed({ items: [] }),
+      enrichArticle: () => Effect.succeed({ enqueued: 1 }),
+    })
+    const requests = [
+      new Request("http://gateway.test/v1/feeds?q=news"),
+      new Request("http://gateway.test/v1/feeds", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ feedUrl: subscription.feedUrl }),
+      }),
+      new Request(
+        `http://gateway.test/v1/me/feed-subscriptions/${subscription.subscriptionId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ enabled: false }),
+        }
+      ),
+      new Request(
+        "http://gateway.test/v1/me/articles?limit=20&state=all&includeHidden=false&sort=newest"
+      ),
+      new Request("http://gateway.test/v1/me/articles/facets?q=news"),
+      new Request(`http://gateway.test/v1/me/articles/${article.id}`),
+      new Request(`http://gateway.test/v1/me/articles/${article.id}/markdown`),
+      new Request(`http://gateway.test/v1/me/articles/${article.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ saved: true }),
+      }),
+      new Request("http://gateway.test/v1/me/articles/bulk-state", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ read: true }),
+      }),
+      new Request(`http://gateway.test/v1/me/articles/${article.id}/archive`, {
+        method: "POST",
+      }),
+      new Request(`http://gateway.test/v1/me/articles/${article.id}/tags`),
+      new Request(`http://gateway.test/v1/me/articles/${article.id}/tags`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tagIds: [] }),
+      }),
+      new Request(`http://gateway.test/v1/me/articles/${article.id}/enrich`, {
+        method: "POST",
+      }),
+    ]
+    try {
+      const responses = await Promise.all(
+        requests.map((request) => runtime.handler(request))
+      )
+      expect(responses.map(({ status }) => status)).toEqual([
+        200, 201, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200,
+      ])
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
   it("serves job control, episode detail, and bounded replay routes", async () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
@@ -78,16 +221,33 @@ describe("Gateway HTTP runtime", () => {
 
     try {
       const responses = await Promise.all([
-        runtime.handler(new Request("http://gateway.test/v1/episode-jobs?limit=20")),
-        runtime.handler(new Request(`http://gateway.test/v1/episode-jobs/${jobId}`)),
-        runtime.handler(new Request(`http://gateway.test/v1/episode-jobs/${jobId}/cancel`, { method: "POST" })),
-        runtime.handler(new Request(`http://gateway.test/v1/episode-jobs/${jobId}/retry`, { method: "POST" })),
-        runtime.handler(new Request(`http://gateway.test/v1/episodes/${episodeId}`)),
+        runtime.handler(
+          new Request("http://gateway.test/v1/episode-jobs?limit=20")
+        ),
+        runtime.handler(
+          new Request(`http://gateway.test/v1/episode-jobs/${jobId}`)
+        ),
+        runtime.handler(
+          new Request(`http://gateway.test/v1/episode-jobs/${jobId}/cancel`, {
+            method: "POST",
+          })
+        ),
+        runtime.handler(
+          new Request(`http://gateway.test/v1/episode-jobs/${jobId}/retry`, {
+            method: "POST",
+          })
+        ),
+        runtime.handler(
+          new Request(`http://gateway.test/v1/episodes/${episodeId}`)
+        ),
       ])
       const replayed = await runtime.handler(
-        new Request(`http://gateway.test/v1/episode-jobs/${jobId}/events?lastEventId=7`, {
-          headers: { "Last-Event-ID": "41" },
-        })
+        new Request(
+          `http://gateway.test/v1/episode-jobs/${jobId}/events?lastEventId=7`,
+          {
+            headers: { "Last-Event-ID": "41" },
+          }
+        )
       )
       const queryResumed = await runtime.handler(
         new Request(
@@ -95,9 +255,13 @@ describe("Gateway HTTP runtime", () => {
         )
       )
 
-      expect(responses.map(({ status }) => status)).toEqual([200, 200, 200, 202, 200])
+      expect(responses.map(({ status }) => status)).toEqual([
+        200, 200, 200, 202, 200,
+      ])
       expect(await responses[4]!.json()).toEqual(episode)
-      expect(replayed.headers.get("content-type")).toContain("text/event-stream")
+      expect(replayed.headers.get("content-type")).toContain(
+        "text/event-stream"
+      )
       const stream = await replayed.text()
       expect(stream).toContain("event: STATE_SNAPSHOT")
       expect(stream).toContain("id: 42")
@@ -214,6 +378,62 @@ describe("Gateway HTTP runtime", () => {
       expect(addFeedSubscription).toHaveBeenCalledOnce()
       expect(listFeedSubscriptions).toHaveBeenCalledOnce()
       expect(deleteFeedSubscription).toHaveBeenCalledOnce()
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("exposes every personalization route through the public runtime", async () => {
+    const runtime = makeGatewayWebHandler(ports)
+    const id = "9aa2225d-07e7-4af4-a8e6-e4788f801a91"
+    const json = (method: string, body: unknown) => ({
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const requests = [
+      new Request("http://gateway.test/v1/me/settings"),
+      new Request(
+        "http://gateway.test/v1/me/settings",
+        json("PATCH", { interestProfile: { include: "", exclude: "" } })
+      ),
+      new Request("http://gateway.test/v1/me/tags"),
+      new Request(
+        "http://gateway.test/v1/me/tags",
+        json("POST", { name: "AI" })
+      ),
+      new Request(`http://gateway.test/v1/me/tags/${id}`, { method: "DELETE" }),
+      new Request("http://gateway.test/v1/me/tag-suggestions"),
+      new Request(
+        "http://gateway.test/v1/me/tag-suggestions/promote",
+        json("POST", { name: "AI" })
+      ),
+      new Request("http://gateway.test/v1/me/reading-dictionary"),
+      new Request(
+        "http://gateway.test/v1/me/reading-dictionary",
+        json("POST", { surface: "NHK", reading: "エヌエイチケー" })
+      ),
+      new Request(
+        `http://gateway.test/v1/me/reading-dictionary/${id}`,
+        json("PUT", { accentType: 0 })
+      ),
+      new Request(`http://gateway.test/v1/me/reading-dictionary/${id}`, {
+        method: "DELETE",
+      }),
+      new Request("http://gateway.test/v1/me/enrich/queue"),
+      new Request("http://gateway.test/v1/me/enrich/reprocess", {
+        method: "POST",
+      }),
+      new Request("http://gateway.test/v1/me/enrich/reset-daily", {
+        method: "POST",
+      }),
+    ]
+
+    try {
+      const responses = []
+      for (const request of requests)
+        responses.push(await runtime.handler(request))
+      expect(responses.map(({ status }) => status)).toEqual(Array(14).fill(503))
     } finally {
       await runtime.dispose()
     }

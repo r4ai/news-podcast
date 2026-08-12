@@ -5,6 +5,8 @@ import {
 } from "@news-podcast/observability"
 import {
   ActorSchema,
+  type ArticleLibraryReply,
+  ContentArticleViewSchema,
   type AddFeedSubscriptionReply,
   CorrelationIdSchema,
   type DeleteFeedSubscriptionReply,
@@ -12,12 +14,18 @@ import {
   type CreateAudioAccessReply,
   MessageEnvelopeSchema,
   parseAddFeedSubscriptionReply,
+  parseArticleLibraryReply,
   parseCreateAudioAccessReply,
   parseDeleteFeedSubscriptionReply,
   parseEpisodeJobControlReply,
   parseGetEpisodeReply,
   parseListEpisodesReply,
   parseListFeedSubscriptionsReply,
+  parseListFeedCatalogReply,
+  parseUpdateFeedSubscriptionReply,
+  parseIdentitySettingsReply,
+  parseContentPersonalizationReply,
+  parseReadingDictionaryReply,
   parseMessageEnvelope,
   subjects,
 } from "@news-podcast/protocols"
@@ -25,14 +33,32 @@ import { Effect, Schema, Scope } from "effect"
 
 import {
   AudioAccessSchema,
+  ArticleArchiveResultSchema,
+  ArticleFacetsSchema,
+  ArticleMarkdownSchema,
+  ArticlePageSchema,
+  ArticleSchema,
+  ArticleTagsSchema,
+  BulkArticleStateResultSchema,
   EpisodeJobPageSchema,
   EpisodeJobSchema,
   EpisodeSchema,
   EpisodePageSchema,
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
+  FeedPageSchema,
+  RegisteredFeedSchema,
+  UpdatedFeedSubscriptionSchema,
   JobReceiptSchema,
   SessionResponseSchema,
+  UserSettingsSchema,
+  TagSchema,
+  TagPageSchema,
+  TagSuggestionPageSchema,
+  ReadingDictionaryEntrySchema,
+  ReadingDictionaryPageSchema,
+  EnrichQueueSchema,
+  EnrichmentEnqueuedSchema,
   type SessionHeadersSchema,
 } from "../contract.js"
 import {
@@ -114,6 +140,61 @@ const subscriptionNotFound = () =>
     status: 404 as const,
     code: "feed_subscription_not_found",
   })
+const personalizationNotFound = () =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Resource not found",
+    status: 404 as const,
+    code: "resource_not_found",
+  })
+const personalizationConflict = () =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Resource conflict",
+    status: 409 as const,
+    code: "resource_conflict",
+  })
+const normalizePersonalizationFailure = (failure: unknown): any =>
+  typeof failure === "object" && failure !== null && "status" in failure
+    ? failure
+    : unavailable()
+
+const articleNotFound = () =>
+  deepFreeze({
+    type: "about:blank",
+    title: "Article not found",
+    status: 404 as const,
+    code: "article_not_found",
+  })
+const toPublicArticle = (
+  article: Schema.Schema.Type<typeof ContentArticleViewSchema>
+) =>
+  parse(ArticleSchema)({
+    id: article.articleId,
+    feedId: article.feedId,
+    title: article.title,
+    url: article.sourceUrl,
+    ...(article.publishedAt === null
+      ? {}
+      : { publishedAt: article.publishedAt }),
+    discoveredAt: article.discoveredAt,
+    archiveStatus:
+      article.archiveStatus === "Pending" ? "pending" : "succeeded",
+    ...(article.snapshotId === null ? {} : { snapshotId: article.snapshotId }),
+    read: article.state.read,
+    saved: article.state.saved,
+    readLater: article.state.readLater,
+    hidden: article.state.hidden,
+    ...(article.state.hiddenAt === null
+      ? {}
+      : { hiddenAt: article.state.hiddenAt }),
+  }).pipe(Effect.mapError(unavailable))
+
+const articleReplyFailure = (reply: ArticleLibraryReply) =>
+  reply._tag === "NotFound" ||
+  (reply._tag === "Rejected" && reply.code === "NOT_FOUND")
+    ? articleNotFound()
+    : unavailable()
 
 type ParsedControlReply = Effect.Success<
   ReturnType<typeof parseEpisodeJobControlReply>
@@ -129,6 +210,8 @@ type PublicEpisodeJob = TypeOf<typeof EpisodeJobSchema>
 type PublicEpisode = TypeOf<typeof EpisodeSchema>
 
 type AudioAccess = TypeOf<typeof AudioAccessSchema>
+type PublicArticleTags = TypeOf<typeof ArticleTagsSchema>
+type PublicEnrichmentEnqueued = TypeOf<typeof EnrichmentEnqueuedSchema>
 type AudioAccessFailure =
   | ReturnType<typeof notFound>
   | ReturnType<typeof unavailable>
@@ -291,9 +374,27 @@ const toEpisode = (
   ReturnType<typeof unavailable> | ReturnType<typeof notFound>
 > => {
   if (reply._tag === "Found")
-    return parse(EpisodeSchema)(reply.episode).pipe(Effect.mapError(unavailable))
+    return parse(EpisodeSchema)(reply.episode).pipe(
+      Effect.mapError(unavailable)
+    )
   if (reply._tag === "NotFound") return Effect.fail(notFound())
   return Effect.fail(unavailable())
+}
+
+const toPublicQueueItem = (
+  item: {
+    readonly articleId: string
+    readonly reason: "New" | "Reprocess"
+    readonly status: "Queued" | "Processing" | "Succeeded" | "Failed"
+  } & Readonly<Record<string, unknown>>
+) => {
+  const { articleId, ...rest } = item
+  return {
+    ...rest,
+    feedItemId: articleId,
+    reason: item.reason.toLowerCase(),
+    status: item.status.toLowerCase(),
+  }
 }
 
 type Dependencies = Readonly<{
@@ -448,6 +549,23 @@ const makeAdapter = (
     causationId: parent.messageId,
     remoteTraceparent: parent.remoteTraceparent,
   })
+
+  const ownerRpc = <Value>(
+    headers: TypeOf<typeof SessionHeadersSchema>,
+    subject: string,
+    producer: string,
+    payload: unknown,
+    decode: (value: unknown) => Effect.Effect<Value, unknown, never>
+  ) =>
+    authenticated(headers).pipe(
+      Effect.flatMap(({ actor, lineage: parent }) => {
+        const lineage = childLineage(parent, dependencies.nextMessageId())
+        return rpc(subject, producer, actor, payload, lineage).pipe(
+          Effect.flatMap((reply) => decode(reply.payload)),
+          Effect.mapError(unavailable)
+        )
+      })
+    )
 
   return deepFreeze({
     health: () => Effect.succeed(deepFreeze({ status: "ok" as const })),
@@ -766,6 +884,796 @@ const makeAdapter = (
         }),
         Effect.flatMap(toDeleted)
       ),
+    ...({
+      updateFeedSubscription: ({
+        headers,
+        subscriptionId,
+        payload,
+      }: Parameters<GatewayPorts["updateFeedSubscription"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.updateSubscription,
+          "content-knowledge",
+          {
+            subscriptionId,
+            enabled: payload.enabled,
+          },
+          parseUpdateFeedSubscriptionReply
+        ).pipe(
+          Effect.flatMap(
+            (
+              reply
+            ): Effect.Effect<
+              Schema.Schema.Type<typeof UpdatedFeedSubscriptionSchema>,
+              | ReturnType<typeof subscriptionNotFound>
+              | ReturnType<typeof unavailable>
+            > =>
+              reply._tag === "Updated"
+                ? parse(UpdatedFeedSubscriptionSchema)({
+                    ...reply.subscription,
+                    enabled: reply.enabled,
+                  }).pipe(Effect.mapError(unavailable))
+                : reply._tag === "NotFound"
+                  ? Effect.fail(subscriptionNotFound())
+                  : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      listFeeds: ({ headers, q }: Parameters<GatewayPorts["listFeeds"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.listFeedCatalog,
+          "content-knowledge",
+          {
+            ...(q === undefined ? {} : { q }),
+          },
+          parseListFeedCatalogReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Catalog"
+              ? parse(FeedPageSchema)({
+                  items: reply.feeds.map((feed) => ({
+                    id: feed.feedId,
+                    feedUrl: feed.feedUrl,
+                  })),
+                  page: { hasMore: false },
+                }).pipe(Effect.mapError(unavailable))
+              : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      registerFeed: ({
+        headers,
+        payload,
+      }: Parameters<GatewayPorts["registerFeed"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.addSubscription,
+          "content-knowledge",
+          payload,
+          parseAddFeedSubscriptionReply
+        ).pipe(
+          Effect.flatMap(
+            (
+              reply
+            ): Effect.Effect<
+              Schema.Schema.Type<typeof RegisteredFeedSchema>,
+              | ReturnType<typeof unauthorized>
+              | ReturnType<typeof unprocessable>
+              | ReturnType<typeof unavailable>
+            > =>
+              reply._tag === "Added"
+                ? parse(RegisteredFeedSchema)({
+                    feed: {
+                      id: reply.subscription.feedId,
+                      feedUrl: reply.subscription.feedUrl,
+                    },
+                    subscription: reply.subscription,
+                  }).pipe(Effect.mapError(unavailable))
+                : reply.code === "UNAUTHENTICATED"
+                  ? Effect.fail(unauthorized())
+                  : reply.code === "INVALID_REQUEST"
+                    ? Effect.fail(unprocessable())
+                    : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+    } as unknown as Pick<
+      GatewayPorts,
+      "updateFeedSubscription" | "listFeeds" | "registerFeed"
+    >),
+    ...({
+      listArticles: ({
+        headers,
+        query,
+      }: Parameters<GatewayPorts["listArticles"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.articleLibrary,
+          "content-knowledge",
+          {
+            operation: "List",
+            query: {
+              limit: query.limit ?? 50,
+              state:
+                query.state === undefined
+                  ? "All"
+                  : (
+                      {
+                        all: "All",
+                        unread: "Unread",
+                        saved: "Saved",
+                        later: "Later",
+                      } as const
+                    )[query.state],
+              includeHidden: query.includeHidden ?? false,
+              feedIds: query.feedIds ?? [],
+              ...(query.q === undefined ? {} : { q: query.q }),
+              order: query.sort === "oldest" ? "Oldest" : "Newest",
+            },
+          },
+          parseArticleLibraryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Listed"
+              ? Effect.forEach(reply.articles, toPublicArticle).pipe(
+                  Effect.flatMap((items) =>
+                    parse(ArticlePageSchema)({
+                      items,
+                      page: { hasMore: false },
+                    }).pipe(Effect.mapError(unavailable))
+                  )
+                )
+              : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      getArticle: ({
+        headers,
+        articleId,
+      }: Parameters<GatewayPorts["getArticle"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.articleLibrary,
+          "content-knowledge",
+          { operation: "Find", articleId },
+          parseArticleLibraryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Found"
+              ? toPublicArticle(reply.article)
+              : Effect.fail(articleReplyFailure(reply))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      getArticleMarkdown: ({
+        headers,
+        articleId,
+      }: Parameters<GatewayPorts["getArticleMarkdown"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.articleLibrary,
+          "content-knowledge",
+          { operation: "Markdown", articleId },
+          parseArticleLibraryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Markdown"
+              ? parse(ArticleMarkdownSchema)({
+                  markdown: reply.markdown,
+                }).pipe(Effect.mapError(unavailable))
+              : Effect.fail(articleReplyFailure(reply))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      patchArticle: ({
+        headers,
+        articleId,
+        payload,
+      }: Parameters<GatewayPorts["patchArticle"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.articleLibrary,
+          "content-knowledge",
+          { operation: "Patch", articleId, patch: payload },
+          parseArticleLibraryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Updated"
+              ? toPublicArticle(reply.article)
+              : Effect.fail(articleReplyFailure(reply))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      bulkPatchArticles: ({
+        headers,
+        payload,
+      }: Parameters<GatewayPorts["bulkPatchArticles"]>[0]) => {
+        const { read, saved, readLater, hidden, ...filter } = payload
+        return ownerRpc(
+          headers,
+          subjects.content.articleLibrary,
+          "content-knowledge",
+          {
+            operation: "BulkPatch",
+            query: {
+              state:
+                filter.state === undefined
+                  ? "All"
+                  : (
+                      {
+                        all: "All",
+                        unread: "Unread",
+                        saved: "Saved",
+                        later: "Later",
+                      } as const
+                    )[filter.state],
+              includeHidden: filter.includeHidden ?? false,
+              feedIds: filter.feedIds ?? [],
+              ...(filter.q === undefined ? {} : { q: filter.q }),
+            },
+            patch: {
+              ...(read === undefined ? {} : { read }),
+              ...(saved === undefined ? {} : { saved }),
+              ...(readLater === undefined ? {} : { readLater }),
+              ...(hidden === undefined ? {} : { hidden }),
+            },
+          },
+          parseArticleLibraryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "BulkUpdated"
+              ? parse(BulkArticleStateResultSchema)({
+                  updated: reply.updated,
+                }).pipe(Effect.mapError(unavailable))
+              : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        )
+      },
+      getArticleFacets: ({
+        headers,
+        query,
+      }: Parameters<GatewayPorts["getArticleFacets"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.articleLibrary,
+          "content-knowledge",
+          {
+            operation: "Facets",
+            query: {
+              includeHidden: query.includeHidden ?? false,
+              feedIds: query.feedIds ?? [],
+              ...(query.q === undefined ? {} : { q: query.q }),
+            },
+          },
+          parseArticleLibraryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Facets"
+              ? parse(ArticleFacetsSchema)(reply.facets).pipe(
+                  Effect.mapError(unavailable)
+                )
+              : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      archiveArticle: ({
+        headers,
+        articleId,
+      }: Parameters<GatewayPorts["archiveArticle"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.articleLibrary,
+          "content-knowledge",
+          { operation: "Archive", articleId },
+          parseArticleLibraryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "ArchiveTriggered"
+              ? parse(ArticleArchiveResultSchema)({
+                  status:
+                    reply.status === "Archived"
+                      ? "archived"
+                      : "already_archived",
+                }).pipe(Effect.mapError(unavailable))
+              : Effect.fail(articleReplyFailure(reply))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      listArticleTags: ({
+        headers,
+        articleId,
+      }: Parameters<GatewayPorts["listArticleTags"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          {
+            operation: "ListArticleTags",
+            articleId,
+          },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap(
+            (
+              reply
+            ): Effect.Effect<
+              PublicArticleTags,
+              | ReturnType<typeof articleNotFound>
+              | ReturnType<typeof unavailable>
+            > =>
+              reply._tag === "ArticleTags"
+                ? parse(ArticleTagsSchema)({
+                    items: reply.tags.map((tag) => ({
+                      ...tag,
+                      source: tag.source === "Manual" ? "manual" : "ai",
+                    })),
+                  }).pipe(Effect.mapError(unavailable))
+                : reply._tag === "NotFound"
+                  ? Effect.fail(articleNotFound())
+                  : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      setArticleTags: ({
+        headers,
+        articleId,
+        payload,
+      }: Parameters<GatewayPorts["setArticleTags"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          {
+            operation: "SetArticleTags",
+            articleId,
+            tagIds: payload.tagIds,
+          },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap(
+            (
+              reply
+            ): Effect.Effect<
+              PublicArticleTags,
+              | ReturnType<typeof articleNotFound>
+              | ReturnType<typeof personalizationConflict>
+              | ReturnType<typeof unavailable>
+            > =>
+              reply._tag === "ArticleTags"
+                ? parse(ArticleTagsSchema)({
+                    items: reply.tags.map((tag) => ({
+                      ...tag,
+                      source: tag.source === "Manual" ? "manual" : "ai",
+                    })),
+                  }).pipe(Effect.mapError(unavailable))
+                : reply._tag === "NotFound"
+                  ? Effect.fail(articleNotFound())
+                  : reply._tag === "Conflict"
+                    ? Effect.fail(personalizationConflict())
+                    : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      enrichArticle: ({
+        headers,
+        articleId,
+      }: Parameters<GatewayPorts["enrichArticle"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          {
+            operation: "EnrichArticle",
+            articleId,
+          },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap(
+            (
+              reply
+            ): Effect.Effect<
+              PublicEnrichmentEnqueued,
+              | ReturnType<typeof articleNotFound>
+              | ReturnType<typeof personalizationConflict>
+              | ReturnType<typeof unavailable>
+            > =>
+              reply._tag === "Enqueued"
+                ? parse(EnrichmentEnqueuedSchema)({
+                    enqueued: reply.count,
+                  }).pipe(Effect.mapError(unavailable))
+                : reply._tag === "NotFound"
+                  ? Effect.fail(articleNotFound())
+                  : reply._tag === "Conflict"
+                    ? Effect.fail(personalizationConflict())
+                    : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+    } as unknown as Pick<
+      GatewayPorts,
+      | "listArticles"
+      | "getArticle"
+      | "getArticleMarkdown"
+      | "patchArticle"
+      | "bulkPatchArticles"
+      | "getArticleFacets"
+      | "archiveArticle"
+      | "listArticleTags"
+      | "setArticleTags"
+      | "enrichArticle"
+    >),
+    ...({
+      getSettings: (headers: Parameters<GatewayPorts["getSettings"]>[0]) =>
+        Effect.all([
+          ownerRpc(
+            headers,
+            subjects.identity.getGenerationSettings,
+            "identity-access",
+            { operation: "Get" },
+            parseIdentitySettingsReply
+          ),
+          ownerRpc(
+            headers,
+            subjects.content.personalization,
+            "content-knowledge",
+            { operation: "GetInterestProfile" },
+            parseContentPersonalizationReply
+          ),
+        ]).pipe(
+          Effect.flatMap(([identity, content]) =>
+            (identity._tag === "Settings" && content._tag === "InterestProfile"
+              ? parse(UserSettingsSchema)({
+                  generationSchedule: identity.generationSchedule,
+                  interestProfile: content.interestProfile,
+                })
+              : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      updateSettings: ({
+        headers,
+        payload,
+      }: Parameters<GatewayPorts["updateSettings"]>[0]) =>
+        Effect.all([
+          payload.generationSchedule === undefined
+            ? ownerRpc(
+                headers,
+                subjects.identity.getGenerationSettings,
+                "identity-access",
+                { operation: "Get" },
+                parseIdentitySettingsReply
+              )
+            : ownerRpc(
+                headers,
+                subjects.identity.updateGenerationSettings,
+                "identity-access",
+                {
+                  operation: "Update",
+                  generationSchedule: payload.generationSchedule,
+                },
+                parseIdentitySettingsReply
+              ),
+          payload.interestProfile === undefined
+            ? ownerRpc(
+                headers,
+                subjects.content.personalization,
+                "content-knowledge",
+                { operation: "GetInterestProfile" },
+                parseContentPersonalizationReply
+              )
+            : ownerRpc(
+                headers,
+                subjects.content.personalization,
+                "content-knowledge",
+                {
+                  operation: "UpdateInterestProfile",
+                  interestProfile: payload.interestProfile,
+                },
+                parseContentPersonalizationReply
+              ),
+        ]).pipe(
+          Effect.flatMap(([identity, content]) =>
+            (identity._tag === "Settings" && content._tag === "InterestProfile"
+              ? parse(UserSettingsSchema)({
+                  generationSchedule: identity.generationSchedule,
+                  interestProfile: content.interestProfile,
+                })
+              : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      listTags: (headers: Parameters<GatewayPorts["listTags"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          { operation: "ListTags" },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Tags"
+              ? parse(TagPageSchema)({
+                  items: reply.tags.map((tag) => ({
+                    id: tag.tagId,
+                    name: tag.name,
+                    createdAt: tag.createdAt,
+                  })),
+                  page: { hasMore: false },
+                })
+              : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      createTag: ({
+        headers,
+        payload,
+      }: Parameters<GatewayPorts["createTag"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          { operation: "CreateTag", name: payload.name },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Tag"
+              ? parse(TagSchema)({
+                  id: reply.tag.tagId,
+                  name: reply.tag.name,
+                  createdAt: reply.tag.createdAt,
+                })
+              : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      deleteTag: ({
+        headers,
+        tagId,
+      }: Parameters<GatewayPorts["deleteTag"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          { operation: "DeleteTag", tagId },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Deleted"
+              ? Effect.void
+              : reply._tag === "NotFound"
+                ? Effect.fail(personalizationNotFound())
+                : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      listTagSuggestions: (
+        headers: Parameters<GatewayPorts["listTagSuggestions"]>[0]
+      ) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          { operation: "ListTagSuggestions" },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Suggestions"
+              ? parse(TagSuggestionPageSchema)({
+                  items: reply.suggestions,
+                  page: { hasMore: false },
+                })
+              : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      promoteTagSuggestion: ({
+        headers,
+        payload,
+      }: Parameters<GatewayPorts["promoteTagSuggestion"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          { operation: "PromoteTagSuggestion", name: payload.name },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Tag"
+              ? parse(TagSchema)({
+                  id: reply.tag.tagId,
+                  name: reply.tag.name,
+                  createdAt: reply.tag.createdAt,
+                })
+              : reply._tag === "NotFound"
+                ? Effect.fail(personalizationNotFound())
+                : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      listReadingDictionary: (
+        headers: Parameters<GatewayPorts["listReadingDictionary"]>[0]
+      ) =>
+        ownerRpc(
+          headers,
+          subjects.production.readingDictionary,
+          "episode-production",
+          { operation: "List" },
+          parseReadingDictionaryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Entries"
+              ? parse(ReadingDictionaryPageSchema)({
+                  items: reply.entries,
+                  page: { hasMore: false },
+                })
+              : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      createReadingDictionary: ({
+        headers,
+        payload,
+      }: Parameters<GatewayPorts["createReadingDictionary"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.readingDictionary,
+          "episode-production",
+          { operation: "Create", ...payload },
+          parseReadingDictionaryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Entry"
+              ? parse(ReadingDictionaryEntrySchema)(reply.entry)
+              : reply._tag === "Conflict"
+                ? Effect.fail(personalizationConflict())
+                : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      updateReadingDictionary: ({
+        headers,
+        id,
+        payload,
+      }: Parameters<GatewayPorts["updateReadingDictionary"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.readingDictionary,
+          "episode-production",
+          { operation: "Update", id, patch: payload },
+          parseReadingDictionaryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Entry"
+              ? parse(ReadingDictionaryEntrySchema)(reply.entry)
+              : reply._tag === "NotFound"
+                ? Effect.fail(personalizationNotFound())
+                : reply._tag === "Conflict"
+                  ? Effect.fail(personalizationConflict())
+                  : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      deleteReadingDictionary: ({
+        headers,
+        id,
+      }: Parameters<GatewayPorts["deleteReadingDictionary"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.readingDictionary,
+          "episode-production",
+          { operation: "Delete", id },
+          parseReadingDictionaryReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "Deleted"
+              ? Effect.void
+              : reply._tag === "NotFound"
+                ? Effect.fail(personalizationNotFound())
+                : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      getEnrichQueue: (
+        headers: Parameters<GatewayPorts["getEnrichQueue"]>[0]
+      ) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          { operation: "GetEnrichmentQueue" },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            (reply._tag === "EnrichmentQueue"
+              ? parse(EnrichQueueSchema)({
+                  ...reply.queue,
+                  processing: reply.queue.processing.map(toPublicQueueItem),
+                  pending: {
+                    ...reply.queue.pending,
+                    items: reply.queue.pending.items.map(toPublicQueueItem),
+                  },
+                  failed: {
+                    ...reply.queue.failed,
+                    items: reply.queue.failed.items.map(toPublicQueueItem),
+                  },
+                  recent: reply.queue.recent.map(toPublicQueueItem),
+                })
+              : Effect.fail(unavailable())
+            ).pipe(Effect.mapError(normalizePersonalizationFailure))
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      enrichReprocess: (
+        headers: Parameters<GatewayPorts["enrichReprocess"]>[0]
+      ) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          { operation: "ReprocessEnrichment" },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Enqueued"
+              ? Effect.succeed(deepFreeze({ enqueued: reply.count }))
+              : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+      enrichResetDaily: (
+        headers: Parameters<GatewayPorts["enrichResetDaily"]>[0]
+      ) =>
+        ownerRpc(
+          headers,
+          subjects.content.personalization,
+          "content-knowledge",
+          {
+            operation: "ResetDailyEnrichment",
+            localDate: dependencies.now().slice(0, 10),
+          },
+          parseContentPersonalizationReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Reset"
+              ? Effect.succeed(
+                  deepFreeze({
+                    message: "Daily enrichment usage reset" as const,
+                  })
+                )
+              : Effect.fail(unavailable())
+          ),
+          Effect.mapError(normalizePersonalizationFailure)
+        ),
+    } as unknown as Pick<
+      GatewayPorts,
+      | "getSettings"
+      | "updateSettings"
+      | "listTags"
+      | "createTag"
+      | "deleteTag"
+      | "listTagSuggestions"
+      | "promoteTagSuggestion"
+      | "listReadingDictionary"
+      | "createReadingDictionary"
+      | "updateReadingDictionary"
+      | "deleteReadingDictionary"
+      | "getEnrichQueue"
+      | "enrichReprocess"
+      | "enrichResetDaily"
+    >),
   } satisfies GatewayPorts)
 }
 

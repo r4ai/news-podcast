@@ -21,8 +21,9 @@ export const makeGatewayHandlers = (ports: GatewayPorts) =>
       freezeSuccess(ports.listEpisodeJobs(deepFreeze(input))),
     getEpisodeJob: (input: Parameters<GatewayPorts["getEpisodeJob"]>[0]) =>
       freezeSuccess(ports.getEpisodeJob(deepFreeze(input))),
-    cancelEpisodeJob: (input: Parameters<GatewayPorts["cancelEpisodeJob"]>[0]) =>
-      freezeSuccess(ports.cancelEpisodeJob(deepFreeze(input))),
+    cancelEpisodeJob: (
+      input: Parameters<GatewayPorts["cancelEpisodeJob"]>[0]
+    ) => freezeSuccess(ports.cancelEpisodeJob(deepFreeze(input))),
     retryEpisodeJob: (input: Parameters<GatewayPorts["retryEpisodeJob"]>[0]) =>
       freezeSuccess(ports.retryEpisodeJob(deepFreeze(input))),
     streamEpisodeJobEvents: (
@@ -83,6 +84,72 @@ export const makeGatewayHandlers = (ports: GatewayPorts) =>
     deleteFeedSubscription: (
       input: Parameters<GatewayPorts["deleteFeedSubscription"]>[0]
     ) => freezeSuccess(ports.deleteFeedSubscription(deepFreeze(input))),
+    updateFeedSubscription: (
+      input: Parameters<GatewayPorts["updateFeedSubscription"]>[0]
+    ) => freezeSuccess(ports.updateFeedSubscription(deepFreeze(input))),
+    listFeeds: (input: Parameters<GatewayPorts["listFeeds"]>[0]) =>
+      freezeSuccess(ports.listFeeds(deepFreeze(input))),
+    registerFeed: (input: Parameters<GatewayPorts["registerFeed"]>[0]) =>
+      freezeSuccess(ports.registerFeed(deepFreeze(input))),
+    listArticles: (input: Parameters<GatewayPorts["listArticles"]>[0]) =>
+      freezeSuccess(ports.listArticles(deepFreeze(input))),
+    getArticle: (input: Parameters<GatewayPorts["getArticle"]>[0]) =>
+      freezeSuccess(ports.getArticle(deepFreeze(input))),
+    getArticleMarkdown: (
+      input: Parameters<GatewayPorts["getArticleMarkdown"]>[0]
+    ) => freezeSuccess(ports.getArticleMarkdown(deepFreeze(input))),
+    patchArticle: (input: Parameters<GatewayPorts["patchArticle"]>[0]) =>
+      freezeSuccess(ports.patchArticle(deepFreeze(input))),
+    bulkPatchArticles: (
+      input: Parameters<GatewayPorts["bulkPatchArticles"]>[0]
+    ) => freezeSuccess(ports.bulkPatchArticles(deepFreeze(input))),
+    getArticleFacets: (
+      input: Parameters<GatewayPorts["getArticleFacets"]>[0]
+    ) => freezeSuccess(ports.getArticleFacets(deepFreeze(input))),
+    archiveArticle: (input: Parameters<GatewayPorts["archiveArticle"]>[0]) =>
+      freezeSuccess(ports.archiveArticle(deepFreeze(input))),
+    listArticleTags: (input: Parameters<GatewayPorts["listArticleTags"]>[0]) =>
+      freezeSuccess(ports.listArticleTags(deepFreeze(input))),
+    setArticleTags: (input: Parameters<GatewayPorts["setArticleTags"]>[0]) =>
+      freezeSuccess(ports.setArticleTags(deepFreeze(input))),
+    enrichArticle: (input: Parameters<GatewayPorts["enrichArticle"]>[0]) =>
+      freezeSuccess(ports.enrichArticle(deepFreeze(input))),
+    getSettings: (headers: Parameters<GatewayPorts["getSettings"]>[0]) =>
+      freezeSuccess(ports.getSettings(deepFreeze(headers))),
+    updateSettings: (input: Parameters<GatewayPorts["updateSettings"]>[0]) =>
+      freezeSuccess(ports.updateSettings(deepFreeze(input))),
+    listTags: (headers: Parameters<GatewayPorts["listTags"]>[0]) =>
+      freezeSuccess(ports.listTags(deepFreeze(headers))),
+    createTag: (input: Parameters<GatewayPorts["createTag"]>[0]) =>
+      freezeSuccess(ports.createTag(deepFreeze(input))),
+    deleteTag: (input: Parameters<GatewayPorts["deleteTag"]>[0]) =>
+      freezeSuccess(ports.deleteTag(deepFreeze(input))),
+    listTagSuggestions: (
+      headers: Parameters<GatewayPorts["listTagSuggestions"]>[0]
+    ) => freezeSuccess(ports.listTagSuggestions(deepFreeze(headers))),
+    promoteTagSuggestion: (
+      input: Parameters<GatewayPorts["promoteTagSuggestion"]>[0]
+    ) => freezeSuccess(ports.promoteTagSuggestion(deepFreeze(input))),
+    listReadingDictionary: (
+      headers: Parameters<GatewayPorts["listReadingDictionary"]>[0]
+    ) => freezeSuccess(ports.listReadingDictionary(deepFreeze(headers))),
+    createReadingDictionary: (
+      input: Parameters<GatewayPorts["createReadingDictionary"]>[0]
+    ) => freezeSuccess(ports.createReadingDictionary(deepFreeze(input))),
+    updateReadingDictionary: (
+      input: Parameters<GatewayPorts["updateReadingDictionary"]>[0]
+    ) => freezeSuccess(ports.updateReadingDictionary(deepFreeze(input))),
+    deleteReadingDictionary: (
+      input: Parameters<GatewayPorts["deleteReadingDictionary"]>[0]
+    ) => freezeSuccess(ports.deleteReadingDictionary(deepFreeze(input))),
+    getEnrichQueue: (headers: Parameters<GatewayPorts["getEnrichQueue"]>[0]) =>
+      freezeSuccess(ports.getEnrichQueue(deepFreeze(headers))),
+    enrichReprocess: (
+      headers: Parameters<GatewayPorts["enrichReprocess"]>[0]
+    ) => freezeSuccess(ports.enrichReprocess(deepFreeze(headers))),
+    enrichResetDaily: (
+      headers: Parameters<GatewayPorts["enrichResetDaily"]>[0]
+    ) => freezeSuccess(ports.enrichResetDaily(deepFreeze(headers))),
   })
 
 export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
@@ -128,15 +195,18 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
               ...(headers.authorization === undefined
                 ? {}
                 : { authorization: headers.authorization }),
-              ...(headers.cookie === undefined ? {} : { cookie: headers.cookie }),
+              ...(headers.cookie === undefined
+                ? {}
+                : { cookie: headers.cookie }),
               ...(headers.traceparent === undefined
                 ? {}
                 : { traceparent: headers.traceparent }),
             },
             jobId: params.jobId,
-            afterSequence: Number.isSafeInteger(headerSequence) && headerSequence >= 0
-              ? headerSequence
-              : (query.lastEventId ?? 0),
+            afterSequence:
+              Number.isSafeInteger(headerSequence) && headerSequence >= 0
+                ? headerSequence
+                : (query.lastEventId ?? 0),
           })
         })
     ),
@@ -171,6 +241,135 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
             headers,
             subscriptionId: params.subscriptionId,
           })
+        )
+        .handle("updateFeedSubscription", ({ headers, params, payload }) =>
+          handlers.updateFeedSubscription({
+            headers,
+            subscriptionId: params.subscriptionId,
+            payload,
+          })
+        )
+    ),
+    HttpApiBuilder.group(gatewayApi, "feeds", (group) =>
+      group
+        .handle("listFeeds", ({ headers, query }) =>
+          handlers.listFeeds({
+            headers,
+            ...(query.q === undefined ? {} : { q: query.q }),
+          })
+        )
+        .handle("registerFeed", ({ headers, payload }) =>
+          handlers.registerFeed({ headers, payload })
+        )
+    ),
+    HttpApiBuilder.group(gatewayApi, "articles", (group) =>
+      group
+        .handle("listArticles", ({ headers, query }) =>
+          handlers.listArticles({
+            headers,
+            query: {
+              ...(query.limit === undefined ? {} : { limit: query.limit }),
+              ...(query.state === undefined ? {} : { state: query.state }),
+              ...(query.includeHidden === undefined
+                ? {}
+                : { includeHidden: query.includeHidden }),
+              ...(query.feedIds === undefined
+                ? {}
+                : { feedIds: query.feedIds }),
+              ...(query.q === undefined ? {} : { q: query.q }),
+              ...(query.sort === undefined ? {} : { sort: query.sort }),
+            },
+          })
+        )
+        .handle("getArticleFacets", ({ headers, query }) =>
+          handlers.getArticleFacets({
+            headers,
+            query: {
+              ...(query.includeHidden === undefined
+                ? {}
+                : { includeHidden: query.includeHidden }),
+              ...(query.feedIds === undefined
+                ? {}
+                : { feedIds: query.feedIds }),
+              ...(query.q === undefined ? {} : { q: query.q }),
+            },
+          })
+        )
+        .handle("getArticle", ({ headers, params }) =>
+          handlers.getArticle({ headers, articleId: params.articleId })
+        )
+        .handle("getArticleMarkdown", ({ headers, params }) =>
+          handlers.getArticleMarkdown({
+            headers,
+            articleId: params.articleId,
+          })
+        )
+        .handle("patchArticle", ({ headers, params, payload }) =>
+          handlers.patchArticle({
+            headers,
+            articleId: params.articleId,
+            payload,
+          })
+        )
+        .handle("bulkPatchArticles", ({ headers, payload }) =>
+          handlers.bulkPatchArticles({ headers, payload })
+        )
+        .handle("archiveArticle", ({ headers, params }) =>
+          handlers.archiveArticle({ headers, articleId: params.articleId })
+        )
+        .handle("listArticleTags", ({ headers, params }) =>
+          handlers.listArticleTags({ headers, articleId: params.articleId })
+        )
+        .handle("setArticleTags", ({ headers, params, payload }) =>
+          handlers.setArticleTags({
+            headers,
+            articleId: params.articleId,
+            payload,
+          })
+        )
+        .handle("enrichArticle", ({ headers, params }) =>
+          handlers.enrichArticle({ headers, articleId: params.articleId })
+        )
+    ),
+    HttpApiBuilder.group(gatewayApi, "personalization", (group) =>
+      group
+        .handle("getSettings", ({ headers }) => handlers.getSettings(headers))
+        .handle("updateSettings", ({ headers, payload }) =>
+          handlers.updateSettings({ headers, payload })
+        )
+        .handle("listTags", ({ headers }) => handlers.listTags(headers))
+        .handle("createTag", ({ headers, payload }) =>
+          handlers.createTag({ headers, payload })
+        )
+        .handle("deleteTag", ({ headers, params }) =>
+          handlers.deleteTag({ headers, tagId: params.tagId })
+        )
+        .handle("listTagSuggestions", ({ headers }) =>
+          handlers.listTagSuggestions(headers)
+        )
+        .handle("promoteTagSuggestion", ({ headers, payload }) =>
+          handlers.promoteTagSuggestion({ headers, payload })
+        )
+        .handle("listReadingDictionary", ({ headers }) =>
+          handlers.listReadingDictionary(headers)
+        )
+        .handle("createReadingDictionary", ({ headers, payload }) =>
+          handlers.createReadingDictionary({ headers, payload })
+        )
+        .handle("updateReadingDictionary", ({ headers, params, payload }) =>
+          handlers.updateReadingDictionary({ headers, id: params.id, payload })
+        )
+        .handle("deleteReadingDictionary", ({ headers, params }) =>
+          handlers.deleteReadingDictionary({ headers, id: params.id })
+        )
+        .handle("getEnrichQueue", ({ headers }) =>
+          handlers.getEnrichQueue(headers)
+        )
+        .handle("enrichReprocess", ({ headers }) =>
+          handlers.enrichReprocess(headers)
+        )
+        .handle("enrichResetDaily", ({ headers }) =>
+          handlers.enrichResetDaily(headers)
         )
     )
   )

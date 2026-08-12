@@ -210,7 +210,10 @@ export const EpisodeJobEventsHeadersSchema = Schema.Struct({
 }).annotate({ identifier: "EpisodeJobEventsHeaders" })
 export const EpisodeJobEventsQuerySchema = Schema.Struct({
   lastEventId: Schema.optional(
-    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+    Schema.NumberFromString.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(0)
+    )
   ),
 }).annotate({ identifier: "EpisodeJobEventsQuery" })
 
@@ -293,6 +296,274 @@ export const FeedSubscriptionPageSchema = Schema.Struct({
   items: Schema.Array(FeedSubscriptionSchema),
   page: Schema.Struct({ hasMore: Schema.Literal(false) }),
 }).annotate({ identifier: "FeedSubscriptionPage" })
+export const UpdateFeedSubscriptionSchema = Schema.Struct({
+  enabled: Schema.Boolean,
+})
+export const UpdatedFeedSubscriptionSchema = Schema.Struct({
+  ...feedSubscriptionFields,
+  enabled: Schema.Boolean,
+}).annotate({ identifier: "UpdatedFeedSubscription" })
+export const FeedSchema = Schema.Struct({
+  id: FeedIdSchema,
+  feedUrl: CanonicalFeedUrlSchema,
+}).annotate({ identifier: "Feed" })
+export const FeedPageSchema = Schema.Struct({
+  items: Schema.Array(FeedSchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "FeedPage" })
+export const RegisteredFeedSchema = Schema.Struct({
+  feed: FeedSchema,
+  subscription: FeedSubscriptionSchema,
+})
+  .annotate({ identifier: "RegisteredFeed" })
+  .pipe(HttpApiSchema.status(201))
+
+const ArticleStateFilterSchema = Schema.Literals([
+  "all",
+  "unread",
+  "saved",
+  "later",
+])
+const ArticleStatePatchFields = {
+  read: Schema.optional(Schema.Boolean),
+  saved: Schema.optional(Schema.Boolean),
+  readLater: Schema.optional(Schema.Boolean),
+  hidden: Schema.optional(Schema.Boolean),
+} as const
+export const ArticleStatePatchSchema = Schema.Struct(
+  ArticleStatePatchFields
+).check(
+  Schema.makeFilter(
+    (value) =>
+      Object.values(value).some((item) => item !== undefined) ||
+      "at least one state field is required"
+  )
+)
+export const ArticleSchema = Schema.Struct({
+  id: ArticleIdSchema,
+  feedId: FeedIdSchema,
+  title: boundedText(500),
+  url: AbsoluteHttpUrlSchema,
+  publishedAt: Schema.optional(UtcDateTimeStringSchema),
+  discoveredAt: UtcDateTimeStringSchema,
+  archiveStatus: Schema.Literals(["pending", "succeeded"]),
+  snapshotId: Schema.optional(SnapshotIdSchema),
+  read: Schema.Boolean,
+  saved: Schema.Boolean,
+  readLater: Schema.Boolean,
+  hidden: Schema.Boolean,
+  hiddenAt: Schema.optional(UtcDateTimeStringSchema),
+}).annotate({ identifier: "Article" })
+export const ArticlePageSchema = Schema.Struct({
+  items: Schema.Array(ArticleSchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "ArticlePage" })
+export const ArticleFacetsSchema = Schema.Struct({
+  states: Schema.Struct({
+    all: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    unread: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    saved: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    later: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }),
+  feeds: Schema.Array(
+    Schema.Struct({
+      feedId: FeedIdSchema,
+      count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    })
+  ),
+}).annotate({ identifier: "ArticleFacets" })
+export const BulkArticleStateSchema = Schema.Struct({
+  state: Schema.optional(ArticleStateFilterSchema),
+  includeHidden: Schema.optional(Schema.Boolean),
+  feedIds: Schema.optional(Schema.Array(FeedIdSchema)),
+  q: Schema.optional(boundedText(200)),
+  ...ArticleStatePatchFields,
+}).check(
+  Schema.makeFilter(
+    (value) =>
+      value.read !== undefined ||
+      value.saved !== undefined ||
+      value.readLater !== undefined ||
+      value.hidden !== undefined ||
+      "at least one state field is required"
+  )
+)
+export const BulkArticleStateResultSchema = Schema.Struct({
+  updated: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+})
+export const ArticleMarkdownSchema = Schema.Struct({
+  markdown: Schema.String.check(Schema.isMaxLength(1_048_576)),
+})
+export const ArticleArchiveResultSchema = Schema.Struct({
+  status: Schema.Literals(["archived", "already_archived"]),
+})
+export const ArticleTagSchema = Schema.Struct({
+  articleId: ArticleIdSchema,
+  tagId: Schema.String.check(Schema.isUUID(4)),
+  name: boundedText(50),
+  source: Schema.Literals(["manual", "ai"]),
+  confidence: Schema.NullOr(
+    Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))
+  ),
+})
+export const ArticleTagsSchema = Schema.Struct({
+  items: Schema.Array(ArticleTagSchema).check(Schema.isMaxLength(100)),
+})
+export const SetArticleTagsSchema = Schema.Struct({
+  tagIds: Schema.Array(Schema.String.check(Schema.isUUID(4))).check(
+    Schema.isMaxLength(100)
+  ),
+})
+
+export const GenerationScheduleSchema = Schema.Struct({
+  enabled: Schema.Boolean,
+  localTime: Schema.String.check(
+    Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/)
+  ),
+  timeZone: boundedText(100),
+}).annotate({ identifier: "GenerationSchedule" })
+export const InterestProfileSchema = Schema.Struct({
+  include: Schema.String.check(Schema.isMaxLength(2_000)),
+  exclude: Schema.String.check(Schema.isMaxLength(2_000)),
+}).annotate({ identifier: "InterestProfile" })
+export const UserSettingsSchema = Schema.Struct({
+  generationSchedule: GenerationScheduleSchema,
+  interestProfile: InterestProfileSchema,
+}).annotate({ identifier: "UserSettings" })
+export const UpdateSettingsSchema = Schema.Union([
+  Schema.Struct({
+    generationSchedule: GenerationScheduleSchema,
+    interestProfile: Schema.optional(InterestProfileSchema),
+  }),
+  Schema.Struct({
+    generationSchedule: Schema.optional(GenerationScheduleSchema),
+    interestProfile: InterestProfileSchema,
+  }),
+]).annotate({ identifier: "UpdateSettings" })
+
+const TagIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
+  Schema.brand("TagId")
+)
+const TagNameSchema = boundedText(50)
+const tagFields = {
+  id: TagIdSchema,
+  name: TagNameSchema,
+  createdAt: UtcDateTimeStringSchema,
+} as const
+export const TagSchema = Schema.Struct(tagFields).annotate({
+  identifier: "Tag",
+})
+export const TagPageSchema = Schema.Struct({
+  items: Schema.Array(TagSchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "TagPage" })
+export const TagSuggestionSchema = Schema.Struct({
+  name: TagNameSchema,
+  occurrences: Schema.Int.check(Schema.isGreaterThan(0)),
+  lastSeenAt: UtcDateTimeStringSchema,
+}).annotate({ identifier: "TagSuggestion" })
+export const TagSuggestionPageSchema = Schema.Struct({
+  items: Schema.Array(TagSuggestionSchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "TagSuggestionPage" })
+export const CreateTagSchema = Schema.Struct({ name: TagNameSchema })
+export const CreatedTagSchema = Schema.Struct(tagFields)
+  .annotate({ identifier: "CreatedTag" })
+  .pipe(HttpApiSchema.status(201))
+
+const ReadingTextSchema = boundedText(100)
+const readingDictionaryFields = {
+  id: Schema.String.check(Schema.isUUID(4)),
+  surface: ReadingTextSchema,
+  reading: ReadingTextSchema,
+  accentType: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  source: Schema.Literals(["manual", "ai_auto"]),
+  episodeJobId: Schema.optional(JobIdSchema),
+  createdAt: UtcDateTimeStringSchema,
+  updatedAt: UtcDateTimeStringSchema,
+} as const
+export const ReadingDictionaryEntrySchema = Schema.Struct(
+  readingDictionaryFields
+).annotate({ identifier: "ReadingDictionaryEntry" })
+export const ReadingDictionaryPageSchema = Schema.Struct({
+  items: Schema.Array(ReadingDictionaryEntrySchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "ReadingDictionaryPage" })
+export const CreateReadingDictionarySchema = Schema.Struct({
+  surface: ReadingTextSchema,
+  reading: ReadingTextSchema,
+  accentType: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))
+  ),
+})
+export const UpdateReadingDictionarySchema = Schema.Union([
+  Schema.Struct({
+    surface: ReadingTextSchema,
+    reading: Schema.optional(ReadingTextSchema),
+    accentType: Schema.optional(
+      Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))
+    ),
+  }),
+  Schema.Struct({
+    surface: Schema.optional(ReadingTextSchema),
+    reading: ReadingTextSchema,
+    accentType: Schema.optional(
+      Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))
+    ),
+  }),
+  Schema.Struct({
+    surface: Schema.optional(ReadingTextSchema),
+    reading: Schema.optional(ReadingTextSchema),
+    accentType: Schema.Int.check(
+      Schema.isBetween({ minimum: 0, maximum: 100 })
+    ),
+  }),
+])
+export const CreatedReadingDictionaryEntrySchema = Schema.Struct(
+  readingDictionaryFields
+)
+  .annotate({ identifier: "CreatedReadingDictionaryEntry" })
+  .pipe(HttpApiSchema.status(201))
+
+export const EnrichQueueItemSchema = Schema.Struct({
+  feedItemId: ArticleIdSchema,
+  title: Schema.String,
+  sourceName: Schema.String,
+  priority: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  reason: Schema.Literals(["new", "reprocess"]),
+  status: Schema.Literals(["queued", "processing", "succeeded", "failed"]),
+  attempt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  error: Schema.optional(Schema.String),
+  publishedAt: Schema.optional(UtcDateTimeStringSchema),
+  createdAt: UtcDateTimeStringSchema,
+  startedAt: Schema.optional(UtcDateTimeStringSchema),
+  completedAt: Schema.optional(UtcDateTimeStringSchema),
+}).annotate({ identifier: "EnrichQueueItem" })
+export const EnrichQueueSchema = Schema.Struct({
+  processing: Schema.Array(EnrichQueueItemSchema),
+  pending: Schema.Struct({
+    count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    items: Schema.Array(EnrichQueueItemSchema),
+  }),
+  failed: Schema.Struct({
+    count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    items: Schema.Array(EnrichQueueItemSchema),
+  }),
+  recent: Schema.Array(EnrichQueueItemSchema),
+  daily: Schema.Struct({
+    used: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    limit: Schema.Int.check(Schema.isGreaterThan(0)),
+  }),
+  reprocessable: Schema.Struct({
+    count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }),
+}).annotate({ identifier: "EnrichQueue" })
+export const EnrichmentEnqueuedSchema = Schema.Struct({
+  enqueued: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+})
+export const EnrichmentResetSchema = Schema.Struct({
+  message: Schema.Literal("Daily enrichment usage reset"),
+})
 
 const problemSchema = <const Status extends number>(
   status: Status,
@@ -392,7 +663,12 @@ export const listEpisodeJobsEndpoint = HttpApiEndpoint.get(
     success: EpisodeJobPageSchema,
     error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
   }
-).annotateMerge(OpenApi.annotations({ identifier: "listEpisodeJobs", summary: "List episode jobs" }))
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "listEpisodeJobs",
+    summary: "List episode jobs",
+  })
+)
 
 export const getEpisodeJobEndpoint = HttpApiEndpoint.get(
   "getEpisodeJob",
@@ -401,9 +677,18 @@ export const getEpisodeJobEndpoint = HttpApiEndpoint.get(
     params: { jobId: JobIdSchema },
     headers: SessionHeadersSchema,
     success: EpisodeJobSchema,
-    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
-).annotateMerge(OpenApi.annotations({ identifier: "getEpisodeJob", summary: "Get an episode job" }))
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "getEpisodeJob",
+    summary: "Get an episode job",
+  })
+)
 
 export const cancelEpisodeJobEndpoint = HttpApiEndpoint.post(
   "cancelEpisodeJob",
@@ -412,9 +697,19 @@ export const cancelEpisodeJobEndpoint = HttpApiEndpoint.post(
     params: { jobId: JobIdSchema },
     headers: SessionHeadersSchema,
     success: EpisodeJobSchema,
-    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, ConflictProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
-).annotateMerge(OpenApi.annotations({ identifier: "cancelEpisodeJob", summary: "Cancel an episode job" }))
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "cancelEpisodeJob",
+    summary: "Cancel an episode job",
+  })
+)
 
 export const retryEpisodeJobEndpoint = HttpApiEndpoint.post(
   "retryEpisodeJob",
@@ -423,9 +718,19 @@ export const retryEpisodeJobEndpoint = HttpApiEndpoint.post(
     params: { jobId: JobIdSchema },
     headers: RetryEpisodeJobHeadersSchema,
     success: JobReceiptSchema,
-    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, ConflictProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
-).annotateMerge(OpenApi.annotations({ identifier: "retryEpisodeJob", summary: "Retry an episode job" }))
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "retryEpisodeJob",
+    summary: "Retry an episode job",
+  })
+)
 
 export const streamEpisodeJobEventsEndpoint = HttpApiEndpoint.get(
   "streamEpisodeJobEvents",
@@ -435,9 +740,18 @@ export const streamEpisodeJobEventsEndpoint = HttpApiEndpoint.get(
     headers: EpisodeJobEventsHeadersSchema,
     query: EpisodeJobEventsQuerySchema,
     success: EpisodeJobEventStreamSchema,
-    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
-).annotateMerge(OpenApi.annotations({ identifier: "streamEpisodeJobEvents", summary: "Replay episode job events" }))
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "streamEpisodeJobEvents",
+    summary: "Replay episode job events",
+  })
+)
 
 export const getEpisodeEndpoint = HttpApiEndpoint.get(
   "getEpisode",
@@ -446,9 +760,18 @@ export const getEpisodeEndpoint = HttpApiEndpoint.get(
     params: { episodeId: EpisodeIdSchema },
     headers: SessionHeadersSchema,
     success: EpisodeSchema,
-    error: [UnauthorizedProblemSchema, NotFoundProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
-).annotateMerge(OpenApi.annotations({ identifier: "getEpisode", summary: "Get a completed episode" }))
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "getEpisode",
+    summary: "Get a completed episode",
+  })
+)
 
 export const createAudioAccessEndpoint = HttpApiEndpoint.post(
   "createAudioAccess",
@@ -525,6 +848,348 @@ export const deleteFeedSubscriptionEndpoint = HttpApiEndpoint.delete(
     summary: "Delete a feed subscription",
   })
 )
+export const updateFeedSubscriptionEndpoint = HttpApiEndpoint.patch(
+  "updateFeedSubscription",
+  "/v1/me/feed-subscriptions/:subscriptionId",
+  {
+    params: { subscriptionId: SubscriptionIdSchema },
+    headers: SessionHeadersSchema,
+    payload: UpdateFeedSubscriptionSchema,
+    success: UpdatedFeedSubscriptionSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const listFeedsEndpoint = HttpApiEndpoint.get("listFeeds", "/v1/feeds", {
+  headers: SessionHeadersSchema,
+  query: Schema.Struct({ q: Schema.optional(boundedText(200)) }),
+  success: FeedPageSchema,
+  error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+})
+export const registerFeedEndpoint = HttpApiEndpoint.post(
+  "registerFeed",
+  "/v1/feeds",
+  {
+    headers: SessionHeadersSchema,
+    payload: AddFeedSubscriptionRequestSchema,
+    success: RegisteredFeedSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      UnprocessableProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+
+const ArticleListFilterSchema = Schema.Struct({
+  limit: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))
+  ),
+  state: Schema.optional(ArticleStateFilterSchema),
+  includeHidden: Schema.optional(Schema.Boolean),
+  feedIds: Schema.optional(Schema.Array(FeedIdSchema)),
+  q: Schema.optional(boundedText(200)),
+  sort: Schema.optional(Schema.Literals(["newest", "oldest"])),
+})
+const ArticleFacetsQuerySchema = Schema.Struct({
+  includeHidden: Schema.optional(Schema.Boolean),
+  feedIds: Schema.optional(Schema.Array(FeedIdSchema)),
+  q: Schema.optional(boundedText(200)),
+})
+export const listArticlesEndpoint = HttpApiEndpoint.get(
+  "listArticles",
+  "/v1/me/articles",
+  {
+    headers: SessionHeadersSchema,
+    query: ArticleListFilterSchema,
+    success: ArticlePageSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const getArticleFacetsEndpoint = HttpApiEndpoint.get(
+  "getArticleFacets",
+  "/v1/me/articles/facets",
+  {
+    headers: SessionHeadersSchema,
+    query: ArticleFacetsQuerySchema,
+    success: ArticleFacetsSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const getArticleEndpoint = HttpApiEndpoint.get(
+  "getArticle",
+  "/v1/me/articles/:articleId",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema },
+    success: ArticleSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const getArticleMarkdownEndpoint = HttpApiEndpoint.get(
+  "getArticleMarkdown",
+  "/v1/me/articles/:articleId/markdown",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema },
+    success: ArticleMarkdownSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const patchArticleEndpoint = HttpApiEndpoint.patch(
+  "patchArticle",
+  "/v1/me/articles/:articleId",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema },
+    payload: ArticleStatePatchSchema,
+    success: ArticleSchema,
+    error: [
+      BadRequestProblemSchema,
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const bulkPatchArticlesEndpoint = HttpApiEndpoint.post(
+  "bulkPatchArticles",
+  "/v1/me/articles/bulk-state",
+  {
+    headers: SessionHeadersSchema,
+    payload: BulkArticleStateSchema,
+    success: BulkArticleStateResultSchema,
+    error: [
+      BadRequestProblemSchema,
+      UnauthorizedProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const archiveArticleEndpoint = HttpApiEndpoint.post(
+  "archiveArticle",
+  "/v1/me/articles/:articleId/archive",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema },
+    success: ArticleArchiveResultSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const listArticleTagsEndpoint = HttpApiEndpoint.get(
+  "listArticleTags",
+  "/v1/me/articles/:articleId/tags",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema },
+    success: ArticleTagsSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const setArticleTagsEndpoint = HttpApiEndpoint.put(
+  "setArticleTags",
+  "/v1/me/articles/:articleId/tags",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema },
+    payload: SetArticleTagsSchema,
+    success: ArticleTagsSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const enrichArticleEndpoint = HttpApiEndpoint.post(
+  "enrichArticle",
+  "/v1/me/articles/:articleId/enrich",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema },
+    success: EnrichmentEnqueuedSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+
+export const getSettingsEndpoint = HttpApiEndpoint.get(
+  "getSettings",
+  "/v1/me/settings",
+  {
+    headers: SessionHeadersSchema,
+    success: UserSettingsSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const updateSettingsEndpoint = HttpApiEndpoint.patch(
+  "updateSettings",
+  "/v1/me/settings",
+  {
+    headers: SessionHeadersSchema,
+    payload: UpdateSettingsSchema,
+    success: UserSettingsSchema,
+    error: [
+      BadRequestProblemSchema,
+      UnauthorizedProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const listTagsEndpoint = HttpApiEndpoint.get("listTags", "/v1/me/tags", {
+  headers: SessionHeadersSchema,
+  success: TagPageSchema,
+  error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+})
+export const createTagEndpoint = HttpApiEndpoint.post(
+  "createTag",
+  "/v1/me/tags",
+  {
+    headers: SessionHeadersSchema,
+    payload: CreateTagSchema,
+    success: CreatedTagSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const deleteTagEndpoint = HttpApiEndpoint.delete(
+  "deleteTag",
+  "/v1/me/tags/:tagId",
+  {
+    headers: SessionHeadersSchema,
+    params: { tagId: TagIdSchema },
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const listTagSuggestionsEndpoint = HttpApiEndpoint.get(
+  "listTagSuggestions",
+  "/v1/me/tag-suggestions",
+  {
+    headers: SessionHeadersSchema,
+    success: TagSuggestionPageSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const promoteTagSuggestionEndpoint = HttpApiEndpoint.post(
+  "promoteTagSuggestion",
+  "/v1/me/tag-suggestions/promote",
+  {
+    headers: SessionHeadersSchema,
+    payload: CreateTagSchema,
+    success: CreatedTagSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const listReadingDictionaryEndpoint = HttpApiEndpoint.get(
+  "listReadingDictionary",
+  "/v1/me/reading-dictionary",
+  {
+    headers: SessionHeadersSchema,
+    success: ReadingDictionaryPageSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const createReadingDictionaryEndpoint = HttpApiEndpoint.post(
+  "createReadingDictionary",
+  "/v1/me/reading-dictionary",
+  {
+    headers: SessionHeadersSchema,
+    payload: CreateReadingDictionarySchema,
+    success: CreatedReadingDictionaryEntrySchema,
+    error: [
+      UnauthorizedProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const updateReadingDictionaryEndpoint = HttpApiEndpoint.put(
+  "updateReadingDictionary",
+  "/v1/me/reading-dictionary/:id",
+  {
+    headers: SessionHeadersSchema,
+    params: { id: Schema.String.check(Schema.isUUID(4)) },
+    payload: UpdateReadingDictionarySchema,
+    success: ReadingDictionaryEntrySchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const deleteReadingDictionaryEndpoint = HttpApiEndpoint.delete(
+  "deleteReadingDictionary",
+  "/v1/me/reading-dictionary/:id",
+  {
+    headers: SessionHeadersSchema,
+    params: { id: Schema.String.check(Schema.isUUID(4)) },
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const getEnrichQueueEndpoint = HttpApiEndpoint.get(
+  "getEnrichQueue",
+  "/v1/me/enrich/queue",
+  {
+    headers: SessionHeadersSchema,
+    success: EnrichQueueSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const enrichReprocessEndpoint = HttpApiEndpoint.post(
+  "enrichReprocess",
+  "/v1/me/enrich/reprocess",
+  {
+    headers: SessionHeadersSchema,
+    success: EnrichmentEnqueuedSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const enrichResetDailyEndpoint = HttpApiEndpoint.post(
+  "enrichResetDaily",
+  "/v1/me/enrich/reset-daily",
+  {
+    headers: SessionHeadersSchema,
+    success: EnrichmentResetSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
 
 const systemGroup = HttpApiGroup.make("system")
   .add(healthEndpoint)
@@ -549,9 +1214,45 @@ const feedSubscriptionsGroup = HttpApiGroup.make("feedSubscriptions")
   .add(
     addFeedSubscriptionEndpoint,
     listFeedSubscriptionsEndpoint,
-    deleteFeedSubscriptionEndpoint
+    deleteFeedSubscriptionEndpoint,
+    updateFeedSubscriptionEndpoint
   )
   .annotateMerge(OpenApi.annotations({ title: "Feed subscriptions" }))
+const feedsGroup = HttpApiGroup.make("feeds")
+  .add(listFeedsEndpoint, registerFeedEndpoint)
+  .annotateMerge(OpenApi.annotations({ title: "Feeds" }))
+const articlesGroup = HttpApiGroup.make("articles")
+  .add(
+    listArticlesEndpoint,
+    getArticleFacetsEndpoint,
+    getArticleEndpoint,
+    getArticleMarkdownEndpoint,
+    patchArticleEndpoint,
+    bulkPatchArticlesEndpoint,
+    archiveArticleEndpoint,
+    listArticleTagsEndpoint,
+    setArticleTagsEndpoint,
+    enrichArticleEndpoint
+  )
+  .annotateMerge(OpenApi.annotations({ title: "Articles" }))
+const personalizationGroup = HttpApiGroup.make("personalization")
+  .add(
+    getSettingsEndpoint,
+    updateSettingsEndpoint,
+    listTagsEndpoint,
+    createTagEndpoint,
+    deleteTagEndpoint,
+    listTagSuggestionsEndpoint,
+    promoteTagSuggestionEndpoint,
+    listReadingDictionaryEndpoint,
+    createReadingDictionaryEndpoint,
+    updateReadingDictionaryEndpoint,
+    deleteReadingDictionaryEndpoint,
+    getEnrichQueueEndpoint,
+    enrichReprocessEndpoint,
+    enrichResetDailyEndpoint
+  )
+  .annotateMerge(OpenApi.annotations({ title: "Personalization" }))
 
 export const gatewayApi = HttpApi.make("gateway")
   .add(
@@ -559,7 +1260,10 @@ export const gatewayApi = HttpApi.make("gateway")
     sessionGroup,
     episodeJobsGroup,
     episodesGroup,
-    feedSubscriptionsGroup
+    feedSubscriptionsGroup,
+    feedsGroup,
+    articlesGroup,
+    personalizationGroup
   )
   .annotateMerge(
     OpenApi.annotations({

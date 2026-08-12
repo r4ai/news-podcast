@@ -2,8 +2,19 @@ import type { Effect, Schema } from "effect"
 
 import {
   AddFeedSubscriptionRequestSchema,
+  ArticleArchiveResultSchema,
+  ArticleFacetsSchema,
+  ArticleIdSchema,
+  ArticleMarkdownSchema,
+  ArticlePageSchema,
+  ArticleSchema,
+  ArticleStatePatchSchema,
+  ArticleTagsSchema,
+  SetArticleTagsSchema,
   AudioAccessSchema,
   BadRequestProblemSchema,
+  BulkArticleStateResultSchema,
+  BulkArticleStateSchema,
   ConflictProblemSchema,
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
@@ -14,6 +25,22 @@ import {
   EpisodePageSchema,
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
+  FeedPageSchema,
+  RegisteredFeedSchema,
+  UpdatedFeedSubscriptionSchema,
+  UpdateFeedSubscriptionSchema,
+  UserSettingsSchema,
+  UpdateSettingsSchema,
+  TagSchema,
+  TagPageSchema,
+  TagSuggestionPageSchema,
+  CreateTagSchema,
+  ReadingDictionaryEntrySchema,
+  ReadingDictionaryPageSchema,
+  CreateReadingDictionarySchema,
+  UpdateReadingDictionarySchema,
+  EnrichQueueSchema,
+  EnrichmentEnqueuedSchema,
   HealthResponseSchema,
   JobReceiptSchema,
   JobIdSchema,
@@ -152,6 +179,250 @@ export type GatewayPorts = Readonly<{
     | TypeOf<typeof BadRequestProblemSchema>
     | TypeOf<typeof UnauthorizedProblemSchema>
     | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  updateFeedSubscription: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly subscriptionId: TypeOf<typeof SubscriptionIdSchema>
+    readonly payload: TypeOf<typeof UpdateFeedSubscriptionSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof UpdatedFeedSubscriptionSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listFeeds: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly q?: string
+  }) => Effect.Effect<
+    TypeOf<typeof FeedPageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  registerFeed: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly payload: TypeOf<typeof AddFeedSubscriptionRequestSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof RegisteredFeedSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnprocessableProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listArticles: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly query: Readonly<{
+      readonly limit?: number
+      readonly state?: "all" | "unread" | "saved" | "later"
+      readonly includeHidden?: boolean
+      readonly feedIds?: readonly string[]
+      readonly q?: string
+      readonly sort?: "newest" | "oldest"
+    }>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticlePageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getArticle: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getArticleMarkdown: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleMarkdownSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  patchArticle: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+    readonly payload: TypeOf<typeof ArticleStatePatchSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleSchema>,
+    | TypeOf<typeof BadRequestProblemSchema>
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  bulkPatchArticles: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly payload: TypeOf<typeof BulkArticleStateSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof BulkArticleStateResultSchema>,
+    | TypeOf<typeof BadRequestProblemSchema>
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getArticleFacets: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly query: Readonly<{
+      readonly includeHidden?: boolean
+      readonly feedIds?: readonly string[]
+      readonly q?: string
+    }>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleFacetsSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  archiveArticle: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleArchiveResultSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listArticleTags: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleTagsSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  setArticleTags: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+    readonly payload: TypeOf<typeof SetArticleTagsSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleTagsSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  enrichArticle: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof EnrichmentEnqueuedSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getSettings: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    TypeOf<typeof UserSettingsSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  updateSettings: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly payload: TypeOf<typeof UpdateSettingsSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof UserSettingsSchema>,
+    | TypeOf<typeof BadRequestProblemSchema>
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listTags: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    TypeOf<typeof TagPageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  createTag: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly payload: TypeOf<typeof CreateTagSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof TagSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  deleteTag: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly tagId: string
+  }) => Effect.Effect<
+    void,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listTagSuggestions: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    TypeOf<typeof TagSuggestionPageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  promoteTagSuggestion: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly payload: TypeOf<typeof CreateTagSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof TagSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listReadingDictionary: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    TypeOf<typeof ReadingDictionaryPageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  createReadingDictionary: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly payload: TypeOf<typeof CreateReadingDictionarySchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ReadingDictionaryEntrySchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  updateReadingDictionary: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly id: string
+    readonly payload: TypeOf<typeof UpdateReadingDictionarySchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ReadingDictionaryEntrySchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  deleteReadingDictionary: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly id: string
+  }) => Effect.Effect<
+    void,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getEnrichQueue: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    TypeOf<typeof EnrichQueueSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  enrichReprocess: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    { readonly enqueued: number },
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  enrichResetDaily: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    { readonly message: "Daily enrichment usage reset" },
+    | TypeOf<typeof UnauthorizedProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
 }>
