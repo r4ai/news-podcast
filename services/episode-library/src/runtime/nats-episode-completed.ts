@@ -51,7 +51,7 @@ export const handleNatsEpisodeCompleted = (ports: EpisodeCompletionPorts) =>
                     })
                   )
                 ),
-                subjects.production.jobCompleted,
+                subjects.production.jobCompletedV2,
                 "process"
               ),
               envelope.traceparent

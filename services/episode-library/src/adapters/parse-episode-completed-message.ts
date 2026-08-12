@@ -1,5 +1,5 @@
 import {
-  parseEpisodeCompleted,
+  parseEpisodeCompletedV2,
   parseMessageEnvelope,
 } from "@news-podcast/protocols"
 import { DateTime, Effect } from "effect"
@@ -26,14 +26,24 @@ export const parseEpisodeCompletedMessage = (input: unknown) =>
     ) {
       return yield* untrustedProducer()
     }
-    const payload = yield* parseEpisodeCompleted(envelope.payload)
+    const payload = yield* parseEpisodeCompletedV2(envelope.payload)
     return (yield* parseNotice({
       messageId: envelope.messageId,
       episodeId: payload.episodeId,
       ownerId: payload.ownerId,
-      audioObjectKey: payload.audioObjectKey,
       title: payload.title,
-      sources: payload.sources,
+      script: payload.script,
+      audio: payload.audio,
+      sources: payload.sources.map((source) => ({
+        _tag: "RssSource" as const,
+        url: source.url,
+        title: source.title,
+        snapshotId: source.snapshotId,
+        ...(source.publishedAt === undefined
+          ? {}
+          : { publishedAt: source.publishedAt }),
+      })),
+      completedAt: payload.completedAt,
       occurredAt: DateTime.formatIso(envelope.occurredAt),
     })) as EpisodeCompletionNotice
   })

@@ -19,9 +19,22 @@ const validMessage = {
   payload: {
     episodeId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
     ownerId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c",
-    audioObjectKey: "episodes/user/episode.wav",
     title: "Daily news",
-    sources: [{ url: "https://example.com/news/1", title: "News 1" }],
+    script: "Full script",
+    audio: {
+      objectKey: "episodes/user/episode.wav",
+      byteLength: 42,
+      contentType: "audio/wav",
+    },
+    sources: [
+      {
+        sourceKind: "rss",
+        snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
+        url: "https://example.com/news/1",
+        title: "News 1",
+      },
+    ],
+    completedAt: "2026-08-12T00:00:00.000Z",
   },
 }
 
@@ -36,15 +49,16 @@ const makePorts = (
       id: notice.episodeId,
       ownerId: notice.ownerId,
       title: notice.title,
-      script: "Full script",
-      audioObjectKey: notice.audioObjectKey,
-      audioByteLength: 42,
-      audioContentType: "audio/wav",
-      createdAt: notice.occurredAt,
+      script: notice.script,
+      audioObjectKey: notice.audio.objectKey,
+      audioByteLength: notice.audio.byteLength,
+      audioContentType: notice.audio.contentType,
+      createdAt: notice.completedAt,
       sources: notice.sources.map((source) => ({
-        sourceKind: "web",
+        sourceKind: "rss",
         url: source.url,
         title: source.title,
+        snapshotId: source.snapshotId,
       })),
     }).pipe(
       Effect.mapError(() => ({ _tag: "CompletionMaterializationFailure" }))
