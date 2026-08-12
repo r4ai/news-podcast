@@ -18,6 +18,7 @@ export type S3AudioObjectStoreConfig = DeepReadonly<{
   readonly bucket: string
   readonly accessKeyId: string
   readonly secretAccessKey: string
+  readonly requestTimeoutMillis: number
 }>
 
 type AudioObjectIdentity = Readonly<{
@@ -113,19 +114,33 @@ export const openS3AudioObjectStoreUnsafe = (
       }
 
       return Effect.tryPromise({
-        try: () =>
-          resource.client.send(
-            new PutObjectCommand({
-              Bucket: config.bucket,
-              Key: objectKey,
-              Body: input.bytes,
-              ContentLength: input.bytes.byteLength,
-              ContentType: "audio/wav",
-            }),
-            input.signal === undefined
-              ? undefined
-              : { abortSignal: input.signal }
-          ),
+        try: async (effectSignal) => {
+          const timeout = new AbortController()
+          const timer = setTimeout(
+            () => timeout.abort(),
+            config.requestTimeoutMillis
+          )
+          timer.unref()
+          const abortSignal = AbortSignal.any([
+            effectSignal,
+            timeout.signal,
+            ...(input.signal === undefined ? [] : [input.signal]),
+          ])
+          try {
+            return await resource.client.send(
+              new PutObjectCommand({
+                Bucket: config.bucket,
+                Key: objectKey,
+                Body: input.bytes,
+                ContentLength: input.bytes.byteLength,
+                ContentType: "audio/wav",
+              }),
+              { abortSignal }
+            )
+          } finally {
+            clearTimeout(timer)
+          }
+        },
         catch: () =>
           input.signal?.aborted === true
             ? pipelineFailure("audio_store_canceled", false)

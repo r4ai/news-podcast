@@ -15,6 +15,7 @@ const config: S3AudioObjectStoreConfig = {
   bucket: "private-audio",
   accessKeyId: "access-secret-id",
   secretAccessKey: "super-secret-key",
+  requestTimeoutMillis: 1_000,
 }
 const ids = {
   ownerId: "owner/../../unsafe" as never,
@@ -44,7 +45,8 @@ describe("S3 audio object store", () => {
         ContentLength: bytes.byteLength,
         ContentType: "audio/wav",
       })
-      expect(options).toEqual({ abortSignal: signal })
+      expect(options.abortSignal).toBeInstanceOf(AbortSignal)
+      expect(options.abortSignal.aborted).toBe(false)
       return {}
     })
     const stored = await Effect.runPromise(
@@ -101,7 +103,7 @@ describe("S3 audio object store", () => {
     )
 
     expect(send).toHaveBeenCalledWith(expect.anything(), {
-      abortSignal: controller.signal,
+      abortSignal: expect.any(AbortSignal),
     })
     expect(failure).toEqual({
       _tag: "PipelineFailure",
@@ -138,6 +140,41 @@ describe("S3 audio object store", () => {
     })
     expect(JSON.stringify(failure)).not.toContain(config.accessKeyId)
     expect(JSON.stringify(failure)).not.toContain(config.secretAccessKey)
+  })
+
+  it("aborts an Object Store upload at the configured deadline", async () => {
+    const resource = openS3AudioObjectStoreUnsafe(
+      { ...config, requestTimeoutMillis: 1 },
+      {
+        createClient: () => ({
+          client: {
+            send: async (
+              _command: unknown,
+              options: { abortSignal: AbortSignal }
+            ) =>
+              new Promise((_resolve, reject) =>
+                options.abortSignal.addEventListener(
+                  "abort",
+                  () => reject(new Error("timed out")),
+                  { once: true }
+                )
+              ),
+          } as never,
+          close: vi.fn(),
+        }),
+        keyFor: () => "episodes/safe/job/episode.wav",
+      }
+    )
+
+    expect(
+      await Effect.runPromise(
+        Effect.flip(resource.store.put({ ...ids, bytes: wav() }))
+      )
+    ).toEqual({
+      _tag: "PipelineFailure",
+      code: "audio_store_unavailable",
+      retryable: true,
+    })
   })
 
   it.each([

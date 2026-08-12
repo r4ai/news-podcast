@@ -37,6 +37,12 @@ export type SqliteJobHandle = Readonly<{
     readonly replace: (document: string) => string
   }) => LeasedJobRow | undefined
   hasLease: (jobId: string, leaseToken: string) => boolean
+  renewLease: (input: {
+    readonly jobId: string
+    readonly leaseToken: string
+    readonly now: string
+    readonly leasedUntil: string
+  }) => boolean
   loadCheckpoint: (jobId: string) => StoredCheckpointRow | undefined
   saveScriptCheckpoint: (input: {
     readonly jobId: string
@@ -156,6 +162,14 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
       AND json_extract(document, '$._tag') = 'Running'
       AND json_extract(document, '$.lease.token') = ?
   `)
+  const renewLease = database.prepare(`
+    UPDATE episode_jobs
+    SET document = json_set(document, '$.lease.leasedUntil', ?)
+    WHERE job_id = ?
+      AND json_extract(document, '$._tag') = 'Running'
+      AND json_extract(document, '$.lease.token') = ?
+      AND json_extract(document, '$.lease.leasedUntil') > ?
+  `)
   const loadCheckpoint = database.prepare(`
     SELECT script, audio FROM episode_execution_checkpoints WHERE job_id = ?
   `)
@@ -234,6 +248,13 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
       }),
     hasLease: (jobId, leaseToken) =>
       hasLease.get(jobId, leaseToken) !== undefined,
+    renewLease: (input) =>
+      renewLease.run(
+        input.leasedUntil,
+        input.jobId,
+        input.leaseToken,
+        input.now
+      ).changes === 1,
     loadCheckpoint: (jobId) => {
       const row = loadCheckpoint.get(jobId) as
         | { readonly script: string; readonly audio: string | null }

@@ -71,12 +71,20 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
     bucket: Schema.NonEmptyString.check(Schema.isMaxLength(255)),
     accessKeyId: secret,
     secretAccessKey: secret,
+    requestTimeoutMillis: positive(300_000),
   }),
   worker: Schema.Struct({
     leaseMillis: positive(3_600_000),
+    heartbeatMillis: positive(1_200_000),
     retryDelayMillis: positive(3_600_000),
     idleMillis: positive(60_000),
-  }),
+  }).check(
+    Schema.makeFilter((worker) =>
+      worker.heartbeatMillis * 3 <= worker.leaseMillis
+        ? true
+        : "heartbeatMillis must be at most one third of leaseMillis"
+    )
+  ),
   completionRelay: Schema.Struct({
     batchSize: positive(100),
     intervalMillis: positive(60_000),
@@ -166,11 +174,13 @@ export const runNodeEpisodeProductionService = (
           const worker = runEpisodeWorkerLoop(
             {
               leaseNext: execution.leaseNext,
+              renewLease: execution.renewLease,
               execute,
               now,
               leasedUntil: (instant) =>
                 addMillis(instant, config.worker.leaseMillis),
               nextLeaseToken: randomLeaseTokenUnsafe,
+              heartbeatMillis: config.worker.heartbeatMillis,
               backoffMillis: () => config.worker.idleMillis,
               wait: (delay) => Effect.sleep(delay),
               observe: (event) =>

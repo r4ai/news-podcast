@@ -186,6 +186,65 @@ describe("SQLite execution repository", () => {
     expect(recovered.afterExpiry?.job.lease.token).toBe("lease-2")
   })
 
+  it("renews only an unexpired matching lease and fences stale workers", async () => {
+    const path = databasePath()
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const commands = yield* sqliteJobRepository(path)
+          const execution = yield* sqliteExecutionRepository(path)
+          yield* commands.saveIdempotently(queued())
+          yield* execution.leaseNext({
+            now: timestamp("2026-08-13T00:01:00.000Z"),
+            leasedUntil: timestamp("2026-08-13T00:06:00.000Z"),
+            leaseToken: token("lease-1"),
+          })
+
+          const applied = yield* execution.renewLease({
+            jobId,
+            leaseToken: token("lease-1"),
+            now: timestamp("2026-08-13T00:02:00.000Z"),
+            leasedUntil: timestamp("2026-08-13T00:07:00.000Z"),
+          })
+          const staleToken = yield* execution.renewLease({
+            jobId,
+            leaseToken: token("lease-stale"),
+            now: timestamp("2026-08-13T00:03:00.000Z"),
+            leasedUntil: timestamp("2026-08-13T00:08:00.000Z"),
+          })
+          const beforeExtendedExpiry = yield* execution.leaseNext({
+            now: timestamp("2026-08-13T00:06:30.000Z"),
+            leasedUntil: timestamp("2026-08-13T00:11:30.000Z"),
+            leaseToken: token("lease-2"),
+          })
+          const expired = yield* execution.renewLease({
+            jobId,
+            leaseToken: token("lease-1"),
+            now: timestamp("2026-08-13T00:07:00.000Z"),
+            leasedUntil: timestamp("2026-08-13T00:12:00.000Z"),
+          })
+          const persisted = yield* execution.findById(jobId)
+          return {
+            applied,
+            staleToken,
+            beforeExtendedExpiry,
+            expired,
+            persisted,
+          }
+        })
+      )
+    )
+
+    expect(result.applied).toBe("Applied")
+    expect(result.staleToken).toBe("StaleLease")
+    expect(result.beforeExtendedExpiry).toBeUndefined()
+    expect(result.expired).toBe("StaleLease")
+    expect(
+      result.persisted?._tag === "Running" &&
+        result.persisted.lease.leasedUntil
+    ).toEqual(timestamp("2026-08-13T00:07:00.000Z"))
+  })
+
   it("leases only due retries and increments their attempt", async () => {
     const path = databasePath()
     const values = await Effect.runPromise(

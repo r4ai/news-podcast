@@ -100,6 +100,15 @@ const leaseDocument = (input: LeaseNextInput, document: string) => {
 
 const repositoryFromHandle = (handle: SqliteJobHandle) => {
   const persistence: EpisodeExecutionPorts["persistence"] = {
+    renewLease: (input) =>
+      tryPersistence("renew_lease", () =>
+        handle.renewLease({
+          jobId: input.jobId,
+          leaseToken: input.leaseToken,
+          now: encodeTimestamp(input.now),
+          leasedUntil: encodeTimestamp(input.leasedUntil),
+        })
+      ).pipe(Effect.map((applied) => (applied ? "Applied" : "StaleLease"))),
     assertLease: ({ jobId, leaseToken }) =>
       tryPersistence("assert_lease", () =>
         handle.hasLease(jobId, leaseToken)

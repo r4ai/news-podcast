@@ -74,6 +74,7 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
       ),
     },
     persistence: {
+      renewLease: () => Effect.succeed("Applied"),
       assertLease: vi.fn(() => Effect.void),
       loadCheckpoint: vi.fn(() => Effect.succeed(checkpoint as never)),
       saveScriptCheckpoint: vi.fn((input) =>

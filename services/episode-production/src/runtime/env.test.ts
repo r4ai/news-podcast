@@ -22,6 +22,7 @@ describe("Episode Production environment configuration", () => {
         S3_BUCKET: "news-podcast",
         S3_ACCESS_KEY_ID: "access",
         S3_SECRET_ACCESS_KEY: "secret",
+        EPISODE_WORKER_HEARTBEAT_MS: "60000",
       })
     )
 
@@ -29,6 +30,7 @@ describe("Episode Production environment configuration", () => {
     expect(config.openAi).toMatchObject({ model: "gpt-test" })
     expect(config.voicevox.baseUrl).toBe("http://voicevox:50021")
     expect(config.completionRelay.batchSize).toBe(50)
+    expect(config.worker.heartbeatMillis).toBe(60_000)
     expect(Object.isFrozen(config.s3)).toBe(true)
   })
 
@@ -40,6 +42,29 @@ describe("Episode Production environment configuration", () => {
         EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
       })
     )
+    expect(exit._tag).toBe("Failure")
+  })
+
+  it("rejects a heartbeat interval above one third of the lease", async () => {
+    const exit = await Effect.runPromiseExit(
+      readEpisodeProductionServiceConfig({
+        EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
+        NATS_SERVERS: "nats://nats:4222",
+        EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
+        OPENAI_API_KEY: "test-openai-key",
+        OPENAI_MODEL: "gpt-test",
+        VOICEVOX_BASE_URL: "http://voicevox:50021",
+        VOICEVOX_CHARACTER_NAME: "ずんだもん",
+        S3_ENDPOINT: "http://seaweedfs:8333",
+        S3_REGION: "us-east-1",
+        S3_BUCKET: "news-podcast",
+        S3_ACCESS_KEY_ID: "access",
+        S3_SECRET_ACCESS_KEY: "secret",
+        EPISODE_WORKER_LEASE_MS: "300000",
+        EPISODE_WORKER_HEARTBEAT_MS: "100001",
+      })
+    )
+
     expect(exit._tag).toBe("Failure")
   })
 

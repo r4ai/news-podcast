@@ -83,6 +83,15 @@ export type LeaseNextInput = DeepReadonly<{
   leaseToken: LeaseToken
 }>
 
+export type RenewLeaseInput = DeepReadonly<{
+  jobId: JobId
+  leaseToken: LeaseToken
+  now: UtcTimestamp
+  leasedUntil: UtcTimestamp
+}>
+
+export type LeaseRenewalResult = "Applied" | "StaleLease"
+
 export type LeasedExecution = DeepReadonly<{
   job: RunningJob
   recovered: boolean
@@ -113,6 +122,10 @@ export type EpisodeExecutionPorts = DeepReadonly<{
   speech: SpeechSynthesizer
   audio: AudioObjectStore
   persistence: {
+    /** Extends only the current, still-live fencing token. */
+    renewLease: (
+      input: RenewLeaseInput
+    ) => Effect.Effect<LeaseRenewalResult, PipelineFailure>
     assertLease: (input: {
       jobId: JobId
       leaseToken: LeaseToken

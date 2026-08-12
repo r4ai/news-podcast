@@ -45,10 +45,12 @@ describe("episode worker loop", () => {
     let leaseIndex = 0
     const ports: EpisodeWorkerPorts = {
       leaseNext: () => Effect.succeed(leases[leaseIndex++]),
+      renewLease: () => Effect.succeed("Applied"),
       execute: () => Effect.succeed({ _tag: "Succeeded" }),
       now: () => at("2026-08-13T00:01:00.000Z"),
       leasedUntil: () => at("2026-08-13T00:06:00.000Z"),
       nextLeaseToken: () => leaseToken,
+      heartbeatMillis: 20,
       backoffMillis: (idle) => idle * 100,
       wait: (delay) =>
         Effect.sync(() => {
@@ -85,10 +87,12 @@ describe("episode worker loop", () => {
     }
     const ports: EpisodeWorkerPorts = {
       leaseNext: () => Effect.succeed({ job, recovered: false }),
+      renewLease: () => Effect.succeed("Applied"),
       execute: () => Effect.fail(failure),
       now: () => at("2026-08-13T00:01:00.000Z"),
       leasedUntil: () => at("2026-08-13T00:06:00.000Z"),
       nextLeaseToken: () => leaseToken,
+      heartbeatMillis: 20,
       backoffMillis: () => 100,
       wait: () => Effect.void,
       observe: (event) => Effect.sync(() => events.push(event)),
@@ -119,6 +123,7 @@ describe("episode worker loop", () => {
     }
     const ports: EpisodeWorkerPorts = {
       leaseNext: () => Effect.fail(failure),
+      renewLease: () => Effect.succeed("Applied"),
       execute: () =>
         Effect.sync(() => {
           executions += 1
@@ -127,6 +132,7 @@ describe("episode worker loop", () => {
       now: () => at("2026-08-13T00:01:00.000Z"),
       leasedUntil: () => at("2026-08-13T00:06:00.000Z"),
       nextLeaseToken: () => leaseToken,
+      heartbeatMillis: 20,
       backoffMillis: () => 100,
       wait: () => Effect.void,
       observe: (event) => Effect.sync(() => events.push(event)),
@@ -146,5 +152,59 @@ describe("episode worker loop", () => {
         retryable: true,
       },
     ])
+  })
+
+  it("aborts execution and finishes stale when a fenced heartbeat loses ownership", async () => {
+    const controller = new AbortController()
+    const events: EpisodeWorkerEvent[] = []
+    const renewals: unknown[] = []
+    let executionAborted = false
+    const ports: EpisodeWorkerPorts = {
+      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      renewLease: (input) =>
+        Effect.sync(() => {
+          renewals.push(input)
+          return "StaleLease" as const
+        }),
+      execute: ({ signal }) =>
+        Effect.sync(() =>
+          signal?.addEventListener(
+            "abort",
+            () => {
+              executionAborted = true
+            },
+            { once: true }
+          )
+        ).pipe(Effect.andThen(Effect.never)),
+      now: () => at("2026-08-13T00:02:00.000Z"),
+      leasedUntil: () => at("2026-08-13T00:07:00.000Z"),
+      nextLeaseToken: () => leaseToken,
+      heartbeatMillis: 20,
+      backoffMillis: () => 100,
+      wait: () => Effect.void,
+      observe: (event) =>
+        Effect.sync(() => {
+          events.push(event)
+          if (event._tag === "JobFinished") controller.abort()
+        }),
+    }
+
+    await Effect.runPromise(runEpisodeWorkerLoop(ports, controller.signal))
+
+    expect(executionAborted).toBe(true)
+    expect(renewals).toEqual([
+      {
+        jobId: job.jobId,
+        leaseToken,
+        now: at("2026-08-13T00:02:00.000Z"),
+        leasedUntil: at("2026-08-13T00:07:00.000Z"),
+      },
+    ])
+    expect(events.at(-2)).toEqual({
+      _tag: "JobFinished",
+      jobId: job.jobId,
+      outcome: "StaleLease",
+    })
+    expect(events.at(-1)).toEqual({ _tag: "WorkerStopped" })
   })
 })
