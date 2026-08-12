@@ -136,6 +136,22 @@ describe("checkArchitecture", () => {
     )
   })
 
+  test("新サービスの自己定義classを拒否する", async () => {
+    const rootDirectory = await createFixture({
+      "services/production/src/domain/job.ts": [
+        "export class EpisodeJob {}",
+        "export const makeJob = () => ({ _tag: 'Queued' as const })",
+      ].join("\n"),
+    })
+
+    const violations = await checkArchitecture({ rootDirectory })
+
+    assert.deepEqual(
+      violations.map(({ rule, line }) => ({ rule, line })),
+      [{ rule: "functional-no-authored-class", line: 1 }]
+    )
+  })
+
   test("別サービスへのrelative importとworkspace package importを拒否する", async () => {
     const rootDirectory = await createFixture({
       "services/content/src/application/read.ts":

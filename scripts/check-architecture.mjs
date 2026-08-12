@@ -229,6 +229,31 @@ const extractImports = (filePath, sourceText) => {
   return imports
 }
 
+const extractAuthoredClasses = (filePath, sourceText) => {
+  const scriptKind = filePath.endsWith("x")
+    ? ts.ScriptKind.TSX
+    : ts.ScriptKind.TS
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind
+  )
+  const classes = []
+  const visit = (node) => {
+    if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(
+        node.getStart(sourceFile)
+      )
+      classes.push({ line: line + 1 })
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return classes
+}
+
 const dependencyRuleFor = (sourceLayer, targetLayer) => {
   if (sourceLayer === "domain" && targetLayer !== "domain") {
     return "domain-depends-only-on-domain"
@@ -275,6 +300,19 @@ export const checkArchitecture = async ({
         continue
       }
       const sourceText = await readFile(sourceFilePath, "utf8")
+
+      for (const authoredClass of extractAuthoredClasses(
+        sourceFilePath,
+        sourceText
+      )) {
+        violations.push({
+          rule: "functional-no-authored-class",
+          file: toPortablePath(path.relative(absoluteRoot, sourceFilePath)),
+          line: authoredClass.line,
+          sourceService: source.service,
+          sourceLayer: source.layer,
+        })
+      }
 
       for (const imported of extractImports(sourceFilePath, sourceText)) {
         const target = classifyImport({
@@ -324,6 +362,9 @@ export const checkArchitecture = async ({
 }
 
 export const formatViolation = (violation) => {
+  if (violation.rule === "functional-no-authored-class") {
+    return `${violation.file}:${violation.line} [${violation.rule}] ${violation.sourceService}/${violation.sourceLayer}: use immutable data and functions`
+  }
   const dependency = `${violation.sourceService}/${violation.sourceLayer} -> ${violation.targetService}/${violation.targetLayer ?? "package-root"}`
   return `${violation.file}:${violation.line} [${violation.rule}] ${dependency}: ${violation.specifier}`
 }
