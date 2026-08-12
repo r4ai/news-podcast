@@ -18,6 +18,9 @@ docker run --rm --entrypoint promtool \
   prom/prometheus:v3.13.1 \
   check config /etc/prometheus/prometheus.yaml
 
+rg -U 'out_of_order_time_window:[[:space:]]+2h' \
+  "$OBSERVABILITY_DIR/prometheus/prometheus.yaml" >/dev/null
+
 docker run --rm \
   -v "$OBSERVABILITY_DIR/loki/config.yaml:/etc/loki/config.yaml:ro" \
   grafana/loki:3.7.2 \
