@@ -1,0 +1,21 @@
+services:
+  nats:
+    image: nats:2.12.1-alpine
+    command: ["--jetstream", "--store_dir=/data", "--http_port=8222"]
+    ports:
+      - "127.0.0.1:14222:4222"
+    tmpfs:
+      - /data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8222/healthz?js-enabled-only=true",
+        ]
+      interval: 1s
+      timeout: 1s
+      retries: 30
