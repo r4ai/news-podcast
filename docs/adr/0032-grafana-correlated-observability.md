@@ -75,12 +75,14 @@ flowchart LR
 | 設計書 | Grafana相関構成、調査導線 | Done | `docs/design.md`、`docs/architecture.md` |
 | ドメイン/ユースケース | N/A — telemetry backendを知らない | Done | dependency rules |
 | OpenAPI/外部契約 | N/A — 公開APIを変更しない | Done | `packages/contracts/openapi/openapi.json` |
-| コード/ポート | trace/log correlation、NATS semantic span | Pending | `packages/observability` |
-| データ/ストレージ | Prometheus/Loki/Tempo volumeとretention | Pending | `infra/observability` |
-| 実行/配備 | LGTM Compose、Collector routing | Pending | `infra/observability/compose.yaml` |
-| 認証/セキュリティ | Grafana認証、OTLP ingress、privacy filter | Pending | provisioning、Collector config |
-| フロント/品質保証 | browser traceの継続 | Pending | browser telemetry tests |
-| テスト/運用 | dashboard、alert、相関、backup smoke | Pending | observability runbook |
+| コード/ポート | trace/log correlation、NATS semantic span | Done | `packages/observability` |
+| データ/ストレージ | Prometheus/Loki/Tempo volume、retention、Collector永続queue | Done | `infra/observability` |
+| 実行/配備 | LGTM Compose、Collector routing | Done | `infra/observability/compose.yaml` |
+| 認証/セキュリティ | Grafana認証、HTTPS OTLP ingress、privacy filter | Done | provisioning、Collector config、gateway override |
+| フロント/品質保証 | browser traceの継続 | Done | browser telemetry tests |
+| テスト/運用 | 5 dashboard、7 alert、datasource相関、構文/health検査 | Foundation done | `infra/observability/README.md`、`scripts/validate-observability.sh`。本番通知・定期restoreは配備先で受け入れる |
+
+新4サービスすべてのentrypointからsynthetic journeyを流すE2Eは、サービス配備接続と同時に完了させる。監視基盤の実装完了をサービス移植完了とはみなさない。
 
 ## 再検討条件
 

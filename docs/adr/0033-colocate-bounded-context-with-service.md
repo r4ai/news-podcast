@@ -56,14 +56,16 @@ services/<bounded-context>/
 | 対象 | 必要な変更 | 状態 | 証拠 |
 | --- | --- | --- | --- |
 | 設計書 | service treeと依存図 | Done | `docs/architecture.md` |
-| ドメイン/ユースケース | service配下へ移設 | In progress | `services/*/src`の関数型縦断slice |
+| ドメイン/ユースケース | service配下へ関数型縦断sliceを実装 | Foundation done | `services/*/src`。全ユースケースの機能同等性は未完了 |
 | OpenAPI/外部契約 | N/A — Gateway契約は独立 | Done | `packages/contracts` |
 | コード/ポート | architecture testとpackage export制限 | Done | `scripts/check-architecture.mjs` |
-| データ/ストレージ | serviceごとのmigration所有 | Pending | `services/*/migrations` |
-| 実行/配備 | serviceごとのentrypoint | Pending | Compose |
+| データ/ストレージ | serviceごとのSQLite adapter、migration所有 | In progress | Content/Production/Library adapterは実装済み。migration/restore受け入れは未完了 |
+| 実行/配備 | serviceごとのentrypoint | In progress | runtime sliceはあるが全4 serviceのNATS/Compose接続は未完了 |
 | 認証/セキュリティ | Context間protocolへActorを付与 | Done | `packages/protocols/src/envelope.ts` |
 | フロント/品質保証 | N/A — Gatewayだけを利用 | Done | Web dependency rule |
 | テスト/運用 | import graph、context contract test | Done | architecture test、service unit tests |
+
+機能移植と削除条件は`docs/functional-ddd-migration.md`で追跡する。
 
 ## 再検討条件
 

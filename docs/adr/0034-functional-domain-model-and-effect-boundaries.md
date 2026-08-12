@@ -69,14 +69,16 @@ flowchart LR
 | 対象 | 必要な変更 | 状態 | 証拠 |
 | --- | --- | --- | --- |
 | 設計書 | 関数型Onion、parse flow、移行状態 | Done | `docs/architecture.md` |
-| ドメイン/ユースケース | 4サービス配下へimmutable modelを実装 | In progress | `services/*/src` |
-| OpenAPI/外部契約 | Effect HttpApiから生成 | Pending | `apps/gateway` |
-| コード/ポート | Effect v4、port record、deep freeze | In progress | `packages/kernel`, `services/*` |
-| データ/ストレージ | service別SQLiteとparse adapter | Pending | service migrations |
-| 実行/配備 | NATS中心のservice runtime | Pending | Compose |
-| 認証/セキュリティ | Better Auth結果をActorへparse | In progress | `services/identity-access` |
+| ドメイン/ユースケース | 4サービス配下へimmutableな縦断sliceを実装 | Foundation done | `services/*/src`。全ユースケースの機能同等性は未完了 |
+| OpenAPI/外部契約 | Effect HttpApi契約 | Foundation done | `apps/gateway`。生成物/Web client切替は未完了 |
+| コード/ポート | Effect v4、port record、deep freeze | Done | `packages/kernel`, `services/*` |
+| データ/ストレージ | service別SQLiteとparse adapter | In progress | Content/Production/Libraryの代表経路。migration/restoreは未完了 |
+| 実行/配備 | NATS中心のservice runtime | In progress | runtime/adapter sliceはあるが全serviceのCompose接続は未完了 |
+| 認証/セキュリティ | Better Auth結果をActorへparse | Done | `services/identity-access` |
 | フロント/品質保証 | 生成OpenAPI clientへ更新 | Pending | `apps/web` |
-| テスト/運用 | 状態表test、依存検査、OTel相関 | In progress | service tests、architecture check |
+| テスト/運用 | 状態表test、依存検査、OTel相関 | In progress | unit/architecture/監視基盤は実装済み。新topologyのE2Eは未完了 |
+
+実装済みの基盤、未移植機能、旧系の削除条件は`docs/functional-ddd-migration.md`を正本とする。
 
 ## 再検討条件
 

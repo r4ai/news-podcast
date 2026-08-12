@@ -2,7 +2,7 @@
 
 - 更新日: 2026-08-12
 - 対象: 関数型マイクロサービスへの移行中（新旧の正本を明記）
-- 関連文書: [詳細設計](design.md) / [ADR](adr/) / [開発ガイド](development.md)
+- 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
 ## 1. 全体像
 
@@ -10,7 +10,7 @@
 
 設計の軸は次の4点である。
 
-> 新規の正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。旧`apps/api`、`apps/worker`、`packages/domain|application|adapters`は外部ユースケースの移植完了まで動作比較にだけ使い、新規依存を追加しない。
+> 新規の正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。旧`apps/api`、`apps/worker`、`packages/domain|application|adapters`は外部ユースケースの移植完了まで動作比較にだけ使い、新規依存を追加しない。現在の完成/未移植/削除条件は[関数型DDDマイクロサービス移行ガイド](functional-ddd-migration.md)を正本とする。
 
 | 設計方針 | 要点 |
 | --- | --- |
@@ -198,11 +198,14 @@ flowchart LR
 | Surface | 状態 | 現在の証拠 |
 | --- | --- | --- |
 | immutable kernel / protocol | Done | strict parse、deep freeze、correlation envelope、version付きsubject |
-| 4 Context domain/application slice | Done | `services/*/src/{domain,application,adapters}` |
-| SQLite/NATS runtime | In progress | service別single-writer、outbox/inbox adapter |
-| Effect HttpApi Gateway | In progress | `apps/gateway` |
+| 4 Context vertical slice | Foundation done | `services/*/src/{domain,application,adapters,runtime}`。全ユースケースの機能同等性は未完了 |
+| SQLite/NATS runtime | In progress | service別single-writer、outbox/inbox adapter。全serviceのentrypoint/Compose接続は未完了 |
+| Effect HttpApi Gateway | Foundation done | HttpApi契約、handler、NATS port。配備とWeb切替は未完了 |
+| Grafana相関監視 | Foundation done | LGTM provisioningと検証script。新4サービスの実配線E2Eは未完了 |
 | Web生成client | Pending | Gateway OpenAPI確定後 |
 | 旧API/Worker削除 | Pending | E2E parity後 |
+
+移行順序と削除ゲートの詳細は[移行ガイド](functional-ddd-migration.md)を参照する。`Foundation done`を機能移植完了とはみなさない。
 
 ## 4. 主要なシステムフロー
 
