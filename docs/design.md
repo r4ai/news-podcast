@@ -202,6 +202,10 @@ bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去�
 
 初期toolは`list_rss_articles`、`read_article`、Responses APIのhosted `web_search`、`submit_episode_draft`とする。RSS記事を主題の起点にし、Web検索は補足と事実確認に使い、異なるsource kindとして保存する。RSS出典はagentが保存済みMarkdown本文を読んだ記事だけを受理する。
 
+6件以上の選択記事は1 sectionあたり最大6件へ分けて生成し、最後に1本の台本へ統合する。分類と統合はResponses APIのstrict JSON Schemaで拘束し、`output`の固定位置ではなく`output_text`判別子を探索してからapplication側でも検証する。分類の重複・未知IDは除外し、未割当記事は決定論的に補完する。統合処理は新しいsourceを生成せず、各sectionで検証済みのsourceだけを継承する。空・不完全応答はbounded retry、refusalとrequest 4xxは終端失敗とする。詳細は[ADR-0029](adr/0029-validated-sectional-response-boundary.md)を正本とする。
+
+AG-UI timelineは`job.retrying`、`RUN_ERROR`、`RUN_FINISHED`で未完了step/toolを閉じる。retry時は次の`RUN_STARTED`と`STEP_STARTED`で同じstageを再開し、backendが停止中または終端済みなのにspinnerだけが動き続ける状態を許さない。
+
 ### 8.4 隔離型Agent Harness
 
 Agentはjob処理中だけTypeScript Worker上のHarnessとして動き、shell/Python/CLIは専用KVM hostのFirecracker microVMへ委譲する。RSS、Web検索、Memoryはowner scopedなMCP Tool Brokerが仲介し、出典検証、VOICEVOX、Episode commitはsandbox外のApplicationが行う。
