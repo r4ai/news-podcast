@@ -1,5 +1,5 @@
 import { Newspaper, SearchX } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -19,7 +19,7 @@ import {
   type ArticlesSearch,
 } from "../-model"
 import { ArticleDateGroup } from "./article-date-group"
-import { ArticleToolbar } from "./article-toolbar"
+import { ArticleToolbar, ArticleToolbarSticky } from "./article-toolbar"
 
 export type ArticleListProps = {
   readonly list: ReturnType<typeof useArticleList>
@@ -28,15 +28,27 @@ export type ArticleListProps = {
   readonly onShowEnrichQueue: () => void
 }
 
-/** データ接続: 呼び出し元(route)が持つhook結果を、toolbarとviewへ渡すだけ。 */
 export function ArticleList({
   list,
   selectedArticleId,
   onSelect,
   onShowEnrichQueue,
 }: ArticleListProps) {
+  const [searchExpanded, setSearchExpanded] = useState(false)
+
+  function toggleSearch() {
+    setSearchExpanded((prev) => !prev)
+  }
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col">
+      <ArticleToolbarSticky
+        facets={list.facets}
+        onStateChange={list.setState}
+        onToggleSearch={toggleSearch}
+        search={list.search}
+        searchExpanded={searchExpanded}
+      />
       <ArticleToolbar
         aiPending={list.aiPending}
         facets={list.facets}
@@ -49,11 +61,12 @@ export function ArticleList({
         onQChange={list.setQ}
         onShowEnrichQueue={onShowEnrichQueue}
         onSortChange={list.setSort}
-        onStateChange={list.setState}
         onTagIdsChange={list.setTagIds}
+        onToggleSearch={toggleSearch}
         onUsedInEpisodeChange={list.setUsedInEpisode}
         q={list.q}
         search={list.search}
+        searchExpanded={searchExpanded}
         tags={list.tags}
       />
       <ArticleListView

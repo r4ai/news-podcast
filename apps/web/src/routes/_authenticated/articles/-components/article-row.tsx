@@ -30,8 +30,7 @@ export function ArticleRow({
 }: ArticleRowProps) {
   const meta = archiveMetaLabel(article.archiveStatus)
   const snippet = articleSnippet(article)
-  const visibleTags = article.tags.slice(0, 2)
-  const remainingTagCount = article.tags.length - visibleTags.length
+  const visibleTags = article.tags.slice(0, 3)
 
   return (
     <div
@@ -50,7 +49,7 @@ export function ArticleRow({
       />
       <button
         aria-current={isSelected ? "true" : undefined}
-        className="flex min-w-0 flex-1 flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() => onSelect(article)}
         type="button"
       >
@@ -64,29 +63,38 @@ export function ArticleRow({
         >
           {article.title}
         </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="min-w-0 max-w-28 truncate font-medium text-foreground/80">
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/80">
             {article.sourceName}
           </span>
           <time dateTime={articleTimestamp(article)}>
             {compactArticleTimestamp(articleTimestamp(article))}
           </time>
-          {meta ? <span className="truncate">{meta}</span> : null}
-          {article.usedInEpisode ? (
-            <Mic
-              aria-label="番組で採用済み"
-              className="ml-auto size-3 shrink-0"
-              role="img"
-            />
-          ) : null}
+          {meta ? <span>{meta}</span> : null}
+          {visibleTags.map((tag) => (
+            <Badge
+              className="text-[0.625rem]"
+              key={tag}
+              variant="secondary"
+            >
+              {tag}
+            </Badge>
+          ))}
           {showRelevanceScore && typeof article.relevanceScore === "number" ? (
             <Badge
               aria-label={`適合度スコア ${article.relevanceScore}`}
-              className="ml-auto shrink-0 tabular-nums"
+              className="tabular-nums"
               variant="outline"
             >
               {article.relevanceScore}
             </Badge>
+          ) : null}
+          {article.usedInEpisode ? (
+            <Mic
+              aria-label="番組で採用済み"
+              className="size-3 shrink-0"
+              role="img"
+            />
           ) : null}
         </span>
         {snippet ? (
@@ -94,36 +102,21 @@ export function ArticleRow({
             {snippet}
           </span>
         ) : null}
-        {article.tags.length > 0 ? (
-          <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-            {visibleTags.map((tag) => (
-              <Badge
-                className="max-w-28 truncate text-[0.625rem]"
-                key={tag}
-                variant="secondary"
-              >
-                {tag}
-              </Badge>
-            ))}
-            {remainingTagCount > 0 ? (
-              <span className="shrink-0 text-[0.625rem] text-muted-foreground">
-                +{remainingTagCount}
-              </span>
-            ) : null}
-          </span>
-        ) : null}
       </button>
       <Button
         aria-label={article.saved ? "保存を解除" : "記事を保存"}
-        className="mt-0.5 size-11 shrink-0 opacity-70 group-hover/row:opacity-100 sm:size-7"
+        className="mt-0.5 size-7 shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100"
         onClick={() => onToggleSaved(article)}
         size="icon-sm"
         variant="ghost"
       >
         {article.saved ? (
-          <BookmarkCheck aria-hidden="true" />
+          <BookmarkCheck aria-hidden="true" className="text-primary" />
         ) : (
-          <Bookmark aria-hidden="true" />
+          <Bookmark
+            aria-hidden="true"
+            className="text-muted-foreground/60"
+          />
         )}
       </Button>
     </div>

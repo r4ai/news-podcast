@@ -1,4 +1,5 @@
 import { CheckCheck, Loader2, Search, X } from "lucide-react"
+import { useRef } from "react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -29,6 +30,59 @@ import {
   type ArticleFilterPopoverProps,
 } from "./article-filter-popover"
 
+export type ArticleToolbarStickyProps = {
+  readonly search: ArticlesSearch
+  readonly facets: ArticleFacets | undefined
+  readonly onStateChange: (state: ArticleState) => void
+  readonly searchExpanded: boolean
+  readonly onToggleSearch: () => void
+}
+
+function tabCount(facets: ArticleFacets | undefined, state: ArticleState) {
+  return facets?.states[state === "all" ? "all" : state]
+}
+
+export function ArticleToolbarSticky({
+  search,
+  facets,
+  onStateChange,
+  searchExpanded,
+  onToggleSearch,
+}: ArticleToolbarStickyProps) {
+  return (
+    <div className="sticky top-0 z-10 -mx-3 flex items-center justify-between gap-2 border-b bg-background/70 px-3 py-1.5 backdrop-blur-md">
+      <ToggleGroup
+        aria-label="記事の状態"
+        className="gap-0.5"
+        onValueChange={(value) => {
+          const [next] = value
+          if (next) onStateChange(next as ArticleState)
+        }}
+        value={[search.state]}
+      >
+        {stateTabs.map((tab) => (
+          <ToggleGroupItem key={tab.value} value={tab.value}>
+            {tab.label}
+            {tabCount(facets, tab.value) !== undefined
+              ? ` (${tabCount(facets, tab.value)})`
+              : ""}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      <Button
+        aria-expanded={searchExpanded}
+        aria-label="検索を開く"
+        onClick={onToggleSearch}
+        size="icon-sm"
+        variant="ghost"
+      >
+        <Search className="size-4" />
+      </Button>
+    </div>
+  )
+}
+
 export type ArticleToolbarProps = Omit<
   ArticleFilterPopoverProps,
   "facets" | "search"
@@ -37,21 +91,15 @@ export type ArticleToolbarProps = Omit<
   readonly facets: ArticleFacets | undefined
   readonly q: string
   readonly onQChange: (value: string) => void
-  readonly onStateChange: (state: ArticleState) => void
   readonly onSortChange: (sort: ArticleSort) => void
   readonly onMarkAllRead: () => void
   readonly isMarkingAllRead: boolean
-  /** 絞り込み条件に依存しない、購読全体のAI補助バッチ未処理件数。0または未取得なら出さない。 */
   readonly aiPending: number | undefined
-  /** AI処理キュー状態ダイアログを開く。 */
   readonly onShowEnrichQueue: () => void
+  readonly searchExpanded: boolean
+  readonly onToggleSearch: () => void
 }
 
-function tabCount(facets: ArticleFacets | undefined, state: ArticleState) {
-  return facets?.states[state === "all" ? "all" : state]
-}
-
-/** 毎回触る軸(状態タブ・並べ替え・検索)をまとめたツールバー。 */
 export function ArticleToolbar({
   search,
   facets,
@@ -59,76 +107,45 @@ export function ArticleToolbar({
   aiPending,
   tags,
   onQChange,
-  onStateChange,
   onSortChange,
   onMarkAllRead,
   onTagIdsChange,
   onShowEnrichQueue,
   isMarkingAllRead,
+  searchExpanded,
+  onToggleSearch,
   ...filterProps
 }: ArticleToolbarProps) {
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const selectedTags = tags.filter((tag) => search.tagIds.includes(tag.id))
 
+  function handleSearchBlur() {
+    if (!q.trim()) {
+      onToggleSearch()
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <ToggleGroup
-          aria-label="記事の状態"
-          onValueChange={(value) => {
-            const [next] = value
-            if (next) onStateChange(next as ArticleState)
-          }}
-          value={[search.state]}
-        >
-          {stateTabs.map((tab) => (
-            <ToggleGroupItem key={tab.value} value={tab.value}>
-              {tab.label}
-              {tabCount(facets, tab.value) !== undefined
-                ? ` (${tabCount(facets, tab.value)})`
-                : ""}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-
-        <div className="flex items-center gap-2">
-          {aiPending ? (
-            <button
-              aria-label="AI処理のキュー状態を開く"
-              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              onClick={onShowEnrichQueue}
-              type="button"
-            >
-              <Loader2 aria-hidden="true" className="size-3 animate-spin" />
-              AI処理待ち {aiPending}件
-            </button>
-          ) : null}
-          <Button
-            disabled={isMarkingAllRead}
-            onClick={onMarkAllRead}
-            size="sm"
-            variant="ghost"
-          >
-            <CheckCheck data-icon="inline-start" />
-            すべて既読
-          </Button>
-        </div>
-      </div>
-
+    <div className="flex flex-col gap-2 px-3 pt-2 pb-1">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            aria-label="記事を検索"
-            className="pl-8"
-            id={ARTICLE_SEARCH_INPUT_ID}
-            onChange={(event) => onQChange(event.target.value)}
-            placeholder="タイトルや本文で検索"
-            value={q}
-          />
-        </div>
+        {searchExpanded ? (
+          <div className="relative min-w-48 flex-1">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label="記事を検索"
+              className="pl-8"
+              id={ARTICLE_SEARCH_INPUT_ID}
+              onBlur={handleSearchBlur}
+              onChange={(event) => onQChange(event.target.value)}
+              placeholder="タイトルや本文で検索"
+              ref={searchInputRef}
+              value={q}
+            />
+          </div>
+        ) : null}
 
         <Select
           items={sortOptions}
@@ -154,6 +171,29 @@ export function ArticleToolbar({
           tags={tags}
           {...filterProps}
         />
+
+        <div className="flex items-center gap-1">
+          {aiPending ? (
+            <button
+              aria-label="AI処理のキュー状態を開く"
+              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              onClick={onShowEnrichQueue}
+              type="button"
+            >
+              <Loader2 aria-hidden="true" className="size-3 animate-spin" />
+              AI処理待ち {aiPending}件
+            </button>
+          ) : null}
+          <Button
+            disabled={isMarkingAllRead}
+            onClick={onMarkAllRead}
+            size="sm"
+            variant="ghost"
+          >
+            <CheckCheck data-icon="inline-start" />
+            すべて既読
+          </Button>
+        </div>
       </div>
 
       {selectedTags.length > 0 ? (

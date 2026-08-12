@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   Loader2,
   PauseCircle,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
   DialogTitle,
 } from "@workspace/ui/components/dialog"
 import { Progress } from "@workspace/ui/components/progress"
+import { cn } from "@workspace/ui/lib/utils"
 
 import type {
   EnrichQueueItem,
@@ -27,7 +29,6 @@ export type EnrichQueueDialogProps = {
   readonly connected: boolean
 }
 
-/** クリックで開くAI補助キュー状態。処理中/待ち/失敗/本日の上限を一覧する。 */
 export function EnrichQueueDialog({
   open,
   onOpenChange,
@@ -66,7 +67,7 @@ export function EnrichQueueDialog({
             }
             label={`処理中 ${status.processing.length}件`}
             items={status.processing}
-            showStatus={false}
+            variant="processing"
           />
         ) : null}
 
@@ -78,7 +79,7 @@ export function EnrichQueueDialog({
                 className="size-3.5 text-muted-foreground"
               />
             ) : (
-              <RefreshCw
+              <Clock
                 aria-hidden="true"
                 className="size-3.5 text-muted-foreground"
               />
@@ -86,8 +87,7 @@ export function EnrichQueueDialog({
           }
           label={`${limitReached ? "本日の上限待ち" : "待ち"} ${status?.pending.count ?? 0}件`}
           items={status?.pending.items ?? []}
-          itemStatusLabel={limitReached ? "上限待ち" : undefined}
-          showStatus={true}
+          variant="pending"
         />
 
         <QueueSection
@@ -99,8 +99,7 @@ export function EnrichQueueDialog({
           }
           label={`失敗 ${status?.failed.count ?? 0}件`}
           items={status?.failed.items ?? []}
-          showStatus={false}
-          failure
+          variant="failed"
         />
 
         {status && status.recent.length > 0 ? (
@@ -145,21 +144,44 @@ function DailyBudget({
   )
 }
 
+function statusBadge(variant: QueueSectionVariant) {
+  switch (variant) {
+    case "processing":
+      return {
+        label: "処理中",
+        className:
+          "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
+      }
+    case "pending":
+      return {
+        label: "待ち",
+        className:
+          "bg-muted text-muted-foreground",
+      }
+    case "failed":
+      return {
+        label: "失敗",
+        className:
+          "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+      }
+  }
+}
+
+type QueueSectionVariant = "processing" | "pending" | "failed"
+
 function QueueSection({
   icon,
   label,
   items,
-  showStatus,
-  itemStatusLabel,
-  failure = false,
+  variant,
 }: {
   readonly icon: React.ReactNode
   readonly label: string
   readonly items: readonly EnrichQueueItem[]
-  readonly showStatus: boolean
-  readonly itemStatusLabel?: string
-  readonly failure?: boolean
+  readonly variant: QueueSectionVariant
 }) {
+  const badge = statusBadge(variant)
+
   return (
     <section className="flex flex-col gap-2">
       <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -169,23 +191,27 @@ function QueueSection({
       {items.length === 0 ? (
         <p className="px-1 text-sm text-muted-foreground">ありません</p>
       ) : (
-        <ul className="flex flex-col gap-px">
+        <ul className="flex flex-col gap-1.5">
           {items.map((item) => (
             <li
-              className="flex items-baseline justify-between gap-2 rounded-md px-1 py-1 text-sm"
               key={item.feedItemId}
+              className="rounded-lg border bg-card px-3 py-2"
             >
-              <span className="line-clamp-1 flex-1">{item.title}</span>
-              {showStatus ? (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {itemStatusLabel ??
-                    (item.status === "failed" ? "再試行待ち" : "待ち")}
+              <div className="flex items-start justify-between gap-2">
+                <span className="line-clamp-1 text-sm font-medium">
+                  {item.title}
                 </span>
-              ) : null}
-              {failure && item.error ? (
-                <span className="line-clamp-1 shrink-0 max-w-[40%] text-xs text-destructive">
-                  {item.error}
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 items-center rounded-full px-1.5 py-px text-[0.625rem] font-medium",
+                    badge.className
+                  )}
+                >
+                  {badge.label}
                 </span>
+              </div>
+              {variant === "failed" && item.error ? (
+                <p className="mt-1 text-xs text-destructive">{item.error}</p>
               ) : null}
             </li>
           ))}

@@ -51,8 +51,7 @@ describe("ArticleAiBlock", () => {
     )
 
     await waitFor(() => expect(view.getByText("生成済みの要約")).toBeTruthy())
-    expect(view.getByLabelText("適合度")).toBeTruthy()
-    expect(view.getByText("82")).toBeTruthy()
+    expect(view.getByLabelText("適合度 82")).toBeTruthy()
     expect(view.getByText("興味に合致するから")).toBeTruthy()
   })
 })

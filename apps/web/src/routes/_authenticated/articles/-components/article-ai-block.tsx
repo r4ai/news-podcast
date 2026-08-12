@@ -1,27 +1,47 @@
-import { RefreshCw, Sparkles } from "lucide-react"
+import { Lightbulb, RefreshCw, Sparkles } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import { Progress } from "@workspace/ui/components/progress"
 import { toast } from "@workspace/ui/components/sonner"
 import { Spinner } from "@workspace/ui/components/spinner"
+import { cn } from "@workspace/ui/lib/utils"
 import { Markdown } from "@/shared/markdown"
 
 import { hasAiEnrichment, type Article } from "../-model"
 
 export type ArticleAiBlockProps = {
   readonly article: Article
-  /** 明示的なAI再計算（POST /enrich）。処理済み記事の再スコアリング。 */
   readonly onRecalculate: () => void
   readonly isRecalculating: boolean
 }
 
-/** Markdown要約を表示し、関連度が生成済みの場合だけスコアと理由を添える。 */
+function scoreLabel(
+  score: number
+): { label: string; className: string } {
+  if (score >= 70)
+    return {
+      label: "高適合",
+      className: "text-emerald-600 [&_[data-slot=progress-indicator]]:bg-emerald-500",
+    }
+  if (score >= 40)
+    return {
+      label: "中適合",
+      className: "text-amber-600 [&_[data-slot=progress-indicator]]:bg-amber-500",
+    }
+  return {
+    label: "低適合",
+    className: "text-muted-foreground [&_[data-slot=progress-indicator]]:bg-muted-foreground/40",
+  }
+}
+
 export function ArticleAiBlock({
   article,
   onRecalculate,
   isRecalculating,
 }: ArticleAiBlockProps) {
   if (!hasAiEnrichment(article)) return null
+
+  const hasScore = typeof article.relevanceScore === "number"
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4">
@@ -30,14 +50,15 @@ export function ArticleAiBlock({
           <Sparkles aria-hidden="true" className="size-3.5" />
           AI要約
         </div>
-        {typeof article.relevanceScore === "number" ? (
-          <div className="flex items-center gap-2">
-            <Progress
-              aria-label="適合度"
-              className="w-20"
-              value={article.relevanceScore}
-            />
-            <span className="text-xs text-muted-foreground">
+        {hasScore ? (
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "text-xs font-medium tabular-nums",
+                scoreLabel(article.relevanceScore!).className
+              )}
+            >
+              {scoreLabel(article.relevanceScore!).label}{" "}
               {article.relevanceScore}
             </span>
           </div>
@@ -46,12 +67,21 @@ export function ArticleAiBlock({
         )}
       </div>
 
+      {hasScore ? (
+        <Progress
+          aria-label={`適合度 ${article.relevanceScore}`}
+          className={cn(scoreLabel(article.relevanceScore!).className)}
+          value={article.relevanceScore ?? null}
+        />
+      ) : null}
+
       <div className="text-sm">
         <Markdown markdown={article.aiSummary!} />
       </div>
 
       {article.relevanceReason ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Lightbulb aria-hidden="true" className="mt-px size-3 shrink-0" />
           {article.relevanceReason}
         </p>
       ) : null}

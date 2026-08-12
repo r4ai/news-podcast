@@ -162,46 +162,48 @@ export function ArticleFilterPopover({
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="article-period">期間</Label>
-          <Select
-            items={periodOptions}
-            onValueChange={(value) => onPeriodChange(value as ArticlePeriod)}
-            value={search.period}
-          >
-            <SelectTrigger id="article-period">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {periodOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="article-period">期間</Label>
+            <Select
+              items={periodOptions}
+              onValueChange={(value) => onPeriodChange(value as ArticlePeriod)}
+              value={search.period}
+            >
+              <SelectTrigger id="article-period">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {periodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="article-archive-status">アーカイブ状態</Label>
-          <Select
-            items={archiveStatusOptions}
-            onValueChange={(value) =>
-              onArchiveStatusFilterChange(value as ArticleStatusFilter)
-            }
-            value={search.archiveStatusFilter}
-          >
-            <SelectTrigger id="article-archive-status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {archiveStatusOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="article-archive-status">アーカイブ状態</Label>
+            <Select
+              items={archiveStatusOptions}
+              onValueChange={(value) =>
+                onArchiveStatusFilterChange(value as ArticleStatusFilter)
+              }
+              value={search.archiveStatusFilter}
+            >
+              <SelectTrigger id="article-archive-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {archiveStatusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-2">

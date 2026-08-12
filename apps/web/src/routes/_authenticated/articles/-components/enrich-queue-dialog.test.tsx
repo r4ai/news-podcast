@@ -39,7 +39,7 @@ describe("EnrichQueueDialog", () => {
     )
 
     expect(screen.getByText("本日の上限待ち 2件")).toBeTruthy()
-    expect(screen.getByText("上限待ち")).toBeTruthy()
+    expect(screen.getByText("待ち")).toBeTruthy()
     expect(screen.queryByText("処理中")).toBeNull()
   })
 })
