@@ -11,6 +11,8 @@
     "./runtime": "./src/runtime/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/bootstrap.ts",
+    "start": "tsx src/bootstrap.ts",
     "build": "tsc --noEmit",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
@@ -21,10 +23,12 @@
     "@news-podcast/kernel": "workspace:*",
     "@news-podcast/observability": "workspace:*",
     "@news-podcast/protocols": "workspace:*",
+    "better-auth": "1.6.26",
     "effect": "4.0.0-beta.102"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
+    "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }
