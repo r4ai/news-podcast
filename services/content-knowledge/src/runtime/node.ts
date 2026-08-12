@@ -29,6 +29,7 @@ import {
 import { createContentTaxonomy } from "../application/content-taxonomy.js"
 import { createInterestProfileOperations } from "../application/interest-profile.js"
 import type { SubscriptionRepository } from "../application/subscription-ports.js"
+import { archiveArticle } from "../application/archive-article.js"
 import {
   openHttpS3ArticleCaptureUnsafe,
   type HttpS3ArticleCaptureConfig,
@@ -38,8 +39,10 @@ import { openS3MarkdownObjectReaderUnsafe } from "../infrastructure/unsafe/s3-ma
 import type { CapturedAt } from "../domain/article.js"
 import {
   currentCapturedAtUnsafe,
+  deriveManualArchiveRequestIdUnsafe,
   randomEnrichmentLeaseTokenUnsafe,
   randomMessageIdUnsafe,
+  randomSnapshotIdUnsafe,
   randomTagIdUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import {
@@ -52,6 +55,7 @@ import {
 } from "../infrastructure/unsafe/json.js"
 import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
 import { runContentFeedPoller } from "./content-feed-poller.js"
+import { makeArticleLibraryHandler } from "./article-library-handler.js"
 import { runNatsContentKnowledgeRpc } from "./nats-content-knowledge-rpc.js"
 import {
   runOutboxRelayLoop,
@@ -440,7 +444,26 @@ export const runNodeService = (
                             queueGroup: config.rpc.queueGroup,
                           },
                           runtime,
-                          markdown.reader
+                          markdown.reader,
+                          undefined,
+                          makeArticleLibraryHandler({
+                            articles: runtime.library,
+                            objects: markdown.reader,
+                            now: currentCapturedAtUnsafe,
+                            deriveArchiveRequestId:
+                              deriveManualArchiveRequestIdUnsafe,
+                            archive: archiveArticle({
+                              ...runtime.store,
+                              capture: capture.capture,
+                              newSnapshotId: randomSnapshotIdUnsafe,
+                              now: currentCapturedAtUnsafe,
+                            }),
+                          }),
+                          {
+                            taxonomy: runtime.taxonomy,
+                            interestProfiles: runtime.interestProfiles,
+                            enrichment,
+                          }
                         ),
                         dependencies.runPoller(
                           config.feedPoller,

@@ -14,6 +14,9 @@ import {
   type UnsafeNatsRpcServer,
 } from "../infrastructure/unsafe/nats-rpc.js"
 import { makeContentKnowledgeRpcHandler } from "./content-knowledge-rpc.js"
+import { makeArticleLibraryRpcHandler } from "./article-library-rpc.js"
+import { makePersonalizationRpcHandler } from "./personalization-rpc.js"
+import type { makeArticleLibraryHandler } from "./article-library-handler.js"
 import type { NodeContentKnowledgeRuntime, NodeRuntimeError } from "./node.js"
 
 export type ContentKnowledgeRpcServerConfig = DeepReadonly<{
@@ -48,7 +51,9 @@ export const runNatsContentKnowledgeRpc = (
   config: ContentKnowledgeRpcServerConfig,
   runtime: Pick<NodeContentKnowledgeRuntime, "articles" | "subscriptions">,
   objects: MarkdownObjectReader,
-  dependencies: ContentKnowledgeRpcServerDependencies = defaultDependencies
+  dependencies: ContentKnowledgeRpcServerDependencies = defaultDependencies,
+  articleLibrary?: ReturnType<typeof makeArticleLibraryHandler>,
+  personalization?: Parameters<typeof makePersonalizationRpcHandler>[0]
 ): Effect.Effect<void, NodeRuntimeError> =>
   Effect.scoped(
     Effect.acquireRelease(
@@ -60,7 +65,11 @@ export const runNatsContentKnowledgeRpc = (
               subjects.content.addSubscription,
               subjects.content.listSubscriptions,
               subjects.content.deleteSubscription,
+              subjects.content.updateSubscription,
+              subjects.content.listFeedCatalog,
               subjects.content.materializeArticles,
+              subjects.content.articleLibrary,
+              subjects.content.personalization,
             ],
             config.queueGroup
           ),
@@ -74,6 +83,14 @@ export const runNatsContentKnowledgeRpc = (
           materializeArticles({ catalog: runtime.articles, objects }),
           dependencies
         )
+        const libraryHandler =
+          articleLibrary === undefined
+            ? undefined
+            : makeArticleLibraryRpcHandler(articleLibrary, dependencies)
+        const personalizationHandler =
+          personalization === undefined
+            ? undefined
+            : makePersonalizationRpcHandler(personalization, dependencies)
         const loop = (): Effect.Effect<void, NodeRuntimeError> =>
           Effect.tryPromise({
             try: () => server.receive(),
@@ -81,7 +98,15 @@ export const runNatsContentKnowledgeRpc = (
           }).pipe(
             Effect.flatMap((delivery) => {
               if (delivery === undefined) return Effect.void
-              return handler({
+              const selected =
+                delivery.subject === subjects.content.articleLibrary &&
+                libraryHandler !== undefined
+                  ? libraryHandler
+                  : delivery.subject === subjects.content.personalization &&
+                      personalizationHandler !== undefined
+                    ? personalizationHandler
+                    : handler
+              return selected({
                 subject: delivery.subject,
                 payload: delivery.payload,
                 reply: (payload) =>

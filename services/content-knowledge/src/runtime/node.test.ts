@@ -164,7 +164,7 @@ describe("content-knowledge Node runtime", () => {
     )
     database.execute(`
       INSERT INTO feed_catalog VALUES ('feed-a', 'https://a.example/feed', '2026-08-12T00:00:00.000Z');
-      INSERT INTO feed_subscriptions VALUES ('sub-a', 'owner-a', 'feed-a', '2026-08-12T00:00:00.000Z');
+      INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-a', 'owner-a', 'feed-a', '2026-08-12T00:00:00.000Z');
       INSERT INTO feed_items VALUES (
         '5af55f2e-ff0b-475c-866a-f2cff48c101d', 'feed-a', 'external-a',
         'https://a.example/article', 'Article', NULL, '2026-08-12T00:00:00.000Z'

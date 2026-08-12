@@ -55,6 +55,18 @@ describe("Content Knowledge RPC handler", () => {
       list: vi.fn(() => Effect.succeed([subscription])),
       remove: vi.fn(() => Effect.succeed({ _tag: "Deleted" } as const)),
       listFeedsForPolling: vi.fn(),
+      setEnabled: vi.fn(() =>
+        Effect.succeed({
+          _tag: "Updated" as const,
+          subscription,
+          enabled: false,
+        })
+      ),
+      listCatalog: vi.fn(() =>
+        Effect.succeed([
+          { feedId: subscription.feedId, feedUrl: subscription.feedUrl },
+        ])
+      ),
     }
     const materialize = vi.fn(() =>
       Effect.succeed({ _tag: "NoArticles" } as const)
@@ -71,6 +83,11 @@ describe("Content Knowledge RPC handler", () => {
     const calls = [
       [subjects.content.addSubscription, { feedUrl: subscription.feedUrl }],
       [subjects.content.listSubscriptions, {}],
+      [
+        subjects.content.updateSubscription,
+        { subscriptionId: subscription.subscriptionId, enabled: false },
+      ],
+      [subjects.content.listFeedCatalog, { q: "news" }],
       [
         subjects.content.deleteSubscription,
         { subscriptionId: subscription.subscriptionId },
@@ -100,6 +117,12 @@ describe("Content Knowledge RPC handler", () => {
       "owner-a",
       subscription.subscriptionId
     )
+    expect(repository.setEnabled).toHaveBeenCalledWith(
+      "owner-a",
+      subscription.subscriptionId,
+      false
+    )
+    expect(repository.listCatalog).toHaveBeenCalledWith("owner-a", "news")
   })
 
   it("materializes for the actor owner and rejects anonymous or wrong producers", async () => {

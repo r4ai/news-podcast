@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 
 import type {
   SubscriptionRepository,
+  SubscriptionStateResult,
   SubscriptionStoreError,
 } from "../application/subscription-ports.js"
 import {
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS feed_subscriptions (
   owner_id TEXT NOT NULL,
   feed_id TEXT NOT NULL REFERENCES feed_catalog(feed_id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   UNIQUE(owner_id, feed_id)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS feed_subscriptions_owner
@@ -61,7 +63,17 @@ export const createSqliteSubscriptionRepository = (
   database: SqlitePort
 ): Effect.Effect<SubscriptionRepository, SubscriptionStoreError> =>
   Effect.try({
-    try: () => database.execute(schema),
+    try: () => {
+      database.execute(schema)
+      const columns = database.all(
+        "PRAGMA table_info(feed_subscriptions)"
+      ) as readonly { readonly name?: unknown }[]
+      if (!columns.some(({ name }) => name === "enabled")) {
+        database.execute(
+          "ALTER TABLE feed_subscriptions ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1))"
+        )
+      }
+    },
     catch: () => failure("Add"),
   }).pipe(
     Effect.map(() => {
@@ -168,6 +180,87 @@ export const createSqliteSubscriptionRepository = (
           )
         )
 
+      const setEnabled: SubscriptionRepository["setEnabled"] = (
+        ownerId,
+        subscriptionId,
+        enabled
+      ) =>
+        Effect.try({
+          try: () => {
+            const updated = database.run(
+              "UPDATE feed_subscriptions SET enabled = ? WHERE subscription_id = ? AND owner_id = ?",
+              [enabled ? 1 : 0, subscriptionId, ownerId]
+            )
+            if (Number(updated.changes) !== 1) return undefined
+            return database.get(
+              `SELECT s.subscription_id AS subscriptionId,
+                      s.feed_id AS feedId,
+                      s.owner_id AS ownerId,
+                      f.feed_url AS feedUrl,
+                      s.created_at AS createdAt
+                 FROM feed_subscriptions s
+                 JOIN feed_catalog f ON f.feed_id = s.feed_id
+                WHERE s.subscription_id = ? AND s.owner_id = ?`,
+              [subscriptionId, ownerId]
+            )
+          },
+          catch: () => failure("Update"),
+        }).pipe(
+          Effect.flatMap(
+            (
+              row
+            ): Effect.Effect<
+              SubscriptionStateResult,
+              SubscriptionStoreError
+            > =>
+              row === undefined
+                ? Effect.succeed({ _tag: "NotFound" as const })
+                : decodeSubscription(row, "Update").pipe(
+                    Effect.map((subscription) =>
+                      deepFreeze({
+                        _tag: "Updated" as const,
+                        subscription,
+                        enabled,
+                      })
+                    )
+                  )
+          )
+        )
+
+      const listCatalog: SubscriptionRepository["listCatalog"] = (
+        ownerId,
+        query
+      ) =>
+        Effect.try({
+          try: () =>
+            database.all(
+              `SELECT DISTINCT f.feed_id AS feedId, f.feed_url AS feedUrl
+                 FROM feed_catalog f
+                 JOIN feed_subscriptions s ON s.feed_id = f.feed_id
+                WHERE s.owner_id = ? AND (? IS NULL OR f.feed_url LIKE ? ESCAPE '\\')
+                ORDER BY f.feed_url, f.feed_id
+                LIMIT 100`,
+              [
+                ownerId,
+                query ?? null,
+                query === undefined
+                  ? null
+                  : `%${query.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`,
+              ]
+            ),
+          catch: () => failure("ListCatalog"),
+        }).pipe(
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, (row) =>
+              parseFeedRow(row).pipe(
+                Effect.flatMap((value) => parse(PollingFeedSchema)(value)),
+                Effect.mapError(() => failure("ListCatalog", "CorruptRecord"))
+              )
+            )
+          ),
+          Effect.map(deepFreeze)
+        )
+
       const listFeedsForPolling: SubscriptionRepository["listFeedsForPolling"] =
         () =>
           Effect.try({
@@ -175,7 +268,7 @@ export const createSqliteSubscriptionRepository = (
               database.all(
                 `SELECT f.feed_id AS feedId, f.feed_url AS feedUrl
                FROM feed_catalog f
-              WHERE EXISTS (SELECT 1 FROM feed_subscriptions s WHERE s.feed_id = f.feed_id)
+              WHERE EXISTS (SELECT 1 FROM feed_subscriptions s WHERE s.feed_id = f.feed_id AND s.enabled = 1)
               ORDER BY f.created_at, f.feed_id`
               ),
             catch: () => failure("ListFeeds"),
@@ -191,6 +284,13 @@ export const createSqliteSubscriptionRepository = (
             Effect.map(deepFreeze)
           )
 
-      return deepFreeze({ add, list, remove, listFeedsForPolling })
+      return deepFreeze({
+        add,
+        list,
+        remove,
+        setEnabled,
+        listCatalog,
+        listFeedsForPolling,
+      })
     })
   )

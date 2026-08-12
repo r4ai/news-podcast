@@ -112,4 +112,83 @@ describe("SQLite subscription repository", () => {
       database.close()
     }
   })
+
+  it("pauses polling and lists only the actor owner's feed catalog", async () => {
+    const database = openSqliteUnsafe(":memory:")
+    try {
+      const repository = await Effect.runPromise(
+        createSqliteSubscriptionRepository(database)
+      )
+      const added = await Effect.runPromise(
+        repository.add({
+          subscriptionId: decode(
+            SubscriptionIdSchema,
+            "9aa2225d-07e7-4af4-a8e6-e4788f801a91"
+          ),
+          feedId: decode(FeedIdSchema, "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd"),
+          ownerId: ownerA,
+          feedUrl,
+          createdAt,
+        })
+      )
+
+      expect(
+        await Effect.runPromise(
+          repository.setEnabled(
+            ownerB,
+            added.subscription.subscriptionId,
+            false
+          )
+        )
+      ).toEqual({ _tag: "NotFound" })
+      expect(
+        await Effect.runPromise(
+          repository.setEnabled(
+            ownerA,
+            added.subscription.subscriptionId,
+            false
+          )
+        )
+      ).toMatchObject({ _tag: "Updated", enabled: false })
+      expect(await Effect.runPromise(repository.listFeedsForPolling())).toEqual(
+        []
+      )
+      expect(
+        await Effect.runPromise(repository.listCatalog(ownerA, "news"))
+      ).toEqual([{ feedId: added.subscription.feedId, feedUrl }])
+      expect(await Effect.runPromise(repository.listCatalog(ownerB))).toEqual(
+        []
+      )
+    } finally {
+      database.close()
+    }
+  })
+
+  it("adds the enabled column to an existing service database", async () => {
+    const database = openSqliteUnsafe(":memory:")
+    try {
+      database.execute(`
+        CREATE TABLE feed_catalog (feed_id TEXT PRIMARY KEY, feed_url TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL) STRICT;
+        CREATE TABLE feed_subscriptions (
+          subscription_id TEXT PRIMARY KEY,
+          owner_id TEXT NOT NULL,
+          feed_id TEXT NOT NULL REFERENCES feed_catalog(feed_id) ON DELETE CASCADE,
+          created_at TEXT NOT NULL,
+          UNIQUE(owner_id, feed_id)
+        ) STRICT;
+      `)
+      const repository = await Effect.runPromise(
+        createSqliteSubscriptionRepository(database)
+      )
+      const columns = database.all(
+        "PRAGMA table_info(feed_subscriptions)"
+      ) as readonly { readonly name: string }[]
+      expect(columns.some(({ name }) => name === "enabled")).toBe(true)
+      expect(await Effect.runPromise(repository.listFeedsForPolling())).toEqual(
+        []
+      )
+    } finally {
+      database.close()
+    }
+  })
 })

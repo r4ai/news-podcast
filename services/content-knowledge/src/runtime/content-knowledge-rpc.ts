@@ -3,13 +3,17 @@ import {
   AddFeedSubscriptionReplySchema,
   ContentKnowledgeRejectionSchema,
   DeleteFeedSubscriptionReplySchema,
+  ListFeedCatalogReplySchema,
   ListFeedSubscriptionsReplySchema,
   MaterializeArticlesReplySchema,
+  UpdateFeedSubscriptionReplySchema,
   MessageEnvelopeSchema,
   parseAddFeedSubscriptionRequest,
   parseDeleteFeedSubscriptionRequest,
+  parseListFeedCatalogRequest,
   parseListFeedSubscriptionsRequest,
   parseMaterializeArticlesRequest,
+  parseUpdateFeedSubscriptionRequest,
   parseMessageEnvelope,
   subjects,
   type ContentKnowledgeRejection,
@@ -65,6 +69,10 @@ const replySchema = (subject: string) => {
       return ListFeedSubscriptionsReplySchema
     case subjects.content.deleteSubscription:
       return DeleteFeedSubscriptionReplySchema
+    case subjects.content.updateSubscription:
+      return UpdateFeedSubscriptionReplySchema
+    case subjects.content.listFeedCatalog:
+      return ListFeedCatalogReplySchema
     case subjects.content.materializeArticles:
       return MaterializeArticlesReplySchema
     default:
@@ -122,9 +130,7 @@ const storageCode = (failure: unknown): ContentKnowledgeRejection["code"] =>
     ? "OBJECT_FAILURE"
     : "STORAGE_FAILURE"
 
-const failureCode = (
-  failure: unknown
-): ContentKnowledgeRejection["code"] => {
+const failureCode = (failure: unknown): ContentKnowledgeRejection["code"] => {
   if (typeof failure === "object" && failure !== null && "code" in failure) {
     const code = failure.code
     if (
@@ -227,6 +233,43 @@ export const makeContentKnowledgeRpcHandler =
                   )
                 )
               }
+              if (delivery.subject === subjects.content.updateSubscription) {
+                return parseUpdateFeedSubscriptionRequest(request.payload).pipe(
+                  Effect.mapError(() => rejection("INVALID_REQUEST")),
+                  Effect.flatMap((input) =>
+                    parse(SubscriptionIdSchema)(input.subscriptionId).pipe(
+                      Effect.mapError(() => rejection("INVALID_REQUEST")),
+                      Effect.flatMap((subscriptionId) =>
+                        subscriptions.setEnabled(
+                          ownerId,
+                          subscriptionId,
+                          input.enabled
+                        )
+                      )
+                    )
+                  ),
+                  Effect.map((result) =>
+                    result._tag === "NotFound"
+                      ? deepFreeze({ _tag: "NotFound" as const })
+                      : deepFreeze({
+                          _tag: "Updated" as const,
+                          subscription: wireSubscription(result.subscription),
+                          enabled: result.enabled,
+                        })
+                  )
+                )
+              }
+              if (delivery.subject === subjects.content.listFeedCatalog) {
+                return parseListFeedCatalogRequest(request.payload).pipe(
+                  Effect.mapError(() => rejection("INVALID_REQUEST")),
+                  Effect.flatMap(({ q }) =>
+                    subscriptions.listCatalog(ownerId, q)
+                  ),
+                  Effect.map((feeds) =>
+                    deepFreeze({ _tag: "Catalog" as const, feeds })
+                  )
+                )
+              }
               if (delivery.subject === subjects.content.materializeArticles) {
                 return parseMaterializeArticlesRequest(request.payload).pipe(
                   Effect.mapError(() => rejection("INVALID_REQUEST")),
@@ -259,8 +302,7 @@ export const makeContentKnowledgeRpcHandler =
               return Effect.fail(rejection("INVALID_REQUEST"))
             }),
             Effect.matchEffect({
-              onFailure: (failure) =>
-                reject(failureCode(failure)),
+              onFailure: (failure) => reject(failureCode(failure)),
               onSuccess: (reply) =>
                 correlatedReply(delivery, request, reply, dependencies),
             })

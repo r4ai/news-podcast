@@ -33,7 +33,11 @@ describe("Content Knowledge NATS RPC runtime", () => {
         "content.add-subscription.v1",
         "content.list-subscriptions.v1",
         "content.delete-subscription.v1",
+        "content.update-subscription.v1",
+        "content.list-feed-catalog.v1",
         "content.materialize-articles.v1",
+        "content.article-library.v1",
+        "content.personalization.v1",
       ],
       "content-rpc"
     )
