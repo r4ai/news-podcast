@@ -1,3 +1,6 @@
 export * from "./article.js"
 export * from "./article-library.js"
 export * from "./subscription.js"
+export * from "./content-taxonomy.js"
+export * from "./enrichment.js"
+export * from "./interest-profile.js"
