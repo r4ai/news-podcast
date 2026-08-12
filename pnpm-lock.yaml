@@ -80,6 +80,9 @@ importers:
 
   apps/gateway:
     dependencies:
+      '@hono/node-server':
+        specifier: 2.0.10
+        version: 2.0.10(hono@4.13.1)
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
@@ -96,6 +99,12 @@ importers:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
     devDependencies:
+      '@types/node':
+        specifier: 24.12.4
+        version: 24.12.4
+      tsx:
+        specifier: 4.23.11
+        version: 4.23.11
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -646,28 +655,6 @@ importers:
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
-      '@news-podcast/protocols':
-        specifier: workspace:*
-        version: link:../../packages/protocols
-      effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
-    devDependencies:
-      '@types/node':
-        specifier: 24.12.4
-        version: 24.12.4
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: 4.1.10
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
-
-  services/episode-library:
-    dependencies:
-      '@news-podcast/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
       '@news-podcast/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -681,6 +668,9 @@ importers:
       '@types/node':
         specifier: 24.12.4
         version: 24.12.4
+      tsx:
+        specifier: 4.23.11
+        version: 4.23.11
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -688,8 +678,14 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
 
-  services/episode-production:
+  services/episode-library:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 3.1106.0
+        version: 3.1106.0
+      '@aws-sdk/s3-request-presigner':
+        specifier: 3.1106.0
+        version: 3.1106.0
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
@@ -709,6 +705,43 @@ importers:
       '@types/node':
         specifier: 24.12.4
         version: 24.12.4
+      tsx:
+        specifier: 4.23.11
+        version: 4.23.11
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
+
+  services/episode-production:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 3.1106.0
+        version: 3.1106.0
+      '@nats-io/transport-node':
+        specifier: 3.4.0
+        version: 3.4.0
+      '@news-podcast/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+      '@news-podcast/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@news-podcast/protocols':
+        specifier: workspace:*
+        version: link:../../packages/protocols
+      effect:
+        specifier: 4.0.0-beta.102
+        version: 4.0.0-beta.102
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.4
+        version: 24.12.4
+      tsx:
+        specifier: 4.23.11
+        version: 4.23.11
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -718,13 +751,31 @@ importers:
 
   services/identity-access:
     dependencies:
+      '@nats-io/transport-node':
+        specifier: 3.4.0
+        version: 3.4.0
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@news-podcast/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@news-podcast/protocols':
+        specifier: workspace:*
+        version: link:../../packages/protocols
+      better-auth:
+        specifier: 1.6.26
+        version: 1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10)
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
     devDependencies:
+      '@types/node':
+        specifier: 24.12.4
+        version: 24.12.4
+      tsx:
+        specifier: 4.23.11
+        version: 4.23.11
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -806,6 +857,10 @@ packages:
 
   '@aws-sdk/nested-clients@3.997.41':
     resolution: {integrity: sha512-RDHqPGQWlF6tatA/Tp3rg6oIwtgN9IVderxE+9av2Y93Dfyu+mO1hZ5Bu2jpfZg2rwdNbsssnwM+sLafIczMlQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/s3-request-presigner@3.1106.0':
+    resolution: {integrity: sha512-ZI5SCkyz8jB3Qr6NPSJ7R4A/PkniQvbD1DO8APwhMsubFcfwPSJMMUxrkv9k1E20ikRk7skpM9itZh+0wI9K/w==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/signature-v4-multi-region@3.996.43':
@@ -7249,6 +7304,15 @@ snapshots:
       '@smithy/core': 3.31.1
       '@smithy/fetch-http-handler': 5.6.13
       '@smithy/node-http-handler': 4.9.13
+      '@smithy/types': 4.16.1
+      tslib: 2.8.1
+
+  '@aws-sdk/s3-request-presigner@3.1106.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.6
+      '@aws-sdk/signature-v4-multi-region': 3.996.43
+      '@aws-sdk/types': 3.974.2
+      '@smithy/core': 3.31.1
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 

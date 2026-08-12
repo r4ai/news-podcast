@@ -16,8 +16,10 @@ import type {
   EpisodeExecutionPorts,
 } from "./execution-ports.js"
 
-const decode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, value: unknown) =>
-  Schema.decodeUnknownSync(schema)(value)
+const decode = <S extends Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: unknown
+) => Schema.decodeUnknownSync(schema)(value)
 const at = (value: string) => decode(UtcTimestampSchema, value)
 const running = leaseQueuedJob(
   newQueuedJob({
@@ -25,9 +27,7 @@ const running = leaseQueuedJob(
     ownerId: decode(OwnerIdSchema, "owner-1"),
     idempotencyKey: decode(IdempotencyKeySchema, "request-1"),
     trigger: "manual",
-    articleIds: [
-      "f8f15e30-6877-4b4d-9568-76bfa3dc3e40" as never,
-    ],
+    articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40" as never],
     enqueuedAt: at("2026-08-12T00:00:00.000Z"),
   }),
   {
@@ -120,13 +120,22 @@ describe("executeEpisodeJob", () => {
 
   it("completes selected sources and atomically writes success plus outbox intent", async () => {
     const ports = makePorts()
-    const outcome = await Effect.runPromise(executeEpisodeJob(ports)({ job: running }))
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running })
+    )
 
     expect(outcome._tag).toBe("Succeeded")
     expect(ports.articles.materialize).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerId: "owner-1",
         selection: { _tag: "Selected", articleIds: running.request.articleIds },
+      })
+    )
+    expect(ports.audio.put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerId: "owner-1",
+        jobId: running.jobId,
+        episodeId: "6518412b-ce2f-4641-9f2c-a02dd515bc31",
       })
     )
     expect(ports.persistence.completeWithOutbox).toHaveBeenCalledWith(
@@ -147,17 +156,22 @@ describe("executeEpisodeJob", () => {
     vi.mocked(first.speech.synthesize).mockReturnValueOnce(
       Effect.fail({ _tag: "TransportFailure" })
     )
-    const firstOutcome = await Effect.runPromise(executeEpisodeJob(first)({ job: running }))
+    const firstOutcome = await Effect.runPromise(
+      executeEpisodeJob(first)({ job: running })
+    )
     expect(firstOutcome._tag).toBe("Retrying")
 
-    const savedScript = vi.mocked(first.persistence.saveScriptCheckpoint).mock.calls[0]![0].script
+    const savedScript = vi.mocked(first.persistence.saveScriptCheckpoint).mock
+      .calls[0]![0].script
     const resumed = makePorts({
       persistence: {
         ...first.persistence,
         loadCheckpoint: () => Effect.succeed({ script: savedScript }),
       },
     })
-    const outcome = await Effect.runPromise(executeEpisodeJob(resumed)({ job: running }))
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(resumed)({ job: running })
+    )
     expect(outcome._tag).toBe("Succeeded")
     expect(resumed.script.generate).not.toHaveBeenCalled()
   })
@@ -178,7 +192,9 @@ describe("executeEpisodeJob", () => {
     vi.mocked(ports.persistence.assertLease).mockReturnValue(
       Effect.fail({ _tag: "StaleLease" })
     )
-    const outcome = await Effect.runPromise(executeEpisodeJob(ports)({ job: running }))
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running })
+    )
     expect(outcome).toEqual({ _tag: "StaleLease" })
     expect(ports.articles.materialize).not.toHaveBeenCalled()
   })
@@ -188,7 +204,9 @@ describe("executeEpisodeJob", () => {
     vi.mocked(ports.persistence.completeWithOutbox).mockReturnValue(
       Effect.succeed("Duplicate")
     )
-    const outcome = await Effect.runPromise(executeEpisodeJob(ports)({ job: running }))
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running })
+    )
     expect(outcome).toEqual({ _tag: "Duplicate" })
   })
 
@@ -198,7 +216,9 @@ describe("executeEpisodeJob", () => {
   ] as const)("maps %s provider failure", async (_case, failure, expected) => {
     const ports = makePorts()
     vi.mocked(ports.script.generate).mockReturnValue(Effect.fail(failure))
-    const outcome = await Effect.runPromise(executeEpisodeJob(ports)({ job: running }))
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running })
+    )
     expect(outcome._tag).toBe(expected)
   })
 })

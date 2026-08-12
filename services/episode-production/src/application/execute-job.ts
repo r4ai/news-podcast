@@ -27,10 +27,7 @@ export type EpisodeExecutionOutcome =
   | Readonly<{ _tag: "Canceled" }>
   | Readonly<{ _tag: "StaleLease" }>
 
-type ExecutionFailure =
-  | LeaseFailure
-  | PipelineFailure
-  | ScriptGenerationFailure
+type ExecutionFailure = LeaseFailure | PipelineFailure | ScriptGenerationFailure
 
 const canceled = (): LeaseFailure => deepFreeze({ _tag: "ExecutionCanceled" })
 
@@ -45,14 +42,16 @@ const isTagged = (failure: unknown, tag: string) =>
 
 const providerFailure = (failure: ExecutionFailure) =>
   isTagged(failure, "ProviderRetryExhausted")
-    ? (failure as Extract<ScriptGenerationFailure, { _tag: "ProviderRetryExhausted" }>).lastFailure
+    ? (
+        failure as Extract<
+          ScriptGenerationFailure,
+          { _tag: "ProviderRetryExhausted" }
+        >
+      ).lastFailure
     : failure
 
 const classify = (failure: ExecutionFailure) => {
-  if (
-    isTagged(failure, "ExecutionCanceled") ||
-    isTagged(failure, "Canceled")
-  ) {
+  if (isTagged(failure, "ExecutionCanceled") || isTagged(failure, "Canceled")) {
     return { _tag: "Canceled" as const, code: "canceled" }
   }
   if (isTagged(failure, "StaleLease")) {
@@ -146,7 +145,8 @@ const transitionFailure = (
     )
 }
 
-export const executeEpisodeJob = (ports: EpisodeExecutionPorts) =>
+export const executeEpisodeJob =
+  (ports: EpisodeExecutionPorts) =>
   (
     input: ExecuteEpisodeJobInput
   ): Effect.Effect<EpisodeExecutionOutcome, PipelineFailure> => {
@@ -206,6 +206,7 @@ export const executeEpisodeJob = (ports: EpisodeExecutionPorts) =>
         yield* assertLease()
         audio = yield* ports.audio.put({
           ownerId: job.request.ownerId,
+          jobId: job.jobId,
           episodeId: ports.nextEpisodeId(),
           bytes,
           ...(signal === undefined ? {} : { signal }),

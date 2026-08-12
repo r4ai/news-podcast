@@ -11,8 +11,8 @@ import type {
   RunningJob,
   UtcTimestamp,
 } from "../domain/episode-job.js"
-import type { ProviderFailure } from "../domain/provider-reliability.js"
 import type { GeneratedScript, ScriptGenerator } from "./script-generator.js"
+import type { SpeechSynthesizer } from "./speech-synthesizer.js"
 import type { Schema } from "effect"
 
 export type LeaseToken = Schema.Schema.Type<typeof LeaseTokenSchema>
@@ -69,34 +69,46 @@ export type EpisodeCompletionIntent = DeepReadonly<{
 
 export type PersistenceResult = "Applied" | "Duplicate" | "StaleLease"
 
+export type LeaseNextInput = DeepReadonly<{
+  now: UtcTimestamp
+  leasedUntil: UtcTimestamp
+  leaseToken: LeaseToken
+}>
+
+export type LeasedExecution = DeepReadonly<{
+  job: RunningJob
+  recovered: boolean
+}>
+
+export type AudioObjectStore = DeepReadonly<{
+  put: (input: {
+    ownerId: OwnerId
+    jobId: JobId
+    episodeId: EpisodeId
+    bytes: Uint8Array
+    signal?: AbortSignal
+  }) => Effect.Effect<StoredAudioCheckpoint, PipelineFailure>
+}>
+
 export type EpisodeExecutionPorts = DeepReadonly<{
   articles: {
     materialize: (input: {
       ownerId: OwnerId
       selection: ArticleSelection
       signal?: AbortSignal
-    }) => Effect.Effect<readonly [MaterializedArticle, ...MaterializedArticle[]], PipelineFailure>
+    }) => Effect.Effect<
+      readonly [MaterializedArticle, ...MaterializedArticle[]],
+      PipelineFailure
+    >
   }
   script: ScriptGenerator
-  speech: {
-    synthesize: (input: {
-      text: string
-      signal?: AbortSignal
-    }) => Effect.Effect<Uint8Array, ProviderFailure>
-  }
-  audio: {
-    put: (input: {
-      ownerId: OwnerId
-      episodeId: EpisodeId
-      bytes: Uint8Array
-      signal?: AbortSignal
-    }) => Effect.Effect<StoredAudioCheckpoint, PipelineFailure>
-  }
+  speech: SpeechSynthesizer
+  audio: AudioObjectStore
   persistence: {
     assertLease: (input: {
       jobId: JobId
       leaseToken: LeaseToken
-    }) => Effect.Effect<void, LeaseFailure>
+    }) => Effect.Effect<void, PipelineFailure | LeaseFailure>
     loadCheckpoint: (
       jobId: JobId
     ) => Effect.Effect<EpisodeExecutionCheckpoint | undefined, PipelineFailure>
