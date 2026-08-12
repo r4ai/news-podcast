@@ -12,23 +12,25 @@ export class VoicevoxDictionaryClient {
 
   constructor(
     config: VoicevoxConfig,
-    private readonly fetcher: typeof fetch = fetch,
+    private readonly fetcher: typeof fetch = fetch
   ) {
     this.baseUrl = config.baseUrl
   }
 
-  async listWords(signal?: AbortSignal): Promise<readonly VoicevoxUserDictWord[]> {
+  async listWords(
+    signal?: AbortSignal
+  ): Promise<readonly VoicevoxUserDictWord[]> {
     const url = new URL("user_dict", this.baseUrl)
     const response = await this.fetcher(url, signal ? { signal } : undefined)
     if (!response.ok) {
-      throw new Error(
-        `VOICEVOX user_dict list failed with ${response.status}`,
-      )
+      throw new Error(`VOICEVOX user_dict list failed with ${response.status}`)
     }
     const data = (await response.json()) as Record<string, unknown>
     const words = data.words
     if (!words || typeof words !== "object") return []
-    const entries = Object.entries(words as Record<string, Record<string, unknown>>)
+    const entries = Object.entries(
+      words as Record<string, Record<string, unknown>>
+    )
     return entries.map(([uuid, word]) => ({
       surface: String(word.surface ?? ""),
       pronunciation: String(word.pronunciation ?? ""),
@@ -41,7 +43,7 @@ export class VoicevoxDictionaryClient {
     surface: string,
     pronunciation: string,
     accentType: number,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<string> {
     const url = new URL("user_dict_word", this.baseUrl)
     url.searchParams.set("surface", surface)
@@ -53,7 +55,7 @@ export class VoicevoxDictionaryClient {
     })
     if (!response.ok) {
       throw new Error(
-        `VOICEVOX user_dict_word add failed with ${response.status}`,
+        `VOICEVOX user_dict_word add failed with ${response.status}`
       )
     }
     return (await response.text()).trim()
@@ -64,7 +66,7 @@ export class VoicevoxDictionaryClient {
     surface: string,
     pronunciation: string,
     accentType: number,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<void> {
     const url = new URL(`user_dict_word/${wordUuid}`, this.baseUrl)
     url.searchParams.set("surface", surface)
@@ -76,7 +78,7 @@ export class VoicevoxDictionaryClient {
     })
     if (!response.ok) {
       throw new Error(
-        `VOICEVOX user_dict_word update failed with ${response.status}`,
+        `VOICEVOX user_dict_word update failed with ${response.status}`
       )
     }
   }
@@ -89,7 +91,7 @@ export class VoicevoxDictionaryClient {
     })
     if (!response.ok) {
       throw new Error(
-        `VOICEVOX user_dict_word delete failed with ${response.status}`,
+        `VOICEVOX user_dict_word delete failed with ${response.status}`
       )
     }
   }

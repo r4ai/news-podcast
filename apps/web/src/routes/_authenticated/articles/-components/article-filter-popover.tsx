@@ -186,7 +186,10 @@ export function ArticleFilterPopover({
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <Label className="shrink-0 text-sm" htmlFor="article-archive-status">
+            <Label
+              className="shrink-0 text-sm"
+              htmlFor="article-archive-status"
+            >
               アーカイブ状態
             </Label>
             <Select

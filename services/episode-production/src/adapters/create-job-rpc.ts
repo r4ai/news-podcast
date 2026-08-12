@@ -137,57 +137,51 @@ export const handleCreateJobRpc = <SaveError>(
         onFailure: () => invalidEnvelope,
         onSuccess: (envelope) => {
           const reject = (code: RejectionCode) =>
-            rejectionLog(
-              code,
-              envelope.correlationId,
-              envelope.messageId
-            ).pipe(
+            rejectionLog(code, envelope.correlationId, envelope.messageId).pipe(
               Effect.andThen(
-                replyWith(
-                  delivery,
-                  rejected(code, envelope.correlationId)
-                )
+                replyWith(delivery, rejected(code, envelope.correlationId))
               )
             )
 
-          const process = envelope.actor._tag !== "User"
-            ? reject("UNAUTHENTICATED")
-            : Effect.all([
-                parseCreateEpisodeJobRequest(envelope.payload),
-                parseOwnerId(envelope.actor.userId),
-              ]).pipe(
-                Effect.matchEffect({
-                  onFailure: () => reject("INVALID_REQUEST"),
-                  onSuccess: ([request, ownerId]) =>
-                    useCase(
-                      deepFreeze({
-                        ownerId,
-                        idempotencyKey: request.idempotencyKey,
-                        trigger: request.trigger,
-                      })
-                    ).pipe(
-                      Effect.matchEffect({
-                        onFailure: (failure) =>
-                          reject(rejectionForSaveFailure(failure)),
-                        onSuccess: (job) =>
-                          Effect.logInfo("episode job accepted", {
-                            event_name: "episode.requested",
-                            job_id: job.jobId,
-                            owner_id: job.request.ownerId,
-                            correlation_id: envelope.correlationId,
-                            message_id: envelope.messageId,
-                          }).pipe(
-                            Effect.andThen(
-                              replyWith(
-                                delivery,
-                                accepted(envelope.correlationId, job.jobId)
+          const process =
+            envelope.actor._tag !== "User"
+              ? reject("UNAUTHENTICATED")
+              : Effect.all([
+                  parseCreateEpisodeJobRequest(envelope.payload),
+                  parseOwnerId(envelope.actor.userId),
+                ]).pipe(
+                  Effect.matchEffect({
+                    onFailure: () => reject("INVALID_REQUEST"),
+                    onSuccess: ([request, ownerId]) =>
+                      useCase(
+                        deepFreeze({
+                          ownerId,
+                          idempotencyKey: request.idempotencyKey,
+                          trigger: request.trigger,
+                        })
+                      ).pipe(
+                        Effect.matchEffect({
+                          onFailure: (failure) =>
+                            reject(rejectionForSaveFailure(failure)),
+                          onSuccess: (job) =>
+                            Effect.logInfo("episode job accepted", {
+                              event_name: "episode.requested",
+                              job_id: job.jobId,
+                              owner_id: job.request.ownerId,
+                              correlation_id: envelope.correlationId,
+                              message_id: envelope.messageId,
+                            }).pipe(
+                              Effect.andThen(
+                                replyWith(
+                                  delivery,
+                                  accepted(envelope.correlationId, job.jobId)
+                                )
                               )
-                            )
-                          ),
-                      })
-                    ),
-                })
-              )
+                            ),
+                        })
+                      ),
+                  })
+                )
 
           return withRemoteTraceparent(
             withMessagingSpan(

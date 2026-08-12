@@ -1,7 +1,10 @@
 import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import { handleCreateJobRpc, type CreateJobRpcDelivery } from "./create-job-rpc.js"
+import {
+  handleCreateJobRpc,
+  type CreateJobRpcDelivery,
+} from "./create-job-rpc.js"
 import { JobIdSchema, UtcTimestampSchema } from "../domain/episode-job.js"
 
 const jobId = Schema.decodeUnknownSync(JobIdSchema)(
@@ -99,9 +102,7 @@ describe("create-job NATS RPC adapter", () => {
     })
 
     await Effect.runPromise(
-      handler(
-        delivery(envelope({ actor: { _tag: "Anonymous" } }), replies)
-      )
+      handler(delivery(envelope({ actor: { _tag: "Anonymous" } }), replies))
     )
 
     expect(saveIdempotently).not.toHaveBeenCalled()

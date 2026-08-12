@@ -155,8 +155,7 @@ function statusBadge(variant: QueueSectionVariant) {
     case "pending":
       return {
         label: "待ち",
-        className:
-          "bg-muted text-muted-foreground",
+        className: "bg-muted text-muted-foreground",
       }
     case "failed":
       return {

@@ -15,22 +15,23 @@ export type ArticleAiBlockProps = {
   readonly isRecalculating: boolean
 }
 
-function scoreLabel(
-  score: number
-): { label: string; className: string } {
+function scoreLabel(score: number): { label: string; className: string } {
   if (score >= 70)
     return {
       label: "高適合",
-      className: "text-emerald-600 [&_[data-slot=progress-indicator]]:bg-emerald-500",
+      className:
+        "text-emerald-600 [&_[data-slot=progress-indicator]]:bg-emerald-500",
     }
   if (score >= 40)
     return {
       label: "中適合",
-      className: "text-amber-600 [&_[data-slot=progress-indicator]]:bg-amber-500",
+      className:
+        "text-amber-600 [&_[data-slot=progress-indicator]]:bg-amber-500",
     }
   return {
     label: "低適合",
-    className: "text-muted-foreground [&_[data-slot=progress-indicator]]:bg-muted-foreground/40",
+    className:
+      "text-muted-foreground [&_[data-slot=progress-indicator]]:bg-muted-foreground/40",
   }
 }
 
