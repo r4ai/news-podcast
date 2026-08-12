@@ -44,6 +44,7 @@ export const ContentFeedSubscriptionSchema = Schema.Struct({
   subscriptionId: SubscriptionIdSchema,
   feedId: FeedIdSchema,
   feedUrl: HttpUrlSchema,
+  enabled: Schema.Boolean,
   createdAt: UtcInstantSchema,
 })
 

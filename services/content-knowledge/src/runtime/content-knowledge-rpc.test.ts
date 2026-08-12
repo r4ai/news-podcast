@@ -44,6 +44,7 @@ describe("Content Knowledge RPC handler", () => {
       feedUrl: Schema.decodeUnknownSync(FeedUrlSchema)(
         "https://feeds.example.com/news.xml"
       ),
+      enabled: true,
       createdAt: Schema.decodeUnknownSync(CreatedAtSchema)(
         "2026-08-13T01:00:00.000Z"
       ),

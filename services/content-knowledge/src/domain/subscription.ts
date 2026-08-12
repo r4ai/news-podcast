@@ -53,6 +53,7 @@ export const FeedSubscriptionSchema = Schema.Struct({
   feedId: FeedIdSchema,
   ownerId: OwnerIdSchema,
   feedUrl: FeedUrlSchema,
+  enabled: Schema.optional(Schema.Boolean),
   createdAt: CreatedAtSchema,
 })
 export type FeedSubscription = Schema.Schema.Type<typeof FeedSubscriptionSchema>

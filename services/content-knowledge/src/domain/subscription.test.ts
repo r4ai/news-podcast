@@ -14,6 +14,7 @@ describe("feed subscription domain", () => {
       feedId: "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd",
       ownerId: "auth0|subject-1",
       feedUrl: "https://feeds.example.com/news.xml",
+      enabled: true,
       createdAt: "2026-08-13T01:00:00.000Z",
     })
 

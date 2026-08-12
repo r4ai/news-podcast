@@ -113,12 +113,14 @@ const wireSubscription = (value: {
   readonly subscriptionId: string
   readonly feedId: string
   readonly feedUrl: string
+  readonly enabled?: boolean
   readonly createdAt: string
 }) =>
   deepFreeze({
     subscriptionId: value.subscriptionId,
     feedId: value.feedId,
     feedUrl: value.feedUrl,
+    enabled: value.enabled ?? true,
     createdAt: value.createdAt,
   })
 
@@ -187,6 +189,7 @@ export const makeContentKnowledgeRpcHandler =
                           ...identity,
                           ownerId,
                           feedUrl,
+                          enabled: true,
                           createdAt,
                         })
                       ),

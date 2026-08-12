@@ -35,6 +35,7 @@ const SubscriptionRowSchema = Schema.Struct({
   feedId: Schema.String,
   ownerId: Schema.String,
   feedUrl: Schema.String,
+  enabled: Schema.Int,
   createdAt: Schema.String,
 })
 const FeedRowSchema = Schema.Struct({
@@ -55,7 +56,12 @@ const decodeSubscription = (
   operation: SubscriptionStoreError["operation"]
 ) =>
   parseSubscriptionRow(row).pipe(
-    Effect.flatMap((value) => parse(FeedSubscriptionSchema)(value)),
+    Effect.flatMap((value) =>
+      parse(FeedSubscriptionSchema)({
+        ...value,
+        enabled: value.enabled === 1,
+      })
+    ),
     Effect.mapError(() => failure(operation, "CorruptRecord"))
   )
 
@@ -85,6 +91,7 @@ export const createSqliteSubscriptionRepository = (
                     s.feed_id AS feedId,
                     s.owner_id AS ownerId,
                     f.feed_url AS feedUrl,
+                    s.enabled AS enabled,
                     s.created_at AS createdAt
                FROM feed_subscriptions s
                JOIN feed_catalog f ON f.feed_id = s.feed_id
@@ -136,6 +143,7 @@ export const createSqliteSubscriptionRepository = (
                       s.feed_id AS feedId,
                       s.owner_id AS ownerId,
                       f.feed_url AS feedUrl,
+                      s.enabled AS enabled,
                       s.created_at AS createdAt
                  FROM feed_subscriptions s
                  JOIN feed_catalog f ON f.feed_id = s.feed_id
@@ -197,6 +205,7 @@ export const createSqliteSubscriptionRepository = (
                       s.feed_id AS feedId,
                       s.owner_id AS ownerId,
                       f.feed_url AS feedUrl,
+                      s.enabled AS enabled,
                       s.created_at AS createdAt
                  FROM feed_subscriptions s
                  JOIN feed_catalog f ON f.feed_id = s.feed_id
