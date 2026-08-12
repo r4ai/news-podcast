@@ -226,6 +226,7 @@ describe("NATS GatewayPorts adapter", () => {
     expect(downstream[0]?.envelope.payload).toMatchObject({
       idempotencyKey: "daily-2026-08-12",
       trigger: "manual",
+      articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
     })
   })
 

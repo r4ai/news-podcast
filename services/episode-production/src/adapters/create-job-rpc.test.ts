@@ -25,7 +25,14 @@ const envelope = (overrides: Readonly<Record<string, unknown>> = {}) => ({
     _tag: "User",
     userId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c",
   },
-  payload: { idempotencyKey: "daily-2026-08-12", trigger: "manual" },
+  payload: {
+    idempotencyKey: "daily-2026-08-12",
+    trigger: "manual",
+    articleIds: [
+      "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+      "3c4d046c-b47b-4047-a562-66ac7e74e995",
+    ],
+  },
   ...overrides,
 })
 
@@ -49,7 +56,13 @@ describe("create-job NATS RPC adapter", () => {
 
     expect(saved).toHaveLength(1)
     expect(saved[0]).toMatchObject({
-      request: { ownerId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c" },
+      request: {
+        ownerId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c",
+        articleIds: [
+          "3c4d046c-b47b-4047-a562-66ac7e74e995",
+          "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+        ],
+      },
     })
     expect(JSON.parse(replies[0]!)).toEqual({
       protocolVersion: "production.create-job.reply.v1",

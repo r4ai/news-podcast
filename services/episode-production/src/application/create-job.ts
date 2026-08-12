@@ -25,6 +25,9 @@ export const createJob = <SaveError>(ports: CreateJobPorts<SaveError>) =>
         ownerId: command.ownerId,
         idempotencyKey: command.idempotencyKey,
         trigger: command.trigger,
+        ...(command.articleIds === undefined
+          ? {}
+          : { articleIds: command.articleIds }),
         enqueuedAt: now,
       })
     )

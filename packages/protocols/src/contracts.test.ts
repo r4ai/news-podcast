@@ -9,6 +9,32 @@ import {
 } from "./contracts.js"
 
 describe("integration contracts", () => {
+  it("preserves explicit article selection while keeping omission valid", async () => {
+    const [automatic, selected] = await Effect.runPromise(
+      Effect.all([
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "automatic",
+          trigger: "manual",
+        }),
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "selected",
+          trigger: "manual",
+          articleIds: [
+            "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+            "3c4d046c-b47b-4047-a562-66ac7e74e995",
+          ],
+        }),
+      ])
+    )
+
+    expect(automatic).not.toHaveProperty("articleIds")
+    expect(selected.articleIds).toEqual([
+      "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+      "3c4d046c-b47b-4047-a562-66ac7e74e995",
+    ])
+    expect(Object.isFrozen(selected.articleIds)).toBe(true)
+  })
+
   it("parses the cross-context happy paths into immutable values", async () => {
     const [session, request, article, episode] = await Effect.runPromise(
       Effect.all([
@@ -74,6 +100,37 @@ describe("integration contracts", () => {
           idempotencyKey: "key",
           trigger: "manual",
           ownerId: "forged",
+        }),
+    ],
+    [
+      "command with empty explicit article selection",
+      () =>
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "key",
+          trigger: "manual",
+          articleIds: [],
+        }),
+    ],
+    [
+      "command with a non-UUID article",
+      () =>
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "key",
+          trigger: "manual",
+          articleIds: ["article-1"],
+        }),
+    ],
+    [
+      "command with more than twenty selected articles",
+      () =>
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "key",
+          trigger: "manual",
+          articleIds: Array.from(
+            { length: 21 },
+            (_, index) =>
+              `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`
+          ),
         }),
     ],
     [

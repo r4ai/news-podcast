@@ -8,6 +8,8 @@ export const JobIdSchema = uuid("EpisodeJobId")
 export type JobId = Schema.Schema.Type<typeof JobIdSchema>
 export const EpisodeIdSchema = uuid("EpisodeId")
 export type EpisodeId = Schema.Schema.Type<typeof EpisodeIdSchema>
+export const ArticleIdSchema = uuid("ArticleId")
+export type ArticleId = Schema.Schema.Type<typeof ArticleIdSchema>
 export const OwnerIdSchema = uuid("OwnerId")
 export type OwnerId = Schema.Schema.Type<typeof OwnerIdSchema>
 export const UtcTimestampSchema = Schema.DateTimeUtcFromString
@@ -21,6 +23,12 @@ export const CreateJobCommandSchema = Schema.Struct({
   ownerId: OwnerIdSchema,
   idempotencyKey: IdempotencyKeySchema,
   trigger: Schema.Literals(["manual", "scheduled"]),
+  articleIds: Schema.optional(
+    Schema.Array(ArticleIdSchema).check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(20)
+    )
+  ),
 })
 export type CreateJobCommand = Schema.Schema.Type<typeof CreateJobCommandSchema>
 
@@ -113,6 +121,7 @@ export const newQueuedJob = (input: {
   readonly ownerId: OwnerId
   readonly idempotencyKey: IdempotencyKey
   readonly trigger: CreateJobCommand["trigger"]
+  readonly articleIds?: CreateJobCommand["articleIds"]
   readonly enqueuedAt: UtcTimestamp
 }): QueuedJob =>
   deepFreeze({
@@ -122,6 +131,9 @@ export const newQueuedJob = (input: {
       ownerId: input.ownerId,
       idempotencyKey: input.idempotencyKey,
       trigger: input.trigger,
+      ...(input.articleIds === undefined
+        ? {}
+        : { articleIds: [...input.articleIds].sort() }),
     },
     attempt: 0,
     enqueuedAt: input.enqueuedAt,

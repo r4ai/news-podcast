@@ -295,6 +295,9 @@ const makeAdapter = (
             {
               idempotencyKey: headers["idempotency-key"],
               trigger: payload.trigger,
+              ...(payload.articleIds === undefined
+                ? {}
+                : { articleIds: payload.articleIds }),
             },
             lineage
           ).pipe(

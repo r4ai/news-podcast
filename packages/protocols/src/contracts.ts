@@ -52,6 +52,12 @@ export const CreateEpisodeJobRequestSchema = Schema.Struct({
     Schema.brand("IdempotencyKey")
   ),
   trigger: Schema.Literals(["manual", "scheduled"]),
+  articleIds: Schema.optional(
+    Schema.Array(uuid("ArticleId")).check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(20)
+    )
+  ),
 })
 export type CreateEpisodeJobRequest = Schema.Schema.Type<
   typeof CreateEpisodeJobRequestSchema
