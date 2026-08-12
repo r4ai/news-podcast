@@ -16,6 +16,7 @@ import {
   CompletedEpisodeSchema,
   type CompletedEpisode,
 } from "../domain/episode.js"
+import { encodeEpisodePageCursor } from "../adapters/episode-page-cursor.js"
 import { makeEpisodeLibraryRpcHandler } from "./episode-library-rpc.js"
 
 const ownerId = "better-auth-user_01"
@@ -77,7 +78,9 @@ describe("episode-library RPC handler", () => {
   it("derives the owner from a trusted User actor and returns a correlated list envelope", async () => {
     const owned = episode()
     const reader: CompletedEpisodeReader = {
-      listByOwner: vi.fn(() => Effect.succeed([owned, episode(otherOwnerId)])),
+      listPageByOwner: vi.fn(() =>
+        Effect.succeed([owned, episode(otherOwnerId)])
+      ),
       findByOwner: vi.fn(() => Effect.succeed(owned)),
     }
     const signer: AudioAccessSigner = {
@@ -97,7 +100,7 @@ describe("episode-library RPC handler", () => {
       })
     )
 
-    expect(reader.listByOwner).toHaveBeenCalledWith(ownerId)
+    expect(reader.listPageByOwner).toHaveBeenCalledWith(ownerId, { limit: 21 })
     const { envelope, payload } = await replyPayload(replies[0]!)
     const parsed = await Effect.runPromise(parseListEpisodesReply(payload))
     expect(envelope).toMatchObject({
@@ -124,7 +127,7 @@ describe("episode-library RPC handler", () => {
 
   it("does not reveal or sign a foreign episode", async () => {
     const reader: CompletedEpisodeReader = {
-      listByOwner: () => Effect.succeed([]),
+      listPageByOwner: () => Effect.succeed([]),
       findByOwner: vi.fn(() => Effect.succeed(episode(otherOwnerId))),
     }
     const signer: AudioAccessSigner = {
@@ -154,7 +157,7 @@ describe("episode-library RPC handler", () => {
 
   it("rejects anonymous actors without consulting storage", async () => {
     const reader: CompletedEpisodeReader = {
-      listByOwner: vi.fn(),
+      listPageByOwner: vi.fn(),
       findByOwner: vi.fn(),
     }
     const signer: AudioAccessSigner = { issue: vi.fn() }
@@ -177,7 +180,7 @@ describe("episode-library RPC handler", () => {
       _tag: "Rejected",
       code: "UNAUTHENTICATED",
     })
-    expect(reader.listByOwner).not.toHaveBeenCalled()
+    expect(reader.listPageByOwner).not.toHaveBeenCalled()
   })
 
   it("maps storage and signing failures to stable protocol rejections", async () => {
@@ -186,7 +189,7 @@ describe("episode-library RPC handler", () => {
       operation: "list" as const,
     }
     const reader: CompletedEpisodeReader = {
-      listByOwner: () => Effect.fail(storageFailure),
+      listPageByOwner: () => Effect.fail(storageFailure),
       findByOwner: () => Effect.succeed(episode()),
     }
     const signer: AudioAccessSigner = {
@@ -218,5 +221,68 @@ describe("episode-library RPC handler", () => {
     expect(
       await Effect.runPromise(parseCreateAudioAccessReply(audio.payload))
     ).toEqual({ _tag: "Rejected", code: "SIGNING_FAILURE" })
+  })
+
+  it("decodes a cursor into an owner-scoped keyset query", async () => {
+    const position = {
+      createdAt: "2026-08-11T00:00:00.000Z" as never,
+      episodeId: "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never,
+    }
+    const reader: CompletedEpisodeReader = {
+      listPageByOwner: vi.fn(() => Effect.succeed([])),
+      findByOwner: vi.fn(() => Effect.succeed(undefined)),
+    }
+    const replies: string[] = []
+
+    await Effect.runPromise(
+      makeEpisodeLibraryRpcHandler(
+        reader,
+        { issue: vi.fn() },
+        dependencies
+      )({
+        subject: subjects.library.listEpisodes,
+        payload: JSON.stringify(
+          request({ cursor: encodeEpisodePageCursor(position) })
+        ),
+        reply: (payload) => Effect.sync(() => void replies.push(payload)),
+      })
+    )
+
+    expect(reader.listPageByOwner).toHaveBeenCalledWith(ownerId, {
+      after: position,
+      limit: 21,
+    })
+    const { payload } = await replyPayload(replies[0]!)
+    expect(await Effect.runPromise(parseListEpisodesReply(payload))).toEqual({
+      _tag: "Listed",
+      page: { items: [], page: { hasMore: false } },
+    })
+  })
+
+  it("rejects malformed cursors without consulting storage", async () => {
+    const reader: CompletedEpisodeReader = {
+      listPageByOwner: vi.fn(),
+      findByOwner: vi.fn(),
+    }
+    const replies: string[] = []
+
+    await Effect.runPromise(
+      makeEpisodeLibraryRpcHandler(
+        reader,
+        { issue: vi.fn() },
+        dependencies
+      )({
+        subject: subjects.library.listEpisodes,
+        payload: JSON.stringify(request({ cursor: "not-a-valid-cursor" })),
+        reply: (payload) => Effect.sync(() => void replies.push(payload)),
+      })
+    )
+
+    expect(reader.listPageByOwner).not.toHaveBeenCalled()
+    const { payload } = await replyPayload(replies[0]!)
+    expect(await Effect.runPromise(parseListEpisodesReply(payload))).toEqual({
+      _tag: "Rejected",
+      code: "INVALID_REQUEST",
+    })
   })
 })

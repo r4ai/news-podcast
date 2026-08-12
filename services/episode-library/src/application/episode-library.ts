@@ -9,8 +9,10 @@ import {
   type UtcInstant,
 } from "../domain/episode.js"
 import type { AudioAccessSigner, CompletedEpisodeReader } from "./ports.js"
+import type { EpisodePagePosition } from "./ports.js"
 
 const AUDIO_ACCESS_TTL_MILLIS = 5 * 60_000
+export const COMPLETED_EPISODE_PAGE_SIZE = 20
 
 export type EpisodeNotFound = Readonly<{ _tag: "EpisodeNotFound" }>
 
@@ -27,13 +29,25 @@ type OwnedEpisodeInput = Readonly<{
 export const listCompletedEpisodes = (reader: CompletedEpisodeReader) =>
   Effect.fn("episodeLibrary.list")(function* (input: {
     readonly ownerId: OwnerId
+    readonly after?: EpisodePagePosition
   }) {
-    const episodes = yield* reader.listByOwner(input.ownerId)
-    return deepFreeze(
-      episodes
-        .filter((episode) => episode.ownerId === input.ownerId)
-        .map(toPublicEpisode)
+    const episodes = yield* reader.listPageByOwner(input.ownerId, {
+      ...(input.after === undefined ? {} : { after: input.after }),
+      limit: COMPLETED_EPISODE_PAGE_SIZE + 1,
+    })
+    const owned = episodes.filter(
+      (episode) => episode.ownerId === input.ownerId
     )
+    const hasMore = owned.length > COMPLETED_EPISODE_PAGE_SIZE
+    const visible = owned.slice(0, COMPLETED_EPISODE_PAGE_SIZE)
+    const last = visible.at(-1)
+    return deepFreeze({
+      items: visible.map(toPublicEpisode),
+      hasMore,
+      ...(hasMore && last !== undefined
+        ? { next: { createdAt: last.createdAt, episodeId: last.id } }
+        : {}),
+    })
   })
 
 export const getCompletedEpisode = (reader: CompletedEpisodeReader) =>

@@ -6,6 +6,8 @@ export {
 } from "./unsafe/nats-episode-completed-consumer.js"
 export {
   makeSqliteEpisodeRepository,
+  restoreSqliteEpisodeLibraryBackup,
+  type EpisodeLibraryBackupFailure,
   type SqliteEpisodeRepository,
 } from "./unsafe/sqlite-episode-repository.js"
 export {

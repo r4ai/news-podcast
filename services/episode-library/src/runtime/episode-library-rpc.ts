@@ -18,9 +18,14 @@ import {
   issueAudioAccess,
   listCompletedEpisodes,
 } from "../application/episode-library.js"
+import {
+  decodeEpisodePageCursor,
+  encodeEpisodePageCursor,
+} from "../adapters/episode-page-cursor.js"
 import type {
   AudioAccessSigner,
   CompletedEpisodeReader,
+  EpisodePagePosition,
 } from "../application/ports.js"
 import { OwnerIdSchema, type EpisodeSource } from "../domain/episode.js"
 
@@ -161,14 +166,37 @@ export const makeEpisodeLibraryRpcHandler = (
                 Effect.mapError(() => rejection("INVALID_REQUEST"))
               ),
             ]).pipe(
-              Effect.flatMap(([ownerId]) => list({ ownerId })),
-              Effect.flatMap((items) =>
+              Effect.flatMap(([ownerId, request]) =>
+                Effect.gen(function* () {
+                  const after: EpisodePagePosition | undefined =
+                    request.cursor === undefined
+                      ? undefined
+                      : yield* decodeEpisodePageCursor(request.cursor).pipe(
+                          Effect.mapError(() => rejection("INVALID_REQUEST"))
+                        )
+                  return [ownerId, after] as const
+                })
+              ),
+              Effect.flatMap(([ownerId, after]) =>
+                list({
+                  ownerId,
+                  ...(after === undefined ? {} : { after }),
+                })
+              ),
+              Effect.flatMap((page) =>
                 parse(ListEpisodesReplySchema)(
                   deepFreeze({
                     _tag: "Listed",
                     page: {
-                      items: items.map(wireEpisode),
-                      page: { hasMore: false },
+                      items: page.items.map(wireEpisode),
+                      page: {
+                        hasMore: page.hasMore,
+                        ...(page.next === undefined
+                          ? {}
+                          : {
+                              nextCursor: encodeEpisodePageCursor(page.next),
+                            }),
+                      },
                     },
                   })
                 )

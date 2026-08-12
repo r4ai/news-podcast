@@ -421,9 +421,10 @@ describe("episode-library Node RPC runtime", () => {
             now: () => "unused",
             nowEpochMillis: () => 0,
             makeRepository: () => ({
-              listByOwner: () => Effect.succeed([]),
+              listPageByOwner: () => Effect.succeed([]),
               findByOwner: () => Effect.succeed(undefined),
               saveOnce: () => Effect.succeed("Stored"),
+              backupTo: () => Effect.succeed(1),
               close: Effect.sync(() => void events.push("sqlite.closed")),
             }),
           },

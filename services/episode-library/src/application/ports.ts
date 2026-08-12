@@ -6,6 +6,7 @@ import type {
   EpisodeId,
   HttpUrl,
   OwnerId,
+  UtcInstant,
 } from "../domain/episode.js"
 
 export type EpisodeLibraryStorageFailure = Readonly<{
@@ -13,9 +14,20 @@ export type EpisodeLibraryStorageFailure = Readonly<{
   operation: "list" | "find"
 }>
 
+export type EpisodePagePosition = Readonly<{
+  createdAt: UtcInstant
+  episodeId: EpisodeId
+}>
+
+export type EpisodePageQuery = Readonly<{
+  after?: EpisodePagePosition
+  limit: number
+}>
+
 export interface CompletedEpisodeReader {
-  listByOwner(
-    ownerId: OwnerId
+  listPageByOwner(
+    ownerId: OwnerId,
+    query: EpisodePageQuery
   ): Effect.Effect<readonly CompletedEpisode[], EpisodeLibraryStorageFailure>
   findByOwner(
     ownerId: OwnerId,

@@ -1,5 +1,7 @@
-import { DatabaseSync } from "node:sqlite"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
+import { copyFile, link, open, rm, unlink } from "node:fs/promises"
+import { basename, dirname, join } from "node:path"
+import { backup, DatabaseSync } from "node:sqlite"
 
 import { deepFreeze } from "@news-podcast/kernel"
 import { Effect } from "effect"
@@ -11,6 +13,7 @@ import type {
 } from "../../application/completion-ports.js"
 import type {
   CompletedEpisodeReader,
+  EpisodePageQuery,
   EpisodeLibraryStorageFailure,
 } from "../../application/ports.js"
 import type { InboxMessageId } from "../../domain/episode-completion.js"
@@ -66,8 +69,16 @@ const schema = `
 
 export type SqliteEpisodeRepository = CompletedEpisodeReader &
   Pick<EpisodeCompletionPorts, "saveOnce"> & {
+    readonly backupTo: (
+      destinationPath: string
+    ) => Effect.Effect<number, EpisodeLibraryBackupFailure>
     readonly close: Effect.Effect<void>
   }
+
+export type EpisodeLibraryBackupFailure = Readonly<{
+  _tag: "EpisodeLibraryBackupFailure"
+  operation: "backup" | "restore" | "validate"
+}>
 
 export const makeSqliteEpisodeRepository = (
   databasePath: string
@@ -89,10 +100,11 @@ export const makeSqliteEpisodeRepository = (
         }),
     })
 
-  const listByOwner = (
-    ownerId: OwnerId
+  const listPageByOwner = (
+    ownerId: OwnerId,
+    query: EpisodePageQuery
   ): Effect.Effect<readonly CompletedEpisode[], EpisodeLibraryStorageFailure> =>
-    selectEpisodeRows(database, ownerId).pipe(
+    selectEpisodeRows(database, ownerId, query).pipe(
       Effect.flatMap((rows) =>
         Effect.forEach(rows, (row) =>
           parseDatabaseEpisode(database, row as EpisodeRow)
@@ -122,11 +134,99 @@ export const makeSqliteEpisodeRepository = (
 
   return deepFreeze({
     saveOnce,
-    listByOwner,
+    listPageByOwner,
     findByOwner,
+    backupTo: (destinationPath) => backupDatabase(database, destinationPath),
     close: Effect.sync(() => database.close()),
   })
 }
+
+const backupFailure = (
+  operation: EpisodeLibraryBackupFailure["operation"]
+): EpisodeLibraryBackupFailure =>
+  deepFreeze({ _tag: "EpisodeLibraryBackupFailure", operation })
+
+const backupDatabase = (database: DatabaseSync, destinationPath: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      let reserved = false
+      try {
+        const handle = await open(destinationPath, "wx")
+        await handle.close()
+        reserved = true
+        return await backup(database, destinationPath)
+      } catch (error) {
+        if (reserved) await rm(destinationPath, { force: true })
+        throw error
+      }
+    },
+    catch: () => backupFailure("backup"),
+  })
+
+const validateBackup = (backupPath: string): void => {
+  const database = new DatabaseSync(backupPath, { readOnly: true })
+  try {
+    const integrity = database.prepare("PRAGMA integrity_check").get()
+    if (integrity?.integrity_check !== "ok") {
+      throw new Error("SQLite integrity check failed")
+    }
+    const tables = new Set(
+      database
+        .prepare(
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table' AND name IN
+             ('episode_completion_inbox', 'episodes', 'episode_sources')`
+        )
+        .all()
+        .map((row) => row.name)
+    )
+    if (
+      !tables.has("episode_completion_inbox") ||
+      !tables.has("episodes") ||
+      !tables.has("episode_sources")
+    ) {
+      throw new Error("Not an episode-library SQLite backup")
+    }
+  } finally {
+    database.close()
+  }
+}
+
+/**
+ * Restores a verified backup to a new path. Existing databases are never
+ * overwritten; cutover remains an explicit operator action.
+ */
+export const restoreSqliteEpisodeLibraryBackup = (
+  backupPath: string,
+  databasePath: string
+): Effect.Effect<void, EpisodeLibraryBackupFailure> =>
+  Effect.tryPromise({
+    try: async () => {
+      try {
+        validateBackup(backupPath)
+      } catch {
+        throw backupFailure("validate")
+      }
+      const temporaryPath = join(
+        dirname(databasePath),
+        `.${basename(databasePath)}.${randomUUID()}.restore`
+      )
+      try {
+        await copyFile(backupPath, temporaryPath)
+        validateBackup(temporaryPath)
+        await link(temporaryPath, databasePath)
+      } finally {
+        await unlink(temporaryPath).catch(() => undefined)
+      }
+    },
+    catch: (error) =>
+      typeof error === "object" &&
+      error !== null &&
+      "_tag" in error &&
+      error._tag === "EpisodeLibraryBackupFailure"
+        ? (error as EpisodeLibraryBackupFailure)
+        : backupFailure("restore"),
+  })
 
 const saveTransaction = (
   database: DatabaseSync,
@@ -219,18 +319,42 @@ const episodeFingerprint = (episode: CompletedEpisode): string =>
 
 type EpisodeRow = Readonly<Record<string, string | number | bigint | null>>
 
-const selectEpisodeRows = (database: DatabaseSync, ownerId: OwnerId) =>
-  Effect.try(() =>
-    database
+const selectEpisodeRows = (
+  database: DatabaseSync,
+  ownerId: OwnerId,
+  query: EpisodePageQuery
+) =>
+  Effect.try(() => {
+    if (query.after === undefined) {
+      return database
+        .prepare(
+          `SELECT id, owner_id, title, script, audio_object_key,
+                  audio_byte_length, audio_content_type, created_at
+           FROM episodes
+           WHERE owner_id = ?
+           ORDER BY created_at DESC, id DESC
+           LIMIT ?`
+        )
+        .all(ownerId, query.limit)
+    }
+    return database
       .prepare(
         `SELECT id, owner_id, title, script, audio_object_key,
                 audio_byte_length, audio_content_type, created_at
          FROM episodes
          WHERE owner_id = ?
-         ORDER BY created_at DESC, id DESC`
+           AND (created_at < ? OR (created_at = ? AND id < ?))
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
       )
-      .all(ownerId)
-  )
+      .all(
+        ownerId,
+        query.after.createdAt,
+        query.after.createdAt,
+        query.after.episodeId,
+        query.limit
+      )
+  })
 
 const selectEpisodeRow = (
   database: DatabaseSync,

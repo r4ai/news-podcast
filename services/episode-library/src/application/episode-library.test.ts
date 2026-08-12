@@ -39,7 +39,7 @@ const makeEpisode = (episodeOwnerId = ownerId): CompletedEpisode =>
   ) as CompletedEpisode
 
 const reader = (episode = makeEpisode()): CompletedEpisodeReader => ({
-  listByOwner: vi.fn(() => Effect.succeed([episode])),
+  listPageByOwner: vi.fn(() => Effect.succeed([episode])),
   findByOwner: vi.fn(() => Effect.succeed(episode)),
 })
 
@@ -54,19 +54,23 @@ describe("episode library use cases", () => {
       getCompletedEpisode(repository)({ ownerId, episodeId })
     )
 
-    expect(repository.listByOwner).toHaveBeenCalledWith(ownerId)
+    expect(repository.listPageByOwner).toHaveBeenCalledWith(ownerId, {
+      limit: 21,
+    })
     expect(repository.findByOwner).toHaveBeenCalledWith(ownerId, episodeId)
-    expect(found).toEqual(listed[0])
+    expect(found).toEqual(listed.items[0])
     expect(found).not.toHaveProperty("ownerId")
     expect(found).not.toHaveProperty("audio")
+    expect(listed).toMatchObject({ hasMore: false })
     expect(Object.isFrozen(listed)).toBe(true)
+    expect(Object.isFrozen(listed.items)).toBe(true)
     expect(Object.isFrozen(found)).toBe(true)
     expect(Object.isFrozen(found.sources)).toBe(true)
   })
 
   it("returns a typed not-found error without revealing cross-owner existence", async () => {
     const repository: CompletedEpisodeReader = {
-      listByOwner: () => Effect.succeed([]),
+      listPageByOwner: () => Effect.succeed([]),
       findByOwner: vi.fn(() => Effect.succeed(undefined)),
     }
 
@@ -141,9 +145,43 @@ describe("episode library use cases", () => {
       })
     )
 
-    expect(listed).toEqual([])
+    expect(listed).toEqual({ items: [], hasMore: false })
     expect(found._tag).toBe("Failure")
     expect(audio._tag).toBe("Failure")
     expect(signer.issue).not.toHaveBeenCalled()
+  })
+
+  it("requests one look-ahead row and returns a stable keyset cursor", async () => {
+    const episodes = Array.from({ length: 21 }, () => makeEpisode()).map(
+      (item, index) => ({
+        ...item,
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}` as never,
+        createdAt:
+          `2026-08-${String(31 - index).padStart(2, "0")}T00:00:00.000Z` as never,
+      })
+    ) as CompletedEpisode[]
+    const repository: CompletedEpisodeReader = {
+      listPageByOwner: vi.fn(() => Effect.succeed(episodes)),
+      findByOwner: vi.fn(() => Effect.succeed(undefined)),
+    }
+    const after = {
+      createdAt: "2026-07-31T00:00:00.000Z" as never,
+      episodeId: "00000000-0000-4000-8000-000000000099" as never,
+    }
+
+    const page = await Effect.runPromise(
+      listCompletedEpisodes(repository)({ ownerId, after })
+    )
+
+    expect(repository.listPageByOwner).toHaveBeenCalledWith(ownerId, {
+      after,
+      limit: 21,
+    })
+    expect(page.items).toHaveLength(20)
+    expect(page.hasMore).toBe(true)
+    expect(page.next).toEqual({
+      createdAt: episodes[19]!.createdAt,
+      episodeId: episodes[19]!.id,
+    })
   })
 })

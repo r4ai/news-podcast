@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -10,7 +10,10 @@ import { afterEach, describe, expect, it } from "vitest"
 import { parseCompletedEpisode } from "../../adapters/parse-stored-episode.js"
 import { InboxMessageIdSchema } from "../../domain/episode-completion.js"
 import type { CompletedEpisode } from "../../domain/episode.js"
-import { makeSqliteEpisodeRepository } from "./sqlite-episode-repository.js"
+import {
+  makeSqliteEpisodeRepository,
+  restoreSqliteEpisodeLibraryBackup,
+} from "./sqlite-episode-repository.js"
 
 const ownerId = "d25da30b-4cd1-4875-94c7-6d48f32b5b1c"
 const otherOwnerId = "153ce5b9-6481-44ee-a82a-d5b065e03bda"
@@ -112,7 +115,7 @@ describe("single-writer SQLite episode repository", () => {
         .pipe(
           Effect.andThen(
             Effect.all([
-              repository.listByOwner(otherOwnerId as never),
+              repository.listPageByOwner(otherOwnerId as never, { limit: 21 }),
               repository.findByOwner(otherOwnerId as never, completed.id),
             ])
           ),
@@ -176,5 +179,107 @@ describe("single-writer SQLite episode repository", () => {
     database.close()
 
     expect(sql).not.toMatch(/signed_url|audio_url/i)
+  })
+
+  it("uses a deterministic owner-scoped keyset across equal timestamps", async () => {
+    const repository = makeSqliteEpisodeRepository(":memory:")
+    const newest = episode("5af55f2e-ff0b-475c-866a-f2cff48c1022")
+    const middle = episode("5af55f2e-ff0b-475c-866a-f2cff48c1011")
+    const oldest = episode("5af55f2e-ff0b-475c-866a-f2cff48c1000", {
+      createdAt: "2026-08-11T00:00:00.000Z",
+    })
+
+    const [first, second] = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* repository.saveOnce(
+          messageId("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a81"),
+          oldest,
+          receivedAt
+        )
+        yield* repository.saveOnce(
+          messageId("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a82"),
+          newest,
+          receivedAt
+        )
+        yield* repository.saveOnce(
+          messageId("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a83"),
+          middle,
+          receivedAt
+        )
+        const first = yield* repository.listPageByOwner(ownerId as never, {
+          limit: 2,
+        })
+        const second = yield* repository.listPageByOwner(ownerId as never, {
+          limit: 2,
+          after: {
+            createdAt: first[1]!.createdAt,
+            episodeId: first[1]!.id,
+          },
+        })
+        return [first, second] as const
+      }).pipe(Effect.ensuring(repository.close))
+    )
+
+    expect(first.map((item) => item.id)).toEqual([newest.id, middle.id])
+    expect(second.map((item) => item.id)).toEqual([oldest.id])
+  })
+
+  it("creates a consistent backup and restores it only to a new database", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "episode-library-backup-"))
+    temporaryDirectories.push(directory)
+    const databasePath = join(directory, "library.sqlite")
+    const backupPath = join(directory, "library.backup.sqlite")
+    const restoredPath = join(directory, "restored.sqlite")
+    const repository = makeSqliteEpisodeRepository(databasePath)
+    const completed = episode()
+
+    const pages = await Effect.runPromise(
+      repository
+        .saveOnce(
+          messageId("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80"),
+          completed,
+          receivedAt
+        )
+        .pipe(
+          Effect.andThen(repository.backupTo(backupPath)),
+          Effect.ensuring(repository.close)
+        )
+    )
+    await Effect.runPromise(
+      restoreSqliteEpisodeLibraryBackup(backupPath, restoredPath)
+    )
+    const restored = makeSqliteEpisodeRepository(restoredPath)
+    const loaded = await Effect.runPromise(
+      restored
+        .findByOwner(completed.ownerId, completed.id)
+        .pipe(Effect.ensuring(restored.close))
+    )
+
+    expect(pages).toBeGreaterThan(0)
+    expect(loaded).toEqual(completed)
+    expect(
+      (
+        await Effect.runPromiseExit(
+          restoreSqliteEpisodeLibraryBackup(backupPath, restoredPath)
+        )
+      )._tag
+    ).toBe("Failure")
+  })
+
+  it("rejects a corrupt restore source before creating a target", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "episode-library-backup-"))
+    temporaryDirectories.push(directory)
+    const backupPath = join(directory, "corrupt.sqlite")
+    const restoredPath = join(directory, "restored.sqlite")
+    writeFileSync(backupPath, "not a sqlite database")
+
+    const exit = await Effect.runPromiseExit(
+      restoreSqliteEpisodeLibraryBackup(backupPath, restoredPath)
+    )
+
+    expect(exit._tag).toBe("Failure")
+    if (exit._tag === "Failure") {
+      expect(String(exit.cause)).toContain("validate")
+    }
   })
 })
