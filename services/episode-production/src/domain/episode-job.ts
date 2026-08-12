@@ -11,7 +11,7 @@ export type EpisodeId = Schema.Schema.Type<typeof EpisodeIdSchema>
 export const ArticleIdSchema = uuid("ArticleId")
 export type ArticleId = Schema.Schema.Type<typeof ArticleIdSchema>
 export const OwnerIdSchema = Schema.NonEmptyString.check(
-  Schema.isPattern(/\S/),
+  Schema.isPattern(/^\S+$/),
   Schema.isMaxLength(255)
 ).pipe(Schema.brand("OwnerId"))
 export type OwnerId = Schema.Schema.Type<typeof OwnerIdSchema>

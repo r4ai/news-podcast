@@ -66,6 +66,7 @@ describe("completed episode domain", () => {
     ],
     ["empty sources", { ...completedEpisode, sources: [] }],
     ["invalid owner", { ...completedEpisode, ownerId: "   " }],
+    ["owner containing whitespace", { ...completedEpisode, ownerId: "owner id" }],
     ["empty title", { ...completedEpisode, title: "" }],
     [
       "invalid URL",

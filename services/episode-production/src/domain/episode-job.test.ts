@@ -47,6 +47,10 @@ const queued = () =>
   })
 
 describe("episode job state machine", () => {
+  it("rejects owner IDs containing whitespace", () => {
+    expect(() => Schema.decodeUnknownSync(OwnerIdSchema)("owner id")).toThrow()
+  })
+
   it("constructs a deeply immutable queued job", () => {
     const job = queued()
 
