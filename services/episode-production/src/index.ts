@@ -16,6 +16,15 @@ export {
   type CreateJobRpcReply,
 } from "./adapters/create-job-rpc.js"
 export {
+  handleCancelJobRpc,
+  handleGetJobRpc,
+  handleListJobsRpc,
+  handleListJobEventsRpc,
+  handleRetryJobRpc,
+  projectEpisodeJob,
+  type JobControlRpcDelivery,
+} from "./adapters/job-control-rpc.js"
+export {
   sqliteJobRepository,
   type IdempotencyConflict,
   type SqliteJobRepository,
@@ -34,6 +43,17 @@ export {
 } from "./infrastructure/unsafe/s3-audio-object-store.js"
 export { createJob, type CreateJobPorts } from "./application/create-job.js"
 export {
+  cancelOwnedJob,
+  getOwnedJob,
+  listOwnedJobs,
+  retryFailedJob,
+  type CancelOwnedJobPorts,
+  type CancelOwnedJobResult,
+  type OwnerScopedJobQueryPorts,
+  type RetryFailedJobPorts,
+  type RetryFailedJobResult,
+} from "./application/job-control.js"
+export {
   executeEpisodeJob,
   type EpisodeExecutionOutcome,
 } from "./application/execute-job.js"
@@ -51,6 +71,7 @@ export {
   NodeCreateJobRpcConfigSchema,
   parseNodeCreateJobRpcConfig,
   runNodeCreateJobRpc,
+  runNodeProductionRpc,
   type NodeCreateJobRpcDependencies,
   type NodeCreateJobRpcError,
 } from "./runtime/node.js"

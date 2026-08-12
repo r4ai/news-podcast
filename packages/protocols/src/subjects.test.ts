@@ -15,6 +15,11 @@ describe("versioned NATS subjects", () => {
       },
       production: {
         createJob: "production.create-job.v1",
+        getJob: "production.get-job.v1",
+        listJobs: "production.list-jobs.v1",
+        listJobEvents: "production.list-job-events.v1",
+        cancelJob: "production.cancel-job.v1",
+        retryJob: "production.retry-job.v1",
         jobCompleted: "production.job-completed.v1",
         jobCompletedV2: "production.job-completed.v2",
       },

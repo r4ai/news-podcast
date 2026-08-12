@@ -3,9 +3,13 @@ import { Effect, Schema, Scope } from "effect"
 
 import {
   EpisodeJobSchema,
+  UtcTimestampSchema,
+  cancelJob,
   type EpisodeJob,
   type JobId,
+  type OwnerId,
   type QueuedJob,
+  type UtcTimestamp,
 } from "../domain/episode-job.js"
 import {
   openSqliteJobHandle,
@@ -13,6 +17,7 @@ import {
 } from "../infrastructure/unsafe/sqlite.js"
 
 const encodeJob = Schema.encodeSync(EpisodeJobSchema)
+const encodeTimestamp = Schema.encodeSync(UtcTimestampSchema)
 const parseJob = parse(EpisodeJobSchema)
 
 export type IdempotencyConflict = Readonly<{
@@ -91,6 +96,93 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => ({
         },
       })
     ),
+  findOwned: (
+    ownerId: OwnerId,
+    jobId: JobId
+  ): Effect.Effect<EpisodeJob | undefined, unknown> =>
+    Effect.try({
+      try: () => handle.findOwned(ownerId, jobId),
+      catch: (cause) => persistenceError("find-owned-job", cause),
+    }).pipe(
+      Effect.flatMap((document) =>
+        document === undefined
+          ? Effect.succeed(undefined)
+          : decodeDocument(document)
+      )
+    ),
+  listOwned: (
+    ownerId: OwnerId,
+    limit: number
+  ): Effect.Effect<readonly EpisodeJob[], unknown> =>
+    Effect.try({
+      try: () => handle.listOwned(ownerId, limit),
+      catch: (cause) => persistenceError("list-owned-jobs", cause),
+    }).pipe(
+      Effect.flatMap((documents) =>
+        Effect.all(documents.map(decodeDocument), { concurrency: 1 })
+      )
+    ),
+  listOwnedStatusEvents: (input: {
+    readonly ownerId: OwnerId
+    readonly jobId: JobId
+    readonly afterSequence: number
+    readonly limit: number
+  }) =>
+    Effect.try({
+      try: () => handle.listOwnedStatusEvents(input),
+      catch: (cause) => persistenceError("list-owned-job-events", cause),
+    }).pipe(
+      Effect.flatMap((rows) =>
+        Effect.all(
+          rows.map((row) =>
+            decodeDocument(row.document).pipe(
+              Effect.map((job) => ({ sequence: row.sequence, job }))
+            )
+          ),
+          { concurrency: 1 }
+        )
+      )
+    ),
+  cancelOwned: (ownerId: OwnerId, jobId: JobId, canceledAt: UtcTimestamp) =>
+    Effect.try({
+      try: () => {
+        const result = handle.replaceOwnedActive({
+          ownerId,
+          jobId,
+          replace: (document) => {
+            const current = Schema.decodeUnknownSync(EpisodeJobSchema)(
+              JSON.parse(document) as unknown
+            )
+            if (
+              current._tag !== "Queued" &&
+              current._tag !== "Running" &&
+              current._tag !== "Retrying"
+            ) {
+              throw new Error("active job changed during cancellation")
+            }
+            return JSON.stringify(
+              encodeJob(
+                cancelJob(current, {
+                  canceledAt: Schema.decodeUnknownSync(UtcTimestampSchema)(
+                    encodeTimestamp(canceledAt)
+                  ),
+                  reason: "requested_by_user",
+                })
+              )
+            )
+          },
+        })
+        return result._tag === "Updated"
+          ? ({
+              _tag: "Canceled" as const,
+              job: Schema.decodeUnknownSync(EpisodeJobSchema)(
+                JSON.parse(result.document) as unknown
+              ),
+            } as const)
+          : result
+      },
+      catch: (cause) => persistenceError("cancel-owned-job", cause),
+    }),
 })
 
 export type SqliteJobRepository = ReturnType<typeof repositoryFromHandle>

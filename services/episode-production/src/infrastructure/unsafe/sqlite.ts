@@ -21,8 +21,29 @@ export type StoredCompletionOutboxRow = Readonly<{
   payload: string
 }>
 
+export type StoredJobStatusEventRow = Readonly<{
+  readonly sequence: number
+  readonly document: string
+}>
+
 export type SqliteJobHandle = Readonly<{
   findById: (jobId: string) => string | undefined
+  findOwned: (ownerId: string, jobId: string) => string | undefined
+  listOwned: (ownerId: string, limit: number) => readonly string[]
+  listOwnedStatusEvents: (input: {
+    readonly ownerId: string
+    readonly jobId: string
+    readonly afterSequence: number
+    readonly limit: number
+  }) => readonly StoredJobStatusEventRow[]
+  replaceOwnedActive: (input: {
+    readonly ownerId: string
+    readonly jobId: string
+    readonly replace: (document: string) => string
+  }) =>
+    | { readonly _tag: "Updated"; readonly document: string }
+    | { readonly _tag: "NotFound" }
+    | { readonly _tag: "Terminal" }
   saveIdempotently: (input: {
     readonly ownerId: string
     readonly idempotencyKey: string
@@ -102,8 +123,30 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
       created_at TEXT NOT NULL,
       published_at TEXT
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS episode_job_status_events (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL REFERENCES episode_jobs(job_id) ON DELETE CASCADE,
+      owner_id TEXT NOT NULL,
+      document TEXT NOT NULL
+    ) STRICT;
+    CREATE TRIGGER IF NOT EXISTS episode_job_status_events_insert
+    AFTER INSERT ON episode_jobs
+    BEGIN
+      INSERT INTO episode_job_status_events(job_id, owner_id, document)
+      VALUES (NEW.job_id, NEW.owner_id, NEW.document);
+    END;
+    CREATE TRIGGER IF NOT EXISTS episode_job_status_events_update
+    AFTER UPDATE OF document ON episode_jobs
+    WHEN json_extract(OLD.document, '$._tag') <>
+         json_extract(NEW.document, '$._tag')
+    BEGIN
+      INSERT INTO episode_job_status_events(job_id, owner_id, document)
+      VALUES (NEW.job_id, NEW.owner_id, NEW.document);
+    END;
     CREATE INDEX IF NOT EXISTS episode_jobs_execution_state
       ON episode_jobs(json_extract(document, '$._tag'), job_id);
+    CREATE INDEX IF NOT EXISTS episode_job_status_events_owner_cursor
+      ON episode_job_status_events(owner_id, job_id, sequence);
     CREATE INDEX IF NOT EXISTS episode_completion_outbox_pending
       ON episode_completion_outbox(published_at, created_at);
   `)
@@ -123,6 +166,22 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
   const findById = database.prepare(
     "SELECT document FROM episode_jobs WHERE job_id = ?"
   )
+  const findOwned = database.prepare(
+    "SELECT document FROM episode_jobs WHERE owner_id = ? AND job_id = ?"
+  )
+  const listOwned = database.prepare(`
+    SELECT document FROM episode_jobs
+    WHERE owner_id = ?
+    ORDER BY rowid DESC
+    LIMIT ?
+  `)
+  const listOwnedStatusEvents = database.prepare(`
+    SELECT sequence, document
+    FROM episode_job_status_events
+    WHERE owner_id = ? AND job_id = ? AND sequence > ?
+    ORDER BY sequence
+    LIMIT ?
+  `)
   const findByKey = database.prepare(`
     SELECT request_fingerprint, document
     FROM episode_jobs
@@ -205,6 +264,47 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
     findById: (jobId) =>
       (findById.get(jobId) as { readonly document: string } | undefined)
         ?.document,
+    findOwned: (ownerId, jobId) =>
+      (
+        findOwned.get(ownerId, jobId) as
+          | { readonly document: string }
+          | undefined
+      )?.document,
+    listOwned: (ownerId, limit) =>
+      (
+        listOwned.all(ownerId, limit) as unknown as readonly {
+          readonly document: string
+        }[]
+      ).map((row) => row.document),
+    listOwnedStatusEvents: (input) =>
+      (
+        listOwnedStatusEvents.all(
+          input.ownerId,
+          input.jobId,
+          input.afterSequence,
+          input.limit
+        ) as unknown as readonly {
+          readonly sequence: number
+          readonly document: string
+        }[]
+      ).map((row) => ({
+        sequence: row.sequence,
+        document: row.document,
+      })),
+    replaceOwnedActive: (input) =>
+      transaction(() => {
+        const row = findOwned.get(input.ownerId, input.jobId) as
+          | { readonly document: string }
+          | undefined
+        if (row === undefined) return { _tag: "NotFound" as const }
+        const current = JSON.parse(row.document) as { readonly _tag?: unknown }
+        if (!["Queued", "Running", "Retrying"].includes(String(current._tag))) {
+          return { _tag: "Terminal" as const }
+        }
+        const document = input.replace(row.document)
+        replaceJob.run(document, input.jobId)
+        return { _tag: "Updated" as const, document }
+      }),
     saveIdempotently: (input) => {
       return transaction(() => {
         const existing = findByKey.get(input.ownerId, input.idempotencyKey) as

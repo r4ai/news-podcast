@@ -6,8 +6,10 @@ import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { sqliteJobRepository } from "./sqlite-job-repository.js"
+import { sqliteExecutionRepository } from "./sqlite-execution-repository.js"
 import {
   ArticleIdSchema,
+  LeaseTokenSchema,
   CreateJobCommandSchema,
   JobIdSchema,
   newQueuedJob,
@@ -25,12 +27,16 @@ const at = Schema.decodeUnknownSync(UtcTimestampSchema)(
 const job = (
   id: string,
   trigger: "manual" | "scheduled" = "manual",
-  articleIds?: readonly string[]
+  articleIds?: readonly string[],
+  idempotencyKey: string = command.idempotencyKey
 ) =>
   newQueuedJob({
     jobId: Schema.decodeUnknownSync(JobIdSchema)(id),
     ownerId: command.ownerId,
-    idempotencyKey: command.idempotencyKey,
+    idempotencyKey: Schema.decodeUnknownSync(CreateJobCommandSchema)({
+      ...command,
+      idempotencyKey,
+    }).idempotencyKey,
     trigger,
     ...(articleIds === undefined
       ? {}
@@ -164,5 +170,133 @@ describe("SQLite job repository", () => {
 
     expect(loaded).toEqual(original)
     expect(loaded && Object.isFrozen(loaded.request)).toBe(true)
+  })
+
+  it("lists and finds jobs only inside the authenticated owner scope", async () => {
+    const ownerOneFirst = job(
+      "10e2d4e1-c127-479f-a124-2ea037bd9319",
+      "manual",
+      undefined,
+      "owner-1-first"
+    )
+    const ownerOneSecond = job(
+      "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+      "manual",
+      undefined,
+      "owner-1-second"
+    )
+    const ownerTwoCommand = Schema.decodeUnknownSync(CreateJobCommandSchema)({
+      ...command,
+      ownerId: "owner-2",
+      idempotencyKey: "owner-2-key",
+    })
+    const ownerTwo = newQueuedJob({
+      jobId: Schema.decodeUnknownSync(JobIdSchema)(
+        "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80"
+      ),
+      ownerId: ownerTwoCommand.ownerId,
+      idempotencyKey: ownerTwoCommand.idempotencyKey,
+      trigger: "manual",
+      enqueuedAt: at,
+    })
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* sqliteJobRepository(":memory:")
+          yield* repository.saveIdempotently(ownerOneFirst)
+          yield* repository.saveIdempotently(ownerOneSecond)
+          yield* repository.saveIdempotently(ownerTwo)
+          return {
+            ownerOne: yield* repository.listOwned(command.ownerId, 100),
+            hidden: yield* repository.findOwned(
+              command.ownerId,
+              ownerTwo.jobId
+            ),
+          }
+        })
+      )
+    )
+
+    expect(result.ownerOne.map((entry) => entry.jobId)).toEqual([
+      ownerOneSecond.jobId,
+      ownerOneFirst.jobId,
+    ])
+    expect(result.hidden).toBeUndefined()
+  })
+
+  it("atomically cancels only active jobs and fences an active lease", async () => {
+    const queued = job("10e2d4e1-c127-479f-a124-2ea037bd9319")
+    const token = Schema.decodeUnknownSync(LeaseTokenSchema)("lease-1")
+    const ownerTwo = Schema.decodeUnknownSync(CreateJobCommandSchema)({
+      ...command,
+      ownerId: "owner-2",
+    }).ownerId
+    const databasePath = join(
+      mkdtempSync(join(tmpdir(), "episode-production-control-")),
+      "jobs.sqlite"
+    )
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* sqliteJobRepository(databasePath)
+          const execution = yield* sqliteExecutionRepository(databasePath)
+          yield* repository.saveIdempotently(queued)
+          yield* execution.leaseNext({
+            now: at,
+            leasedUntil: Schema.decodeUnknownSync(UtcTimestampSchema)(
+              "2026-08-12T00:01:00.000Z"
+            ),
+            leaseToken: token,
+          })
+          const hidden = yield* repository.cancelOwned(
+            ownerTwo,
+            queued.jobId,
+            at
+          )
+          const canceled = yield* repository.cancelOwned(
+            command.ownerId,
+            queued.jobId,
+            at
+          )
+          const terminal = yield* repository.cancelOwned(
+            command.ownerId,
+            queued.jobId,
+            at
+          )
+          const leaseExit = yield* Effect.exit(
+            execution.assertLease({ jobId: queued.jobId, leaseToken: token })
+          )
+          const events = yield* repository.listOwnedStatusEvents({
+            ownerId: command.ownerId,
+            jobId: queued.jobId,
+            afterSequence: 0,
+            limit: 100,
+          })
+          const resumed = yield* repository.listOwnedStatusEvents({
+            ownerId: command.ownerId,
+            jobId: queued.jobId,
+            afterSequence: events[1]!.sequence,
+            limit: 100,
+          })
+          return { hidden, canceled, terminal, leaseExit, events, resumed }
+        })
+      )
+    )
+
+    expect(result.hidden).toEqual({ _tag: "NotFound" })
+    expect(result.canceled).toMatchObject({
+      _tag: "Canceled",
+      job: { _tag: "Canceled", reason: "requested_by_user" },
+    })
+    expect(result.terminal).toEqual({ _tag: "Terminal" })
+    expect(result.leaseExit._tag).toBe("Failure")
+    expect(result.events.map((event) => event.job._tag)).toEqual([
+      "Queued",
+      "Running",
+      "Canceled",
+    ])
+    expect(result.resumed.map((event) => event.job._tag)).toEqual(["Canceled"])
   })
 })

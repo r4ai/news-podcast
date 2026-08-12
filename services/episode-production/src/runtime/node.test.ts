@@ -1,9 +1,10 @@
+import { subjects } from "@news-podcast/protocols"
 import { Effect, Fiber, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
 import { UtcTimestampSchema } from "../domain/episode-job.js"
-import { runNodeCreateJobRpc } from "./node.js"
+import { runNodeCreateJobRpc, runNodeProductionRpc } from "./node.js"
 
 const config = {
   sqlitePath: ":memory:",
@@ -103,5 +104,38 @@ describe("episode-production Node RPC runtime", () => {
     await Effect.runPromise(Fiber.interrupt(fiber))
 
     expect(drain).toHaveBeenCalledOnce()
+  })
+
+  it("acquires and drains every versioned job-control subject", async () => {
+    const connected: string[] = []
+    const drained: string[] = []
+
+    await Effect.runPromise(
+      runNodeProductionRpc(config, {
+        connectNats: async (_servers, subject) => {
+          connected.push(subject)
+          return {
+            receive: async () => undefined,
+            drain: async () => void drained.push(subject),
+          }
+        },
+        newJobId: () => "10e2d4e1-c127-479f-a124-2ea037bd9319" as never,
+        now: () =>
+          Schema.decodeUnknownSync(UtcTimestampSchema)(
+            "2026-08-12T00:00:00.000Z"
+          ),
+      })
+    )
+
+    const expected = [
+      subjects.production.createJob,
+      subjects.production.getJob,
+      subjects.production.listJobs,
+      subjects.production.listJobEvents,
+      subjects.production.cancelJob,
+      subjects.production.retryJob,
+    ]
+    expect(connected.sort()).toEqual([...expected].sort())
+    expect(drained.sort()).toEqual([...expected].sort())
   })
 })

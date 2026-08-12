@@ -19,7 +19,7 @@ import {
   randomLeaseTokenUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import { runCompletionRelayLoop } from "./completion-relay-loop.js"
-import { NodeCreateJobRpcConfigSchema, runNodeCreateJobRpc } from "./node.js"
+import { NodeCreateJobRpcConfigSchema, runNodeProductionRpc } from "./node.js"
 import { runEpisodeWorkerLoop } from "./worker-loop.js"
 
 const positive = (maximum: number) =>
@@ -59,7 +59,9 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
   voicevox: Schema.Struct({
     baseUrl: httpUrl,
     characterName: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
-    styleName: Schema.optional(Schema.NonEmptyString.check(Schema.isMaxLength(200))),
+    styleName: Schema.optional(
+      Schema.NonEmptyString.check(Schema.isMaxLength(200))
+    ),
     requestTimeoutMillis: positive(300_000),
     maximumAudioBytes: positive(134_217_728),
     maximumTextCharactersPerRequest: positive(10_000),
@@ -130,7 +132,8 @@ export const runNodeEpisodeProductionService = (
               try: () => connectNatsRequestUnsafe(config.rpc.natsServers),
               catch: () => runtimeError("Content"),
             }),
-            (resource) => Effect.promise(() => resource.close()).pipe(Effect.ignore)
+            (resource) =>
+              Effect.promise(() => resource.close()).pipe(Effect.ignore)
           )
           const jetStream = yield* Effect.acquireRelease(
             Effect.tryPromise({
@@ -138,7 +141,8 @@ export const runNodeEpisodeProductionService = (
                 connectProductionJetStreamUnsafe(config.rpc.natsServers),
               catch: () => runtimeError("JetStream"),
             }),
-            (resource) => Effect.promise(() => resource.close()).pipe(Effect.ignore)
+            (resource) =>
+              Effect.promise(() => resource.close()).pipe(Effect.ignore)
           )
           const audio = yield* s3AudioObjectStoreScoped(config.s3).pipe(
             Effect.mapError(() => runtimeError("S3"))
@@ -210,7 +214,7 @@ export const runNodeEpisodeProductionService = (
             },
             config.completionRelay
           )
-          const rpc = runNodeCreateJobRpc(config.rpc).pipe(
+          const rpc = runNodeProductionRpc(config.rpc).pipe(
             Effect.mapError(() => runtimeError("Execution"))
           )
 
