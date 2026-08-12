@@ -12,6 +12,7 @@ RUN --mount=type=cache,id=news-podcast-pnpm-store,target=/pnpm/store \
     pnpm fetch --frozen-lockfile
 
 COPY apps/api/package.json apps/api/package.json
+COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/watchdog/package.json apps/watchdog/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY apps/worker/package.json apps/worker/package.json
@@ -20,13 +21,20 @@ COPY packages/agent-runtime/package.json packages/agent-runtime/package.json
 COPY packages/application/package.json packages/application/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/domain/package.json packages/domain/package.json
+COPY packages/kernel/package.json packages/kernel/package.json
 COPY packages/observability/package.json packages/observability/package.json
+COPY packages/protocols/package.json packages/protocols/package.json
 COPY packages/ui/package.json packages/ui/package.json
+COPY services/content-knowledge/package.json services/content-knowledge/package.json
+COPY services/episode-library/package.json services/episode-library/package.json
+COPY services/episode-production/package.json services/episode-production/package.json
+COPY services/identity-access/package.json services/identity-access/package.json
 RUN --network=none \
     --mount=type=cache,id=news-podcast-pnpm-store,target=/pnpm/store \
     pnpm install --offline --frozen-lockfile
 
 COPY apps ./apps
 COPY packages ./packages
+COPY services ./services
 
 CMD ["pnpm", "build"]
