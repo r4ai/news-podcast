@@ -235,6 +235,37 @@ describe("bounded episode processing", () => {
     )
     store.close()
   })
+
+  it("retries a transient structured-output failure", async () => {
+    const { store, leased } = await createLeasedJob("retry-empty-agent-output")
+    const processor = new EpisodeProcessor({
+      store,
+      audio: memoryAudioStore(),
+      agent: {
+        run: () =>
+          Promise.reject(
+            new PodcastAgentError(
+              "OpenAI response contained no output text (completed)"
+            )
+          ),
+      },
+      speech: { synthesize: () => Promise.resolve(wave()) },
+      voice: { characterName: "ずんだもん" },
+    })
+
+    await processor.process(leased)
+
+    expect(store.getJob("owner-1", leased.id)).toMatchObject({
+      status: "retrying",
+      attempt: 1,
+      failure: {
+        code: "provider-unavailable",
+        message: "Podcast generation failed",
+        retryable: true,
+      },
+    })
+    store.close()
+  })
 })
 
 async function createLeasedJob(
