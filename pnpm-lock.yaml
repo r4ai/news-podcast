@@ -95,6 +95,9 @@ importers:
       '@news-podcast/protocols':
         specifier: workspace:*
         version: link:../../packages/protocols
+      '@news-podcast/service-runtime':
+        specifier: workspace:*
+        version: link:../../packages/service-runtime
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
@@ -583,6 +586,25 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
 
+  packages/service-runtime:
+    dependencies:
+      '@news-podcast/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      effect:
+        specifier: 4.0.0-beta.102
+        version: 4.0.0-beta.102
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.4
+        version: 24.12.4
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
+
   packages/ui:
     dependencies:
       '@base-ui/react':
@@ -646,12 +668,18 @@ importers:
 
   services/content-knowledge:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 3.1106.0
+        version: 3.1106.0
       '@nats-io/jetstream':
         specifier: 3.4.0
         version: 3.4.0
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
+      '@news-podcast/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -661,6 +689,9 @@ importers:
       '@news-podcast/protocols':
         specifier: workspace:*
         version: link:../../packages/protocols
+      '@news-podcast/service-runtime':
+        specifier: workspace:*
+        version: link:../../packages/service-runtime
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
@@ -686,6 +717,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: 3.1106.0
         version: 3.1106.0
+      '@nats-io/jetstream':
+        specifier: 3.4.0
+        version: 3.4.0
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
@@ -698,6 +732,9 @@ importers:
       '@news-podcast/protocols':
         specifier: workspace:*
         version: link:../../packages/protocols
+      '@news-podcast/service-runtime':
+        specifier: workspace:*
+        version: link:../../packages/service-runtime
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
@@ -720,6 +757,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1106.0
         version: 3.1106.0
+      '@nats-io/jetstream':
+        specifier: 3.4.0
+        version: 3.4.0
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
@@ -732,6 +772,9 @@ importers:
       '@news-podcast/protocols':
         specifier: workspace:*
         version: link:../../packages/protocols
+      '@news-podcast/service-runtime':
+        specifier: workspace:*
+        version: link:../../packages/service-runtime
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
@@ -763,6 +806,9 @@ importers:
       '@news-podcast/protocols':
         specifier: workspace:*
         version: link:../../packages/protocols
+      '@news-podcast/service-runtime':
+        specifier: workspace:*
+        version: link:../../packages/service-runtime
       better-auth:
         specifier: 1.6.26
         version: 1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10)

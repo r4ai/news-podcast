@@ -1,4 +1,152 @@
 services:
+  gateway:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+      network: host
+    command: ["pnpm", "--filter", "@news-podcast/gateway", "start"]
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    environment:
+      GATEWAY_PORT: "4001"
+      GATEWAY_HEALTH_PORT: "4101"
+      HEALTH_PORT: "4101"
+      NATS_SERVERS: nats://nats:4222
+    ports:
+      - "127.0.0.1:4001:4001"
+      - "127.0.0.1:4101:4101"
+    depends_on:
+      identity-access:
+        condition: service_healthy
+      content-knowledge:
+        condition: service_healthy
+      episode-production:
+        condition: service_healthy
+      episode-library:
+        condition: service_healthy
+    healthcheck: &context-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + process.env.HEALTH_PORT + '/health/ready').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  identity-access:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+      network: host
+    command: ["pnpm", "--filter", "@news-podcast/identity-access", "start"]
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    environment:
+      IDENTITY_DATABASE_PATH: /app/data/identity.sqlite
+      IDENTITY_HEALTH_PORT: "4102"
+      HEALTH_PORT: "4102"
+      NATS_SERVERS: nats://nats:4222
+    volumes:
+      - identity-data:/app/data
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck: *context-health
+
+  content-knowledge:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+      network: host
+    command: ["pnpm", "--filter", "@news-podcast/content-knowledge", "start"]
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    environment:
+      CONTENT_KNOWLEDGE_DATABASE_PATH: /app/data/content.sqlite
+      CONTENT_HEALTH_PORT: "4103"
+      HEALTH_PORT: "4103"
+      NATS_SERVERS: nats://nats:4222
+      CONTENT_OUTBOX_BATCH_SIZE: "50"
+      CONTENT_OUTBOX_INTERVAL_MS: "1000"
+      CONTENT_OUTBOX_INITIAL_BACKOFF_MS: "1000"
+      CONTENT_OUTBOX_MAX_BACKOFF_MS: "30000"
+    volumes:
+      - content-data:/app/data
+    depends_on:
+      nats:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+    healthcheck: *context-health
+
+  episode-production:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+      network: host
+    command: ["pnpm", "--filter", "@news-podcast/episode-production", "start"]
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    environment:
+      EPISODE_PRODUCTION_DATABASE_PATH: /app/data/production.sqlite
+      EPISODE_PRODUCTION_HEALTH_PORT: "4104"
+      HEALTH_PORT: "4104"
+      NATS_SERVERS: nats://nats:4222
+    volumes:
+      - production-data:/app/data
+    depends_on:
+      nats:
+        condition: service_healthy
+      voicevox:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+    healthcheck: *context-health
+
+  episode-library:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+      network: host
+    command: ["pnpm", "--filter", "@news-podcast/episode-library", "start"]
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    environment:
+      EPISODE_LIBRARY_DATABASE_PATH: /app/data/library.sqlite
+      EPISODE_LIBRARY_HEALTH_PORT: "4105"
+      HEALTH_PORT: "4105"
+      NATS_SERVERS: nats://nats:4222
+      EPISODE_LIBRARY_COMPLETION_STREAM: EPISODE_PRODUCTION
+      EPISODE_LIBRARY_COMPLETION_DURABLE_NAME: episode-library-completions
+      EPISODE_LIBRARY_COMPLETION_ACK_WAIT_MILLIS: "30000"
+      EPISODE_LIBRARY_COMPLETION_MAXIMUM_DELIVERIES: "10"
+      EPISODE_LIBRARY_COMPLETION_INITIAL_NACK_DELAY_MILLIS: "1000"
+      EPISODE_LIBRARY_COMPLETION_MAXIMUM_NACK_DELAY_MILLIS: "30000"
+    volumes:
+      - library-data:/app/data
+    depends_on:
+      nats-provision:
+        condition: service_completed_successfully
+      seaweedfs:
+        condition: service_started
+    healthcheck: *context-health
+
+  nats-provision:
+    image: natsio/nats-box:0.19.2
+    command:
+      ["sh", "-ec", "nats --server nats://nats:4222 stream add EPISODE_PRODUCTION --subjects 'production.job-completed.v2' --storage file --retention limits --discard old --max-msgs=-1 --max-bytes=-1 --max-age=30d --dupe-window=2m --replicas=1 --no-allow-rollup --no-deny-delete --no-deny-purge --defaults || nats --server nats://nats:4222 stream info EPISODE_PRODUCTION"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: "no"
+
   web:
     build:
       context: .
@@ -131,6 +279,10 @@ services:
       retries: 20
 
 volumes:
+  identity-data:
+  content-data:
+  production-data:
+  library-data:
   app-data:
   audio-data:
   nats-data:

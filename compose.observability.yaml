@@ -1,4 +1,27 @@
 services:
+  gateway:
+    environment: &context-otel
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACE_SAMPLE_RATE: "1"
+    networks: [default, observability]
+
+  identity-access:
+    environment: *context-otel
+    networks: [default, observability]
+
+  content-knowledge:
+    environment: *context-otel
+    networks: [default, observability]
+
+  episode-production:
+    environment: *context-otel
+    networks: [default, observability]
+
+  episode-library:
+    environment: *context-otel
+    networks: [default, observability]
+
   api:
     environment:
       OTEL_ENABLED: "true"
