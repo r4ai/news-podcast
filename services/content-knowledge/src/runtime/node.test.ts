@@ -1,11 +1,12 @@
 import { deepFreeze } from "@news-podcast/kernel"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import type { UnsafeJetStream } from "../infrastructure/unsafe/nats-jetstream.js"
 import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
 import {
   parseNodeRuntimeConfig,
+  runNodeService,
   startNodeRuntime,
   type NodeRuntimeDependencies,
 } from "./node.js"
@@ -13,6 +14,16 @@ import {
 const validConfig = {
   sqlitePath: ":memory:",
   natsServers: ["nats://127.0.0.1:4222"],
+}
+
+const validServiceConfig = {
+  ...validConfig,
+  relay: {
+    batchSize: 10,
+    intervalMillis: 1_000,
+    initialBackoffMillis: 100,
+    maximumBackoffMillis: 1_000,
+  },
 }
 
 const makeJetStream = (close = vi.fn(async () => undefined)): UnsafeJetStream =>
@@ -108,6 +119,40 @@ describe("content-knowledge Node runtime", () => {
       _tag: "ContentKnowledgeRuntimeFailed",
       component: "Sqlite",
     })
+    database.close()
+  })
+
+  it("closes NATS and SQLite when the continuous service is interrupted", async () => {
+    const closeNats = vi.fn(async () => undefined)
+    const closeSqlite = vi.fn()
+    const database = openSqliteUnsafe(":memory:")
+    const runtimeDependencies: NodeRuntimeDependencies = {
+      ...makeDependencies(makeJetStream(closeNats)),
+      openSqlite: () =>
+        deepFreeze({
+          ...database,
+          close: () => void closeSqlite(),
+        }),
+    }
+    let cycleObserved = false
+    const fiber = Effect.runFork(
+      runNodeService(validServiceConfig, {
+        startRuntime: (input) => startNodeRuntime(input, runtimeDependencies),
+        relayRuntime: {
+          observe: () =>
+            Effect.sync(() => {
+              cycleObserved = true
+            }),
+          wait: () => Effect.never,
+        },
+      })
+    )
+
+    await vi.waitFor(() => expect(cycleObserved).toBe(true))
+    await Effect.runPromise(Fiber.interrupt(fiber))
+
+    expect(closeNats).toHaveBeenCalledOnce()
+    expect(closeSqlite).toHaveBeenCalledOnce()
     database.close()
   })
 })

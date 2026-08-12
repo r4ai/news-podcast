@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect"
 import {
   createJetStreamPublisher,
   createSqliteArchiveStore,
+  OutboxBatchSizeSchema,
   parseOutboxLimit,
   relayOutbox,
   type OutboxPublisherError,
@@ -26,6 +27,10 @@ import {
   stringifyJsonUnsafe,
 } from "../infrastructure/unsafe/json.js"
 import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
+import {
+  runOutboxRelayLoop,
+  type OutboxRelayLoopRuntime,
+} from "./outbox-relay-loop.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -44,6 +49,32 @@ export const NodeRuntimeConfigSchema = Schema.Struct({
   ),
 })
 export const parseNodeRuntimeConfig = parse(NodeRuntimeConfigSchema)
+
+const RelayDelaySchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(300_000)
+)
+export const NodeServiceConfigSchema = Schema.Struct({
+  sqlitePath: SqlitePathSchema,
+  natsServers: Schema.NonEmptyArray(NatsServerSchema).check(
+    Schema.isMaxLength(10)
+  ),
+  relay: Schema.Struct({
+    batchSize: OutboxBatchSizeSchema,
+    intervalMillis: RelayDelaySchema,
+    initialBackoffMillis: RelayDelaySchema,
+    maximumBackoffMillis: RelayDelaySchema,
+  }),
+})
+const parseNodeServiceStructure = parse(NodeServiceConfigSchema)
+export const parseNodeServiceConfig = (input: unknown) =>
+  parseNodeServiceStructure(input).pipe(
+    Effect.filterOrFail(
+      (config) =>
+        config.relay.initialBackoffMillis <= config.relay.maximumBackoffMillis,
+      () => deepFreeze({ _tag: "InvalidBackoffRange" as const })
+    )
+  )
 
 export type NodeRuntimeError = DeepReadonly<{
   readonly _tag: "ContentKnowledgeRuntimeFailed"
@@ -68,6 +99,13 @@ export type NodeRuntimeDependencies = DeepReadonly<{
   ) => Promise<UnsafeJetStream>
   readonly newMessageId: typeof randomMessageIdUnsafe
   readonly now: () => CapturedAt
+}>
+
+export type NodeServiceDependencies = Readonly<{
+  readonly startRuntime: (
+    input: unknown
+  ) => Effect.Effect<NodeContentKnowledgeRuntime, NodeRuntimeError>
+  readonly relayRuntime: Partial<OutboxRelayLoopRuntime>
 }>
 
 const defaultDependencies: NodeRuntimeDependencies = deepFreeze({
@@ -151,6 +189,48 @@ export const startNodeRuntime = (
               )
             ),
             Effect.tapError(() => closeSqlite(database).pipe(Effect.ignore))
+          )
+        )
+      )
+    )
+  )
+
+const defaultServiceDependencies: NodeServiceDependencies = Object.freeze({
+  startRuntime: startNodeRuntime,
+  relayRuntime: Object.freeze({}),
+})
+
+/** Owns the continuously running relay and releases SQLite/NATS on interruption. */
+export const runNodeService = (
+  input: unknown,
+  dependencies: NodeServiceDependencies = defaultServiceDependencies
+): Effect.Effect<void, NodeRuntimeError> =>
+  parseNodeServiceConfig(input).pipe(
+    Effect.mapError(() => runtimeError("Config")),
+    Effect.flatMap((config) =>
+      Effect.scoped(
+        Effect.acquireRelease(
+          dependencies.startRuntime({
+            sqlitePath: config.sqlitePath,
+            natsServers: config.natsServers,
+          }),
+          (runtime) =>
+            runtime.close().pipe(
+              Effect.tapError((failure) =>
+                Effect.logWarning("content runtime close failed", {
+                  event_name: "content.runtime.close",
+                  component: failure.component,
+                })
+              ),
+              Effect.ignore
+            )
+        ).pipe(
+          Effect.flatMap((runtime) =>
+            runOutboxRelayLoop(
+              config.relay,
+              runtime.relayOnce,
+              dependencies.relayRuntime
+            )
           )
         )
       )
