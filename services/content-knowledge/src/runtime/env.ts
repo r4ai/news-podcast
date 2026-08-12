@@ -9,10 +9,15 @@ const configFailure = (): NodeRuntimeError =>
     component: "Config" as const,
   })
 
-const decimalInteger = (value: string | undefined): number =>
-  value !== undefined && /^(?:0|[1-9]\d*)$/.test(value.trim())
+const decimalInteger = (
+  value: string | undefined,
+  fallback?: number
+): number => {
+  if (value === undefined && fallback !== undefined) return fallback
+  return value !== undefined && /^(?:0|[1-9]\d*)$/.test(value.trim())
     ? Number(value)
     : Number.NaN
+}
 
 /** Reads only explicitly owned variables and rejects malformed values. */
 export const readContentKnowledgeConfig = (
@@ -23,6 +28,12 @@ export const readContentKnowledgeConfig = (
     .split(",")
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
+  const openAiApiKey = env.OPENAI_API_KEY?.trim() ?? ""
+  const openAiModel =
+    env.CONTENT_ENRICH_OPENAI_MODEL?.trim() || env.OPENAI_MODEL?.trim() || ""
+  // A model name is non-secret and may be shared by other services. Only a
+  // usable key opts this service into external calls.
+  const enrichmentProviderEnabled = openAiApiKey.length > 0
 
   if (sqlitePath === "" || sqlitePath === ":memory:") {
     return Effect.fail(configFailure())
@@ -57,6 +68,31 @@ export const readContentKnowledgeConfig = (
     },
     enrichment: {
       dailyLimit: decimalInteger(env.CONTENT_ENRICH_DAILY_LIMIT),
+      provider: enrichmentProviderEnabled
+        ? {
+            endpoint:
+              env.OPENAI_RESPONSES_URL?.trim() ||
+              "https://api.openai.com/v1/responses",
+            apiKey: openAiApiKey,
+            model: openAiModel,
+            requestTimeoutMillis: decimalInteger(
+              env.CONTENT_ENRICH_OPENAI_TIMEOUT_MS,
+              60_000
+            ),
+            maximumAttempts: decimalInteger(
+              env.CONTENT_ENRICH_OPENAI_MAX_ATTEMPTS,
+              3
+            ),
+            baseDelayMillis: decimalInteger(
+              env.CONTENT_ENRICH_OPENAI_BASE_DELAY_MS,
+              1_000
+            ),
+            maximumDelayMillis: decimalInteger(
+              env.CONTENT_ENRICH_OPENAI_MAX_DELAY_MS,
+              30_000
+            ),
+          }
+        : null,
       loop: {
         intervalMillis: decimalInteger(env.CONTENT_ENRICH_INTERVAL_MS),
         initialBackoffMillis: decimalInteger(

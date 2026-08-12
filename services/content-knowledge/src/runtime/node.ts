@@ -10,6 +10,7 @@ import {
   createSqliteEnrichmentQueue,
   createSqliteInterestProfileRepository,
   createSqliteSubscriptionRepository,
+  makeOpenAiEnrichmentProvider,
   OutboxBatchSizeSchema,
   parseOutboxLimit,
   relayOutbox,
@@ -98,6 +99,24 @@ const DailyLimitSchema = Schema.Int.check(
   Schema.isLessThanOrEqualTo(10_000)
 )
 const S3TextSchema = Schema.NonEmptyString.check(Schema.isMaxLength(1_024))
+const HttpEndpointSchema = Schema.String.check(
+  Schema.makeFilter((value: string) => {
+    try {
+      const url = new URL(value)
+      return (
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        url.username === "" &&
+        url.password === ""
+      )
+    } catch {
+      return false
+    }
+  })
+)
+const ProviderAttemptSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(5)
+)
 export const NodeServiceConfigSchema = Schema.Struct({
   sqlitePath: SqlitePathSchema,
   natsServers: Schema.NonEmptyArray(NatsServerSchema).check(
@@ -127,6 +146,17 @@ export const NodeServiceConfigSchema = Schema.Struct({
   }),
   enrichment: Schema.Struct({
     dailyLimit: DailyLimitSchema,
+    provider: Schema.NullOr(
+      Schema.Struct({
+        endpoint: HttpEndpointSchema,
+        apiKey: S3TextSchema,
+        model: S3TextSchema,
+        requestTimeoutMillis: RelayDelaySchema,
+        maximumAttempts: ProviderAttemptSchema,
+        baseDelayMillis: RelayDelaySchema,
+        maximumDelayMillis: RelayDelaySchema,
+      })
+    ),
     loop: Schema.Struct({
       intervalMillis: RelayDelaySchema,
       initialBackoffMillis: RelayDelaySchema,
@@ -134,20 +164,7 @@ export const NodeServiceConfigSchema = Schema.Struct({
     }),
   }),
   archive: Schema.Struct({
-    endpoint: Schema.String.check(
-      Schema.makeFilter((value: string) => {
-        try {
-          const url = new URL(value)
-          return (
-            (url.protocol === "http:" || url.protocol === "https:") &&
-            url.username === "" &&
-            url.password === ""
-          )
-        } catch {
-          return false
-        }
-      })
-    ),
+    endpoint: HttpEndpointSchema,
     region: S3TextSchema,
     bucket: S3TextSchema,
     accessKeyId: S3TextSchema,
@@ -166,7 +183,10 @@ export const parseNodeServiceConfig = (input: unknown) =>
         config.feedPoller.loop.initialBackoffMillis <=
           config.feedPoller.loop.maximumBackoffMillis &&
         config.enrichment.loop.initialBackoffMillis <=
-          config.enrichment.loop.maximumBackoffMillis,
+          config.enrichment.loop.maximumBackoffMillis &&
+        (config.enrichment.provider === null ||
+          config.enrichment.provider.baseDelayMillis <=
+            config.enrichment.provider.maximumDelayMillis),
       () => deepFreeze({ _tag: "InvalidBackoffRange" as const })
     )
   )
@@ -219,7 +239,7 @@ export type NodeServiceDependencies = Readonly<{
   readonly openMarkdownReader: typeof openS3MarkdownObjectReaderUnsafe
   readonly runRpc: typeof runNatsContentKnowledgeRpc
   readonly runPoller: typeof runContentFeedPoller
-  readonly enrichmentProvider: EnrichmentProvider
+  readonly enrichmentProvider?: EnrichmentProvider
   readonly runEnrichment: typeof runEnrichmentWorkerLoop
   readonly onReady?: () => void
 }>
@@ -379,7 +399,6 @@ export const defaultNodeServiceDependencies: NodeServiceDependencies =
     openMarkdownReader: openS3MarkdownObjectReaderUnsafe,
     runRpc: runNatsContentKnowledgeRpc,
     runPoller: runContentFeedPoller,
-    enrichmentProvider: unavailableEnrichmentProvider,
     runEnrichment: runEnrichmentWorkerLoop,
   })
 
@@ -427,7 +446,16 @@ export const runNodeService = (
                   Effect.flatMap((markdown) => {
                     const enrichment = runtime.createEnrichment({
                       source: makeEnrichmentSource(markdown.reader),
-                      provider: dependencies.enrichmentProvider,
+                      provider:
+                        dependencies.enrichmentProvider ??
+                        (config.enrichment.provider === null
+                          ? unavailableEnrichmentProvider
+                          : makeOpenAiEnrichmentProvider({
+                              ...config.enrichment.provider,
+                              endpoint: new URL(
+                                config.enrichment.provider.endpoint
+                              ),
+                            })),
                       dailyLimit: config.enrichment.dailyLimit,
                     })
                     dependencies.onReady?.()

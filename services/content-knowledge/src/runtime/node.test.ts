@@ -36,6 +36,7 @@ const validServiceConfig = {
   },
   enrichment: {
     dailyLimit: 200,
+    provider: null,
     loop: {
       intervalMillis: 1_000,
       initialBackoffMillis: 100,

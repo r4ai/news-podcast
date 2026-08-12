@@ -55,6 +55,7 @@ describe("content-knowledge environment boundary", () => {
       },
       enrichment: {
         dailyLimit: 200,
+        provider: null,
         loop: {
           intervalMillis: 60_000,
           initialBackoffMillis: 1_000,
@@ -112,11 +113,44 @@ describe("content-knowledge environment boundary", () => {
       "out-of-range enrichment budget",
       { ...validEnvironment, CONTENT_ENRICH_DAILY_LIMIT: "10001" },
     ],
+    [
+      "partial OpenAI configuration",
+      { ...validEnvironment, OPENAI_API_KEY: "test-key" },
+    ],
+    [
+      "invalid OpenAI retry budget",
+      {
+        ...validEnvironment,
+        OPENAI_API_KEY: "test-key",
+        OPENAI_MODEL: "gpt-test",
+        CONTENT_ENRICH_OPENAI_MAX_ATTEMPTS: "6",
+      },
+    ],
   ])("rejects %s", async (_name, environment) => {
     const exit = await Effect.runPromiseExit(
       readContentKnowledgeConfig(environment)
     )
 
     expect(exit._tag).toBe("Failure")
+  })
+
+  it("enables the OpenAI provider only when key and model are both configured", async () => {
+    const config = await Effect.runPromise(
+      readContentKnowledgeConfig({
+        ...validEnvironment,
+        OPENAI_API_KEY: "test-key",
+        CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+      })
+    )
+
+    expect(config.enrichment.provider).toEqual({
+      endpoint: "https://api.openai.com/v1/responses",
+      apiKey: "test-key",
+      model: "gpt-test",
+      requestTimeoutMillis: 60_000,
+      maximumAttempts: 3,
+      baseDelayMillis: 1_000,
+      maximumDelayMillis: 30_000,
+    })
   })
 })
