@@ -219,6 +219,7 @@ export function reduceGenerationStream(
       return {
         ...current,
         finished: true,
+        timeline: finishTimeline(current.timeline),
         ...(current.state
           ? { state: { ...current.state, status: "succeeded" } }
           : {}),
@@ -228,6 +229,7 @@ export function reduceGenerationStream(
       return {
         ...current,
         finished: true,
+        timeline: finishTimeline(current.timeline),
         ...(current.state
           ? {
               state: {
@@ -245,6 +247,14 @@ export function reduceGenerationStream(
     default:
       return current
   }
+}
+
+function finishTimeline(
+  timeline: readonly TimelineEntry[]
+): readonly TimelineEntry[] {
+  return timeline.map((entry) =>
+    entry.done ? entry : { ...entry, done: true }
+  )
 }
 
 const isSameStep =

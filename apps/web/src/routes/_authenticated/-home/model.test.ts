@@ -125,16 +125,25 @@ describe("reduceGenerationStream", () => {
   it("marks the run finished on RUN_FINISHED", () => {
     const result = reduceAll([
       { ...at(), type: "STATE_SNAPSHOT", snapshot },
+      { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
       { ...at(), type: "RUN_FINISHED", threadId: "job-1", runId: "job-1" },
     ])
 
     expect(result.finished).toBe(true)
     expect(result.state?.status).toBe("succeeded")
+    expect(result.timeline.every((entry) => entry.done)).toBe(true)
   })
 
   it("records a failure from RUN_ERROR", () => {
     const result = reduceAll([
       { ...at(), type: "STATE_SNAPSHOT", snapshot },
+      { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
+      {
+        ...at(),
+        type: "TOOL_CALL_START",
+        toolCallId: "t1",
+        toolCallName: "read_article",
+      },
       {
         ...at(),
         type: "RUN_ERROR",
@@ -148,6 +157,7 @@ describe("reduceGenerationStream", () => {
       code: "provider-timeout",
       message: "timeout",
     })
+    expect(result.timeline.every((entry) => entry.done)).toBe(true)
   })
 
   it("distinguishes cancellation from failure", () => {
