@@ -483,9 +483,13 @@ describe("LocalStore enrich_queue", () => {
     )
 
     expect(store.countEnrichPending(owner)).toBe(0)
-    expect(store.listEnrichQueueStatus(owner, 200).failed.items[0]).toMatchObject(
-      { feedItemId: claimed!.feedItemId, attempt: 4, error: "invalid request" }
-    )
+    expect(
+      store.listEnrichQueueStatus(owner, 200).failed.items[0]
+    ).toMatchObject({
+      feedItemId: claimed!.feedItemId,
+      attempt: 4,
+      error: "invalid request",
+    })
   })
 
   it("enqueueReprocess queues only processed articles at priority 100", () => {

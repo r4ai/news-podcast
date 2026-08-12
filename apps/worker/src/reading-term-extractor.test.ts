@@ -117,22 +117,23 @@ describe("extractReadingTerms", () => {
     {
       name: "malformed structured output",
       response: Response.json({
-        output: [
-          { content: [{ type: "output_text", text: "not-json" }] },
-        ],
+        output: [{ content: [{ type: "output_text", text: "not-json" }] }],
       }),
       message: "OpenAI response was not valid JSON",
     },
-  ])("reports $name instead of silently succeeding", async ({ response, message }) => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+  ])(
+    "reports $name instead of silently succeeding",
+    async ({ response, message }) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
 
-    await expect(
-      extractReadingTerms(
-        "台本",
-        { apiKey: "test-key", model: "gpt-5.6-luna" },
-        new AbortController().signal,
-        fetcher
-      )
-    ).rejects.toThrow(message)
-  })
+      await expect(
+        extractReadingTerms(
+          "台本",
+          { apiKey: "test-key", model: "gpt-5.6-luna" },
+          new AbortController().signal,
+          fetcher
+        )
+      ).rejects.toThrow(message)
+    }
+  )
 })

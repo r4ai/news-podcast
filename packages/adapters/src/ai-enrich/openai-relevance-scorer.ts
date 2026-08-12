@@ -105,7 +105,6 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
     input: RelevanceScoreInput,
     signal?: AbortSignal
   ): Promise<RelevanceBatchResult> {
-
     // タグ付与はスコア付けと同じ1コールに相乗りさせる（コール数を増やさない）。
     // 語彙が空ならenumが空になり構造化出力が壊れるため、tags関連フィールド自体を
     // スキーマから外してタグ付与をスキップする。
@@ -226,19 +225,14 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
     try {
       providerResponse = (await response.json()) as OpenAiResponse
     } catch {
-      throw new RelevanceScoreError(
-        "OpenAI response body was not valid JSON"
-      )
+      throw new RelevanceScoreError("OpenAI response body was not valid JSON")
     }
     const outputText = providerResponse.output
       ?.flatMap((item) => item.content ?? [])
       .find((item) => item.type === "output_text")?.text
     if (typeof outputText !== "string") {
       if (hasOpenAiRefusal(providerResponse.output)) {
-        throw new RelevanceScoreError(
-          "OpenAI refused relevance output",
-          false
-        )
+        throw new RelevanceScoreError("OpenAI refused relevance output", false)
       }
       throw new RelevanceScoreError(
         "OpenAI response did not contain output_text"
@@ -287,9 +281,7 @@ function parseScorePayload(
   const completeOneToOneMapping =
     parsed.data.scores.length === candidates.length &&
     parsed.data.scores.every((score) => allowed.has(score.feed_item_id)) &&
-    candidates.every(
-      (candidate) => occurrences.get(candidate.feedItemId) === 1
-    )
+    candidates.every((candidate) => occurrences.get(candidate.feedItemId) === 1)
   if (!completeOneToOneMapping) {
     throw new RelevanceScoreError(
       "OpenAI response must score every requested feed_item_id exactly once"

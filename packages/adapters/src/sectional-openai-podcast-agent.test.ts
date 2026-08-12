@@ -110,7 +110,9 @@ describe("SectionalOpenAiPodcastAgent", () => {
   })
 
   it("wraps a transport failure as retryable", async () => {
-    const agent = createAgent(vi.fn().mockRejectedValue(new TypeError("fetch failed")))
+    const agent = createAgent(
+      vi.fn().mockRejectedValue(new TypeError("fetch failed"))
+    )
 
     const error = await agent.run(runInput()).catch((value: unknown) => value)
 
@@ -120,9 +122,14 @@ describe("SectionalOpenAiPodcastAgent", () => {
 
   it("does not retry a request-contract 400", async () => {
     const agent = createAgent(
-      vi.fn().mockResolvedValue(
-        Response.json({ error: { message: "invalid schema" } }, { status: 400 })
-      )
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { error: { message: "invalid schema" } },
+            { status: 400 }
+          )
+        )
     )
 
     const error = await agent.run(runInput()).catch((value: unknown) => value)

@@ -200,12 +200,14 @@ describe("OpenAiArticleSummarizer", () => {
   it("marks a request-contract 400 as non-retryable", async () => {
     const summarizer = new OpenAiArticleSummarizer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
-      vi.fn<typeof fetch>().mockResolvedValue(
-        Response.json(
-          { error: { message: "invalid summary schema" } },
-          { status: 400 }
-        )
-      ),
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          Response.json(
+            { error: { message: "invalid summary schema" } },
+            { status: 400 }
+          )
+        ),
       noSleepRetry
     )
 
@@ -237,9 +239,7 @@ describe("OpenAiArticleSummarizer", () => {
   it("does not retry a refusal", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({
-        output: [
-          { content: [{ type: "refusal", refusal: "cannot comply" }] },
-        ],
+        output: [{ content: [{ type: "refusal", refusal: "cannot comply" }] }],
       })
     )
     const summarizer = new OpenAiArticleSummarizer(

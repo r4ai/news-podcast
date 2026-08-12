@@ -1460,9 +1460,7 @@ export class LocalStore implements EpisodeJobRepository {
   // surface（表記）とreading（読みカナ）の組をownerごとに管理。
   // VOICEVOX /user_dict_word APIと同期してTTSの読み品質を改善する。
 
-  listReadingDictionary(
-    ownerId: string,
-  ): readonly ReadingDictionaryDto[] {
+  listReadingDictionary(ownerId: string): readonly ReadingDictionaryDto[] {
     return this.database
       .prepare(
         `SELECT id, surface, reading, accent_type, word_uuid, source,
@@ -1510,7 +1508,7 @@ export class LocalStore implements EpisodeJobRepository {
         entry.source,
         entry.episodeJobId,
         entry.createdAt,
-        entry.updatedAt,
+        entry.updatedAt
       )
     const existing = this.database
       .prepare(
@@ -1530,7 +1528,7 @@ export class LocalStore implements EpisodeJobRepository {
       readonly reading?: string
       readonly accentType?: number
       readonly wordUuid?: string | null
-    },
+    }
   ): ReadingDictionaryDto | null {
     const now = new Date().toISOString()
     const sets: string[] = ["updated_at = ?"]
@@ -1571,9 +1569,7 @@ export class LocalStore implements EpisodeJobRepository {
   deleteReadingDictionary(ownerId: string, id: string): boolean {
     return (
       this.database
-        .prepare(
-          "DELETE FROM reading_dictionary WHERE id = ? AND owner_id = ?"
-        )
+        .prepare("DELETE FROM reading_dictionary WHERE id = ? AND owner_id = ?")
         .run(id, ownerId).changes > 0
     )
   }
@@ -3601,7 +3597,7 @@ function toTagSuggestion(row: Record<string, unknown>): TagSuggestionDto {
 }
 
 function toReadingDictionaryEntry(
-  row: Record<string, unknown>,
+  row: Record<string, unknown>
 ): ReadingDictionaryDto {
   return {
     id: String(row.id),

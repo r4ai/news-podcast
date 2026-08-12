@@ -112,9 +112,10 @@ describe("OpenAiPodcastAgent", () => {
     })
     expect(JSON.stringify(body.tools)).not.toContain('"format"')
     expect(body.include).toEqual(["web_search_call.action.sources"])
-    expect(
-      submitTool?.parameters?.properties?.script
-    ).toMatchObject({ minLength: 100, maxLength: 6_000 })
+    expect(submitTool?.parameters?.properties?.script).toMatchObject({
+      minLength: 100,
+      maxLength: 6_000,
+    })
   })
 
   it("repairs a draft that omitted a selected article and its source", async () => {
@@ -177,13 +178,13 @@ describe("OpenAiPodcastAgent", () => {
     const correctionRequest = JSON.parse(
       String(fetcherMock.mock.calls[1]?.[1]?.body)
     ) as { input: { output: string }[] }
-    expect(JSON.parse(correctionRequest.input[0]?.output ?? "{}")).toMatchObject(
-      {
-        ok: false,
-        code: "draft_evidence_incomplete",
-        unread_article_ids: [article.id],
-      }
-    )
+    expect(
+      JSON.parse(correctionRequest.input[0]?.output ?? "{}")
+    ).toMatchObject({
+      ok: false,
+      code: "draft_evidence_incomplete",
+      unread_article_ids: [article.id],
+    })
   })
 
   it("treats an empty completed response as retryable", async () => {
@@ -191,9 +192,11 @@ describe("OpenAiPodcastAgent", () => {
       { apiKey: "test", model: "test-model" },
       { listArticles: vi.fn(), readArticle: vi.fn() },
       { start: vi.fn(() => "run-1"), tool: vi.fn(), finish: vi.fn() },
-      vi.fn().mockResolvedValue(
-        Response.json({ id: "response-1", status: "completed", output: [] })
-      ) as unknown as typeof fetch
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ id: "response-1", status: "completed", output: [] })
+        ) as unknown as typeof fetch
     )
 
     await expect(
@@ -206,9 +209,14 @@ describe("OpenAiPodcastAgent", () => {
       { apiKey: "test", model: "test-model" },
       { listArticles: vi.fn(), readArticle: vi.fn() },
       { start: vi.fn(() => "run-1"), tool: vi.fn(), finish: vi.fn() },
-      vi.fn().mockResolvedValue(
-        Response.json({ error: { message: "invalid request" } }, { status: 400 })
-      ) as unknown as typeof fetch
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { error: { message: "invalid request" } },
+            { status: 400 }
+          )
+        ) as unknown as typeof fetch
     )
 
     const error = await agent
@@ -251,7 +259,9 @@ describe("OpenAiPodcastAgent", () => {
     const agent = new OpenAiPodcastAgent(
       { apiKey: "test", model: "test-model" },
       {
-        listArticles: vi.fn(() => Promise.reject(new Error("store unavailable"))),
+        listArticles: vi.fn(() =>
+          Promise.reject(new Error("store unavailable"))
+        ),
         readArticle: vi.fn(),
       },
       audit,

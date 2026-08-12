@@ -116,9 +116,7 @@ function parseReadingTerms(
     const payload = JSON.parse(outputText) as { readonly terms?: unknown }
     terms = payload.terms
   } catch {
-    throw new ReadingTermExtractionError(
-      "OpenAI response was not valid JSON"
-    )
+    throw new ReadingTermExtractionError("OpenAI response was not valid JSON")
   }
   if (!Array.isArray(terms)) {
     throw new ReadingTermExtractionError(

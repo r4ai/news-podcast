@@ -337,16 +337,16 @@ describe("OpenAiRelevanceScorer", () => {
         candidates,
         tagVocabulary: [],
       })
-    ).resolves.toMatchObject({ scores: [{ feedItemId: "a" }, { feedItemId: "b" }] })
+    ).resolves.toMatchObject({
+      scores: [{ feedItemId: "a" }, { feedItemId: "b" }],
+    })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
   it("does not retry a refusal", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({
-        output: [
-          { content: [{ type: "refusal", refusal: "cannot comply" }] },
-        ],
+        output: [{ content: [{ type: "refusal", refusal: "cannot comply" }] }],
       })
     )
     const scorer = new OpenAiRelevanceScorer(

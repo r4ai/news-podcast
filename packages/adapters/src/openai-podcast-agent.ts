@@ -78,8 +78,7 @@ const PODCAST_AGENT_TOOLS = [
   {
     type: "function",
     name: "submit_episode_draft",
-    description:
-      "台本（タイトル・本文）と使用した出典URLを提出する。",
+    description: "台本（タイトル・本文）と使用した出典URLを提出する。",
     strict: true,
     parameters: {
       type: "object",
@@ -236,9 +235,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
             const missingSelectedSourceUrls =
               selectedArticleIds.size === 0
                 ? []
-                : [...allowedRssUrls].filter(
-                    (url) => !submittedUrls.has(url)
-                  )
+                : [...allowedRssUrls].filter((url) => !submittedUrls.has(url))
             if (
               unobservedUrls.length > 0 ||
               unreadArticleIds.length > 0 ||

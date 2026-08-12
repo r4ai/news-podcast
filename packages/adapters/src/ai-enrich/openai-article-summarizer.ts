@@ -196,9 +196,7 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
     try {
       providerResponse = (await response.json()) as OpenAiResponse
     } catch {
-      throw new ArticleSummaryError(
-        "OpenAI response body was not valid JSON"
-      )
+      throw new ArticleSummaryError("OpenAI response body was not valid JSON")
     }
     const outputText = providerResponse.output
       ?.flatMap((item) => item.content ?? [])

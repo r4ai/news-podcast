@@ -52,7 +52,9 @@ export function isRetryableOpenAiStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500
 }
 
-export function hasOpenAiRefusal(output: readonly unknown[] | undefined): boolean {
+export function hasOpenAiRefusal(
+  output: readonly unknown[] | undefined
+): boolean {
   return (output ?? []).some((item) => {
     if (!isRecord(item) || !Array.isArray(item.content)) return false
     return item.content.some(
