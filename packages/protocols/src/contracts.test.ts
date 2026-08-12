@@ -5,6 +5,7 @@ import {
   parseArticleArchived,
   parseCreateEpisodeJobRequest,
   parseEpisodeCompleted,
+  parseEpisodeCompletedV2,
   parseResolveSessionResponse,
 } from "./contracts.js"
 
@@ -47,6 +48,39 @@ describe("integration contracts", () => {
     )
 
     expect(completion.ownerId).toBe("better-auth-user_01")
+  })
+
+  it("preserves every field required to materialize a completed episode", async () => {
+    const completion = await Effect.runPromise(
+      parseEpisodeCompletedV2({
+        episodeId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+        ownerId: "better-auth-user_01",
+        title: "Daily news",
+        script: "The verified news script.",
+        audio: {
+          objectKey: "episodes/opaque/episode.wav",
+          byteLength: 42,
+          contentType: "audio/wav",
+        },
+        sources: [
+          {
+            sourceKind: "rss",
+            snapshotId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
+            url: "https://example.com/news",
+            title: "News",
+            publishedAt: "2026-08-12T00:00:00.000Z",
+          },
+        ],
+        completedAt: "2026-08-12T01:00:00.000Z",
+      })
+    )
+
+    expect(completion.script).toBe("The verified news script.")
+    expect(completion.audio.byteLength).toBe(42)
+    expect(completion.sources[0]?.snapshotId).toBe(
+      "3c4d046c-b47b-4047-a562-66ac7e74e995"
+    )
+    expect(Object.isFrozen(completion.audio)).toBe(true)
   })
 
   it("parses the cross-context happy paths into immutable values", async () => {

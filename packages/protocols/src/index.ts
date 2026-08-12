@@ -3,15 +3,18 @@ export {
   ArticleArchivedV1Schema,
   CreateEpisodeJobRequestSchema,
   EpisodeCompletedSchema,
+  EpisodeCompletedV2Schema,
   parseArticleArchived,
   parseCreateEpisodeJobRequest,
   parseEpisodeCompleted,
+  parseEpisodeCompletedV2,
   parseResolveSessionResponse,
   ResolveSessionResponseSchema,
   type ArticleArchived,
   type ArticleArchivedV1,
   type CreateEpisodeJobRequest,
   type EpisodeCompleted,
+  type EpisodeCompletedV2,
   type ResolveSessionResponse,
 } from "./contracts.js"
 export {

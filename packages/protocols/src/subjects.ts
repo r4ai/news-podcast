@@ -8,6 +8,7 @@ export const subjects = {
   production: {
     createJob: "production.create-job.v1",
     jobCompleted: "production.job-completed.v1",
+    jobCompletedV2: "production.job-completed.v2",
   },
   library: {
     episodePublished: "library.episode-published.v1",

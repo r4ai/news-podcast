@@ -115,3 +115,35 @@ export const EpisodeCompletedSchema = Schema.Struct({
 })
 export type EpisodeCompleted = Schema.Schema.Type<typeof EpisodeCompletedSchema>
 export const parseEpisodeCompleted = parse(EpisodeCompletedSchema)
+
+const EpisodeCompletedV2SourceSchema = Schema.Struct({
+  sourceKind: Schema.Literal("rss"),
+  snapshotId: uuid("ArticleSnapshotId"),
+  url: HttpUrlSchema,
+  title: Schema.NonEmptyString.check(Schema.isMaxLength(500)),
+  publishedAt: Schema.optional(UtcInstantSchema),
+})
+
+/**
+ * Durable episode materialization contract. Unlike v1, this contains every
+ * value the Library owns so consumers never have to read Production storage.
+ */
+export const EpisodeCompletedV2Schema = Schema.Struct({
+  episodeId: uuid("EpisodeId"),
+  ownerId: OpaqueUserIdSchema,
+  title: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  script: Schema.NonEmptyString.check(Schema.isMaxLength(6_000)),
+  audio: Schema.Struct({
+    objectKey: ObjectKeySchema,
+    byteLength: Schema.Int.check(Schema.isGreaterThan(0)),
+    contentType: Schema.Literals(["audio/wav", "audio/mpeg"]),
+  }),
+  sources: Schema.NonEmptyArray(EpisodeCompletedV2SourceSchema).check(
+    Schema.isMaxLength(20)
+  ),
+  completedAt: UtcInstantSchema,
+})
+export type EpisodeCompletedV2 = Schema.Schema.Type<
+  typeof EpisodeCompletedV2Schema
+>
+export const parseEpisodeCompletedV2 = parse(EpisodeCompletedV2Schema)
