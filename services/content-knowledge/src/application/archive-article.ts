@@ -8,9 +8,15 @@ import {
 } from "../domain/article.js"
 import type {
   ArchiveArticlePorts,
+  ArchiveMessageContext,
   ArchiveStoreError,
   CaptureError,
 } from "./ports.js"
+
+export type ArchiveArticleInvocation = DeepReadonly<{
+  readonly command: ArchiveCommand
+  readonly context: ArchiveMessageContext
+}>
 
 export type ArchiveArticleResult =
   | DeepReadonly<{
@@ -25,9 +31,9 @@ export type ArchiveArticleResult =
 export const archiveArticle =
   (ports: ArchiveArticlePorts) =>
   (
-    command: ArchiveCommand
+    invocation: ArchiveArticleInvocation
   ): Effect.Effect<ArchiveArticleResult, ArchiveStoreError | CaptureError> =>
-    ports.lookup(command.archiveRequestId).pipe(
+    ports.lookup(invocation.command.archiveRequestId).pipe(
       Effect.flatMap((lookup) => {
         if (lookup._tag === "Archived") {
           return Effect.succeed(
@@ -38,31 +44,34 @@ export const archiveArticle =
           )
         }
 
-        return ports.capture(deepFreeze({ sourceUrl: command.sourceUrl })).pipe(
-          Effect.map(deepFreeze),
-          Effect.flatMap((capture) => {
-            const snapshot = createArticleSnapshot({
-              command,
-              snapshotId: ports.newSnapshotId(),
-              capturedAt: ports.now(),
-              capture,
-            })
-            const commitInput = deepFreeze({
-              snapshot,
-              event: createArticleArchived(snapshot),
-            })
+        return ports
+          .capture(deepFreeze({ sourceUrl: invocation.command.sourceUrl }))
+          .pipe(
+            Effect.map(deepFreeze),
+            Effect.flatMap((capture) => {
+              const snapshot = createArticleSnapshot({
+                command: invocation.command,
+                snapshotId: ports.newSnapshotId(),
+                capturedAt: ports.now(),
+                capture,
+              })
+              const commitInput = deepFreeze({
+                snapshot,
+                event: createArticleArchived(snapshot),
+                context: invocation.context,
+              })
 
-            return ports.commit(commitInput).pipe(
-              Effect.map((commit): ArchiveArticleResult =>
-                commit._tag === "Committed"
-                  ? deepFreeze({ _tag: "Archived" as const, snapshot })
-                  : deepFreeze({
-                      _tag: "AlreadyArchived" as const,
-                      snapshot: deepFreeze(commit.snapshot),
-                    })
+              return ports.commit(commitInput).pipe(
+                Effect.map((commit): ArchiveArticleResult =>
+                  commit._tag === "Committed"
+                    ? deepFreeze({ _tag: "Archived" as const, snapshot })
+                    : deepFreeze({
+                        _tag: "AlreadyArchived" as const,
+                        snapshot: deepFreeze(commit.snapshot),
+                      })
+                )
               )
-            )
-          })
-        )
+            })
+          )
       })
     )

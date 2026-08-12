@@ -1,4 +1,10 @@
 import type { DeepReadonly } from "@news-podcast/kernel"
+import type {
+  Actor,
+  CorrelationId,
+  MessageId,
+  Traceparent,
+} from "@news-podcast/protocols"
 import type { Effect } from "effect"
 
 import type {
@@ -40,6 +46,13 @@ export type ArchiveCommit =
       readonly snapshot: ArticleSnapshot
     }>
 
+export type ArchiveMessageContext = DeepReadonly<{
+  readonly messageId: MessageId
+  readonly correlationId: CorrelationId
+  readonly traceparent: Traceparent
+  readonly actor: Actor
+}>
+
 export type ArchiveArticlePorts = DeepReadonly<{
   readonly lookup: (
     archiveRequestId: ArchiveRequestId
@@ -53,5 +66,6 @@ export type ArchiveArticlePorts = DeepReadonly<{
   readonly commit: (input: {
     readonly snapshot: ArticleSnapshot
     readonly event: ArticleArchived
+    readonly context: ArchiveMessageContext
   }) => Effect.Effect<ArchiveCommit, ArchiveStoreError>
 }>

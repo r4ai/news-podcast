@@ -1,4 +1,10 @@
 import { deepFreeze } from "@news-podcast/kernel"
+import {
+  ActorSchema,
+  CorrelationIdSchema,
+  MessageIdSchema,
+  TraceparentSchema,
+} from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
@@ -24,6 +30,22 @@ const command = decode(ArchiveCommandSchema, {
   sourceUrl: "https://news.example.com/posts/1",
   title: "Typed domain models",
 })
+const context = deepFreeze({
+  messageId: decode(MessageIdSchema, "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4"),
+  correlationId: decode(
+    CorrelationIdSchema,
+    "ea122752-73d0-4851-9664-7d3e63e76859"
+  ),
+  traceparent: decode(
+    TraceparentSchema,
+    "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  ),
+  actor: decode(ActorSchema, {
+    _tag: "User",
+    userId: "fbb2b8a9-8776-4513-bdff-d2e6fd3ec25c",
+  }),
+})
+const invocation = deepFreeze({ command, context })
 const snapshotId = decode(
   SnapshotIdSchema,
   "46c2eef5-a205-4526-8640-dc3ea84d88b4"
@@ -74,7 +96,7 @@ const makePorts = (): ArchiveArticlePorts => {
 describe("archiveArticle", () => {
   it("captures, constructs and atomically commits a snapshot with its event", async () => {
     const ports = makePorts()
-    const result = await Effect.runPromise(archiveArticle(ports)(command))
+    const result = await Effect.runPromise(archiveArticle(ports)(invocation))
 
     expect(result._tag).toBe("Archived")
     expect(ports.capture).toHaveBeenCalledWith({ sourceUrl: command.sourceUrl })
@@ -95,6 +117,7 @@ describe("archiveArticle", () => {
           capture,
         })
       ),
+      context,
     })
     expect(Object.isFrozen(result)).toBe(true)
     expect(commitCall && Object.isFrozen(commitCall)).toBe(true)
@@ -113,7 +136,7 @@ describe("archiveArticle", () => {
       Effect.succeed(deepFreeze({ _tag: "Archived", snapshot: existing }))
     )
 
-    const result = await Effect.runPromise(archiveArticle(ports)(command))
+    const result = await Effect.runPromise(archiveArticle(ports)(invocation))
 
     expect(result).toEqual({ _tag: "AlreadyArchived", snapshot: existing })
     expect(ports.capture).not.toHaveBeenCalled()
@@ -135,7 +158,7 @@ describe("archiveArticle", () => {
       )
     )
 
-    const result = await Effect.runPromise(archiveArticle(ports)(command))
+    const result = await Effect.runPromise(archiveArticle(ports)(invocation))
 
     expect(result).toEqual({ _tag: "AlreadyArchived", snapshot: existing })
     expect(Object.isFrozen(result)).toBe(true)
@@ -147,7 +170,7 @@ describe("archiveArticle", () => {
       Effect.fail(deepFreeze({ _tag: "CaptureFailed", reason: "Unavailable" }))
     )
 
-    const exit = await Effect.runPromiseExit(archiveArticle(ports)(command))
+    const exit = await Effect.runPromiseExit(archiveArticle(ports)(invocation))
 
     expect(exit._tag).toBe("Failure")
     expect(ports.commit).not.toHaveBeenCalled()

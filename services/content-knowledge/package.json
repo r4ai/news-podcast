@@ -6,7 +6,8 @@
   "exports": {
     "./domain": "./src/domain/index.ts",
     "./application": "./src/application/index.ts",
-    "./adapters": "./src/adapters/index.ts"
+    "./adapters": "./src/adapters/index.ts",
+    "./runtime": "./src/runtime/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -15,10 +16,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
     "@news-podcast/kernel": "workspace:*",
+    "@news-podcast/protocols": "workspace:*",
     "effect": "4.0.0-beta.102"
   },
   "devDependencies": {
+    "@types/node": "24.12.4",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }

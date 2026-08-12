@@ -1,1 +1,6 @@
 export * from "./archive-input.js"
+export * from "./jetstream-publisher.js"
+export * from "./outbox-relay.js"
+export * from "./outbox.js"
+export * from "./sqlite-archive-store.js"
+export type * from "./sqlite-port.js"

@@ -15,6 +15,20 @@ const validCommand = {
   title: "Typed domain models",
 }
 
+const validCommandEnvelope = {
+  messageId: "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4",
+  correlationId: "ea122752-73d0-4851-9664-7d3e63e76859",
+  causationId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
+  occurredAt: "2026-08-12T00:00:00.000Z",
+  producer: "gateway",
+  traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  actor: {
+    _tag: "User",
+    userId: "fbb2b8a9-8776-4513-bdff-d2e6fd3ec25c",
+  },
+  payload: validCommand,
+}
+
 const validCapture = {
   rawResponse: {
     _tag: "RawResponse",
@@ -55,7 +69,10 @@ describe("archive input parsers", () => {
     } as unknown as ArchiveArticlePorts
 
     const exit = await Effect.runPromiseExit(
-      archiveArticleFromUnknown(ports)({ ...validCommand, title: "" })
+      archiveArticleFromUnknown(ports)({
+        ...validCommandEnvelope,
+        payload: { ...validCommand, title: "" },
+      })
     )
 
     expect(exit._tag).toBe("Failure")
