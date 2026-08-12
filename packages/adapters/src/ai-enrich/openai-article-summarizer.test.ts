@@ -196,4 +196,24 @@ describe("OpenAiArticleSummarizer", () => {
     ).rejects.toBeInstanceOf(ProviderRateLimitError)
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
+
+  it("marks a request-contract 400 as non-retryable", async () => {
+    const summarizer = new OpenAiArticleSummarizer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json(
+          { error: { message: "invalid summary schema" } },
+          { status: 400 }
+        )
+      ),
+      noSleepRetry
+    )
+
+    const error = await summarizer
+      .summarize({ title: "t", markdown: "m" })
+      .catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(ArticleSummaryError)
+    expect(error).toMatchObject({ retryable: false })
+  })
 })

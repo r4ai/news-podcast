@@ -10,6 +10,7 @@ import type {
 import type { OpenAiConfig } from "../config.js"
 import {
   createPortableStructuredResponseRequest,
+  isRetryableOpenAiStatus,
   readOpenAiErrorMessage,
 } from "./openai-responses.js"
 import {
@@ -173,7 +174,8 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
     if (!response.ok) {
       const detail = await readOpenAiErrorMessage(response)
       throw new ArticleSummaryError(
-        `OpenAI request failed with ${response.status}${detail ? `: ${detail}` : ""}`
+        `OpenAI request failed with ${response.status}${detail ? `: ${detail}` : ""}`,
+        isRetryableOpenAiStatus(response.status)
       )
     }
 
@@ -183,8 +185,7 @@ export class OpenAiArticleSummarizer implements ArticleSummarizer {
       .find((item) => item.type === "output_text")?.text
     if (typeof outputText !== "string") {
       throw new ArticleSummaryError(
-        "OpenAI response did not contain output_text",
-        false
+        "OpenAI response did not contain output_text"
       )
     }
 
@@ -274,13 +275,12 @@ function parseSummaryPayload(outputText: string): {
   try {
     raw = JSON.parse(outputText)
   } catch {
-    throw new ArticleSummaryError("OpenAI response was not valid JSON", false)
+    throw new ArticleSummaryError("OpenAI response was not valid JSON")
   }
   const parsed = SummaryPayload.safeParse(raw)
   if (!parsed.success) {
     throw new ArticleSummaryError(
-      "OpenAI response did not match the summary schema",
-      false
+      "OpenAI response did not match the summary schema"
     )
   }
   return { summary: parsed.data.summary }

@@ -460,6 +460,34 @@ describe("LocalStore enrich_queue", () => {
     expect(store.countEnrichPending(owner)).toBe(0)
   })
 
+  it("terminalizes a non-retryable enrichment failure immediately", () => {
+    const store = openStore()
+    const owner = "owner-permanent-failure"
+    seedArchivedArticle(store, owner, "permanent", "2026-01-01T00:00:00.000Z")
+    store.reconcileEnrichQueue(NOW)
+    const [claimed] = store.leaseEnrichBatch(owner, 8, NOW)
+
+    store.completeEnrichBatch(
+      owner,
+      {
+        succeeded: [],
+        failed: [
+          {
+            feedItemId: claimed!.feedItemId,
+            error: "invalid request",
+            retryable: false,
+          },
+        ],
+      },
+      NOW
+    )
+
+    expect(store.countEnrichPending(owner)).toBe(0)
+    expect(store.listEnrichQueueStatus(owner, 200).failed.items[0]).toMatchObject(
+      { feedItemId: claimed!.feedItemId, attempt: 4, error: "invalid request" }
+    )
+  })
+
   it("enqueueReprocess queues only processed articles at priority 100", () => {
     const store = openStore()
     const owner = "owner-reprocess"

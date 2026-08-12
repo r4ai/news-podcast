@@ -126,7 +126,11 @@ export class AiEnrichWorker {
     if (batch.length === 0) return 0
 
     const summaryByFeedItem = new Map<string, string>()
-    const failed: { readonly feedItemId: string; readonly error: string }[] = []
+    const failed: {
+      readonly feedItemId: string
+      readonly error: string
+      readonly retryable?: boolean
+    }[] = []
     for (const candidate of batch) {
       try {
         const summary = await this.ensureSummary(candidate)
@@ -142,6 +146,7 @@ export class AiEnrichWorker {
         failed.push({
           feedItemId: candidate.feedItemId,
           error: error instanceof Error ? error.message : "summary-failed",
+          retryable: isRetryableAiError(error),
         })
       }
     }
@@ -202,7 +207,7 @@ export class AiEnrichWorker {
         error,
         rateLimited: error instanceof ProviderRateLimitError,
       })
-      if (rethrowFailure) throw error
+      if (rethrowFailure || !isRetryableAiError(error)) throw error
       return undefined
     }
   }
@@ -222,6 +227,7 @@ export class AiEnrichWorker {
     readonly failed: readonly {
       readonly feedItemId: string
       readonly error: string
+      readonly retryable?: boolean
     }[]
   }> {
     try {
@@ -288,6 +294,7 @@ export class AiEnrichWorker {
       const failed = batch.map((candidate) => ({
         feedItemId: candidate.feedItemId,
         error: message.slice(0, 500),
+        retryable: isRetryableAiError(error),
       }))
       for (const item of failed) {
         this.store.saveArticleRelevanceFailure({
@@ -333,4 +340,11 @@ function splitTokensEvenly(
 
 function toLocalDate(now: Date): string {
   return now.toISOString().slice(0, 10)
+}
+
+function isRetryableAiError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("retryable" in error)) {
+    return true
+  }
+  return (error as { readonly retryable?: unknown }).retryable !== false
 }

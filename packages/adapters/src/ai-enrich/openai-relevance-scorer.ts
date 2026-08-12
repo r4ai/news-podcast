@@ -10,6 +10,7 @@ import type {
 import type { OpenAiConfig } from "../config.js"
 import {
   createPortableStructuredResponseRequest,
+  isRetryableOpenAiStatus,
   readOpenAiErrorMessage,
 } from "./openai-responses.js"
 import {
@@ -190,7 +191,8 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
     if (!response.ok) {
       const detail = await readOpenAiErrorMessage(response)
       throw new RelevanceScoreError(
-        `OpenAI request failed with ${response.status}${detail ? `: ${detail}` : ""}`
+        `OpenAI request failed with ${response.status}${detail ? `: ${detail}` : ""}`,
+        isRetryableOpenAiStatus(response.status)
       )
     }
 
@@ -200,8 +202,7 @@ export class OpenAiRelevanceScorer implements ArticleRelevanceScorer {
       .find((item) => item.type === "output_text")?.text
     if (typeof outputText !== "string") {
       throw new RelevanceScoreError(
-        "OpenAI response did not contain output_text",
-        false
+        "OpenAI response did not contain output_text"
       )
     }
 
@@ -228,13 +229,12 @@ function parseScorePayload(
   try {
     raw = JSON.parse(outputText)
   } catch {
-    throw new RelevanceScoreError("OpenAI response was not valid JSON", false)
+    throw new RelevanceScoreError("OpenAI response was not valid JSON")
   }
   const parsed = ScorePayload.safeParse(raw)
   if (!parsed.success) {
     throw new RelevanceScoreError(
-      "OpenAI response did not match the relevance schema",
-      false
+      "OpenAI response did not match the relevance schema"
     )
   }
   const allowed = new Set(candidates.map((candidate) => candidate.feedItemId))

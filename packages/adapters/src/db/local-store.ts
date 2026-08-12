@@ -1669,8 +1669,8 @@ export class LocalStore implements EpisodeJobRepository {
     })
   }
 
-  // claim済みバッチの結果をキューへ反映する。succeededは終端、failedはattemptを
-  // 1つ増やして再試行対象に戻す（上限超過後は終端として残る）。
+  // claim済みバッチの結果をキューへ反映する。succeededは終端、retryableな
+  // failedはattemptを1つ増やし、永続障害は上限へ進めて直ちに終端化する。
   completeEnrichBatch(
     ownerId: string,
     input: {
@@ -1678,6 +1678,7 @@ export class LocalStore implements EpisodeJobRepository {
       readonly failed: readonly {
         readonly feedItemId: string
         readonly error: string
+        readonly retryable?: boolean
       }[]
     },
     now: Date = new Date()
@@ -1694,13 +1695,16 @@ export class LocalStore implements EpisodeJobRepository {
       }
       const fail = this.database.prepare(
         `UPDATE enrich_queue
-         SET status = 'failed', attempt = attempt + 1,
+         SET status = 'failed',
+             attempt = CASE WHEN ? = 1 THEN attempt + 1 ELSE ? END,
              lease_token = NULL, lease_expires_at = NULL,
              completed_at = ?, error = ?
          WHERE owner_id = ? AND feed_item_id = ?`
       )
       for (const item of input.failed) {
         fail.run(
+          item.retryable === false ? 0 : 1,
+          MAX_ENRICH_ATTEMPTS,
           now.toISOString(),
           item.error.slice(0, 500),
           ownerId,

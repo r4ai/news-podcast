@@ -298,14 +298,20 @@ describe("OpenAiRelevanceScorer", () => {
       noSleepRetry
     )
 
-    await expect(
-      scorer.score({
+    const error = await scorer
+      .score({
         profile: { include: "", exclude: "" },
         candidates,
         tagVocabulary: [],
       })
-    ).rejects.toThrow(
-      "Unsupported parameter: 'temperature' is not supported with this model."
+      .catch((value: unknown) => value)
+    expect(error).toBeInstanceOf(RelevanceScoreError)
+    expect(error).toMatchObject({ retryable: false })
+    expect(error).toHaveProperty(
+      "message",
+      expect.stringContaining(
+        "Unsupported parameter: 'temperature' is not supported with this model."
+      )
     )
   })
 })

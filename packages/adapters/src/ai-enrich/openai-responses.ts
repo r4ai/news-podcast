@@ -48,6 +48,10 @@ export async function readOpenAiErrorMessage(
   }
 }
 
+export function isRetryableOpenAiStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 429 || status >= 500
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }

@@ -12,6 +12,7 @@ import type {
 } from "@news-podcast/application"
 
 import { LocalStore } from "../db/local-store.js"
+import { RelevanceScoreError } from "./openai-relevance-scorer.js"
 import { AiEnrichWorker, type AiEnrichEvent } from "./enrich-worker.js"
 import { ProviderRateLimitError, RELEVANCE_BATCH_SIZE } from "./shared.js"
 
@@ -369,6 +370,29 @@ describe("AiEnrichWorker.runOnce", () => {
     await worker.runOnce()
     expect(store.getArticle(owner, feedItemId)?.relevanceScore).toBe(42)
     expect(store.listEnrichQueueStatus(owner, 200).pending.count).toBe(0)
+  })
+
+  it("does not requeue a permanent provider request failure", async () => {
+    const store = openStore()
+    const owner = "owner-permanent"
+    const feedItemId = seedArchivedArticle(store, owner, "permanent")
+    const worker = new AiEnrichWorker(
+      store,
+      fakeObjects(),
+      fakeSummarizer(),
+      {
+        score: () =>
+          Promise.reject(new RelevanceScoreError("invalid request", false)),
+      },
+      "gpt-5.6-luna"
+    )
+
+    await worker.runOnce()
+
+    expect(store.countEnrichPending(owner)).toBe(0)
+    expect(
+      store.listEnrichQueueStatus(owner, 200).failed.items[0]
+    ).toMatchObject({ feedItemId, attempt: 4 })
   })
 })
 
