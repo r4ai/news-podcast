@@ -28,6 +28,8 @@ type StrictFunctionParameter =
     }
   | {
       readonly type: "string"
+      readonly minLength?: number
+      readonly maxLength?: number
     }
   | {
       readonly type: "integer"
@@ -84,8 +86,12 @@ const PODCAST_AGENT_TOOLS = [
       additionalProperties: false,
       required: ["title", "script", "source_urls"],
       properties: {
-        title: { type: "string" },
-        script: { type: "string" },
+        title: { type: "string", minLength: 1, maxLength: 200 },
+        script: {
+          type: "string",
+          minLength: 100,
+          maxLength: MAX_SCRIPT_LENGTH,
+        },
         source_urls: {
           type: "array",
           minItems: 1,
@@ -113,6 +119,8 @@ interface FunctionCall {
 
 interface OpenAiResponse {
   readonly id: string
+  readonly status?: string
+  readonly incomplete_details?: { readonly reason?: string }
   readonly output?: readonly unknown[]
 }
 
@@ -175,6 +183,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     })
     const selectedArticleIds = new Set(input.articleIds ?? [])
     const allowedRssUrls = new Set<string>()
+    const readArticleIds = new Set<string>()
     const observedWebUrls = new Set<string>()
     let previousResponseId: string | undefined
     let nextInput: unknown = selectedArticleIds.size
@@ -191,12 +200,19 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
           ...(input.signal ? { signal: input.signal } : {}),
         })
         previousResponseId = response.id
+        if (response.status === "incomplete") {
+          throw new PodcastAgentError(
+            `OpenAI response was incomplete (${response.incomplete_details?.reason ?? "unknown"})`
+          )
+        }
+        if (containsRefusal(response.output ?? [])) {
+          throw new PodcastAgentError("OpenAI refused agent output", false)
+        }
         collectObservedWebUrls(response.output ?? [], observedWebUrls)
         const calls = (response.output ?? []).filter(isFunctionCall)
         if (calls.length === 0) {
           throw new PodcastAgentError(
-            "Agent stopped without submitting an episode draft",
-            false
+            "Agent stopped without submitting an episode draft"
           )
         }
         const outputs: unknown[] = []
@@ -212,7 +228,21 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
               (url) =>
                 !allowedRssUrls.has(url.href) && !observedWebUrls.has(url.href)
             )
-            if (unobservedUrls.length > 0) {
+            const unreadArticleIds = [...selectedArticleIds].filter(
+              (articleId) => !readArticleIds.has(articleId)
+            )
+            const submittedUrls = new Set(urls.map((url) => url.href))
+            const missingSelectedSourceUrls =
+              selectedArticleIds.size === 0
+                ? []
+                : [...allowedRssUrls].filter(
+                    (url) => !submittedUrls.has(url)
+                  )
+            if (
+              unobservedUrls.length > 0 ||
+              unreadArticleIds.length > 0 ||
+              missingSelectedSourceUrls.length > 0
+            ) {
               sourceCorrections += 1
               if (sourceCorrections > MAX_SOURCE_CORRECTIONS) {
                 throw new PodcastAgentError(
@@ -222,12 +252,18 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
               }
               const correction = {
                 ok: false,
-                code: "source_not_observed",
+                code:
+                  unreadArticleIds.length > 0 ||
+                  missingSelectedSourceUrls.length > 0
+                    ? "draft_evidence_incomplete"
+                    : "source_not_observed",
                 invalid_source_urls: unobservedUrls.map((url) => url.href),
+                unread_article_ids: unreadArticleIds,
+                missing_selected_source_urls: missingSelectedSourceUrls,
                 correction_attempt: sourceCorrections,
                 correction_limit: MAX_SOURCE_CORRECTIONS,
                 instruction:
-                  "Each source must first be observed through read_article or web_search. Read or search the missing sources, then submit the complete draft again.",
+                  "Read every selected article, cite every selected article URL, and use only sources observed through read_article or web_search. Then submit the complete draft again.",
               }
               this.audit.tool({
                 runId,
@@ -262,6 +298,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
             input,
             allowedRssUrls,
             selectedArticleIds,
+            readArticleIds,
             runId
           )
           this.audit.tool({
@@ -282,6 +319,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
       throw new PodcastAgentError("Agent turn limit exceeded", false)
     } catch (error) {
       this.audit.finish(runId, "agent-run-failed")
+      if (input.signal?.aborted) throw input.signal.reason
       if (error instanceof PodcastAgentError) throw error
       throw new PodcastAgentError(
         error instanceof Error ? error.message : "Unknown agent failure"
@@ -328,6 +366,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
     },
     allowedRssUrls: Set<string>,
     selectedArticleIds: ReadonlySet<string>,
+    readArticleIds: Set<string>,
     runId: string
   ): Promise<unknown> {
     const args = JSON.parse(call.arguments) as Record<string, unknown>
@@ -365,6 +404,7 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
         ownerId: input.ownerId,
         articleId,
       })
+      readArticleIds.add(articleId)
       allowedRssUrls.add(value.article.url.href)
       this.audit.articleAdopted?.({
         runId,
@@ -414,14 +454,35 @@ export class OpenAiPodcastAgent implements PodcastAgentRunner {
       throw new PodcastAgentError(
         `OpenAI request failed with ${response.status}: ${await readOpenAiError(
           response
-        )}`
+        )}`,
+        isRetryableProviderStatus(response.status)
       )
     }
     return (await response.json()) as OpenAiResponse
   }
 }
 
-async function readOpenAiError(response: Response): Promise<string> {
+function containsRefusal(responseOutput: readonly unknown[]): boolean {
+  return responseOutput.some((value) => {
+    if (!value || typeof value !== "object") return false
+    const content = (value as Record<string, unknown>).content
+    return (
+      Array.isArray(content) &&
+      content.some(
+        (item) =>
+          item !== null &&
+          typeof item === "object" &&
+          (item as Record<string, unknown>).type === "refusal"
+      )
+    )
+  })
+}
+
+export function isRetryableProviderStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 429 || status >= 500
+}
+
+export async function readOpenAiError(response: Response): Promise<string> {
   const fallback = response.statusText || "Unknown API error"
   try {
     const payload = (await response.json()) as {

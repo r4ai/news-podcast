@@ -108,6 +108,46 @@ describe("SectionalOpenAiPodcastAgent", () => {
     expect(error).toBeInstanceOf(PodcastAgentError)
     expect(error).toMatchObject({ retryable: true })
   })
+
+  it("wraps a transport failure as retryable", async () => {
+    const agent = createAgent(vi.fn().mockRejectedValue(new TypeError("fetch failed")))
+
+    const error = await agent.run(runInput()).catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(PodcastAgentError)
+    expect(error).toMatchObject({ retryable: true })
+  })
+
+  it("does not retry a request-contract 400", async () => {
+    const agent = createAgent(
+      vi.fn().mockResolvedValue(
+        Response.json({ error: { message: "invalid schema" } }, { status: 400 })
+      )
+    )
+
+    const error = await agent.run(runInput()).catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(PodcastAgentError)
+    expect(error).toMatchObject({ retryable: false })
+    expect(error).toHaveProperty(
+      "message",
+      "OpenAI request failed with 400: invalid schema"
+    )
+  })
+
+  it("propagates the caller cancellation reason", async () => {
+    const controller = new AbortController()
+    const reason = new Error("job-canceled")
+    const fetcher = vi.fn(() => {
+      controller.abort(reason)
+      return Promise.reject(reason)
+    })
+    const agent = createAgent(fetcher)
+
+    await expect(
+      agent.run({ ...runInput(), signal: controller.signal })
+    ).rejects.toBe(reason)
+  })
 })
 
 function createAgent(fetcher: ReturnType<typeof vi.fn>) {

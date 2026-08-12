@@ -10,6 +10,8 @@ import type { OpenAiConfig } from "./config.js"
 import {
   OpenAiPodcastAgent,
   PodcastAgentError,
+  isRetryableProviderStatus,
+  readOpenAiError,
   type AgentAudit,
 } from "./openai-podcast-agent.js"
 
@@ -163,10 +165,10 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
     const prompt = [
       "以下の記事一覧を、共通の話題でグループ分けせよ。",
       `1グループ最大${MAX_ARTICLES_PER_SECTION}記事、各記事は1グループのみ所属。`,
-      "JSON形式で出力せよ。",
+      "指定されたJSON Schemaのオブジェクト形式で出力せよ。",
       "",
       "出力形式:",
-      '[ { "topic": "グループ名", "articleIds": ["uuid1", "uuid2"] }, ... ]',
+      '{ "groups": [ { "topic": "グループ名", "articleIds": ["uuid1", "uuid2"] } ] }',
       "",
       "記事一覧:",
       articleList,
@@ -286,37 +288,50 @@ export class SectionalOpenAiPodcastAgent implements PodcastAgentRunner {
     format: typeof TOPIC_GROUPS_FORMAT | typeof MERGED_DRAFT_FORMAT,
     signal?: AbortSignal
   ): Promise<unknown> {
-    const response = await this.fetcher("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
-        : AbortSignal.timeout(120_000),
-      body: JSON.stringify({
-        model: this.config.model,
-        instructions: "簡潔なJSONだけを出力せよ。説明や前置きは一切不要。",
-        input: prompt,
-        text: { format },
-      }),
-    })
+    let response: Response
+    try {
+      response = await this.fetcher("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
+          : AbortSignal.timeout(120_000),
+        body: JSON.stringify({
+          model: this.config.model,
+          instructions: "簡潔なJSONだけを出力せよ。説明や前置きは一切不要。",
+          input: prompt,
+          text: { format },
+        }),
+      })
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason
+      throw new PodcastAgentError(
+        `OpenAI request failed: ${error instanceof Error ? error.message : "Unknown transport error"}`
+      )
+    }
 
     if (!response.ok) {
       throw new PodcastAgentError(
-        `OpenAI request failed with ${response.status}: ${response.statusText}`,
+        `OpenAI request failed with ${response.status}: ${await readOpenAiError(response)}`,
         isRetryableProviderStatus(response.status)
       )
     }
 
-    const data = (await response.json()) as {
+    let data: {
       status?: string
       incomplete_details?: { reason?: string }
       output?: readonly {
         type?: string
         content?: readonly { type?: string; text?: string; refusal?: string }[]
       }[]
+    }
+    try {
+      data = (await response.json()) as typeof data
+    } catch {
+      throw new PodcastAgentError("OpenAI returned a malformed response body")
     }
     const outputText = data.output
       ?.flatMap((item) => item.content ?? [])
@@ -352,8 +367,4 @@ function parseStructuredOutput<T>(schema: z.ZodType<T>, value: unknown): T {
     )
   }
   return result.data
-}
-
-function isRetryableProviderStatus(status: number): boolean {
-  return status === 408 || status === 409 || status === 429 || status >= 500
 }
