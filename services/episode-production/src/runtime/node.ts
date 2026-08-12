@@ -13,11 +13,17 @@ import {
 } from "../adapters/job-control-rpc.js"
 import { retryFailedJob } from "../application/job-control.js"
 import { sqliteJobRepository } from "../adapters/sqlite-job-repository.js"
+import { sqliteReadingDictionaryRepository } from "../adapters/sqlite-reading-dictionary.js"
+import {
+  makeReadingDictionaryRpcHandler,
+  type ReadingDictionaryRpcDelivery,
+} from "../adapters/reading-dictionary-rpc.js"
 import {
   UtcTimestampSchema,
   type JobId,
   type UtcTimestamp,
 } from "../domain/episode-job.js"
+import { ReadingDictionaryIdSchema } from "../domain/reading-dictionary.js"
 import {
   currentUtcTimestampUnsafe,
   randomJobIdUnsafe,
@@ -45,7 +51,7 @@ export const parseNodeCreateJobRpcConfig = parse(NodeCreateJobRpcConfigSchema)
 
 export type NodeCreateJobRpcError = DeepReadonly<{
   readonly _tag: "NodeCreateJobRpcFailed"
-  readonly component: "Config" | "Nats" | "Reply" | "Sqlite"
+  readonly component: "Config" | "Handler" | "Nats" | "Reply" | "Sqlite"
 }>
 
 export type NodeCreateJobRpcDependencies = DeepReadonly<{
@@ -124,8 +130,10 @@ export const runNodeCreateJobRpc = (
   )
 
 type RpcHandler = (
-  delivery: JobControlRpcDelivery<NodeCreateJobRpcError>
-) => Effect.Effect<void, NodeCreateJobRpcError>
+  delivery:
+    | JobControlRpcDelivery<NodeCreateJobRpcError>
+    | ReadingDictionaryRpcDelivery<NodeCreateJobRpcError>
+) => Effect.Effect<void, unknown, never>
 
 /** Runs the complete versioned Episode Production command/query RPC surface. */
 export const runNodeProductionRpc = (
@@ -140,6 +148,9 @@ export const runNodeProductionRpc = (
           const repository = yield* sqliteJobRepository(config.sqlitePath).pipe(
             Effect.mapError(() => runtimeError("Sqlite"))
           )
+          const dictionary = yield* sqliteReadingDictionaryRepository(
+            config.sqlitePath
+          ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
           const now = Effect.sync(dependencies.now)
           const replyDependencies = {
             newMessageId: () => dependencies.newJobId(),
@@ -203,6 +214,17 @@ export const runNodeProductionRpc = (
                 replyDependencies,
               }),
             ],
+            [
+              subjects.production.readingDictionary,
+              makeReadingDictionaryRpcHandler(dictionary, {
+                newId: () =>
+                  Schema.decodeUnknownSync(ReadingDictionaryIdSchema)(
+                    dependencies.newJobId()
+                  ),
+                newMessageId: dependencies.newJobId,
+                now: dependencies.now,
+              }),
+            ],
           ]
 
           yield* Effect.all(
@@ -238,7 +260,16 @@ export const runNodeProductionRpc = (
                           try: () => delivery.reply(payload),
                           catch: () => runtimeError("Reply"),
                         }),
-                    })
+                    }).pipe(
+                      Effect.mapError((failure) =>
+                        typeof failure === "object" &&
+                        failure !== null &&
+                        "_tag" in failure &&
+                        failure._tag === "NodeCreateJobRpcFailed"
+                          ? (failure as NodeCreateJobRpcError)
+                          : runtimeError("Handler")
+                      )
+                    )
                 )
               })
             ),

@@ -134,6 +134,7 @@ describe("episode-production Node RPC runtime", () => {
       subjects.production.listJobEvents,
       subjects.production.cancelJob,
       subjects.production.retryJob,
+      subjects.production.readingDictionary,
     ]
     expect(connected.sort()).toEqual([...expected].sort())
     expect(drained.sort()).toEqual([...expected].sort())

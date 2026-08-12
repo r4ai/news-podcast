@@ -107,6 +107,11 @@ export {
 } from "./application/reading-dictionary.js"
 export * from "./application/script-generator.js"
 export * from "./application/speech-synthesizer.js"
+export {
+  makeReadingDictionaryRpcHandler,
+  type ReadingDictionaryRpcDelivery,
+  type ReadingDictionaryRpcDependencies,
+} from "./adapters/reading-dictionary-rpc.js"
 export * from "./domain/episode-job.js"
 export * from "./domain/agent-audit-memory.js"
 export * from "./domain/provider-reliability.js"
