@@ -11,7 +11,7 @@ import {
 } from "@opentelemetry/api"
 
 import {
-  AllowlistTextMapPropagator,
+  makeAllowlistTextMapPropagator,
   installPropagationGate,
   propagationDisabledKey,
   readPropagationAllowlist,
@@ -85,7 +85,7 @@ describe("propagation allowlist gate", () => {
   })
 
   it("injects W3C context unless propagation is disabled", () => {
-    const propagator = new AllowlistTextMapPropagator()
+    const propagator = makeAllowlistTextMapPropagator()
     const { context: ctx } = sampledContext()
 
     const injected: Record<string, string> = {}
@@ -101,7 +101,7 @@ describe("propagation allowlist gate", () => {
   })
 
   it("always extracts remote context even when injection is disabled", () => {
-    const propagator = new AllowlistTextMapPropagator()
+    const propagator = makeAllowlistTextMapPropagator()
     const carrier = {
       traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
     }

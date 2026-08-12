@@ -24,20 +24,24 @@ export const propagationDisabledKey: symbol = createContextKey(
  * （任意RSSサイトなど）へは識別子を漏らさないTextMapPropagator。
  * extractは常にW3Cへ委譲し、受信側の相関は維持する。
  */
-export class AllowlistTextMapPropagator implements TextMapPropagator {
-  private readonly delegate = new W3CTraceContextPropagator()
-
-  inject(context: Context, carrier: unknown, setter: TextMapSetter): void {
-    if (context.getValue(propagationDisabledKey)) return
-    this.delegate.inject(context, carrier, setter)
-  }
-  extract(context: Context, carrier: unknown, getter: TextMapGetter): Context {
-    return this.delegate.extract(context, carrier, getter)
-  }
-
-  fields(): string[] {
-    return this.delegate.fields()
-  }
+export const makeAllowlistTextMapPropagator = (): TextMapPropagator => {
+  const delegate = new W3CTraceContextPropagator()
+  return Object.freeze({
+    inject: (
+      activeContext: Context,
+      carrier: unknown,
+      setter: TextMapSetter
+    ): void => {
+      if (activeContext.getValue(propagationDisabledKey)) return
+      delegate.inject(activeContext, carrier, setter)
+    },
+    extract: (
+      activeContext: Context,
+      carrier: unknown,
+      getter: TextMapGetter
+    ): Context => delegate.extract(activeContext, carrier, getter),
+    fields: (): string[] => delegate.fields(),
+  })
 }
 
 export function readPropagationAllowlist(

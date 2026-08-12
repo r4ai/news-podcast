@@ -53,7 +53,7 @@ import {
   sanitizeMetricAttributes,
 } from "./privacy.js"
 import {
-  AllowlistTextMapPropagator,
+  makeAllowlistTextMapPropagator,
   installPropagationGate,
   readPropagationAllowlist,
 } from "./propagation.js"
@@ -135,7 +135,7 @@ export function createNodeObservability(
     resource,
     instrumentations,
     ...(config.autoInstrumentation
-      ? { textMapPropagator: new AllowlistTextMapPropagator() }
+      ? { textMapPropagator: makeAllowlistTextMapPropagator() }
       : {}),
     traceExporter: new OTLPTraceExporter({
       url: signalUrl(config.endpoint, "traces"),
