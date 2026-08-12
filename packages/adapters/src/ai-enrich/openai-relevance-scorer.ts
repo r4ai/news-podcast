@@ -238,15 +238,25 @@ function parseScorePayload(
     )
   }
   const allowed = new Set(candidates.map((candidate) => candidate.feedItemId))
-  const scores = parsed.data.scores.filter((score) =>
-    allowed.has(score.feed_item_id)
-  )
-  if (scores.length === 0) {
-    throw new RelevanceScoreError(
-      "OpenAI response referenced no known feed_item_id",
-      false
+  const occurrences = new Map<string, number>()
+  for (const score of parsed.data.scores) {
+    occurrences.set(
+      score.feed_item_id,
+      (occurrences.get(score.feed_item_id) ?? 0) + 1
     )
   }
+  const completeOneToOneMapping =
+    parsed.data.scores.length === candidates.length &&
+    parsed.data.scores.every((score) => allowed.has(score.feed_item_id)) &&
+    candidates.every(
+      (candidate) => occurrences.get(candidate.feedItemId) === 1
+    )
+  if (!completeOneToOneMapping) {
+    throw new RelevanceScoreError(
+      "OpenAI response must score every requested feed_item_id exactly once"
+    )
+  }
+  const scores = parsed.data.scores
   const vocabulary = new Set(tagVocabulary)
   return scores.map((score) => ({
     feedItemId: score.feed_item_id,

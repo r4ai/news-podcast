@@ -105,12 +105,28 @@ describe("OpenAiRelevanceScorer", () => {
     })
   })
 
-  it("filters out scores for feed_item_ids that were not in the request", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonSchemaResponse([
+  it.each([
+    {
+      name: "an unknown id",
+      scores: [
         { feed_item_id: "a", score: 80, reason: "ok" },
         { feed_item_id: "unknown-id", score: 5, reason: "invented" },
-      ])
+      ],
+    },
+    {
+      name: "a missing id",
+      scores: [{ feed_item_id: "a", score: 80, reason: "ok" }],
+    },
+    {
+      name: "a duplicate id",
+      scores: [
+        { feed_item_id: "a", score: 80, reason: "ok" },
+        { feed_item_id: "a", score: 70, reason: "duplicate" },
+      ],
+    },
+  ])("rejects a response with $name", async ({ scores }) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonSchemaResponse(scores)
     )
     const scorer = new OpenAiRelevanceScorer(
       { apiKey: "test-key", model: "gpt-5.6-luna" },
@@ -118,13 +134,13 @@ describe("OpenAiRelevanceScorer", () => {
       noSleepRetry
     )
 
-    const result = await scorer.score({
-      profile: { include: "AI", exclude: "" },
-      candidates,
-      tagVocabulary: [],
-    })
-
-    expect(result.scores.map((score) => score.feedItemId)).toEqual(["a"])
+    await expect(
+      scorer.score({
+        profile: { include: "AI", exclude: "" },
+        candidates,
+        tagVocabulary: [],
+      })
+    ).rejects.toThrow("exactly once")
   })
 
   it("passes the tag vocabulary as an enum and maps tags/suggested_tags", async () => {
