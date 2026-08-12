@@ -3,6 +3,8 @@
 このガイドは、News Podcastをローカルで動かし、変更を検証するための手順をまとめたものです。
 初回はfake providerで一連の操作を確認し、必要になった段階でOpenAIとVOICEVOXを使う構成へ切り替えます。
 
+> 現在のクイックスタートは移行元の`apps/api` / `apps/worker`を起動する。関数型Gateway/4サービスは縦断スライスまで実装済みだが、全機能のCompose配備は未完了である。新規実装先、未移植範囲、旧実装の削除条件は[関数型DDDマイクロサービス移行ガイド](functional-ddd-migration.md)を参照する。
+
 ## クイックスタート
 
 ### 必要なもの
@@ -11,7 +13,7 @@
 | --- | --- | --- |
 | Node.js | 24以上 | セットアップ、テスト、ビルド |
 | pnpm | 11.16.0 | ワークスペースの依存関係とコマンドの管理 |
-| Docker | Docker Composeを利用できる版 | Web、API、Worker、VOICEVOX、SeaweedFSの起動 |
+| Docker | Docker Composeを利用できる版 | Web、API、Worker、NATS JetStream、VOICEVOX、SeaweedFSの起動 |
 
 バージョンを確認します。
 
@@ -64,6 +66,8 @@ container内だけ名前解決が数秒以上遅い場合は、containerの`/etc
 | Webアプリ | <http://localhost:4173> |
 | APIヘルスチェック | <http://localhost:4000/health> |
 | OpenAPIドキュメント | <http://localhost:4000/openapi.json> |
+| NATS client | `nats://127.0.0.1:4222` |
+| NATS monitoring | <http://localhost:8222> |
 | VOICEVOX Engine | <http://localhost:50021> |
 | SeaweedFS S3 API | <http://localhost:8333> |
 | SeaweedFS Master UI | <http://localhost:9333> |
@@ -109,6 +113,23 @@ flowchart LR
 
 APIは生成要求をSQLiteへ保存し、Workerはジョブを定期的に取得します。
 APIとWorkerはSQLiteをメタデータの正本とし、記事HTML、Markdown、asset、音声をSeaweedFSへ保存します。従来のローカル音声は初回再生時にObjectStoreへ遅延移行します。
+
+### NATS JetStreamを確認する
+
+`pnpm dev:up`は、version固定したNATSをJetStream有効で起動する。client portと認証なしのmonitoring portはどちらもloopbackだけへ公開し、JetStreamの状態は`nats-data` volumeへ永続化する。
+
+NATSだけを起動して健全性を確認する場合は次を使う。
+
+```bash
+docker compose up -d nats
+docker compose ps nats
+curl --fail --silent --show-error \
+  'http://127.0.0.1:8222/healthz?js-enabled-only=true'
+```
+
+期待する応答は`{"status":"ok"}`である。詳細なJetStream状態が必要な場合だけ、`http://127.0.0.1:8222/jsz?streams=true`を確認する。Compose内のプロセスは`.env`既定値の`NATS_SERVERS=nats://nats:4222`、host上のプロセスは`NATS_SERVERS=nats://127.0.0.1:4222`を使う。
+
+現時点の`compose.yaml`はNATS基盤だけを提供し、新しい4 context serviceは実行entrypointが揃うまで登録しない。従来のAPI/WorkerがNATSへ依存しているようには扱わず、配備可能なserviceから順にhealthcheck付きで追加する。
 
 ## 技術スタックとリポジトリ構成
 
