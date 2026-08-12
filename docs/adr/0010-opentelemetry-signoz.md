@@ -4,7 +4,7 @@
 - Date: 2026-08-10
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0032
 - Related: ADR-0017、`packages/observability`、`infra/observability`
 
 ## コンテキストと変更契機

@@ -96,16 +96,20 @@ flowchart LR
   Node["Local Node API / Worker"] -->|"OTLP HTTP"| Ingress
   Gateway -->|"Bearer OTLP"| Ingress
   Ingress --> Collector["OpenTelemetry Collector"]
-  Collector --> SigNoz["SigNoz Community"]
-  SigNoz --> ClickHouse[("ClickHouse")]
+  Collector --> Prometheus[("Prometheus / Metrics")]
+  Collector --> Loki[("Loki / Logs")]
+  Collector --> Tempo[("Tempo / Traces")]
+  Prometheus --> Grafana["Grafana"]
+  Loki --> Grafana
+  Tempo --> Grafana
   Watchdog["同一host watchdog"] -->|"health/freshness poll"| Node
-  Watchdog --> SigNoz
+  Watchdog --> Grafana
   Watchdog -->|"direct SMTP"| OnCall["Operations"]
 ```
 
 Cloudflareへのアプリ配備とLinux上の監視基盤は独立させる。Domain/Applicationは監視実装を知らず、appsとadapterだけが`packages/observability`を使う。BrowserからAPIまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Workerは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はWorker trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
-Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Dashboard、rule、routingは公式SigNoz Terraform providerで管理し、watchdogはSigNoz停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0010](adr/0010-opentelemetry-signoz.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
+Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningでdashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理し、watchdogはGrafana停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
 計装は呼び出しごとの手動spanではなく、**自動計装（`instrumentation-http` + `instrumentation-undici`）を正本**にする。Node APIはbootstrapで`@news-podcast/observability/node/register`を初期化してからcomposition rootを動的importし、依存moduleの評価より先に`node:http`をpatchする。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）へspanを自動生成する。W3C trace headerの注入はallowlist（既定`api.openai.com`・`localhost`・`127.0.0.1`、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは注入しない（ADR-0017の「外部へ送らない」方針を部分改訂）。span自体は生成・記録され続け、受信は常にW3Cで継続する。非HTTP入口（Workerのtick）は`withGuaranteedSpan`でroot spanを合成して`trace.entry.synthesized`を計数し、本番はmetric/ruleで、非本番は`assertActiveSpan`で計装欠落を検出する。エラー詳細はredact済み`error.message`・`error.type`をlogs/spansへ記録し、metric属性は低cardinalityに限定する（高cardinalityの`error.message`はmetricsへ入れない）。詳細は[ADR-0025](adr/0025-automatic-instrumentation-and-trace-guarantee.md)を正本とする。
 
