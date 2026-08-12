@@ -1,7 +1,11 @@
 import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import { subjects } from "@news-podcast/protocols"
+import {
+  CreateAudioAccessReplySchema,
+  ListEpisodesReplySchema,
+  subjects,
+} from "@news-podcast/protocols"
 
 import {
   AudioAccessSchema,
@@ -13,8 +17,6 @@ import {
 import type { UnsafeNatsRequestClient } from "../infrastructure/unsafe/nats-request.js"
 import {
   acquireNatsGatewayPorts,
-  LibraryCreateAudioAccessResponseSchema,
-  LibraryListEpisodesResponseSchema,
   makeNatsGatewayPorts,
 } from "./nats-gateway-ports.js"
 
@@ -161,14 +163,14 @@ describe("NATS GatewayPorts adapter", () => {
         return encodedReply(
           request.envelope,
           "episode-library",
-          LibraryListEpisodesResponseSchema,
+          ListEpisodesReplySchema,
           { _tag: "Listed", page: { items: [], page: { hasMore: false } } }
         )
       }
       return encodedReply(
         request.envelope,
         "episode-library",
-        LibraryCreateAudioAccessResponseSchema,
+        CreateAudioAccessReplySchema,
         {
           _tag: "Found",
           access: {
@@ -210,8 +212,8 @@ describe("NATS GatewayPorts adapter", () => {
     )
     expect(downstream.map(({ subject }) => subject)).toEqual([
       subjects.production.createJob,
-      "library.list-episodes.v1",
-      "library.create-audio-access.v1",
+      subjects.library.listEpisodes,
+      subjects.library.createAudioAccess,
     ])
     for (const request of downstream) {
       expect(request.envelope.actor).toEqual({ _tag: "User", userId })

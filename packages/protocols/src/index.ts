@@ -15,6 +15,26 @@ export {
   type ResolveSessionResponse,
 } from "./contracts.js"
 export {
+  AudioAccessSchema as LibraryAudioAccessSchema,
+  CreateAudioAccessReplySchema,
+  CreateAudioAccessRequestSchema,
+  EpisodeLibraryRejectionCodeSchema,
+  EpisodeLibraryRejectionSchema,
+  LibraryEpisodePageSchema,
+  LibraryEpisodeSchema,
+  ListEpisodesReplySchema,
+  ListEpisodesRequestSchema,
+  parseCreateAudioAccessReply,
+  parseCreateAudioAccessRequest,
+  parseListEpisodesReply,
+  parseListEpisodesRequest,
+  type CreateAudioAccessReply,
+  type CreateAudioAccessRequest,
+  type EpisodeLibraryRejection,
+  type ListEpisodesReply,
+  type ListEpisodesRequest,
+} from "./episode-library-rpc.js"
+export {
   ActorSchema,
   CorrelationIdSchema,
   messageEnvelope,

@@ -6,7 +6,10 @@ import {
 import {
   ActorSchema,
   CorrelationIdSchema,
+  type CreateAudioAccessReply,
   MessageEnvelopeSchema,
+  parseCreateAudioAccessReply,
+  parseListEpisodesReply,
   parseMessageEnvelope,
   subjects,
 } from "@news-podcast/protocols"
@@ -49,22 +52,6 @@ export const ProductionCreateEpisodeJobResponseSchema = Schema.Union([
   }),
 ])
 
-// Temporary local wire contracts until episode-library publishes its RPC contract.
-export const LibraryListEpisodesResponseSchema = Schema.Union([
-  Schema.Struct({ _tag: Schema.Literal("Listed"), page: EpisodePageSchema }),
-  Schema.Struct({ _tag: Schema.Literal("Rejected"), code: Schema.String }),
-])
-export const LibraryCreateAudioAccessResponseSchema = Schema.Union([
-  Schema.Struct({ _tag: Schema.Literal("Found"), access: AudioAccessSchema }),
-  Schema.Struct({ _tag: Schema.Literal("NotFound") }),
-  Schema.Struct({ _tag: Schema.Literal("Rejected"), code: Schema.String }),
-])
-
-const librarySubjects = deepFreeze({
-  listEpisodes: "library.list-episodes.v1",
-  createAudioAccess: "library.create-audio-access.v1",
-})
-
 const unavailable = () =>
   deepFreeze({
     type: "about:blank",
@@ -95,17 +82,18 @@ const notFound = () =>
   })
 
 type AudioAccess = TypeOf<typeof AudioAccessSchema>
-type AudioAccessReply = TypeOf<typeof LibraryCreateAudioAccessResponseSchema>
 type AudioAccessFailure =
   | ReturnType<typeof notFound>
   | ReturnType<typeof unavailable>
 
 const toAudioAccess = (
-  reply: AudioAccessReply
+  reply: CreateAudioAccessReply
 ): Effect.Effect<AudioAccess, AudioAccessFailure> => {
   switch (reply._tag) {
     case "Found":
-      return Effect.succeed(reply.access)
+      return parse(AudioAccessSchema)(reply.access).pipe(
+        Effect.mapError(unavailable)
+      )
     case "NotFound":
       return Effect.fail(notFound())
     case "Rejected":
@@ -331,21 +319,23 @@ const makeAdapter = (
         Effect.flatMap(({ actor, lineage: parent }) => {
           const lineage = childLineage(parent, dependencies.nextMessageId())
           return rpc(
-            librarySubjects.listEpisodes,
+            subjects.library.listEpisodes,
             "episode-library",
             actor,
             {},
             lineage
           ).pipe(
             Effect.flatMap((reply) =>
-              parse(LibraryListEpisodesResponseSchema)(reply.payload)
+              parseListEpisodesReply(reply.payload)
             ),
             Effect.mapError(unavailable)
           )
         }),
         Effect.flatMap((reply) =>
           reply._tag === "Listed"
-            ? Effect.succeed(reply.page)
+            ? parse(EpisodePageSchema)(reply.page).pipe(
+                Effect.mapError(unavailable)
+              )
             : Effect.fail(unavailable())
         )
       ),
@@ -354,14 +344,14 @@ const makeAdapter = (
         Effect.flatMap(({ actor, lineage: parent }) => {
           const lineage = childLineage(parent, dependencies.nextMessageId())
           return rpc(
-            librarySubjects.createAudioAccess,
+            subjects.library.createAudioAccess,
             "episode-library",
             actor,
             { episodeId },
             lineage
           ).pipe(
             Effect.flatMap((reply) =>
-              parse(LibraryCreateAudioAccessResponseSchema)(reply.payload)
+              parseCreateAudioAccessReply(reply.payload)
             ),
             Effect.mapError(unavailable)
           )

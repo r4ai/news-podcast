@@ -11,6 +11,8 @@ export const subjects = {
   },
   library: {
     episodePublished: "library.episode-published.v1",
+    listEpisodes: "library.list-episodes.v1",
+    createAudioAccess: "library.create-audio-access.v1",
   },
 } as const
 
