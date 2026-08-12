@@ -109,6 +109,10 @@ describe("episode-library RPC handler", () => {
       causationId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
       actor: { _tag: "Service", service: "episode-library" },
     })
+    expect(envelope.traceparent).toMatch(
+      /^00-4bf92f3577b34da6a3ce929d0e0e4736-[\da-f]{16}-01$/
+    )
+    expect(envelope.traceparent).not.toBe(request({}).traceparent)
     expect(parsed).toMatchObject({
       _tag: "Listed",
       page: {

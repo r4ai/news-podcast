@@ -1,5 +1,9 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import {
+  withMessagingSpan,
+  withRemoteTraceparent,
+} from "@news-podcast/observability"
+import {
   CreateAudioAccessReplySchema,
   EpisodeLibraryRejectionSchema,
   ListEpisodesReplySchema,
@@ -71,21 +75,25 @@ const correlatedReply = <ReplyError>(
   payload: unknown,
   dependencies: EpisodeLibraryRpcDependencies
 ) =>
-  parse(replySchema(delivery.subject))(payload).pipe(
-    Effect.flatMap((trustedPayload) =>
-      parse(MessageEnvelopeSchema)({
-        messageId: dependencies.newMessageId(),
-        correlationId: request.correlationId,
-        causationId: request.messageId,
-        occurredAt: dependencies.now(),
-        producer: "episode-library",
-        traceparent: request.traceparent,
-        actor: { _tag: "Service", service: "episode-library" },
-        payload: trustedPayload,
-      }).pipe(
-        Effect.flatMap(Schema.encodeEffect(MessageEnvelopeSchema)),
-        Effect.map(JSON.stringify),
-        Effect.flatMap(delivery.reply)
+  Effect.currentSpan.pipe(
+    Effect.flatMap((span) =>
+      parse(replySchema(delivery.subject))(payload).pipe(
+        Effect.flatMap((trustedPayload) =>
+          parse(MessageEnvelopeSchema)({
+            messageId: dependencies.newMessageId(),
+            correlationId: request.correlationId,
+            causationId: request.messageId,
+            occurredAt: dependencies.now(),
+            producer: "episode-library",
+            traceparent: `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`,
+            actor: { _tag: "Service", service: "episode-library" },
+            payload: trustedPayload,
+          }).pipe(
+            Effect.flatMap(Schema.encodeEffect(MessageEnvelopeSchema)),
+            Effect.map(JSON.stringify),
+            Effect.flatMap(delivery.reply)
+          )
+        )
       )
     )
   )
@@ -150,114 +158,121 @@ export const makeEpisodeLibraryRpcHandler = (
       Effect.matchEffect({
         onFailure: () => rawRejection(delivery, rejection("INVALID_REQUEST")),
         onSuccess: (envelope) => {
-          const reject = (code: EpisodeLibraryRejection["code"]) =>
-            correlatedReply(delivery, envelope, rejection(code), dependencies)
+          const process = Effect.suspend(() => {
+            const reject = (code: EpisodeLibraryRejection["code"]) =>
+              correlatedReply(delivery, envelope, rejection(code), dependencies)
 
-          if (envelope.producer !== "gateway") return reject("INVALID_REQUEST")
-          if (envelope.actor._tag !== "User") return reject("UNAUTHENTICATED")
+            if (envelope.producer !== "gateway")
+              return reject("INVALID_REQUEST")
+            if (envelope.actor._tag !== "User") return reject("UNAUTHENTICATED")
 
-          const owner = parseOwnerId(envelope.actor.userId).pipe(
-            Effect.mapError(() => rejection("INVALID_REQUEST"))
-          )
-          if (delivery.subject === subjects.library.listEpisodes) {
-            return Effect.all([
-              owner,
-              parseListEpisodesRequest(envelope.payload).pipe(
-                Effect.mapError(() => rejection("INVALID_REQUEST"))
-              ),
-            ]).pipe(
-              Effect.flatMap(([ownerId, request]) =>
-                Effect.gen(function* () {
-                  const after: EpisodePagePosition | undefined =
-                    request.cursor === undefined
-                      ? undefined
-                      : yield* decodeEpisodePageCursor(request.cursor).pipe(
-                          Effect.mapError(() => rejection("INVALID_REQUEST"))
-                        )
-                  return [ownerId, after] as const
-                })
-              ),
-              Effect.flatMap(([ownerId, after]) =>
-                list({
-                  ownerId,
-                  ...(after === undefined ? {} : { after }),
-                })
-              ),
-              Effect.flatMap((page) =>
-                parse(ListEpisodesReplySchema)(
-                  deepFreeze({
-                    _tag: "Listed",
-                    page: {
-                      items: page.items.map(wireEpisode),
-                      page: {
-                        hasMore: page.hasMore,
-                        ...(page.next === undefined
-                          ? {}
-                          : {
-                              nextCursor: encodeEpisodePageCursor(page.next),
-                            }),
-                      },
-                    },
+            const owner = parseOwnerId(envelope.actor.userId).pipe(
+              Effect.mapError(() => rejection("INVALID_REQUEST"))
+            )
+            if (delivery.subject === subjects.library.listEpisodes) {
+              return Effect.all([
+                owner,
+                parseListEpisodesRequest(envelope.payload).pipe(
+                  Effect.mapError(() => rejection("INVALID_REQUEST"))
+                ),
+              ]).pipe(
+                Effect.flatMap(([ownerId, request]) =>
+                  Effect.gen(function* () {
+                    const after: EpisodePagePosition | undefined =
+                      request.cursor === undefined
+                        ? undefined
+                        : yield* decodeEpisodePageCursor(request.cursor).pipe(
+                            Effect.mapError(() => rejection("INVALID_REQUEST"))
+                          )
+                    return [ownerId, after] as const
                   })
-                )
-              ),
-              Effect.matchEffect({
-                onFailure: (failure) =>
-                  reject(
-                    typeof failure === "object" &&
-                      failure !== null &&
-                      "code" in failure
-                      ? (failure as EpisodeLibraryRejection).code
-                      : failureCode(failure)
-                  ),
-                onSuccess: (reply) =>
-                  correlatedReply(delivery, envelope, reply, dependencies),
-              })
-            )
-          }
-          if (delivery.subject === subjects.library.createAudioAccess) {
-            return Effect.all([
-              owner,
-              parseCreateAudioAccessRequest(envelope.payload).pipe(
-                Effect.mapError(() => rejection("INVALID_REQUEST"))
-              ),
-            ]).pipe(
-              Effect.flatMap(([ownerId, request]) =>
-                audio({ ownerId, episodeId: request.episodeId as never })
-              ),
-              Effect.flatMap((access) =>
-                parse(CreateAudioAccessReplySchema)(
-                  deepFreeze({ _tag: "Found", access })
-                )
-              ),
-              Effect.matchEffect({
-                onFailure: (failure) => {
-                  const reply: CreateAudioAccessReply =
-                    typeof failure === "object" &&
-                    failure !== null &&
-                    "_tag" in failure &&
-                    failure._tag === "EpisodeNotFound"
-                      ? deepFreeze({ _tag: "NotFound" })
-                      : rejection(
-                          typeof failure === "object" &&
-                            failure !== null &&
-                            "code" in failure
-                            ? (failure as EpisodeLibraryRejection).code
-                            : failureCode(failure)
-                        )
-                  return correlatedReply(
-                    delivery,
-                    envelope,
-                    reply,
-                    dependencies
+                ),
+                Effect.flatMap(([ownerId, after]) =>
+                  list({
+                    ownerId,
+                    ...(after === undefined ? {} : { after }),
+                  })
+                ),
+                Effect.flatMap((page) =>
+                  parse(ListEpisodesReplySchema)(
+                    deepFreeze({
+                      _tag: "Listed",
+                      page: {
+                        items: page.items.map(wireEpisode),
+                        page: {
+                          hasMore: page.hasMore,
+                          ...(page.next === undefined
+                            ? {}
+                            : {
+                                nextCursor: encodeEpisodePageCursor(page.next),
+                              }),
+                        },
+                      },
+                    })
                   )
-                },
-                onSuccess: (reply) =>
-                  correlatedReply(delivery, envelope, reply, dependencies),
-              })
-            )
-          }
-          return reject("INVALID_REQUEST")
+                ),
+                Effect.matchEffect({
+                  onFailure: (failure) =>
+                    reject(
+                      typeof failure === "object" &&
+                        failure !== null &&
+                        "code" in failure
+                        ? (failure as EpisodeLibraryRejection).code
+                        : failureCode(failure)
+                    ),
+                  onSuccess: (reply) =>
+                    correlatedReply(delivery, envelope, reply, dependencies),
+                })
+              )
+            }
+            if (delivery.subject === subjects.library.createAudioAccess) {
+              return Effect.all([
+                owner,
+                parseCreateAudioAccessRequest(envelope.payload).pipe(
+                  Effect.mapError(() => rejection("INVALID_REQUEST"))
+                ),
+              ]).pipe(
+                Effect.flatMap(([ownerId, request]) =>
+                  audio({ ownerId, episodeId: request.episodeId as never })
+                ),
+                Effect.flatMap((access) =>
+                  parse(CreateAudioAccessReplySchema)(
+                    deepFreeze({ _tag: "Found", access })
+                  )
+                ),
+                Effect.matchEffect({
+                  onFailure: (failure) => {
+                    const reply: CreateAudioAccessReply =
+                      typeof failure === "object" &&
+                      failure !== null &&
+                      "_tag" in failure &&
+                      failure._tag === "EpisodeNotFound"
+                        ? deepFreeze({ _tag: "NotFound" })
+                        : rejection(
+                            typeof failure === "object" &&
+                              failure !== null &&
+                              "code" in failure
+                              ? (failure as EpisodeLibraryRejection).code
+                              : failureCode(failure)
+                          )
+                    return correlatedReply(
+                      delivery,
+                      envelope,
+                      reply,
+                      dependencies
+                    )
+                  },
+                  onSuccess: (reply) =>
+                    correlatedReply(delivery, envelope, reply, dependencies),
+                })
+              )
+            }
+            return reject("INVALID_REQUEST")
+          })
+          return withRemoteTraceparent(
+            withMessagingSpan(process, delivery.subject, "process"),
+            envelope.traceparent
+          )
         },
       })
     )
