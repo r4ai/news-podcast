@@ -126,6 +126,28 @@ describe("OpenAiArticleSummarizer", () => {
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
+  it("removes an unclosed Mermaid fence after repair without deleting preceding text", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() =>
+        Promise.resolve(
+          jsonSchemaResponse("重要な結論\n\n```mermaid\nflowchart LR\nA-->")
+        )
+      )
+    const summarizer = new OpenAiArticleSummarizer(
+      { apiKey: "test-key", model: "gpt-5.6-luna" },
+      fetcher,
+      noSleepRetry
+    )
+
+    await expect(
+      summarizer.summarize({ title: "タイトル", markdown: "本文" })
+    ).resolves.toMatchObject({
+      markdown: "重要な結論",
+      warnings: ["invalid-mermaid-removed"],
+    })
+  })
+
   it("truncates markdown to the configured max length before sending", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

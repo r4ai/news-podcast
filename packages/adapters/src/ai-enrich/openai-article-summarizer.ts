@@ -220,10 +220,21 @@ async function inspectMermaid(summary: string): Promise<{
   readonly markdownWithoutInvalid: string
 }> {
   const starts = [...summary.matchAll(/```mermaid\b/gi)]
-  const diagrams = [
+  const completeDiagrams = [
     ...summary.matchAll(/```mermaid[^\S\r\n]*\r?\n([\s\S]*?)```/gi),
   ]
-  let valid = starts.length === diagrams.length
+  const completeStarts = new Set(
+    completeDiagrams.map((diagram) => diagram.index ?? -1)
+  )
+  const unclosedStart = starts.find(
+    (start) => !completeStarts.has(start.index ?? -1)
+  )?.index
+  const inspectableSummary =
+    unclosedStart === undefined ? summary : summary.slice(0, unclosedStart)
+  const diagrams = [
+    ...inspectableSummary.matchAll(/```mermaid[^\S\r\n]*\r?\n([\s\S]*?)```/gi),
+  ]
+  let valid = unclosedStart === undefined
   let cursor = 0
   let markdownWithoutInvalid = ""
   for (const diagram of diagrams) {
@@ -238,18 +249,11 @@ async function inspectMermaid(summary: string): Promise<{
     }
     valid &&= diagramValid
     const index = diagram.index ?? cursor
-    markdownWithoutInvalid += summary.slice(cursor, index)
+    markdownWithoutInvalid += inspectableSummary.slice(cursor, index)
     if (diagramValid) markdownWithoutInvalid += diagram[0]
     cursor = index + diagram[0].length
   }
-  markdownWithoutInvalid += summary.slice(cursor)
-  if (starts.length > diagrams.length) {
-    valid = false
-    markdownWithoutInvalid = markdownWithoutInvalid.replace(
-      /```mermaid\b[\s\S]*$/i,
-      ""
-    )
-  }
+  markdownWithoutInvalid += inspectableSummary.slice(cursor)
   return {
     valid,
     markdownWithoutInvalid: markdownWithoutInvalid
