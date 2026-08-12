@@ -16,6 +16,8 @@ const content = template
   .replace(/^BETTER_AUTH_SECRET=$/m, `BETTER_AUTH_SECRET=${secret()}`)
   .replace(/^AUDIO_ACCESS_SECRET=$/m, `AUDIO_ACCESS_SECRET=${secret()}`)
   .replace(/^DEV_AUTH_PASSWORD=$/m, `DEV_AUTH_PASSWORD=${secret()}`)
+  .replace(/^TELEMETRY_PROXY_TOKEN=$/m, `TELEMETRY_PROXY_TOKEN=${secret()}`)
+  .replace(/^GRAFANA_ADMIN_PASSWORD=$/m, `GRAFANA_ADMIN_PASSWORD=${secret()}`)
 
 writeFileSync(target, content, { flag: "wx" })
 console.log(

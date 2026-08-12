@@ -1,0 +1,255 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: service-reliability
+    folder: News Podcast
+    interval: 1m
+    rules:
+      - uid: np-service-errors
+        title: Service error rate is above 5%
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum by (service_name) (rate(traces_spanmetrics_calls_total{status_code="STATUS_CODE_ERROR"}[5m])) / clamp_min(sum by (service_name) (rate(traces_spanmetrics_calls_total[5m])), 0.001)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0.05], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: '{{ $labels.service_name }} error rate is above 5%'
+          description: Open Service Overview, then follow an exemplar or Tempo service graph to the failing dependency and correlated logs.
+        labels: { severity: critical, team: platform }
+
+      - uid: np-service-latency
+        title: Service p95 latency exceeds 2 seconds
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'histogram_quantile(0.95, sum by (le, service_name) (rate(traces_spanmetrics_duration_milliseconds_bucket[5m])))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [2000], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: '{{ $labels.service_name }} p95 latency exceeds 2 seconds'
+          description: Use the service graph edge latency and representative traces to identify the slow dependency or database operation.
+        labels: { severity: warning, team: platform }
+
+      - uid: np-api-5xx
+        title: API returned 5xx responses
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum by (service_name, http_route) (increase(http_server_error_total[5m]))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: '{{ $labels.service_name }} returned 5xx on {{ $labels.http_route }}'
+          description: Inspect the linked trace and logs with the same trace_id before retrying the operation.
+        labels: { severity: critical, team: platform }
+
+  - orgId: 1
+    name: episode-production
+    folder: News Podcast
+    interval: 1m
+    rules:
+      - uid: np-generation-failure
+        title: Episode generation failed
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum by (failure_code) (increase(episode_failed_total[5m]))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: 'Episode generation failed: {{ $labels.failure_code }}'
+          description: Open Episode Production, find the error log, and follow trace_id across worker, provider, storage, and database spans.
+        labels: { severity: critical, team: platform }
+
+      - uid: np-generation-queue-age
+        title: Episode queue age is near the job deadline
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'max(episode_queue_oldest_age)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [1440000], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: Episode queue age exceeds 24 minutes
+          description: Check worker health, active NATS/queue edges, provider latency, and stale lease traces.
+        labels: { severity: critical, team: platform }
+
+  - orgId: 1
+    name: telemetry-pipeline
+    folder: News Podcast
+    interval: 1m
+    rules:
+      - uid: np-otel-export-failure
+        title: OTel Collector export is failing
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum by (exporter) (increase({__name__=~"otelcol_exporter_send_failed_(spans|metric_points|log_records)_total"}[5m]))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: 'Collector export failure: {{ $labels.exporter }}'
+          description: Telemetry may be incomplete. Check Collector queues and Prometheus/Loki/Tempo readiness; business processing should remain available.
+        labels: { severity: critical, team: platform }
+
+      - uid: np-uninstrumented-entry
+        title: Uninstrumented entry point detected
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 1200, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum by (service_name, operation_stage) (increase(trace_entry_synthesized_total[15m]))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: '{{ $labels.service_name }} synthesized a root span'
+          description: The entry point lost its parent/link context. Fix instrumentation before relying on the affected service graph edge.
+        labels: { severity: warning, team: platform }

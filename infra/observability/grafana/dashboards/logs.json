@@ -1,0 +1,65 @@
+{
+  "annotations": { "list": [] },
+  "description": "Structured application logs correlated with Tempo by trace_id and span_id.",
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "title": "Overview", "type": "link", "url": "/d/news-podcast-overview", "keepTime": true },
+    { "title": "Service map and traces", "type": "link", "url": "/d/news-podcast-service-map", "keepTime": true }
+  ],
+  "panels": [
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 50, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "sum by (service_name) (count_over_time({service_name=~\"$service\"}[$__auto]))", "legendFormat": "{{service_name}}", "queryType": "range", "refId": "A" }],
+      "title": "Log volume by service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 50, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "sum by (detected_level) (count_over_time({service_name=~\"$service\"} | detected_level =~ `error|warn` [$__auto]))", "legendFormat": "{{detected_level}}", "queryType": "range", "refId": "A" }],
+      "title": "Warnings and errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "auto" },
+      "targets": [{ "editorMode": "code", "expr": "sum(count_over_time({service_name=~\"$service\"} | trace_id != `` [5m])) / sum(count_over_time({service_name=~\"$service\"}[5m]))", "legendFormat": "trace correlation", "queryType": "range", "refId": "A" }],
+      "title": "Logs carrying trace_id",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 17, "w": 24, "x": 0, "y": 7 },
+      "id": 4,
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [{ "editorMode": "code", "expr": "{service_name=~\"$service\"} | detected_level =~ `$level` |~ `$search`", "queryType": "range", "refId": "A" }],
+      "title": "Structured logs — TraceID opens the complete distributed trace",
+      "type": "logs"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "tags": ["news-podcast", "logs", "correlation", "managed"],
+  "templating": { "list": [
+    { "current": { "text": "All", "value": "$__all" }, "datasource": { "type": "loki", "uid": "loki" }, "definition": "label_values(service_name)", "includeAll": true, "label": "Service", "multi": true, "name": "service", "query": "label_values(service_name)", "refresh": 2, "type": "query" },
+    { "current": { "text": "error|warn|info|debug", "value": "error|warn|info|debug" }, "hide": 0, "label": "Level", "name": "level", "options": [], "query": "error|warn|info|debug", "type": "textbox" },
+    { "current": { "text": ".*", "value": ".*" }, "hide": 0, "label": "Search regex", "name": "search", "options": [], "query": ".*", "type": "textbox" }
+  ] },
+  "time": { "from": "now-3h", "to": "now" },
+  "timezone": "browser",
+  "title": "News Podcast / Correlated Logs",
+  "uid": "news-podcast-logs",
+  "version": 1
+}

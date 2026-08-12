@@ -35,6 +35,7 @@ flowchart LR
 - Tempo datasourceはtrace-to-logs、trace-to-metrics、service mapを提供する。
 - dashboard、datasource、alert、notification policyはprovisioning fileを正本とし、UI変更を恒久設定にしない。
 - metricsには高cardinality IDを入れず、job/message IDはtrace/logだけに許可する。
+- backend traceは100%収集する。20% samplingのBrowserが未収集を選んだremote parentでも、APIは同じtrace IDを継続しbackend spanを収集する。
 - CollectorまたはGrafana stack障害で業務処理を止めず、欠落・drop・export失敗自体を監視する。
 
 ## 判断要因
@@ -65,7 +66,7 @@ flowchart LR
 
 - Prometheus、Loki、Tempo、Grafanaの運用・容量設計・backupが必要になる。
 - service graphとspan metricsは正しいspan kind、peer/service属性、trace伝播に依存する。
-- head samplingで落ちたtraceは復元できないため、失敗・長時間traceを残すsampling方針が必要になる。
+- Browser側で未収集のspanは復元できないが、backend traceは常に保持するためAPI以降の障害原因は失わない。
 
 ## 影響と同期
 
@@ -84,7 +85,7 @@ flowchart LR
 ## 再検討条件
 
 - 1日あたりのtelemetry量またはquery latencyが単一host構成のSLOを30日間継続して超える。
-- head samplingにより障害traceを取得できない事例が月2件以上発生する。
+- backend telemetry量が単一hostの容量を超え、100%収集を維持できなくなる。
 - Grafana stackの運用負担が障害調査時間の短縮効果を上回る。
 
 ## 受け入れゲートと未決事項

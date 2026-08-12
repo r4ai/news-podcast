@@ -1,0 +1,83 @@
+apiVersion: 1
+
+deleteDatasources:
+  - { name: Prometheus, orgId: 1 }
+  - { name: Loki, orgId: 1 }
+  - { name: Tempo, orgId: 1 }
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      prometheusType: Prometheus
+      prometheusVersion: 3.13.1
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+          urlDisplayLabel: View trace
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: 'trace[_]?id'
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+          urlDisplayLabel: View trace
+        - name: SpanID
+          matcherType: label
+          matcherRegex: 'span[_]?id'
+          url: ''
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      httpMethod: GET
+      nodeGraph:
+        enabled: true
+      serviceMap:
+        datasourceUid: prometheus
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        filterByTraceID: true
+        filterBySpanID: true
+        customQuery: false
+        tags:
+          - { key: service.name, value: service_name }
+          - { key: deployment.environment.name, value: deployment_environment_name }
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        tags:
+          - { key: service.name, value: service_name }
+          - { key: span.name, value: span_name }
+        queries:
+          - name: Request rate
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))'
+          - name: Error rate
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags,status_code="STATUS_CODE_ERROR"}[5m]))'
+          - name: P95 latency
+            query: 'histogram_quantile(0.95, sum(rate(traces_spanmetrics_duration_milliseconds_bucket{$$__tags}[5m])) by (le))'
+      traceQuery:
+        timeShiftEnabled: true
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
