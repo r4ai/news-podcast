@@ -9,9 +9,20 @@ export {
   type EpisodeLibraryRpcDependencies,
 } from "./episode-library-rpc.js"
 export {
+  NodeEpisodeLibraryServiceConfigSchema,
   NodeEpisodeLibraryRpcConfigSchema,
+  parseNodeEpisodeLibraryServiceConfig,
   parseNodeEpisodeLibraryRpcConfig,
+  runNodeEpisodeLibraryService,
   runNodeEpisodeLibraryRpc,
+  type NodeEpisodeLibraryServiceDependencies,
   type NodeEpisodeLibraryRpcDependencies,
   type NodeEpisodeLibraryRpcError,
 } from "./node.js"
+export { readEpisodeLibraryConfig } from "./env.js"
+export {
+  startEpisodeLibraryProcess,
+  type EpisodeLibraryProcessController,
+  type EpisodeLibraryProcessDependencies,
+  type ProcessSignal,
+} from "./process.js"

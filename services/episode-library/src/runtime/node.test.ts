@@ -9,7 +9,7 @@ import {
   parseMessageEnvelope,
   subjects,
 } from "@news-podcast/protocols"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { AudioAccessSigner } from "../application/ports.js"
@@ -19,6 +19,7 @@ import { makeSqliteEpisodeRepository } from "../infrastructure/index.js"
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
 import {
   parseNodeEpisodeLibraryRpcConfig,
+  runNodeEpisodeLibraryService,
   runNodeEpisodeLibraryRpc,
 } from "./node.js"
 
@@ -45,8 +46,7 @@ const request = (subject: string, payload: unknown, messageId: string) => ({
     causationId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
     occurredAt: "2026-08-12T00:00:00.000Z",
     producer: "gateway",
-    traceparent:
-      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
     actor: { _tag: "User", userId: ownerId },
     payload,
   }),
@@ -84,9 +84,7 @@ describe("episode-library Node RPC runtime", () => {
       repository
         .saveOnce(
           Effect.runSync(
-            parse(InboxMessageIdSchema)(
-              "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80"
-            )
+            parse(InboxMessageIdSchema)("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80")
           ),
           completed as never,
           "2026-08-12T00:00:00.000Z" as never
@@ -138,16 +136,12 @@ describe("episode-library Node RPC runtime", () => {
     ]
 
     await Effect.runPromise(
-      runNodeEpisodeLibraryRpc(
-        { ...config, sqlitePath },
-        signer,
-        {
-          connectNats,
-          newMessageId: () => replyIds.shift()!,
-          now: () => "2026-08-12T00:00:01.000Z",
-          nowEpochMillis: () => Date.parse("2026-08-12T00:00:00.000Z"),
-        }
-      )
+      runNodeEpisodeLibraryRpc({ ...config, sqlitePath }, signer, {
+        connectNats,
+        newMessageId: () => replyIds.shift()!,
+        now: () => "2026-08-12T00:00:01.000Z",
+        nowEpochMillis: () => Date.parse("2026-08-12T00:00:00.000Z"),
+      })
     )
 
     expect(connectNats).toHaveBeenCalledWith(
@@ -236,16 +230,12 @@ describe("episode-library Node RPC runtime", () => {
   it("classifies NATS acquisition failure without invoking the signer", async () => {
     const signer = { issue: vi.fn() }
     const exit = await Effect.runPromiseExit(
-      runNodeEpisodeLibraryRpc(
-        { ...config, sqlitePath: ":memory:" },
-        signer,
-        {
-          connectNats: () => Promise.reject(new Error("connection refused")),
-          newMessageId: () => "unused",
-          now: () => "unused",
-          nowEpochMillis: () => 0,
-        }
-      )
+      runNodeEpisodeLibraryRpc({ ...config, sqlitePath: ":memory:" }, signer, {
+        connectNats: () => Promise.reject(new Error("connection refused")),
+        newMessageId: () => "unused",
+        now: () => "unused",
+        nowEpochMillis: () => 0,
+      })
     )
 
     expect(exit._tag).toBe("Failure")
@@ -259,5 +249,60 @@ describe("episode-library Node RPC runtime", () => {
     )
     expect(parsed).toEqual(config)
     expect(Object.isFrozen(parsed.natsServers)).toBe(true)
+  })
+
+  it("closes SQLite, NATS, and the signer client on interruption", async () => {
+    const events: string[] = []
+    const server: UnsafeNatsRpcServer = {
+      receive: () => new Promise(() => undefined),
+      drain: async () => void events.push("nats.closed"),
+    }
+    const signer = { issue: vi.fn() }
+    const fiber = Effect.runFork(
+      runNodeEpisodeLibraryService(
+        {
+          ...config,
+          sqlitePath: ":memory:",
+          s3: {
+            endpoint: "http://seaweedfs:8333",
+            region: "us-east-1",
+            bucket: "private-audio",
+            accessKeyId: "access-id",
+            secretAccessKey: "secret-key",
+          },
+        },
+        {
+          openSigner: () => ({
+            signer,
+            close: Effect.sync(() => void events.push("signer.closed")),
+          }),
+          rpcDependencies: {
+            connectNats: async () => {
+              events.push("nats.opened")
+              return server
+            },
+            newMessageId: () => "unused",
+            now: () => "unused",
+            nowEpochMillis: () => 0,
+            makeRepository: () => ({
+              listByOwner: () => Effect.succeed([]),
+              findByOwner: () => Effect.succeed(undefined),
+              saveOnce: () => Effect.succeed("Stored"),
+              close: Effect.sync(() => void events.push("sqlite.closed")),
+            }),
+          },
+        }
+      )
+    )
+
+    await vi.waitFor(() => expect(events).toContain("nats.opened"))
+    await Effect.runPromise(Fiber.interrupt(fiber))
+
+    expect(events).toEqual([
+      "nats.opened",
+      "nats.closed",
+      "sqlite.closed",
+      "signer.closed",
+    ])
   })
 })

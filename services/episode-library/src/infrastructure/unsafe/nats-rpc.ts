@@ -20,9 +20,8 @@ export const connectNatsRpcUnsafe = async (
   const connection = await connect({ servers: [...servers] })
   const decoder = new TextDecoder()
   const deliveries: UnsafeNatsRpcDelivery[] = []
-  const waiters: Array<
-    (delivery: UnsafeNatsRpcDelivery | undefined) => void
-  > = []
+  const waiters: Array<(delivery: UnsafeNatsRpcDelivery | undefined) => void> =
+    []
   let active = subjects.length
   let failure: unknown
 

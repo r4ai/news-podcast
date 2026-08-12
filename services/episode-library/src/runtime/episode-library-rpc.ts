@@ -22,10 +22,7 @@ import type {
   AudioAccessSigner,
   CompletedEpisodeReader,
 } from "../application/ports.js"
-import {
-  OwnerIdSchema,
-  type EpisodeSource,
-} from "../domain/episode.js"
+import { OwnerIdSchema, type EpisodeSource } from "../domain/episode.js"
 
 export type EpisodeLibraryRpcDelivery<ReplyError = never> = Readonly<{
   subject: string

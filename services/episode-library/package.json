@@ -12,12 +12,16 @@
     "./runtime": "./src/runtime/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/bootstrap.ts",
+    "start": "tsx src/bootstrap.ts",
     "build": "tsc --noEmit",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1106.0",
+    "@aws-sdk/s3-request-presigner": "3.1106.0",
     "@nats-io/transport-node": "3.4.0",
     "@news-podcast/kernel": "workspace:*",
     "@news-podcast/observability": "workspace:*",
@@ -26,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "24.12.4",
+    "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }

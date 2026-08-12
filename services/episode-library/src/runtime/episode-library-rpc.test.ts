@@ -55,8 +55,7 @@ const request = (
   causationId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
   occurredAt: "2026-08-12T00:00:00.000Z",
   producer: "gateway",
-  traceparent:
-    "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
   actor,
   payload,
 })
@@ -87,7 +86,11 @@ describe("episode-library RPC handler", () => {
     const replies: string[] = []
 
     await Effect.runPromise(
-      makeEpisodeLibraryRpcHandler(reader, signer, dependencies)({
+      makeEpisodeLibraryRpcHandler(
+        reader,
+        signer,
+        dependencies
+      )({
         subject: subjects.library.listEpisodes,
         payload: JSON.stringify(request({})),
         reply: (payload) => Effect.sync(() => void replies.push(payload)),
@@ -130,7 +133,11 @@ describe("episode-library RPC handler", () => {
     const replies: string[] = []
 
     await Effect.runPromise(
-      makeEpisodeLibraryRpcHandler(reader, signer, dependencies)({
+      makeEpisodeLibraryRpcHandler(
+        reader,
+        signer,
+        dependencies
+      )({
         subject: subjects.library.createAudioAccess,
         payload: JSON.stringify(request({ episodeId })),
         reply: (payload) => Effect.sync(() => void replies.push(payload)),
@@ -138,9 +145,9 @@ describe("episode-library RPC handler", () => {
     )
 
     const { payload } = await replyPayload(replies[0]!)
-    expect(await Effect.runPromise(parseCreateAudioAccessReply(payload))).toEqual(
-      { _tag: "NotFound" }
-    )
+    expect(
+      await Effect.runPromise(parseCreateAudioAccessReply(payload))
+    ).toEqual({ _tag: "NotFound" })
     expect(reader.findByOwner).toHaveBeenCalledWith(ownerId, episodeId)
     expect(signer.issue).not.toHaveBeenCalled()
   })
@@ -154,7 +161,11 @@ describe("episode-library RPC handler", () => {
     const replies: string[] = []
 
     await Effect.runPromise(
-      makeEpisodeLibraryRpcHandler(reader, signer, dependencies)({
+      makeEpisodeLibraryRpcHandler(
+        reader,
+        signer,
+        dependencies
+      )({
         subject: subjects.library.listEpisodes,
         payload: JSON.stringify(request({}, { _tag: "Anonymous" })),
         reply: (payload) => Effect.sync(() => void replies.push(payload)),
@@ -201,9 +212,9 @@ describe("episode-library RPC handler", () => {
 
     const list = await replyPayload(replies[0]!)
     const audio = await replyPayload(replies[1]!)
-    expect(await Effect.runPromise(parseListEpisodesReply(list.payload))).toEqual(
-      { _tag: "Rejected", code: "STORAGE_FAILURE" }
-    )
+    expect(
+      await Effect.runPromise(parseListEpisodesReply(list.payload))
+    ).toEqual({ _tag: "Rejected", code: "STORAGE_FAILURE" })
     expect(
       await Effect.runPromise(parseCreateAudioAccessReply(audio.payload))
     ).toEqual({ _tag: "Rejected", code: "SIGNING_FAILURE" })
