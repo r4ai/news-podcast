@@ -1,13 +1,19 @@
 export const subjects = {
   identity: {
     resolveSession: "identity.resolve-session.v1",
+    getGenerationSettings: "identity.get-generation-settings.v1",
+    updateGenerationSettings: "identity.update-generation-settings.v1",
   },
   content: {
     articleArchived: "content.article-archived.v1",
     addSubscription: "content.add-subscription.v1",
     listSubscriptions: "content.list-subscriptions.v1",
     deleteSubscription: "content.delete-subscription.v1",
+    updateSubscription: "content.update-subscription.v1",
+    listFeedCatalog: "content.list-feed-catalog.v1",
     materializeArticles: "content.materialize-articles.v1",
+    articleLibrary: "content.article-library.v1",
+    personalization: "content.personalization.v1",
   },
   production: {
     createJob: "production.create-job.v1",
@@ -16,6 +22,7 @@ export const subjects = {
     listJobEvents: "production.list-job-events.v1",
     cancelJob: "production.cancel-job.v1",
     retryJob: "production.retry-job.v1",
+    readingDictionary: "production.reading-dictionary.v1",
     jobCompleted: "production.job-completed.v1",
     jobCompletedV2: "production.job-completed.v2",
   },

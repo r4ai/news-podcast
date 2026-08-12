@@ -18,6 +18,15 @@ export {
   parseListFeedSubscriptionsReply,
   parseMaterializeArticlesReply,
   parseMaterializeArticlesRequest,
+  parseUpdateFeedSubscriptionRequest,
+  parseUpdateFeedSubscriptionReply,
+  parseListFeedCatalogRequest,
+  parseListFeedCatalogReply,
+  UpdateFeedSubscriptionRequestSchema,
+  UpdateFeedSubscriptionReplySchema,
+  ListFeedCatalogRequestSchema,
+  ListFeedCatalogReplySchema,
+  ContentFeedCatalogEntrySchema,
   type AddFeedSubscriptionRequest,
   type AddFeedSubscriptionReply,
   type ContentKnowledgeRejection,
@@ -117,3 +126,5 @@ export {
   type ResolveSessionRequest,
 } from "./identity-rpc.js"
 export { subjects, type Subject } from "./subjects.js"
+export * from "./personalization-rpc.js"
+export * from "./article-library-rpc.js"

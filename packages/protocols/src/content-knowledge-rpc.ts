@@ -72,6 +72,24 @@ export const parseDeleteFeedSubscriptionRequest = parse(
   DeleteFeedSubscriptionRequestSchema
 )
 
+export const UpdateFeedSubscriptionRequestSchema = Schema.Struct({
+  subscriptionId: SubscriptionIdSchema,
+  enabled: Schema.Boolean,
+})
+export const parseUpdateFeedSubscriptionRequest = parse(
+  UpdateFeedSubscriptionRequestSchema
+)
+export const ListFeedCatalogRequestSchema = Schema.Struct({
+  q: Schema.optional(
+    Schema.String.check(
+      Schema.isTrimmed(),
+      Schema.isMinLength(1),
+      Schema.isMaxLength(200)
+    )
+  ),
+})
+export const parseListFeedCatalogRequest = parse(ListFeedCatalogRequestSchema)
+
 export const ContentKnowledgeRejectionSchema = Schema.TaggedStruct("Rejected", {
   code: Schema.Literals([
     "INVALID_REQUEST",
@@ -119,6 +137,30 @@ export type DeleteFeedSubscriptionReply = Schema.Schema.Type<
 export const parseDeleteFeedSubscriptionReply = parse(
   DeleteFeedSubscriptionReplySchema
 )
+export const UpdateFeedSubscriptionReplySchema = Schema.Union([
+  Schema.TaggedStruct("Updated", {
+    subscription: ContentFeedSubscriptionSchema,
+    enabled: Schema.Boolean,
+  }),
+  Schema.TaggedStruct("NotFound", {}),
+  ContentKnowledgeRejectionSchema,
+])
+export const parseUpdateFeedSubscriptionReply = parse(
+  UpdateFeedSubscriptionReplySchema
+)
+export const ContentFeedCatalogEntrySchema = Schema.Struct({
+  feedId: FeedIdSchema,
+  feedUrl: HttpUrlSchema,
+})
+export const ListFeedCatalogReplySchema = Schema.Union([
+  Schema.TaggedStruct("Catalog", {
+    feeds: Schema.Array(ContentFeedCatalogEntrySchema).check(
+      Schema.isMaxLength(100)
+    ),
+  }),
+  ContentKnowledgeRejectionSchema,
+])
+export const parseListFeedCatalogReply = parse(ListFeedCatalogReplySchema)
 
 export const MaterializeArticlesRequestSchema = Schema.Struct({
   selection: Schema.Union([
