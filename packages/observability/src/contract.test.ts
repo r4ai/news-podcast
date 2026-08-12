@@ -8,6 +8,7 @@ describe("observability contract", () => {
     expect(new Set(telemetryEventNames).size).toBe(telemetryEventNames.length)
     expect(new Set(metricNames).size).toBe(metricNames.length)
     expect(telemetryEventNames).toContain("episode.failed")
+    expect(telemetryEventNames).toContain("article.enrich.summary.degraded")
     expect(telemetryEventNames).toContain("process.uncaught_exception")
     expect(metricNames).toContain("http.server.duration")
     expect(metricNames).toContain("trace.entry.synthesized")

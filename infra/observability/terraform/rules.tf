@@ -42,6 +42,13 @@ locals {
       target   = 3
       query    = "SELECT toFloat64(count()) FROM signoz_logs.distributed_logs WHERE body IN ('article.enrich.summary.failed','article.enrich.relevance.failed') AND resources_string['deployment.environment'] = '${var.alert_environment}'"
     }
+    ai_summary_degraded = {
+      alert    = "Repeated AI summary degradation"
+      log_attr = "body"
+      window   = "15m"
+      target   = 3
+      query    = "SELECT toFloat64(count()) FROM signoz_logs.distributed_logs WHERE body = 'article.enrich.summary.degraded' AND resources_string['deployment.environment'] = '${var.alert_environment}'"
+    }
   }
 }
 

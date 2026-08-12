@@ -88,6 +88,16 @@ const aiEnrich = ((): AiEnrichWorker | undefined => {
           })
         }
         if (
+          event.type === "summary_succeeded" &&
+          event.warnings.includes("invalid-mermaid-removed")
+        ) {
+          observability.log({
+            name: "article.enrich.summary.degraded",
+            level: "warn",
+            attributes: { "degradation.reason": "invalid-mermaid-removed" },
+          })
+        }
+        if (
           event.type === "summary_failed" ||
           event.type === "relevance_failed"
         ) {

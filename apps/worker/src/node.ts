@@ -70,6 +70,13 @@ const aiEnrich = openAiConfig
         if (event.type === "summary_succeeded") {
           recordEnrichTokens("summary", event.tokensIn, event.tokensOut)
           observability.log({ name: "article.enrich.summary.succeeded" })
+          if (event.warnings.includes("invalid-mermaid-removed")) {
+            observability.log({
+              name: "article.enrich.summary.degraded",
+              level: "warn",
+              attributes: { "degradation.reason": "invalid-mermaid-removed" },
+            })
+          }
         } else if (event.type === "summary_failed") {
           observability.log({
             name: "article.enrich.summary.failed",

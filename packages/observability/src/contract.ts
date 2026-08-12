@@ -80,6 +80,7 @@ export const telemetryEventNames = [
   "article.archive.failed",
   "article.search_body.index_failed",
   "article.enrich.summary.succeeded",
+  "article.enrich.summary.degraded",
   "article.enrich.summary.failed",
   "article.enrich.relevance.succeeded",
   "article.enrich.relevance.failed",
