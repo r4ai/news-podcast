@@ -5,19 +5,23 @@ export type ProviderFailure =
       readonly retryAfter?: string
     }>
   | Readonly<{ readonly _tag: "Timeout" }>
+  | Readonly<{ readonly _tag: "TransportFailure" }>
+  | Readonly<{ readonly _tag: "Incomplete" }>
   | Readonly<{ readonly _tag: "MalformedResponse" }>
   | Readonly<{ readonly _tag: "Refusal" }>
+  | Readonly<{ readonly _tag: "Canceled" }>
 
 export type ProviderFailureClassification =
   | Readonly<{
       readonly retryable: true
-      readonly reason: "RateLimited" | "Unavailable" | "Timeout"
+      readonly reason: "RateLimited" | "Unavailable" | "Timeout" | "Incomplete"
       readonly retryAfterMillis?: number
     }>
   | Readonly<{
       readonly retryable: false
       readonly reason:
         | "ClientError"
+        | "Canceled"
         | "MalformedResponse"
         | "Refusal"
         | "UnexpectedStatus"
@@ -76,6 +80,10 @@ export const classifyProviderFailure = (
   switch (failure._tag) {
     case "Timeout":
       return Object.freeze({ retryable: true, reason: "Timeout" })
+    case "TransportFailure":
+      return Object.freeze({ retryable: true, reason: "Unavailable" })
+    case "Incomplete":
+      return Object.freeze({ retryable: true, reason: "Incomplete" })
     case "MalformedResponse":
       return Object.freeze({
         retryable: false,
@@ -83,6 +91,8 @@ export const classifyProviderFailure = (
       })
     case "Refusal":
       return Object.freeze({ retryable: false, reason: "Refusal" })
+    case "Canceled":
+      return Object.freeze({ retryable: false, reason: "Canceled" })
     case "HttpFailure": {
       if (failure.status === 429) {
         const retryAfterMillis = parseRetryAfterMillis(

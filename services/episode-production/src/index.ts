@@ -1,5 +1,10 @@
 export { parseCreateJobCommand } from "./adapters/parse-create-job.js"
 export {
+  makeOpenAiScriptGenerator,
+  type OpenAiScriptGeneratorConfig,
+  type OpenAiScriptGeneratorDependencies,
+} from "./adapters/openai-script-generator.js"
+export {
   CreateJobRpcReplySchema,
   handleCreateJobRpc,
   type CreateJobRpcDelivery,
@@ -16,6 +21,7 @@ export {
   type ProviderRetryExhausted,
   type ProviderRetryRuntime,
 } from "./application/retry-provider.js"
+export * from "./application/script-generator.js"
 export * from "./domain/episode-job.js"
 export * from "./domain/provider-reliability.js"
 export {
