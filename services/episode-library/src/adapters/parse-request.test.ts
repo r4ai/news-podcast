@@ -31,7 +31,7 @@ describe("episode library request parsers", () => {
 
   it.each([
     ["owner omitted", { episodeId }],
-    ["owner malformed", { ownerId: "owner", episodeId }],
+    ["owner malformed", { ownerId: " ", episodeId }],
     ["episode malformed", { ownerId, episodeId: "episode" }],
     ["unexpected field", { ownerId, episodeId, audioUrl: "persist-me" }],
   ])("rejects %s", async (_case, input) => {

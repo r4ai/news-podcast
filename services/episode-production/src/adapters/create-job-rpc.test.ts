@@ -5,7 +5,11 @@ import {
   handleCreateJobRpc,
   type CreateJobRpcDelivery,
 } from "./create-job-rpc.js"
-import { JobIdSchema, UtcTimestampSchema } from "../domain/episode-job.js"
+import {
+  JobIdSchema,
+  UtcTimestampSchema,
+  type QueuedJob,
+} from "../domain/episode-job.js"
 
 const jobId = Schema.decodeUnknownSync(JobIdSchema)(
   "10e2d4e1-c127-479f-a124-2ea037bd9319"
@@ -71,6 +75,32 @@ describe("create-job NATS RPC adapter", () => {
       jobId: "10e2d4e1-c127-479f-a124-2ea037bd9319",
       state: "Queued",
     })
+  })
+
+  it("accepts a non-UUID authenticated provider subject", async () => {
+    const saved: QueuedJob[] = []
+    const replies: string[] = []
+    const handler = handleCreateJobRpc({
+      nextJobId: Effect.succeed(jobId),
+      now: Effect.succeed(now),
+      saveIdempotently: (job) =>
+        Effect.sync(() => {
+          saved.push(job)
+          return job
+        }),
+    })
+
+    await Effect.runPromise(
+      handler({
+        payload: JSON.stringify(
+          envelope({ actor: { _tag: "User", userId: "better-auth-user-1" } })
+        ),
+        reply: (payload) => Effect.sync(() => void replies.push(payload)),
+      })
+    )
+
+    expect(saved[0]?.request.ownerId).toBe("better-auth-user-1")
+    expect(replies).toHaveLength(1)
   })
 
   it("rejects a forged payload owner before invoking the use case", async () => {

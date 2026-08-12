@@ -46,7 +46,7 @@ describe("stored episode parser", () => {
   it.each([
     ["unknown property", { ...storedEpisode, audioUrl: "https://signed.test" }],
     ["empty sources", { ...storedEpisode, sources: [] }],
-    ["invalid owner", { ...storedEpisode, ownerId: "owner-1" }],
+    ["invalid owner", { ...storedEpisode, ownerId: "   " }],
     ["empty title", { ...storedEpisode, title: "" }],
     [
       "invalid URL",

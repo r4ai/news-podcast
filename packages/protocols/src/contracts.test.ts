@@ -35,6 +35,20 @@ describe("integration contracts", () => {
     expect(Object.isFrozen(selected.articleIds)).toBe(true)
   })
 
+  it("preserves an opaque authenticated owner in completion events", async () => {
+    const completion = await Effect.runPromise(
+      parseEpisodeCompleted({
+        episodeId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+        ownerId: "better-auth-user_01",
+        audioObjectKey: "episodes/opaque/episode.wav",
+        title: "Daily news",
+        sources: [{ url: "https://example.com/news", title: "News" }],
+      })
+    )
+
+    expect(completion.ownerId).toBe("better-auth-user_01")
+  })
+
   it("parses the cross-context happy paths into immutable values", async () => {
     const [session, request, article, episode] = await Effect.runPromise(
       Effect.all([

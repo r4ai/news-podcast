@@ -10,6 +10,11 @@ const HttpUrlSchema = Schema.String.check(
   Schema.isPattern(/^https?:\/\/[^\s/$.?#].[^\s]*$/i)
 ).pipe(Schema.brand("HttpUrl"))
 
+const OpaqueUserIdSchema = Schema.NonEmptyString.check(
+  Schema.isPattern(/^\S+$/),
+  Schema.isMaxLength(255)
+).pipe(Schema.brand("UserId"))
+
 const UtcInstantSchema = Schema.String.check(
   Schema.makeFilter<string>(
     (value) =>
@@ -101,7 +106,7 @@ const EpisodeSourceSchema = Schema.Struct({
 
 export const EpisodeCompletedSchema = Schema.Struct({
   episodeId: uuid("EpisodeId"),
-  ownerId: uuid("OwnerId"),
+  ownerId: OpaqueUserIdSchema,
   audioObjectKey: Schema.NonEmptyString.check(
     Schema.isPattern(/^episodes\/[a-zA-Z0-9._/-]+$/)
   ).pipe(Schema.brand("AudioObjectKey")),

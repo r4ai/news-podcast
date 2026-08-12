@@ -35,7 +35,10 @@ const httpUrl = Schema.String.check(
   )
 ).pipe(Schema.brand("HttpUrl"))
 
-export const OwnerIdSchema = uuid("OwnerId")
+export const OwnerIdSchema = Schema.NonEmptyString.check(
+  Schema.isPattern(/\S/),
+  Schema.isMaxLength(255)
+).pipe(Schema.brand("OwnerId"))
 export type OwnerId = Schema.Schema.Type<typeof OwnerIdSchema>
 
 export const EpisodeIdSchema = uuid("EpisodeId")

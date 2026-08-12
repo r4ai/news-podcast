@@ -65,7 +65,7 @@ describe("completed episode domain", () => {
       { ...completedEpisode, audioUrl: "https://signed.test" },
     ],
     ["empty sources", { ...completedEpisode, sources: [] }],
-    ["invalid owner", { ...completedEpisode, ownerId: "owner-1" }],
+    ["invalid owner", { ...completedEpisode, ownerId: "   " }],
     ["empty title", { ...completedEpisode, title: "" }],
     [
       "invalid URL",

@@ -20,7 +20,7 @@ describe("parseCreateJobCommand", () => {
   })
 
   it.each([
-    ["invalid owner", { ...valid, ownerId: "owner-1" }],
+    ["invalid owner", { ...valid, ownerId: "   " }],
     ["empty key", { ...valid, idempotencyKey: "" }],
     ["unknown trigger", { ...valid, trigger: "cron" }],
     ["empty article selection", { ...valid, articleIds: [] }],

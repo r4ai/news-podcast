@@ -25,7 +25,7 @@ flowchart LR
   Application --> Domain["domain / pure functions"]
 ```
 
-依存の矢印は必ず内向きにする。外部入力は`unknown`として境界でparseし、余剰propertyを拒否したdeep-frozenな値だけをapplication/domainへ渡す。Context間でdomain型やDBを共有しない。
+依存の矢印は必ず内向きにする。外部入力は`unknown`として境界でparseし、余剰propertyを拒否したdeep-frozenな値だけをapplication/domainへ渡す。Context間でdomain型やDBを共有しない。認証主体IDはUUIDと仮定せず、Identityでparseしたbounded opaque値をActorとして伝播する（ADR-0035）。
 
 ## 2. `contexts/`と`services/`を分離しない理由
 
