@@ -34,9 +34,11 @@ export function useFeedCatalog() {
 
   function addSelected() {
     if (!selectedFeedId) return
+    const selectedFeed = candidates.find((feed) => feed.id === selectedFeedId)
+    if (!selectedFeed) return
     startTransition(async () => {
       try {
-        await add.mutateAsync({ body: { feedId: selectedFeedId } })
+        await add.mutateAsync({ body: { feedUrl: selectedFeed.feedUrl } })
         await queryClient.invalidateQueries({
           queryKey: subscriptionsQueryOptions.queryKey,
         })

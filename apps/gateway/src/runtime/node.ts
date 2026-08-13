@@ -11,10 +11,28 @@ import {
   randomUuidUnsafe,
 } from "../infrastructure/unsafe/runtime-values.js"
 import { makeGatewayWebHandler } from "./http.js"
+import { makeGatewayAuthProxy } from "./auth-proxy.js"
 
 const NatsServerSchema = Schema.String.check(
   Schema.isPattern(/^nats:\/\/[\w.-]+(?::\d{1,5})?$/)
 ).pipe(Schema.brand("NatsServer"))
+const HttpOriginSchema = Schema.String.check(
+  Schema.makeFilter((value: string) => {
+    try {
+      const url = new URL(value)
+      return (url.protocol === "http:" || url.protocol === "https:") &&
+        url.username === "" &&
+        url.password === "" &&
+        url.pathname === "/" &&
+        url.search === "" &&
+        url.hash === ""
+        ? undefined
+        : "Expected a credential-free HTTP origin"
+    } catch {
+      return "Expected an HTTP origin"
+    }
+  })
+)
 
 export const NodeGatewayConfigSchema = Schema.Struct({
   hostname: Schema.NonEmptyString.check(Schema.isMaxLength(255)),
@@ -29,6 +47,13 @@ export const NodeGatewayConfigSchema = Schema.Struct({
     development: Schema.Boolean,
     google: Schema.Boolean,
   }),
+  identityHttpOrigin: HttpOriginSchema,
+  authProxyTimeoutMillis: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: 30_000 })
+  ),
+  authProxyMaximumResponseBytes: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: 1_048_576 })
+  ),
 })
 export const parseNodeGatewayConfig = parse(NodeGatewayConfigSchema)
 
@@ -76,18 +101,22 @@ export const runNodeGateway = (
     Effect.flatMap((config) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const ports = yield* acquireNatsGatewayPorts(
-            config,
-            {
-              connect: dependencies.connectNats,
-              nextMessageId: dependencies.nextMessageId,
-              now: dependencies.now,
-            }
-          ).pipe(Effect.mapError(() => runtimeError("Nats")))
+          const ports = yield* acquireNatsGatewayPorts(config, {
+            connect: dependencies.connectNats,
+            nextMessageId: dependencies.nextMessageId,
+            now: dependencies.now,
+          }).pipe(Effect.mapError(() => runtimeError("Nats")))
           const web = makeGatewayWebHandler(
             ports,
             dependencies.telemetry ?? Layer.empty
           )
+          const handler = makeGatewayAuthProxy({
+            upstream: new URL(config.identityHttpOrigin),
+            timeoutMillis: config.authProxyTimeoutMillis,
+            maximumResponseBytes: config.authProxyMaximumResponseBytes,
+            fetch: globalThis.fetch,
+            next: web.handler,
+          })
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => web.dispose()).pipe(Effect.ignore)
           )
@@ -97,7 +126,7 @@ export const runNodeGateway = (
                 dependencies.listen({
                   hostname: config.hostname,
                   port: config.port,
-                  handler: web.handler,
+                  handler,
                 }),
               catch: () => runtimeError("Http"),
             }),

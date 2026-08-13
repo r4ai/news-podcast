@@ -59,7 +59,8 @@ describe("sqlite agent audit and memory repository", () => {
     const result = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const repository = yield* sqliteAgentAuditMemoryRepository(databasePath)
+          const repository =
+            yield* sqliteAgentAuditMemoryRepository(databasePath)
           const instance = yield* ensureAgentInstance(
             {
               ...repository,
@@ -171,7 +172,8 @@ describe("sqlite agent audit and memory repository", () => {
     const result = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const repository = yield* sqliteAgentAuditMemoryRepository(databasePath)
+          const repository =
+            yield* sqliteAgentAuditMemoryRepository(databasePath)
           yield* ensureAgentInstance(
             {
               ...repository,

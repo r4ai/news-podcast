@@ -81,15 +81,19 @@ describe("SQLite job repository", () => {
       _tag: "Running",
       startedAt: "2026-08-12T00:05:00.000Z",
     })
-    database.prepare(
-      "INSERT INTO episode_jobs VALUES (?, ?, ?, ?, ?)"
-    ).run("legacy-job", "owner", "key", "fingerprint", runningDocument)
-    database.prepare(
-      "INSERT INTO episode_job_status_events(job_id, owner_id, document) VALUES (?, ?, ?)"
-    ).run("legacy-job", "owner", queuedDocument)
-    database.prepare(
-      "INSERT INTO episode_job_status_events(job_id, owner_id, document) VALUES (?, ?, ?)"
-    ).run("legacy-job", "owner", runningDocument)
+    database
+      .prepare("INSERT INTO episode_jobs VALUES (?, ?, ?, ?, ?)")
+      .run("legacy-job", "owner", "key", "fingerprint", runningDocument)
+    database
+      .prepare(
+        "INSERT INTO episode_job_status_events(job_id, owner_id, document) VALUES (?, ?, ?)"
+      )
+      .run("legacy-job", "owner", queuedDocument)
+    database
+      .prepare(
+        "INSERT INTO episode_job_status_events(job_id, owner_id, document) VALUES (?, ?, ?)"
+      )
+      .run("legacy-job", "owner", runningDocument)
     database.close()
 
     const handle = openSqliteJobHandle(path)
@@ -98,16 +102,15 @@ describe("SQLite job repository", () => {
         createdAt: "2026-08-12T00:00:00.000Z",
       })
       expect(
-        handle.listOwnedStatusEvents({
-          ownerId: "owner",
-          jobId: "legacy-job",
-          afterSequence: 0,
-          limit: 10,
-        }).map(({ document }) => JSON.parse(document).createdAt)
-      ).toEqual([
-        "2026-08-12T00:00:00.000Z",
-        "2026-08-12T00:00:00.000Z",
-      ])
+        handle
+          .listOwnedStatusEvents({
+            ownerId: "owner",
+            jobId: "legacy-job",
+            afterSequence: 0,
+            limit: 10,
+          })
+          .map(({ document }) => JSON.parse(document).createdAt)
+      ).toEqual(["2026-08-12T00:00:00.000Z", "2026-08-12T00:00:00.000Z"])
     } finally {
       handle.close()
     }

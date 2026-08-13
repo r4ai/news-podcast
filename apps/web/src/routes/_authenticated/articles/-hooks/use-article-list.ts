@@ -11,16 +11,13 @@ import { toast } from "@workspace/ui/components/sonner"
 
 import { api } from "@/shared/api"
 import {
-  applyClientFilters,
   groupArticlesByDate,
   toBulkFilter,
   toFacetsQuery,
   toListQuery,
   type Article,
-  type ArticlePeriod,
   type ArticleSort,
   type ArticleState,
-  type ArticleStatusFilter,
   type ArticlesSearch,
 } from "../-model"
 
@@ -62,20 +59,16 @@ export function useArticleList({
   const listQuery = api.useInfiniteQuery(
     "get",
     "/v1/me/articles",
-    { params: { query: { ...toListQuery(search), limit: PAGE_SIZE } } },
+    { params: { query: { ...toListQuery(search), limit: String(PAGE_SIZE) } } },
     {
       initialPageParam: undefined as string | undefined,
-      getNextPageParam: (last) =>
-        last.page.hasMore ? last.page.nextCursor : undefined,
+      getNextPageParam: () => undefined,
     }
   )
 
   const facetsQuery = api.useQuery("get", "/v1/me/articles/facets", {
     params: { query: toFacetsQuery(search) },
   })
-
-  // タグチップ・絞り込みポップオーバーの選択肢用。頻繁には変わらないのでdefaultのcache設定で足りる。
-  const tagsQuery = api.useQuery("get", "/v1/me/tags")
 
   const patchMutation = api.useMutation("patch", "/v1/me/articles/{articleId}")
   const bulkMutation = api.useMutation("post", "/v1/me/articles/bulk-state")
@@ -86,10 +79,7 @@ export function useArticleList({
     [listQuery.data]
   )
   const [items, addDraft] = useOptimistic(serverItems, applyDraft)
-  const articles = useMemo(
-    () => applyClientFilters(items, search),
-    [items, search]
-  )
+  const articles = items
 
   async function invalidate() {
     await Promise.all([
@@ -147,7 +137,6 @@ export function useArticleList({
     articles,
     groups: groupArticlesByDate(articles),
     facets: facetsQuery.data,
-    tags: tagsQuery.data?.items ?? [],
     aiPending: facetsQuery.data?.aiPending,
     isLoading: listQuery.isPending,
     isError: listQuery.isError,
@@ -162,14 +151,8 @@ export function useArticleList({
     setState: (state: ArticleState) => onSearchChange({ state }),
     setSort: (sort: ArticleSort) => onSearchChange({ sort }),
     setFeedIds: (feedIds: readonly string[]) => onSearchChange({ feedIds }),
-    setTagIds: (tagIds: readonly string[]) => onSearchChange({ tagIds }),
     setIncludeHidden: (includeHidden: boolean) =>
       onSearchChange({ includeHidden }),
-    setUsedInEpisode: (usedInEpisode: boolean) =>
-      onSearchChange({ usedInEpisode }),
-    setPeriod: (period: ArticlePeriod) => onSearchChange({ period }),
-    setArchiveStatusFilter: (archiveStatusFilter: ArticleStatusFilter) =>
-      onSearchChange({ archiveStatusFilter }),
     toggleSaved: (article: Article) =>
       update(article, { saved: !article.saved }),
     markRead: (article: Article) => update(article, { read: true }),

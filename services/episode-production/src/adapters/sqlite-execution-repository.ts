@@ -153,14 +153,12 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
         Effect.flatMap((document) =>
           document === undefined
             ? Effect.succeed(undefined)
-            : tryPersistence(
-                "decode_dictionary_snapshot",
-                () =>
-                  deepFreeze(
-                    Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)(
-                      parseJson(document)
-                    ) as ReadingDictionarySnapshot
-                  )
+            : tryPersistence("decode_dictionary_snapshot", () =>
+                deepFreeze(
+                  Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)(
+                    parseJson(document)
+                  ) as ReadingDictionarySnapshot
+                )
               )
         )
       ),
@@ -173,9 +171,7 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
         })
       ).pipe(
         Effect.flatMap(
-          (
-            result
-          ): Effect.Effect<void, PipelineFailure | LeaseFailure> => {
+          (result): Effect.Effect<void, PipelineFailure | LeaseFailure> => {
             switch (result) {
               case "Applied":
                 return Effect.void

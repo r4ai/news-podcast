@@ -34,6 +34,7 @@ export type UnsafeIdentityAuth = DeepReadonly<{
 
 export type UnsafeIdentityRuntimeResource = DeepReadonly<{
   readonly api: BetterAuthSessionApi
+  readonly handler: (request: Request) => Promise<Response>
   readonly database: IdentitySqlitePort
   readonly close: () => void
 }>
@@ -71,7 +72,12 @@ export const makeIdentitySessionApi = (
 const createIdentitySessionApiUnsafe = async (
   config: IdentityAuthConfig,
   database: DatabaseSync
-): Promise<BetterAuthSessionApi> => {
+): Promise<
+  Readonly<{
+    api: BetterAuthSessionApi
+    handler: (request: Request) => Promise<Response>
+  }>
+> => {
   const auth = betterAuth({
     appName: "RSS News Podcast Identity",
     secret: config.secret,
@@ -90,10 +96,11 @@ const createIdentitySessionApiUnsafe = async (
   })
   const context = await auth.$context
   await context.runMigrations()
-  const api: BetterAuthSessionApi = deepFreeze({
+  const sessionApi: BetterAuthSessionApi = deepFreeze({
     getSession: (input) => auth.api.getSession(input),
   })
-  return makeIdentitySessionApi(api, config.devAuth)
+  const api = makeIdentitySessionApi(sessionApi, config.devAuth)
+  return deepFreeze({ api, handler: (request) => auth.handler(request) })
 }
 
 /** Opens one SQLite handle shared by Better Auth and Identity-owned settings. */
@@ -106,9 +113,10 @@ export const createIdentityRuntimeResourceUnsafe = async (
       rawDatabase,
       config.databasePath
     )
-    const api = await createIdentitySessionApiUnsafe(config, rawDatabase)
+    const auth = await createIdentitySessionApiUnsafe(config, rawDatabase)
     return deepFreeze({
-      api,
+      api: auth.api,
+      handler: auth.handler,
       database,
       close: database.close,
     })

@@ -108,8 +108,8 @@ const decodeEvent = (
         occurredAt: row.occurredAt,
         payload,
       }).pipe(
-        Effect.map((event) =>
-          deepFreeze({ ...event, payload }) as AgentAuditEvent
+        Effect.map(
+          (event) => deepFreeze({ ...event, payload }) as AgentAuditEvent
         )
       )
     ),
@@ -137,8 +137,8 @@ const decodeMemory = (
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       }).pipe(
-        Effect.map((memory) =>
-          deepFreeze({ ...memory, content }) as AgentMemory
+        Effect.map(
+          (memory) => deepFreeze({ ...memory, content }) as AgentMemory
         )
       )
     ),
@@ -201,7 +201,7 @@ const repositoryFromHandle = (
         catch: () => failure("RecordRun"),
       })
       if (result._tag === "Created") {
-          return deepFreeze({ _tag: "Created" as const, run })
+        return deepFreeze({ _tag: "Created" as const, run })
       }
       if (result._tag === "ScopeConflict") {
         return deepFreeze({ _tag: "Conflict" as const })
@@ -221,9 +221,7 @@ const repositoryFromHandle = (
       catch: () => failure("GetRun"),
     }).pipe(
       Effect.flatMap((row) =>
-        row === undefined
-          ? Effect.succeed(undefined)
-          : decodeRun(row, "GetRun")
+        row === undefined ? Effect.succeed(undefined) : decodeRun(row, "GetRun")
       )
     )
 
@@ -237,11 +235,9 @@ const repositoryFromHandle = (
       Effect.flatMap((rows) =>
         rows === undefined
           ? Effect.succeed(undefined)
-          : Effect.forEach(
-              rows,
-              (row) => decodeEvent(row, "ReplayEvents"),
-              { concurrency: 1 }
-            ).pipe(Effect.map(deepFreeze))
+          : Effect.forEach(rows, (row) => decodeEvent(row, "ReplayEvents"), {
+              concurrency: 1,
+            }).pipe(Effect.map(deepFreeze))
       )
     )
 
@@ -267,11 +263,13 @@ const repositoryFromHandle = (
       return deepFreeze({ _tag: "Appended" as const, event })
     })
 
-  const transitionOwnedRun: AgentAuditMemoryRepository["transitionOwnedRun"] =
-    (input) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.try({
-          try: () => handle.transitionOwnedRun({
+  const transitionOwnedRun: AgentAuditMemoryRepository["transitionOwnedRun"] = (
+    input
+  ) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.try({
+        try: () =>
+          handle.transitionOwnedRun({
             ownerId: input.ownerId,
             runId: input.runId,
             expected: input.expected,
@@ -284,25 +282,23 @@ const repositoryFromHandle = (
             payloadJson: JSON.stringify(input.eventPayload),
             occurredAt: encodeTimestamp(input.occurredAt),
           }),
-          catch: () => failure("TransitionRun"),
-        })
-        if (result._tag === "NotFound") return deepFreeze(result)
-        if (result._tag === "StateConflict") {
-          const current = yield* parse(AgentRunStatusSchema)(result.current).pipe(
-            Effect.mapError(() => failure("TransitionRun", "CorruptRecord"))
-          )
-          return deepFreeze({ _tag: "StateConflict" as const, current })
-        }
-        const [run, event] = yield* Effect.all([
-            decodeRun(result.run, "TransitionRun"),
-            decodeEvent(result.event, "TransitionRun"),
-        ])
-        return deepFreeze({ _tag: "Transitioned" as const, run, event })
+        catch: () => failure("TransitionRun"),
       })
+      if (result._tag === "NotFound") return deepFreeze(result)
+      if (result._tag === "StateConflict") {
+        const current = yield* parse(AgentRunStatusSchema)(result.current).pipe(
+          Effect.mapError(() => failure("TransitionRun", "CorruptRecord"))
+        )
+        return deepFreeze({ _tag: "StateConflict" as const, current })
+      }
+      const [run, event] = yield* Effect.all([
+        decodeRun(result.run, "TransitionRun"),
+        decodeEvent(result.event, "TransitionRun"),
+      ])
+      return deepFreeze({ _tag: "Transitioned" as const, run, event })
+    })
 
-  const proposeMemory: AgentAuditMemoryRepository["proposeMemory"] = (
-    memory
-  ) =>
+  const proposeMemory: AgentAuditMemoryRepository["proposeMemory"] = (memory) =>
     Effect.try({
       try: () => handle.proposeMemory(toMemoryRow(memory)),
       catch: () => failure("ProposeMemory"),
@@ -332,13 +328,14 @@ const repositoryFromHandle = (
     const nextStatus = decideAgentMemoryStatus("proposed", input.decision)!
     return Effect.gen(function* () {
       const result = yield* Effect.try({
-        try: () => handle.decideOwnedMemory({
-          ownerId: input.ownerId,
-          instanceId: input.instanceId,
-          memoryId: input.memoryId,
-          nextStatus,
-          updatedAt: encodeTimestamp(input.updatedAt),
-        }),
+        try: () =>
+          handle.decideOwnedMemory({
+            ownerId: input.ownerId,
+            instanceId: input.instanceId,
+            memoryId: input.memoryId,
+            nextStatus,
+            updatedAt: encodeTimestamp(input.updatedAt),
+          }),
         catch: () => failure("DecideMemory"),
       })
       if (result._tag !== "Updated") return deepFreeze(result)

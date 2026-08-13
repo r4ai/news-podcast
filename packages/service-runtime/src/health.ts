@@ -26,10 +26,7 @@ export type HealthServerFailure = Readonly<{
   _tag: "HealthServerFailure"
 }>
 
-export const healthServerScoped = (
-  port: number,
-  state: HealthState
-) =>
+export const healthServerScoped = (port: number, state: HealthState) =>
   Effect.acquireRelease(
     Effect.tryPromise({
       try: () =>
@@ -63,8 +60,7 @@ export const healthServerScoped = (
       Effect.sync(state.notReady).pipe(
         Effect.andThen(
           Effect.promise(
-            () =>
-              new Promise<void>((resolve) => server.close(() => resolve()))
+            () => new Promise<void>((resolve) => server.close(() => resolve()))
           )
         )
       )

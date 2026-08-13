@@ -39,16 +39,15 @@ export function useArticlePicker(
       params: {
         query: {
           archiveStatus: ["succeeded"],
-          sort: "relevance",
-          limit: PAGE_SIZE,
+          sort: "newest",
+          limit: String(PAGE_SIZE),
         },
       },
     },
     {
       enabled,
       initialPageParam: undefined as string | undefined,
-      getNextPageParam: (last) =>
-        last.page.hasMore ? last.page.nextCursor : undefined,
+      getNextPageParam: () => undefined,
     }
   )
 

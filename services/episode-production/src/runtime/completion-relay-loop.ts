@@ -44,17 +44,19 @@ export const runCompletionRelayLoop = (
             consecutiveFailures,
             nextDelayMillis: backoff,
           })
-          return ports.observe(event).pipe(
-            Effect.andThen(ports.wait(backoff)),
-            Effect.andThen(
-              Effect.suspend(() =>
-                loop(
-                  consecutiveFailures,
-                  Math.min(backoff * 2, config.maximumBackoffMillis)
+          return ports
+            .observe(event)
+            .pipe(
+              Effect.andThen(ports.wait(backoff)),
+              Effect.andThen(
+                Effect.suspend(() =>
+                  loop(
+                    consecutiveFailures,
+                    Math.min(backoff * 2, config.maximumBackoffMillis)
+                  )
                 )
               )
             )
-          )
         },
         onSuccess: (result) => {
           const event = deepFreeze({
@@ -62,12 +64,14 @@ export const runCompletionRelayLoop = (
             ...result,
             nextDelayMillis: config.intervalMillis,
           })
-          return ports.observe(event).pipe(
-            Effect.andThen(ports.wait(config.intervalMillis)),
-            Effect.andThen(
-              Effect.suspend(() => loop(0, config.initialBackoffMillis))
+          return ports
+            .observe(event)
+            .pipe(
+              Effect.andThen(ports.wait(config.intervalMillis)),
+              Effect.andThen(
+                Effect.suspend(() => loop(0, config.initialBackoffMillis))
+              )
             )
-          )
         },
       })
     )

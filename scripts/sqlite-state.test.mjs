@@ -17,7 +17,9 @@ test("online backup and offline restore preserve a healthy SQLite database", asy
     database.exec(
       "PRAGMA journal_mode=WAL; CREATE TABLE episode_jobs(value TEXT NOT NULL)"
     )
-    database.prepare("INSERT INTO episode_jobs(value) VALUES (?)").run("durable")
+    database
+      .prepare("INSERT INTO episode_jobs(value) VALUES (?)")
+      .run("durable")
     await backupDatabase("production", source, archived)
     database.close()
 

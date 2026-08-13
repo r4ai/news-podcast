@@ -10,7 +10,11 @@ import type {
   EpisodeCompletionIntent,
   PipelineFailure,
 } from "./execution-ports.js"
-import { UtcTimestampSchema, type JobId, type UtcTimestamp } from "../domain/episode-job.js"
+import {
+  UtcTimestampSchema,
+  type JobId,
+  type UtcTimestamp,
+} from "../domain/episode-job.js"
 
 const CompletionEnvelopeSchema = Schema.Struct({
   ...MessageEnvelopeSchema.fields,

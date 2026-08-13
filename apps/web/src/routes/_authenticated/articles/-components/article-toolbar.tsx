@@ -1,7 +1,6 @@
-import { CheckCheck, Loader2, Search, X } from "lucide-react"
+import { CheckCheck, Loader2, Search } from "lucide-react"
 import { useRef } from "react"
 
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import {
@@ -105,11 +104,9 @@ export function ArticleToolbar({
   facets,
   q,
   aiPending,
-  tags,
   onQChange,
   onSortChange,
   onMarkAllRead,
-  onTagIdsChange,
   onShowEnrichQueue,
   isMarkingAllRead,
   searchExpanded,
@@ -117,7 +114,6 @@ export function ArticleToolbar({
   ...filterProps
 }: ArticleToolbarProps) {
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const selectedTags = tags.filter((tag) => search.tagIds.includes(tag.id))
 
   function handleSearchBlur() {
     if (!q.trim()) {
@@ -166,9 +162,7 @@ export function ArticleToolbar({
 
         <ArticleFilterPopover
           facets={facets}
-          onTagIdsChange={onTagIdsChange}
           search={search}
-          tags={tags}
           {...filterProps}
         />
 
@@ -195,29 +189,6 @@ export function ArticleToolbar({
           </Button>
         </div>
       </div>
-
-      {selectedTags.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {selectedTags.map((tag) => (
-            <Badge
-              key={tag.id}
-              render={
-                <button
-                  aria-label={`「${tag.name}」の絞り込みを外す`}
-                  onClick={() =>
-                    onTagIdsChange(search.tagIds.filter((id) => id !== tag.id))
-                  }
-                  type="button"
-                />
-              }
-              variant="secondary"
-            >
-              {tag.name}
-              <X aria-hidden="true" data-icon="inline-end" />
-            </Badge>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }

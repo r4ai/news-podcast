@@ -50,18 +50,16 @@ export const getGenerationSettings =
   (
     ownerId: UserId
   ): Effect.Effect<GenerationSchedule, GenerationSettingsStoreError> =>
-    repository
-      .find(ownerId)
-      .pipe(
-        Effect.map(
-          Option.match({
-            onNone: () => defaultGenerationSchedule,
-            onSome: (schedule) => schedule,
-          })
-        ),
-        Effect.map(deepFreeze),
-        Effect.withSpan("identityAccess.getGenerationSettings")
-      )
+    repository.find(ownerId).pipe(
+      Effect.map(
+        Option.match({
+          onNone: () => defaultGenerationSchedule,
+          onSome: (schedule) => schedule,
+        })
+      ),
+      Effect.map(deepFreeze),
+      Effect.withSpan("identityAccess.getGenerationSettings")
+    )
 
 export const updateGenerationSettings =
   (repository: GenerationSettingsRepository) =>

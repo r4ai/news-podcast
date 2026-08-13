@@ -150,6 +150,37 @@ export const makeGatewayHandlers = (ports: GatewayPorts) =>
     enrichResetDaily: (
       headers: Parameters<GatewayPorts["enrichResetDaily"]>[0]
     ) => freezeSuccess(ports.enrichResetDaily(deepFreeze(headers))),
+    listAgentInstances: (
+      headers: Parameters<GatewayPorts["listAgentInstances"]>[0]
+    ) => freezeSuccess(ports.listAgentInstances(deepFreeze(headers))),
+    getAgentRun: (input: Parameters<GatewayPorts["getAgentRun"]>[0]) =>
+      freezeSuccess(ports.getAgentRun(deepFreeze(input))),
+    streamAgentRunEvents: (
+      input: Parameters<GatewayPorts["replayAgentRunEvents"]>[0]
+    ) =>
+      ports.replayAgentRunEvents(deepFreeze(input)).pipe(
+        Effect.map((events) =>
+          Stream.fromIterable(
+            events.map((event) => ({
+              id: String(event.sequence),
+              event: event.type,
+              data: event,
+            }))
+          )
+        )
+      ),
+    listAgentMemories: (
+      input: Parameters<GatewayPorts["listAgentMemories"]>[0]
+    ) => freezeSuccess(ports.listAgentMemories(deepFreeze(input))),
+    createAgentMemory: (
+      input: Parameters<GatewayPorts["createAgentMemory"]>[0]
+    ) => freezeSuccess(ports.createAgentMemory(deepFreeze(input))),
+    approveAgentMemory: (
+      input: Parameters<GatewayPorts["approveAgentMemory"]>[0]
+    ) => freezeSuccess(ports.approveAgentMemory(deepFreeze(input))),
+    deleteAgentMemory: (
+      input: Parameters<GatewayPorts["deleteAgentMemory"]>[0]
+    ) => freezeSuccess(ports.deleteAgentMemory(deepFreeze(input))),
   })
 
 export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
@@ -277,7 +308,9 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
                 ? {}
                 : { feedIds: query.feedIds }),
               ...(query.q === undefined ? {} : { q: query.q }),
-              ...(query.sort === undefined ? {} : { sort: query.sort }),
+              ...(query.sort === "newest" || query.sort === "oldest"
+                ? { sort: query.sort }
+                : {}),
             },
           })
         )
@@ -370,6 +403,63 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
         )
         .handle("enrichResetDaily", ({ headers }) =>
           handlers.enrichResetDaily(headers)
+        )
+    ),
+    HttpApiBuilder.group(gatewayApi, "agents", (group) =>
+      group
+        .handle("listAgentInstances", ({ headers }) =>
+          handlers.listAgentInstances(headers)
+        )
+        .handle("getAgentRun", ({ headers, params }) =>
+          handlers.getAgentRun({ headers, runId: params.runId })
+        )
+        .handle("streamAgentRunEvents", ({ headers, params, query }) => {
+          const headerSequence = Number(headers["last-event-id"])
+          return handlers.streamAgentRunEvents({
+            headers: {
+              ...(headers.authorization === undefined
+                ? {}
+                : { authorization: headers.authorization }),
+              ...(headers.cookie === undefined
+                ? {}
+                : { cookie: headers.cookie }),
+              ...(headers.traceparent === undefined
+                ? {}
+                : { traceparent: headers.traceparent }),
+            },
+            runId: params.runId,
+            afterSequence:
+              Number.isSafeInteger(headerSequence) && headerSequence >= 0
+                ? headerSequence
+                : (query.lastEventId ?? 0),
+          })
+        })
+        .handle("listAgentMemories", ({ headers, params }) =>
+          handlers.listAgentMemories({
+            headers,
+            agentInstanceId: params.agentInstanceId,
+          })
+        )
+        .handle("createAgentMemory", ({ headers, params, payload }) =>
+          handlers.createAgentMemory({
+            headers,
+            agentInstanceId: params.agentInstanceId,
+            payload,
+          })
+        )
+        .handle("approveAgentMemory", ({ headers, params }) =>
+          handlers.approveAgentMemory({
+            headers,
+            agentInstanceId: params.agentInstanceId,
+            memoryId: params.memoryId,
+          })
+        )
+        .handle("deleteAgentMemory", ({ headers, params }) =>
+          handlers.deleteAgentMemory({
+            headers,
+            agentInstanceId: params.agentInstanceId,
+            memoryId: params.memoryId,
+          })
         )
     )
   )

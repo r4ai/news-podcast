@@ -1,4 +1,8 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http"
 import type { AddressInfo } from "node:net"
 
 import { Effect } from "effect"
@@ -204,26 +208,39 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
   })
 
   it.each([
-    ["speakers", [{ name: "ずんだもん", styles: [{ name: "ノーマル", id: "secret-invalid-id" }] }]],
+    [
+      "speakers",
+      [
+        {
+          name: "ずんだもん",
+          styles: [{ name: "ノーマル", id: "secret-invalid-id" }],
+        },
+      ],
+    ],
     ["audio query", { ...audioQuery, speedScale: "secret-invalid-scale" }],
-  ])("rejects a malformed %s response without retaining its body", async (kind, malformed) => {
-    const fake = await startServer((request, response) => {
-      const path = new URL(request.url!, "http://test").pathname
-      if (path === "/speakers") {
-        return json(response, kind === "speakers" ? malformed : speakers)
-      }
-      if (path === "/audio_query") return json(response, malformed)
-      defaultHandler(request, response, "", 0)
-    })
+  ])(
+    "rejects a malformed %s response without retaining its body",
+    async (kind, malformed) => {
+      const fake = await startServer((request, response) => {
+        const path = new URL(request.url!, "http://test").pathname
+        if (path === "/speakers") {
+          return json(response, kind === "speakers" ? malformed : speakers)
+        }
+        if (path === "/audio_query") return json(response, malformed)
+        defaultHandler(request, response, "", 0)
+      })
 
-    const failure = await Effect.runPromise(
-      Effect.flip(synthesize(makeSynthesizer(fake.baseUrl)))
-    )
+      const failure = await Effect.runPromise(
+        Effect.flip(synthesize(makeSynthesizer(fake.baseUrl)))
+      )
 
-    expect(failure).toEqual({ _tag: "MalformedResponse" })
-    expect(JSON.stringify(failure)).not.toContain("secret-invalid")
-    expect(fake.requests.some(({ url }) => url?.startsWith("/synthesis"))).toBe(false)
-  })
+      expect(failure).toEqual({ _tag: "MalformedResponse" })
+      expect(JSON.stringify(failure)).not.toContain("secret-invalid")
+      expect(
+        fake.requests.some(({ url }) => url?.startsWith("/synthesis"))
+      ).toBe(false)
+    }
+  )
 
   it.each([
     ["missing RIFF/WAVE markers", new Uint8Array(44)],
@@ -291,7 +308,9 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
       await Effect.runPromise(synthesize(synthesizer))
 
       expect(delays).toEqual([expectedDelay])
-      expect(fake.requests.filter(({ url }) => url === "/speakers")).toHaveLength(2)
+      expect(
+        fake.requests.filter(({ url }) => url === "/speakers")
+      ).toHaveLength(2)
       expect(
         fake.requests.filter(({ url }) => url?.startsWith("/synthesis"))
       ).toHaveLength(2)
@@ -305,7 +324,9 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
     })
 
     const failure = await Effect.runPromise(
-      Effect.flip(synthesize(makeSynthesizer(fake.baseUrl), "secret request text"))
+      Effect.flip(
+        synthesize(makeSynthesizer(fake.baseUrl), "secret request text")
+      )
     )
 
     expect(failure).toEqual({ _tag: "HttpFailure", status: 400 })
@@ -341,7 +362,11 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
     const controller = new AbortController()
     const pending = Effect.runPromise(
       Effect.flip(
-        synthesize(makeSynthesizer(fake.baseUrl), "cancel me", controller.signal)
+        synthesize(
+          makeSynthesizer(fake.baseUrl),
+          "cancel me",
+          controller.signal
+        )
       )
     )
     await fake.firstRequest

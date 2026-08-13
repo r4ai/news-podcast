@@ -23,7 +23,6 @@ function makeArticle(overrides: Partial<Article>): Article {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
     ...overrides,
   } as Article
 }
@@ -53,24 +52,16 @@ describe("useArticleReader", () => {
     expect(result.current.didAutoFallback).toBe(false)
   })
 
-  it("falls back to archive and marks it as an automatic switch when markdown is too short", async () => {
+  it("marks raw archive content unavailable when markdown is too short", async () => {
     const { result } = render([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
       { path: "/v1/me/articles/a/markdown", raw: shortMarkdown },
-      {
-        path: "/v1/me/articles/a/archive",
-        raw: "<html><body>archive</body></html>",
-        contentType: "text/html",
-      },
     ])
 
     await waitFor(() => expect(result.current.source).toBe("archive"))
     expect(result.current.didAutoFallback).toBe(true)
-    await waitFor(() =>
-      expect(result.current.archiveHtml).toBe(
-        "<html><body>archive</body></html>"
-      )
-    )
+    expect(result.current.archiveHtml).toBeUndefined()
+    expect(result.current.archiveUnavailable).toBe(true)
   })
 
   it("does not mark an unread article as read while it is open", async () => {

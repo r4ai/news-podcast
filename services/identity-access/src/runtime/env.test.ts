@@ -20,6 +20,8 @@ describe("Identity Access environment configuration", () => {
     const config = await Effect.runPromise(readIdentityAccessConfig(valid))
 
     expect(config).toEqual({
+      httpHost: "0.0.0.0",
+      httpPort: 4002,
       databasePath: "/var/lib/news-podcast/identity.sqlite",
       secret: "s".repeat(32),
       baseUrl: "http://localhost:4173",

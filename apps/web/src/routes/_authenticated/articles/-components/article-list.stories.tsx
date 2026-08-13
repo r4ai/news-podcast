@@ -18,10 +18,8 @@ function article(overrides: Partial<Article>): Article {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
     summary:
       "並行レンダリングと新しいuse APIを、実際のアプリ構成で試した記録。",
-    tags: [],
     ...overrides,
   } as Article
 }
@@ -33,7 +31,6 @@ const unreadArticles = [
     title: "OpenTelemetryでWebフロントの分散traceを組む",
     sourceName: "Hacker News",
     publishedAt: "2026-08-10T21:00:00.000Z",
-    usedInEpisode: true,
   }),
   article({
     id: "a3",
@@ -54,10 +51,6 @@ const baseArgs = {
     ],
     aiPending: 0,
   },
-  tags: [
-    { id: "tag-ai", name: "AI", createdAt: "2026-08-01T00:00:00.000Z" },
-    { id: "tag-web", name: "Web", createdAt: "2026-08-01T00:00:00.000Z" },
-  ],
   aiPending: 0,
   search: defaultArticlesSearch,
   q: "",
@@ -72,11 +65,7 @@ const baseArgs = {
   setState: fn(),
   setSort: fn(),
   setFeedIds: fn(),
-  setTagIds: fn(),
   setIncludeHidden: fn(),
-  setUsedInEpisode: fn(),
-  setPeriod: fn(),
-  setArchiveStatusFilter: fn(),
   toggleSaved: fn(),
   markRead: fn(),
   markAllRead: fn(),
@@ -205,7 +194,7 @@ export const LongTitle: Story = {
   },
 }
 
-export const WithTagsAndAiSummary: Story = {
+export const WithAiSummary: Story = {
   args: {
     articles: [
       article({
@@ -215,7 +204,6 @@ export const WithTagsAndAiSummary: Story = {
         aiSummary:
           "**React Compilerはメモ化をコンパイラがJSXから自動生成する。**\n\n- 既存のuseMemo/useCallbackは段階的に不要\n- 既存コードの書き換えなしで導入可能",
         relevanceScore: 82,
-        tags: ["AI", "React"],
       }),
     ],
     groups: [
@@ -229,7 +217,6 @@ export const WithTagsAndAiSummary: Story = {
             aiSummary:
               "React Compilerはメモ化をコンパイラがJSXから自動生成する。",
             relevanceScore: 82,
-            tags: ["AI", "React"],
           }),
         ],
       },
@@ -242,61 +229,6 @@ export const WithTagsAndAiSummary: Story = {
         "React Compilerはメモ化をコンパイラがJSXから自動生成する。"
       )
     ).toBeVisible()
-    await expect(canvas.getByText("AI")).toBeVisible()
-    await expect(canvas.getByText("React")).toBeVisible()
-  },
-}
-
-export const RelevanceSortShowsScore: Story = {
-  args: {
-    search: { ...defaultArticlesSearch, sort: "relevance" },
-    articles: [
-      article({ id: "hi", title: "スコア上位の記事", relevanceScore: 91 }),
-      article({ id: "lo", title: "スコア無し（未処理）の記事" }),
-    ],
-    groups: [
-      {
-        key: "today",
-        label: "今日",
-        articles: [
-          article({ id: "hi", title: "スコア上位の記事", relevanceScore: 91 }),
-          article({ id: "lo", title: "スコア無し（未処理）の記事" }),
-        ],
-      },
-    ],
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await expect(canvas.getByText("91")).toBeVisible()
-  },
-}
-
-export const NewestSortHidesScore: Story = {
-  args: {
-    articles: [
-      article({
-        id: "hi",
-        title: "新着順ではスコアを出さない",
-        relevanceScore: 91,
-      }),
-    ],
-    groups: [
-      {
-        key: "today",
-        label: "今日",
-        articles: [
-          article({
-            id: "hi",
-            title: "新着順ではスコアを出さない",
-            relevanceScore: 91,
-          }),
-        ],
-      },
-    ],
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await expect(canvas.queryByText("91")).not.toBeInTheDocument()
   },
 }
 

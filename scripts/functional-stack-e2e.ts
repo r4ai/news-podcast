@@ -198,10 +198,7 @@ const main = Effect.scoped(
       })
       assert(addSubscription.status === 201, "subscription was not added")
       const added = await json(addSubscription)
-      assert(
-        typeof added.subscriptionId === "string",
-        "subscription ID missing"
-      )
+      assert(typeof added.id === "string", "subscription ID missing")
 
       const subscriptionsResponse = await request(
         web.handler,
@@ -243,7 +240,8 @@ const main = Effect.scoped(
           `/v1/episode-jobs/${jobId}`,
           { headers }
         )
-        if (response.status === 503) throw new Error("Job control RPC not ready")
+        if (response.status === 503)
+          throw new Error("Job control RPC not ready")
         return response
       })
       assert(

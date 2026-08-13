@@ -14,6 +14,9 @@ const validConfig = {
   natsServers: ["nats://nats:4222"],
   requestTimeoutMillis: 2_000,
   loginMethods: { development: true, google: false },
+  identityHttpOrigin: "http://identity-access:4002",
+  authProxyTimeoutMillis: 5_000,
+  authProxyMaximumResponseBytes: 1_048_576,
 }
 
 describe("Gateway Node runtime", () => {

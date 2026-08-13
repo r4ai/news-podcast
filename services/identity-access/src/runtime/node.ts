@@ -20,6 +20,10 @@ import {
   type IdentitySettingsRpcDelivery,
   type IdentitySettingsRpcOperations,
 } from "./settings-rpc.js"
+import {
+  makeScheduledGenerationRpcHandler,
+  type ScheduledGenerationRpcOperations,
+} from "./scheduled-generation-rpc.js"
 
 const NatsServerSchema = Schema.String.check(
   Schema.isPattern(/^nats:\/\/[\w.-]+(?::\d{1,5})?$/)
@@ -134,7 +138,7 @@ type SettingsHandler = (
 
 const runNodeSettingsRpc = (
   input: unknown,
-  settings: IdentitySettingsRpcOperations,
+  settings: IdentitySettingsRpcOperations & ScheduledGenerationRpcOperations,
   dependencies: NodeResolveSessionRpcDependencies
 ): Effect.Effect<void, NodeResolveSessionRpcError> =>
   parseNodeResolveSessionRpcConfig(input).pipe(
@@ -147,6 +151,22 @@ const runNodeSettingsRpc = (
               subjects.identity.getGenerationSettings,
               makeIdentitySettingsRpcHandler(
                 subjects.identity.getGenerationSettings,
+                settings,
+                dependencies
+              ),
+            ],
+            [
+              subjects.identity.discoverDueGenerations,
+              makeScheduledGenerationRpcHandler(
+                subjects.identity.discoverDueGenerations,
+                settings,
+                dependencies
+              ),
+            ],
+            [
+              subjects.identity.completeScheduledGeneration,
+              makeScheduledGenerationRpcHandler(
+                subjects.identity.completeScheduledGeneration,
                 settings,
                 dependencies
               ),
@@ -213,7 +233,7 @@ const runNodeSettingsRpc = (
 export const runNodeIdentityRpc = (
   input: unknown,
   api: BetterAuthSessionApi,
-  settings: IdentitySettingsRpcOperations,
+  settings: IdentitySettingsRpcOperations & ScheduledGenerationRpcOperations,
   dependencies: NodeResolveSessionRpcDependencies = defaultNodeResolveSessionRpcDependencies
 ): Effect.Effect<void, NodeResolveSessionRpcError> => {
   let connected = 0
@@ -224,7 +244,7 @@ export const runNodeIdentityRpc = (
     connectNats: async (...args) => {
       const server = await dependencies.connectNats(...args)
       connected += 1
-      if (!ready && connected === 3) {
+      if (!ready && connected === 5) {
         ready = true
         dependencies.onReady?.()
       }

@@ -27,7 +27,6 @@ function makeArticle(overrides: Partial<Article>): Article {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
     ...overrides,
   } as Article
 }
@@ -40,9 +39,6 @@ const facets = {
   states: { all: 2, unread: 2, saved: 1, later: 0 },
   feeds: [{ feedId: "feed-1", name: "Zenn", count: 2 }],
   aiPending: 3,
-}
-const tags = {
-  items: [{ id: "tag-1", name: "AI", createdAt: "2026-08-11T00:00:00.000Z" }],
 }
 
 describe("applyDraft", () => {
@@ -72,7 +68,6 @@ describe("useArticleList", () => {
     const { result, calls } = renderList([
       { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
       { path: "/v1/me/articles/facets", body: facets },
-      { path: "/v1/me/tags", body: tags },
     ])
 
     await waitFor(() => expect(result.current.articles).toHaveLength(2))
@@ -81,23 +76,6 @@ describe("useArticleList", () => {
 
     const listCall = calls.find((call) => call.url === "/v1/me/articles")
     expect(listCall?.method).toBe("GET")
-  })
-
-  it("exposes the owner's tag vocabulary and sends tagIds through onSearchChange", async () => {
-    const { result, onSearchChange } = renderList([
-      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
-      { path: "/v1/me/articles/facets", body: facets },
-      { path: "/v1/me/tags", body: tags },
-    ])
-
-    await waitFor(() =>
-      expect(result.current.tags).toEqual([
-        { id: "tag-1", name: "AI", createdAt: "2026-08-11T00:00:00.000Z" },
-      ])
-    )
-
-    act(() => result.current.setTagIds(["tag-1"]))
-    expect(onSearchChange).toHaveBeenCalledWith({ tagIds: ["tag-1"] })
   })
 
   it("debounces search input and pushes it to the URL via onSearchChange", async () => {
@@ -196,25 +174,19 @@ describe("useArticleList", () => {
     })
   })
 
-  it("appends the next page when fetchNextPage follows the returned cursor", async () => {
-    const { result, calls } = renderList([
+  it("does not advertise pagination beyond the bounded public result", async () => {
+    const { result } = renderList([
       {
         path: "/v1/me/articles",
         body: {
           items: [items[0]],
-          page: { hasMore: true, nextCursor: "cursor-1" },
+          page: { hasMore: false },
         },
       },
       { path: "/v1/me/articles/facets", body: facets },
     ])
     await waitFor(() => expect(result.current.articles).toHaveLength(1))
-    expect(result.current.hasNextPage).toBe(true)
-
-    calls.length = 0
-    await act(async () => result.current.fetchNextPage())
-
-    const secondCall = calls.find((call) => call.url === "/v1/me/articles")
-    expect(secondCall?.url).toBe("/v1/me/articles")
+    expect(result.current.hasNextPage).toBe(false)
   })
 
   it("applies a bulk read across the current filter and reports how many changed", async () => {

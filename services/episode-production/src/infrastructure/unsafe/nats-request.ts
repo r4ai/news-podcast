@@ -19,14 +19,20 @@ export const connectNatsRequestUnsafe = async (
   return deepFreeze({
     request: async (subject, payload, timeoutMillis, signal) => {
       if (signal?.aborted) throw new Error("canceled")
-      const request = connection.request(subject, payload, { timeout: timeoutMillis })
+      const request = connection.request(subject, payload, {
+        timeout: timeoutMillis,
+      })
       const message = signal
         ? await Promise.race([
             request,
             new Promise<never>((_, reject) =>
-              signal.addEventListener("abort", () => reject(new Error("canceled")), {
-                once: true,
-              })
+              signal.addEventListener(
+                "abort",
+                () => reject(new Error("canceled")),
+                {
+                  once: true,
+                }
+              )
             ),
           ])
         : await request

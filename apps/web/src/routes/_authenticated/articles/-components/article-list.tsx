@@ -13,11 +13,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 
 import { useArticleList } from "../-hooks/use-article-list"
-import {
-  shouldShowRelevanceScore,
-  type Article,
-  type ArticlesSearch,
-} from "../-model"
+import { type Article, type ArticlesSearch } from "../-model"
 import { ArticleDateGroup } from "./article-date-group"
 import { ArticleToolbar, ArticleToolbarSticky } from "./article-toolbar"
 
@@ -53,21 +49,16 @@ export function ArticleList({
         aiPending={list.aiPending}
         facets={list.facets}
         isMarkingAllRead={list.isMarkingAllRead}
-        onArchiveStatusFilterChange={list.setArchiveStatusFilter}
         onFeedIdsChange={list.setFeedIds}
         onIncludeHiddenChange={list.setIncludeHidden}
         onMarkAllRead={list.markAllRead}
-        onPeriodChange={list.setPeriod}
         onQChange={list.setQ}
         onShowEnrichQueue={onShowEnrichQueue}
         onSortChange={list.setSort}
-        onTagIdsChange={list.setTagIds}
         onToggleSearch={toggleSearch}
-        onUsedInEpisodeChange={list.setUsedInEpisode}
         q={list.q}
         search={list.search}
         searchExpanded={searchExpanded}
-        tags={list.tags}
       />
       <ArticleListView
         {...list}
@@ -91,12 +82,7 @@ function emptyStateCopy(search: ArticlesSearch) {
       icon: SearchX,
     }
   }
-  const filtered =
-    search.feedIds.length > 0 ||
-    search.period !== "all" ||
-    search.archiveStatusFilter !== "all" ||
-    search.usedInEpisode ||
-    search.state !== "all"
+  const filtered = search.feedIds.length > 0 || search.state !== "all"
   return filtered
     ? {
         title: "条件に一致する記事がありません",
@@ -222,9 +208,6 @@ export function ArticleListView({
     )
   }
 
-  const showDateHeaders = search.sort === "newest" || search.sort === "oldest"
-  const showRelevanceScore = shouldShowRelevanceScore(search.sort)
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border bg-background">
       {groups.map((group) => (
@@ -234,8 +217,7 @@ export function ArticleListView({
           onSelect={onSelect}
           onToggleSaved={toggleSaved}
           selectedArticleId={selectedArticleId}
-          showHeader={showDateHeaders}
-          showRelevanceScore={showRelevanceScore}
+          showHeader
         />
       ))}
       <LoadMoreSentinel

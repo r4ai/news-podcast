@@ -54,11 +54,20 @@ export function useReadingDictionary() {
     id: string,
     patch: { surface?: string; reading?: string; accentType?: number }
   ) {
+    const body =
+      patch.surface !== undefined
+        ? { surface: patch.surface }
+        : patch.reading !== undefined
+          ? { reading: patch.reading }
+          : patch.accentType !== undefined
+            ? { accentType: patch.accentType }
+            : undefined
+    if (body === undefined) return
     startTransition(async () => {
       try {
         await updateMutation.mutateAsync({
           params: { path: { id } },
-          body: patch,
+          body,
         })
         await invalidate()
         toast.success("辞書を更新しました")

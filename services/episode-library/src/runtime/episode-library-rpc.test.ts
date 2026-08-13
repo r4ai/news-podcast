@@ -85,7 +85,11 @@ describe("episode-library RPC handler", () => {
     const replies: string[] = []
 
     await Effect.runPromise(
-      makeEpisodeLibraryRpcHandler(reader, { issue: vi.fn() }, dependencies)({
+      makeEpisodeLibraryRpcHandler(
+        reader,
+        { issue: vi.fn() },
+        dependencies
+      )({
         subject: subjects.library.getEpisode,
         payload: JSON.stringify(request({ episodeId })),
         reply: (payload) => Effect.sync(() => void replies.push(payload)),

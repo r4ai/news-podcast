@@ -5,7 +5,9 @@ import { createHealthState, healthServerScoped } from "./health.js"
 
 const fibers: Array<ReturnType<typeof Effect.runFork>> = []
 afterEach(async () => {
-  await Promise.all(fibers.splice(0).map((fiber) => Effect.runPromise(Fiber.interrupt(fiber))))
+  await Promise.all(
+    fibers.splice(0).map((fiber) => Effect.runPromise(Fiber.interrupt(fiber)))
+  )
 })
 
 describe("service health server", () => {
@@ -13,7 +15,9 @@ describe("service health server", () => {
     const state = createHealthState()
     const port = 45_000 + Math.floor(Math.random() * 1_000)
     const fiber = Effect.runFork(
-      Effect.scoped(healthServerScoped(port, state).pipe(Effect.andThen(Effect.never)))
+      Effect.scoped(
+        healthServerScoped(port, state).pipe(Effect.andThen(Effect.never))
+      )
     )
     fibers.push(fiber)
     await expect
@@ -24,8 +28,12 @@ describe("service health server", () => {
         )
       )
       .toBe(200)
-    await expect(fetch(`http://127.0.0.1:${port}/health/ready`)).resolves.toMatchObject({ status: 503 })
+    await expect(
+      fetch(`http://127.0.0.1:${port}/health/ready`)
+    ).resolves.toMatchObject({ status: 503 })
     state.ready()
-    await expect(fetch(`http://127.0.0.1:${port}/health/ready`)).resolves.toMatchObject({ status: 200 })
+    await expect(
+      fetch(`http://127.0.0.1:${port}/health/ready`)
+    ).resolves.toMatchObject({ status: 200 })
   })
 })

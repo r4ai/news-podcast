@@ -27,6 +27,7 @@ import {
   parseContentPersonalizationReply,
   parseReadingDictionaryReply,
   parseMessageEnvelope,
+  parseAgentAuditReply,
   subjects,
 } from "@news-podcast/protocols"
 import { Effect, Schema, Scope } from "effect"
@@ -59,6 +60,11 @@ import {
   ReadingDictionaryPageSchema,
   EnrichQueueSchema,
   EnrichmentEnqueuedSchema,
+  AgentInstancePageSchema,
+  AgentRunSchema,
+  AgentMemorySchema,
+  AgentMemoryPageSchema,
+  AgentRunEventSchema,
   type SessionHeadersSchema,
 } from "../contract.js"
 import {
@@ -98,6 +104,13 @@ const unavailable = () =>
     status: 503 as const,
     code: "upstream_unavailable",
   })
+type AgentProblem =
+  | ReturnType<typeof unavailable>
+  | ReturnType<typeof notFound>
+  | ReturnType<typeof conflict>
+const agentUnavailable = (): AgentProblem => unavailable()
+const agentNotFound = (): AgentProblem => notFound()
+const agentConflict = (): AgentProblem => conflict()
 const unauthorized = () =>
   deepFreeze({
     type: "about:blank",
@@ -172,6 +185,7 @@ const toPublicArticle = (
   parse(ArticleSchema)({
     id: article.articleId,
     feedId: article.feedId,
+    sourceName: new URL(article.sourceUrl).hostname,
     title: article.title,
     url: article.sourceUrl,
     ...(article.publishedAt === null
@@ -250,9 +264,12 @@ const toAddedSubscription = (
   reply: AddFeedSubscriptionReply
 ): Effect.Effect<FeedSubscription, AddSubscriptionFailure> => {
   if (reply._tag === "Added")
-    return parse(FeedSubscriptionSchema)(reply.subscription).pipe(
-      Effect.mapError(unavailable)
-    )
+    return parse(FeedSubscriptionSchema)({
+      id: reply.subscription.subscriptionId,
+      feedId: reply.subscription.feedId,
+      enabled: reply.subscription.enabled,
+      createdAt: reply.subscription.createdAt,
+    }).pipe(Effect.mapError(unavailable))
   if (reply.code === "INVALID_REQUEST") return Effect.fail(unprocessable())
   if (reply.code === "UNAUTHENTICATED") return Effect.fail(unauthorized())
   return Effect.fail(unavailable())
@@ -263,7 +280,12 @@ const toSubscriptionPage = (
 ): Effect.Effect<FeedSubscriptionPage, ListSubscriptionsFailure> => {
   if (reply._tag === "Listed")
     return parse(FeedSubscriptionPageSchema)({
-      items: reply.subscriptions,
+      items: reply.subscriptions.map((subscription) => ({
+        id: subscription.subscriptionId,
+        feedId: subscription.feedId,
+        enabled: subscription.enabled,
+        createdAt: subscription.createdAt,
+      })),
       page: { hasMore: false },
     }).pipe(Effect.mapError(unavailable))
   return reply.code === "UNAUTHENTICATED"
@@ -910,7 +932,9 @@ const makeAdapter = (
             > =>
               reply._tag === "Updated"
                 ? parse(UpdatedFeedSubscriptionSchema)({
-                    ...reply.subscription,
+                    id: reply.subscription.subscriptionId,
+                    feedId: reply.subscription.feedId,
+                    createdAt: reply.subscription.createdAt,
                     enabled: reply.enabled,
                   }).pipe(Effect.mapError(unavailable))
                 : reply._tag === "NotFound"
@@ -934,6 +958,8 @@ const makeAdapter = (
               ? parse(FeedPageSchema)({
                   items: reply.feeds.map((feed) => ({
                     id: feed.feedId,
+                    name: new URL(feed.feedUrl).hostname,
+                    siteUrl: new URL("/", feed.feedUrl).href,
                     feedUrl: feed.feedUrl,
                   })),
                   page: { hasMore: false },
@@ -966,9 +992,16 @@ const makeAdapter = (
                 ? parse(RegisteredFeedSchema)({
                     feed: {
                       id: reply.subscription.feedId,
+                      name: new URL(reply.subscription.feedUrl).hostname,
+                      siteUrl: new URL("/", reply.subscription.feedUrl).href,
                       feedUrl: reply.subscription.feedUrl,
                     },
-                    subscription: reply.subscription,
+                    subscription: {
+                      id: reply.subscription.subscriptionId,
+                      feedId: reply.subscription.feedId,
+                      enabled: reply.subscription.enabled,
+                      createdAt: reply.subscription.createdAt,
+                    },
                   }).pipe(Effect.mapError(unavailable))
                 : reply.code === "UNAUTHENTICATED"
                   ? Effect.fail(unauthorized())
@@ -1151,9 +1184,14 @@ const makeAdapter = (
         ).pipe(
           Effect.flatMap((reply) =>
             reply._tag === "Facets"
-              ? parse(ArticleFacetsSchema)(reply.facets).pipe(
-                  Effect.mapError(unavailable)
-                )
+              ? parse(ArticleFacetsSchema)({
+                  ...reply.facets,
+                  feeds: reply.facets.feeds.map((feed) => ({
+                    ...feed,
+                    name: feed.feedId,
+                  })),
+                  aiPending: 0,
+                }).pipe(Effect.mapError(unavailable))
               : Effect.fail(unavailable())
           ),
           Effect.mapError(normalizePersonalizationFailure)
@@ -1303,6 +1341,176 @@ const makeAdapter = (
       | "listArticleTags"
       | "setArticleTags"
       | "enrichArticle"
+    >),
+    ...({
+      listAgentInstances: (
+        headers: Parameters<GatewayPorts["listAgentInstances"]>[0]
+      ) =>
+        ownerRpc(
+          headers,
+          subjects.production.agentAuditMemory,
+          "episode-production",
+          { operation: "ListInstances" },
+          parseAgentAuditReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Instances"
+              ? parse(AgentInstancePageSchema)({ items: reply.instances }).pipe(
+                  Effect.mapError(agentUnavailable)
+                )
+              : Effect.fail(agentUnavailable())
+          ),
+          Effect.mapError(agentUnavailable)
+        ),
+      getAgentRun: ({
+        headers,
+        runId,
+      }: Parameters<GatewayPorts["getAgentRun"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.agentAuditMemory,
+          "episode-production",
+          { operation: "GetRun", runId },
+          parseAgentAuditReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Run"
+              ? parse(AgentRunSchema)(reply.run).pipe(
+                  Effect.mapError(agentUnavailable)
+                )
+              : reply._tag === "NotFound"
+                ? Effect.fail(agentNotFound())
+                : Effect.fail(agentUnavailable())
+          ),
+          Effect.mapError(agentUnavailable)
+        ),
+      replayAgentRunEvents: ({
+        headers,
+        runId,
+        afterSequence,
+      }: Parameters<GatewayPorts["replayAgentRunEvents"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.agentAuditMemory,
+          "episode-production",
+          { operation: "ReplayEvents", runId, afterSequence, limit: 100 },
+          parseAgentAuditReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Events"
+              ? Effect.forEach(reply.events, (event) =>
+                  parse(AgentRunEventSchema)(event).pipe(
+                    Effect.mapError(agentUnavailable)
+                  )
+                )
+              : reply._tag === "NotFound"
+                ? Effect.fail(agentNotFound())
+                : Effect.fail(agentUnavailable())
+          ),
+          Effect.mapError(agentUnavailable)
+        ),
+      listAgentMemories: ({
+        headers,
+        agentInstanceId,
+      }: Parameters<GatewayPorts["listAgentMemories"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.agentAuditMemory,
+          "episode-production",
+          { operation: "ListMemories", agentInstanceId },
+          parseAgentAuditReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Memories"
+              ? parse(AgentMemoryPageSchema)({ items: reply.memories }).pipe(
+                  Effect.mapError(agentUnavailable)
+                )
+              : reply._tag === "NotFound"
+                ? Effect.fail(agentNotFound())
+                : Effect.fail(agentUnavailable())
+          ),
+          Effect.mapError(agentUnavailable)
+        ),
+      createAgentMemory: ({
+        headers,
+        agentInstanceId,
+        payload,
+      }: Parameters<GatewayPorts["createAgentMemory"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.agentAuditMemory,
+          "episode-production",
+          { operation: "CreateMemory", agentInstanceId, ...payload },
+          parseAgentAuditReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Memory"
+              ? parse(AgentMemorySchema)(reply.memory).pipe(
+                  Effect.mapError(agentUnavailable)
+                )
+              : reply._tag === "NotFound"
+                ? Effect.fail(agentNotFound())
+                : Effect.fail(agentUnavailable())
+          ),
+          Effect.mapError(agentUnavailable)
+        ),
+      approveAgentMemory: ({
+        headers,
+        agentInstanceId,
+        memoryId,
+      }: Parameters<GatewayPorts["approveAgentMemory"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.agentAuditMemory,
+          "episode-production",
+          { operation: "ApproveMemory", agentInstanceId, memoryId },
+          parseAgentAuditReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Memory"
+              ? parse(AgentMemorySchema)(reply.memory).pipe(
+                  Effect.mapError(agentUnavailable)
+                )
+              : reply._tag === "NotFound"
+                ? Effect.fail(agentNotFound())
+                : reply._tag === "Conflict"
+                  ? Effect.fail(agentConflict())
+                  : Effect.fail(agentUnavailable())
+          ),
+          Effect.mapError(agentUnavailable)
+        ),
+      deleteAgentMemory: ({
+        headers,
+        agentInstanceId,
+        memoryId,
+      }: Parameters<GatewayPorts["deleteAgentMemory"]>[0]) =>
+        ownerRpc(
+          headers,
+          subjects.production.agentAuditMemory,
+          "episode-production",
+          { operation: "DeleteMemory", agentInstanceId, memoryId },
+          parseAgentAuditReply
+        ).pipe(
+          Effect.flatMap((reply) =>
+            reply._tag === "Deleted"
+              ? Effect.void
+              : reply._tag === "NotFound"
+                ? Effect.fail(agentNotFound())
+                : reply._tag === "Conflict"
+                  ? Effect.fail(agentConflict())
+                  : Effect.fail(agentUnavailable())
+          ),
+          Effect.mapError(agentUnavailable)
+        ),
+    } as unknown as Pick<
+      GatewayPorts,
+      | "listAgentInstances"
+      | "getAgentRun"
+      | "replayAgentRunEvents"
+      | "listAgentMemories"
+      | "createAgentMemory"
+      | "approveAgentMemory"
+      | "deleteAgentMemory"
     >),
     ...({
       getSettings: (headers: Parameters<GatewayPorts["getSettings"]>[0]) =>

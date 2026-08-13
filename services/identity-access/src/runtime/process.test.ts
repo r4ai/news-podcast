@@ -77,6 +77,7 @@ describe("Identity Access process lifecycle", () => {
       startRuntime: () =>
         Effect.succeed({
           api: { getSession: () => Promise.resolve(null) },
+          authHandler: async () => new Response(null),
           settings: {} as never,
           close: () => Effect.sync(() => void events.push("auth.closed")),
         }),

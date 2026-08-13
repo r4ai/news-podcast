@@ -17,5 +17,9 @@ export const makeGatewayWebHandler = (
     Layer.provideMerge(telemetry)
   )
 
-  return HttpRouter.toWebHandler(apiLayer, { disableLogger: true })
+  const runtime = HttpRouter.toWebHandler(apiLayer, { disableLogger: true })
+  return {
+    ...runtime,
+    handler: (request: Request) => runtime.handler(request, undefined as never),
+  }
 }

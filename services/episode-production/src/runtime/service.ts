@@ -5,18 +5,24 @@ import { DateTime, Effect, Schema } from "effect"
 
 import { makeCompletionPublisher } from "../adapters/completion-publisher.js"
 import { makeContentArticleMaterializer } from "../adapters/content-article-materializer.js"
+import { makeIdentityScheduleClient } from "../adapters/identity-schedule-client.js"
 import { makeOpenAiScriptGenerator } from "../adapters/openai-script-generator.js"
 import { sqliteExecutionRepository } from "../adapters/sqlite-execution-repository.js"
+import { sqliteJobRepository } from "../adapters/sqlite-job-repository.js"
 import { sqliteReadingDictionaryRepository } from "../adapters/sqlite-reading-dictionary.js"
 import { makeVoicevoxSpeechSynthesizer } from "../adapters/voicevox-speech-synthesizer.js"
 import { relayCompletionOutbox } from "../application/completion-outbox.js"
+import { createJob } from "../application/create-job.js"
 import { executeEpisodeJob } from "../application/execute-job.js"
+import { runScheduledGenerationLoop } from "../application/scheduled-generation.js"
+import { IdempotencyKeySchema, OwnerIdSchema } from "../domain/episode-job.js"
 import { connectProductionJetStreamUnsafe } from "../infrastructure/unsafe/nats-jetstream.js"
 import { connectNatsRequestUnsafe } from "../infrastructure/unsafe/nats-request.js"
 import { s3AudioObjectStoreScoped } from "../infrastructure/unsafe/s3-audio-object-store.js"
 import {
   currentUtcTimestampUnsafe,
   randomEpisodeIdUnsafe,
+  randomJobIdUnsafe,
   randomLeaseTokenUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import { runCompletionRelayLoop } from "./completion-relay-loop.js"
@@ -94,6 +100,11 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
     initialBackoffMillis: positive(60_000),
     maximumBackoffMillis: positive(300_000),
   }),
+  scheduler: Schema.Struct({
+    intervalMillis: positive(3_600_000),
+    failureBackoffMillis: positive(3_600_000),
+    requestTimeoutMillis: positive(30_000),
+  }),
 })
 export type NodeEpisodeProductionServiceConfig = DeepReadonly<
   Schema.Schema.Type<typeof NodeEpisodeProductionServiceConfigSchema>
@@ -128,6 +139,9 @@ export const runNodeEpisodeProductionService = (
           const execution = yield* sqliteExecutionRepository(
             config.rpc.sqlitePath
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
+          const jobs = yield* sqliteJobRepository(config.rpc.sqlitePath).pipe(
+            Effect.mapError(() => runtimeError("Execution"))
+          )
           const dictionary = yield* sqliteReadingDictionaryRepository(
             config.rpc.sqlitePath
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
@@ -230,13 +244,51 @@ export const runNodeEpisodeProductionService = (
             },
             config.completionRelay
           )
+          const identitySchedule = makeIdentityScheduleClient(content, {
+            now: () => DateTime.formatIso(now()),
+            timeoutMillis: config.scheduler.requestTimeoutMillis,
+          })
+          const createScheduled = createJob({
+            nextJobId: Effect.sync(randomJobIdUnsafe),
+            now: Effect.sync(now),
+            saveIdempotently: jobs.saveIdempotently,
+          })
+          const scheduler = runScheduledGenerationLoop(
+            {
+              discoverDue: identitySchedule.discoverDue,
+              create: (ownerId, idempotencyKey) =>
+                Effect.all([
+                  parse(OwnerIdSchema)(ownerId),
+                  parse(IdempotencyKeySchema)(idempotencyKey),
+                ]).pipe(
+                  Effect.flatMap(([parsedOwnerId, parsedIdempotencyKey]) =>
+                    createScheduled({
+                      ownerId: parsedOwnerId,
+                      idempotencyKey: parsedIdempotencyKey,
+                      trigger: "scheduled",
+                    })
+                  ),
+                  Effect.asVoid
+                ),
+              complete: identitySchedule.complete,
+              wait: (delay) => Effect.sleep(delay),
+              observe: (event) =>
+                Effect.logInfo("scheduled generation state", {
+                  event_name: event._tag,
+                  owner_id: event.ownerId,
+                  local_date: event.localDate,
+                }),
+            },
+            config.scheduler,
+            controller.signal
+          )
           const rpc = runNodeProductionRpc(config.rpc).pipe(
             Effect.mapError(() => runtimeError("Execution"))
           )
 
           onReady()
 
-          yield* Effect.all([rpc, worker, relay], {
+          yield* Effect.all([rpc, worker, relay, scheduler], {
             concurrency: "unbounded",
             discard: true,
           })

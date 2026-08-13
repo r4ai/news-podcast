@@ -65,7 +65,7 @@ const replySchema = (subject: string) =>
     ? ListEpisodesReplySchema
     : subject === subjects.library.getEpisode
       ? GetEpisodeReplySchema
-    : CreateAudioAccessReplySchema
+      : CreateAudioAccessReplySchema
 
 const rawRejection = <ReplyError>(
   delivery: EpisodeLibraryRpcDelivery<ReplyError>,
@@ -298,7 +298,12 @@ export const makeEpisodeLibraryRpcHandler = (
                       failure._tag === "EpisodeNotFound"
                         ? deepFreeze({ _tag: "NotFound" })
                         : rejection(failureCode(failure))
-                    return correlatedReply(delivery, envelope, reply, dependencies)
+                    return correlatedReply(
+                      delivery,
+                      envelope,
+                      reply,
+                      dependencies
+                    )
                   },
                   onSuccess: (reply) =>
                     correlatedReply(delivery, envelope, reply, dependencies),

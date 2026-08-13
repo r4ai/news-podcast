@@ -165,8 +165,9 @@ export const executeEpisodeJob =
     const run = Effect.gen(function* () {
       yield* assertLease()
       const checkpoint = yield* ports.persistence.loadCheckpoint(job.jobId)
-      let dictionarySnapshot =
-        yield* ports.persistence.loadDictionarySnapshot(job.jobId)
+      let dictionarySnapshot = yield* ports.persistence.loadDictionarySnapshot(
+        job.jobId
+      )
       if (
         dictionarySnapshot !== undefined &&
         dictionarySnapshot.ownerId !== job.request.ownerId

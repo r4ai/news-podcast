@@ -86,7 +86,9 @@ export const parseListEpisodesRequest = parse(ListEpisodesRequestSchema)
 export const GetEpisodeRequestSchema = Schema.Struct({
   episodeId: EpisodeIdSchema,
 })
-export type GetEpisodeRequest = Schema.Schema.Type<typeof GetEpisodeRequestSchema>
+export type GetEpisodeRequest = Schema.Schema.Type<
+  typeof GetEpisodeRequestSchema
+>
 export const parseGetEpisodeRequest = parse(GetEpisodeRequestSchema)
 
 export const CreateAudioAccessRequestSchema = Schema.Struct({

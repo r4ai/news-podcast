@@ -1,10 +1,16 @@
 import { getNodeObservability } from "@news-podcast/observability/node/register"
 import { makeEffectOtlpLayerFromEnvironment } from "@news-podcast/observability"
-import { createHealthState, healthServerScoped } from "@news-podcast/service-runtime"
+import {
+  createHealthState,
+  healthServerScoped,
+} from "@news-podcast/service-runtime"
 import { Effect } from "effect"
 
 import { readContentKnowledgeConfig } from "./runtime/env.js"
-import { defaultNodeServiceDependencies, runNodeService } from "./runtime/node.js"
+import {
+  defaultNodeServiceDependencies,
+  runNodeService,
+} from "./runtime/node.js"
 import { startContentKnowledgeProcess } from "./runtime/process.js"
 
 const observability = getNodeObservability({
@@ -16,19 +22,21 @@ const effectTelemetry = makeEffectOtlpLayerFromEnvironment(
   "content-knowledge"
 )
 const health = createHealthState()
-const core = readContentKnowledgeConfig(process.env).pipe(
-  Effect.flatMap((config) =>
-    runNodeService(config, {
-      ...defaultNodeServiceDependencies,
-      onReady: health.ready,
-    })
+const core = readContentKnowledgeConfig(process.env)
+  .pipe(
+    Effect.flatMap((config) =>
+      runNodeService(config, {
+        ...defaultNodeServiceDependencies,
+        onReady: health.ready,
+      })
+    )
   )
-).pipe(Effect.provide(effectTelemetry))
+  .pipe(Effect.provide(effectTelemetry))
 const program = Effect.scoped(
-  healthServerScoped(Number(process.env.CONTENT_HEALTH_PORT ?? "4103"), health).pipe(
-    Effect.andThen(core),
-    Effect.ensuring(Effect.sync(health.notReady))
-  )
+  healthServerScoped(
+    Number(process.env.CONTENT_HEALTH_PORT ?? "4103"),
+    health
+  ).pipe(Effect.andThen(core), Effect.ensuring(Effect.sync(health.notReady)))
 )
 
 startContentKnowledgeProcess(program, {

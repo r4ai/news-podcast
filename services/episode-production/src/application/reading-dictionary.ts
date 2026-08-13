@@ -22,7 +22,13 @@ import {
 
 export type ReadingDictionaryStoreError = DeepReadonly<{
   readonly _tag: "ReadingDictionaryStoreFailed"
-  readonly operation: "Open" | "Create" | "List" | "Update" | "Delete" | "Snapshot"
+  readonly operation:
+    | "Open"
+    | "Create"
+    | "List"
+    | "Update"
+    | "Delete"
+    | "Snapshot"
   readonly reason: "Unavailable" | "CorruptRecord"
 }>
 
@@ -61,7 +67,10 @@ export type ReadingDictionaryRepository = DeepReadonly<{
   ) => Effect.Effect<CreateReadingDictionaryResult, ReadingDictionaryStoreError>
   readonly list: (
     ownerId: OwnerId
-  ) => Effect.Effect<readonly ReadingDictionaryEntry[], ReadingDictionaryStoreError>
+  ) => Effect.Effect<
+    readonly ReadingDictionaryEntry[],
+    ReadingDictionaryStoreError
+  >
   readonly update: (
     ownerId: OwnerId,
     entryId: ReadingDictionaryId,

@@ -53,10 +53,13 @@ const OutboxRowSchema = Schema.Struct({
   envelope_json: Schema.String,
 })
 const parseOutboxRow = parse(OutboxRowSchema)
-const decodeArticleArchived = Schema.decodeUnknownSync(ArticleArchivedV1Schema, {
-  errors: "all",
-  onExcessProperty: "error",
-})
+const decodeArticleArchived = Schema.decodeUnknownSync(
+  ArticleArchivedV1Schema,
+  {
+    errors: "all",
+    onExcessProperty: "error",
+  }
+)
 
 const archiveStoreError = (
   operation: ArchiveStoreError["operation"],

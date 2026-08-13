@@ -61,7 +61,11 @@ export type AppendAgentAuditEventResult = DeepReadonly<
   | { readonly _tag: "NotFound" }
 >
 export type TransitionAgentRunResult = DeepReadonly<
-  | { readonly _tag: "Transitioned"; readonly run: AgentRun; readonly event: AgentAuditEvent }
+  | {
+      readonly _tag: "Transitioned"
+      readonly run: AgentRun
+      readonly event: AgentAuditEvent
+    }
   | { readonly _tag: "NotFound" }
   | { readonly _tag: "StateConflict"; readonly current: AgentRunStatus }
 >
@@ -99,7 +103,10 @@ export type AgentAuditMemoryRepository = DeepReadonly<{
     readonly runId: AgentRunId
     readonly afterSequence: number
     readonly limit: number
-  }) => Effect.Effect<readonly AgentAuditEvent[] | undefined, AgentAuditMemoryStoreError>
+  }) => Effect.Effect<
+    readonly AgentAuditEvent[] | undefined,
+    AgentAuditMemoryStoreError
+  >
   readonly appendOwnedEvent: (input: {
     readonly ownerId: OwnerId
     readonly runId: AgentRunId
@@ -179,7 +186,11 @@ const TransitionAgentRunSchema = Schema.Struct({
   next: AgentRunStatusSchema,
   occurredAt: UtcTimestampSchema,
   failureCode: Schema.optional(
-    Schema.String.check(Schema.isTrimmed(), Schema.isMinLength(1), Schema.isMaxLength(100))
+    Schema.String.check(
+      Schema.isTrimmed(),
+      Schema.isMinLength(1),
+      Schema.isMaxLength(100)
+    )
   ),
   eventPayload: Schema.Unknown,
 })
@@ -268,7 +279,9 @@ export const getOwnedAgentRun = (
   input: unknown
 ) =>
   parse(OwnedRunSchema)(input).pipe(
-    Effect.flatMap(({ ownerId, runId }) => repository.getOwnedRun(ownerId, runId))
+    Effect.flatMap(({ ownerId, runId }) =>
+      repository.getOwnedRun(ownerId, runId)
+    )
   )
 
 export const replayAgentAuditEvents = (
@@ -285,10 +298,10 @@ export const appendAgentAuditEvent = (
 ) =>
   Effect.gen(function* () {
     const command = yield* parse(AppendAgentEventSchema)(input)
-      const payload = validatePublicJsonObject(command.payload, {
-        maxBytes: 16 * 1_024,
-        maxDepth: 8,
-      })
+    const payload = validatePublicJsonObject(command.payload, {
+      maxBytes: 16 * 1_024,
+      maxDepth: 8,
+    })
     if (payload === undefined) {
       return yield* Effect.fail(invalidPublicPayload("event"))
     }
@@ -300,36 +313,34 @@ export const transitionOwnedAgentRun = (
   input: unknown
 ) =>
   Effect.gen(function* () {
-      const command = yield* parse(TransitionAgentRunSchema)(input)
-      if (!canTransitionAgentRun(command.expected, command.next)) {
-        return yield* Effect.fail(
-          invalidTransition(command.expected, command.next)
-        )
-      }
-      if (
-        (command.next === "failed") !== (command.failureCode !== undefined)
-      ) {
-        return yield* Effect.fail(invalidFailureCode())
-      }
-      const eventPayload = validatePublicJsonObject(command.eventPayload, {
-        maxBytes: 16 * 1_024,
-        maxDepth: 8,
-      })
-      if (eventPayload === undefined) {
-        return yield* Effect.fail(invalidPublicPayload("event"))
-      }
-      return yield* repository.transitionOwnedRun({
-        ownerId: command.ownerId,
-        runId: command.runId,
-        expected: command.expected,
-        next: command.next,
-        occurredAt: command.occurredAt,
-        failureCode: command.failureCode ?? null,
-        eventType: Schema.decodeUnknownSync(AgentEventTypeSchema)(
-          `run.${command.next}`
-        ),
-        eventPayload,
-      })
+    const command = yield* parse(TransitionAgentRunSchema)(input)
+    if (!canTransitionAgentRun(command.expected, command.next)) {
+      return yield* Effect.fail(
+        invalidTransition(command.expected, command.next)
+      )
+    }
+    if ((command.next === "failed") !== (command.failureCode !== undefined)) {
+      return yield* Effect.fail(invalidFailureCode())
+    }
+    const eventPayload = validatePublicJsonObject(command.eventPayload, {
+      maxBytes: 16 * 1_024,
+      maxDepth: 8,
+    })
+    if (eventPayload === undefined) {
+      return yield* Effect.fail(invalidPublicPayload("event"))
+    }
+    return yield* repository.transitionOwnedRun({
+      ownerId: command.ownerId,
+      runId: command.runId,
+      expected: command.expected,
+      next: command.next,
+      occurredAt: command.occurredAt,
+      failureCode: command.failureCode ?? null,
+      eventType: Schema.decodeUnknownSync(AgentEventTypeSchema)(
+        `run.${command.next}`
+      ),
+      eventPayload,
+    })
   })
 
 export const proposeAgentMemory = (
@@ -340,29 +351,29 @@ export const proposeAgentMemory = (
   input: unknown
 ) =>
   Effect.gen(function* () {
-      const command = yield* parse(ProposeMemorySchema)(input)
-      const content = validatePublicJsonObject(command.content, {
-        maxBytes: 8 * 1_024,
-        maxDepth: 6,
-      })
-      if (content === undefined) {
-        return yield* Effect.fail(invalidPublicPayload("memory"))
-      }
-      const [id, now] = yield* Effect.all([ports.nextMemoryId, ports.now])
-      return yield* ports.proposeMemory(
-        deepFreeze({
-          id,
-          ownerId: command.ownerId,
-          agentInstanceId: command.agentInstanceId,
-          kind: command.kind,
-          status: initialAgentMemoryStatus(command.kind),
-          version: 1,
-          content,
-          expiresAt: command.expiresAt ?? null,
-          createdAt: now,
-          updatedAt: now,
-        } satisfies AgentMemory)
-      )
+    const command = yield* parse(ProposeMemorySchema)(input)
+    const content = validatePublicJsonObject(command.content, {
+      maxBytes: 8 * 1_024,
+      maxDepth: 6,
+    })
+    if (content === undefined) {
+      return yield* Effect.fail(invalidPublicPayload("memory"))
+    }
+    const [id, now] = yield* Effect.all([ports.nextMemoryId, ports.now])
+    return yield* ports.proposeMemory(
+      deepFreeze({
+        id,
+        ownerId: command.ownerId,
+        agentInstanceId: command.agentInstanceId,
+        kind: command.kind,
+        status: initialAgentMemoryStatus(command.kind),
+        version: 1,
+        content,
+        expiresAt: command.expiresAt ?? null,
+        createdAt: now,
+        updatedAt: now,
+      } satisfies AgentMemory)
+    )
   })
 
 export const listAgentMemories = (

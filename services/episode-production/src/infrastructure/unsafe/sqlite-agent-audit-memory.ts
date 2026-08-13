@@ -42,7 +42,9 @@ export type AgentMemoryRow = Readonly<{
 export type UnsafeAgentAuditMemoryHandle = Readonly<{
   ensureInstance: (row: AgentInstanceRow) => AgentInstanceRow
   listInstances: (ownerId: string) => readonly AgentInstanceRow[]
-  recordRun: (row: AgentRunRow) =>
+  recordRun: (
+    row: AgentRunRow
+  ) =>
     | { readonly _tag: "Created" }
     | { readonly _tag: "Existing"; readonly row: AgentRunRow }
     | { readonly _tag: "ScopeConflict" }
@@ -71,7 +73,11 @@ export type UnsafeAgentAuditMemoryHandle = Readonly<{
     readonly payloadJson: string
     readonly occurredAt: string
   }) =>
-    | { readonly _tag: "Transitioned"; readonly run: AgentRunRow; readonly event: AgentEventRow }
+    | {
+        readonly _tag: "Transitioned"
+        readonly run: AgentRunRow
+        readonly event: AgentEventRow
+      }
     | { readonly _tag: "NotFound" }
     | { readonly _tag: "StateConflict"; readonly current: string }
   proposeMemory: (row: AgentMemoryRow) => boolean
@@ -304,7 +310,10 @@ export const openUnsafeAgentAuditMemoryHandle = (
           row.createdAt,
           row.updatedAt
         )
-        return findInstanceByKey.get(row.ownerId, row.agentKey) as AgentInstanceRow
+        return findInstanceByKey.get(
+          row.ownerId,
+          row.agentKey
+        ) as AgentInstanceRow
       }),
     listInstances: (ownerId) =>
       listInstances.all(ownerId) as unknown as readonly AgentInstanceRow[],
@@ -391,7 +400,9 @@ export const openUnsafeAgentAuditMemoryHandle = (
       }),
     proposeMemory: (row) =>
       transaction(() => {
-        if (findOwnedInstance.get(row.ownerId, row.agentInstanceId) === undefined) {
+        if (
+          findOwnedInstance.get(row.ownerId, row.agentInstanceId) === undefined
+        ) {
           return false
         }
         insertMemory.run(
@@ -416,7 +427,10 @@ export const openUnsafeAgentAuditMemoryHandle = (
     listOwnedMemories: (ownerId, instanceId) =>
       findOwnedInstance.get(ownerId, instanceId) === undefined
         ? undefined
-        : (listMemories.all(ownerId, instanceId) as unknown as readonly AgentMemoryRow[]),
+        : (listMemories.all(
+            ownerId,
+            instanceId
+          ) as unknown as readonly AgentMemoryRow[]),
     decideOwnedMemory: (input) =>
       transaction(() => {
         const current = findOwnedMemory.get(

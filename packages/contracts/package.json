@@ -10,7 +10,7 @@
   "scripts": {
     "build": "pnpm generate",
     "lint": "spectral lint --ruleset ../../.spectral.yaml openapi/openapi.json",
-    "generate:document": "tsx ../../apps/api/src/openapi/generate.ts",
+    "generate:document": "tsx ../../apps/gateway/src/openapi/generate.ts",
     "generate:types": "openapi-typescript openapi/openapi.json -o src/generated/openapi.ts",
     "generate": "pnpm generate:document && pnpm generate:types",
     "check": "pnpm generate:document && openapi-typescript openapi/openapi.json --check -o src/generated/openapi.ts",

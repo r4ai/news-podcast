@@ -113,10 +113,7 @@ export const readEpisodeProductionServiceConfig = (
         },
         worker: {
           leaseMillis: integer(env.EPISODE_WORKER_LEASE_MS, 300_000),
-          heartbeatMillis: integer(
-            env.EPISODE_WORKER_HEARTBEAT_MS,
-            60_000
-          ),
+          heartbeatMillis: integer(env.EPISODE_WORKER_HEARTBEAT_MS, 60_000),
           retryDelayMillis: integer(env.EPISODE_WORKER_RETRY_DELAY_MS, 30_000),
           idleMillis: integer(env.EPISODE_WORKER_IDLE_MS, 1_000),
         },
@@ -130,6 +127,17 @@ export const readEpisodeProductionServiceConfig = (
           maximumBackoffMillis: integer(
             env.EPISODE_COMPLETION_MAX_BACKOFF_MS,
             30_000
+          ),
+        },
+        scheduler: {
+          intervalMillis: integer(env.EPISODE_SCHEDULER_INTERVAL_MS, 60_000),
+          failureBackoffMillis: integer(
+            env.EPISODE_SCHEDULER_FAILURE_BACKOFF_MS,
+            5_000
+          ),
+          requestTimeoutMillis: integer(
+            env.EPISODE_SCHEDULER_REQUEST_TIMEOUT_MS,
+            5_000
           ),
         },
       }).pipe(Effect.mapError(serviceConfigFailure))

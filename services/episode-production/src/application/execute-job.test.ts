@@ -92,9 +92,7 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
       renewLease: () => Effect.succeed("Applied"),
       assertLease: vi.fn(() => Effect.void),
       loadCheckpoint: vi.fn(() => Effect.succeed(checkpoint as never)),
-      loadDictionarySnapshot: vi.fn(() =>
-        Effect.succeed(dictionarySnapshot)
-      ),
+      loadDictionarySnapshot: vi.fn(() => Effect.succeed(dictionarySnapshot)),
       saveDictionarySnapshot: vi.fn((input) =>
         Effect.sync(() => {
           dictionarySnapshot ??= input.snapshot

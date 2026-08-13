@@ -18,6 +18,12 @@ export {
   type IdentitySettingsRpcOperations,
 } from "./settings-rpc.js"
 export {
+  makeScheduledGenerationRpcHandler,
+  type ScheduledGenerationRpcDelivery,
+  type ScheduledGenerationRpcOperations,
+  type ScheduledGenerationRpcDependencies,
+} from "./scheduled-generation-rpc.js"
+export {
   makeResolveSessionRpcHandler,
   type ResolveSessionRpcDelivery,
   type ResolveSessionRpcDependencies,

@@ -26,9 +26,7 @@ type UnsafeClient = Readonly<{
 const failure = (reason: MarkdownObjectError["reason"]): MarkdownObjectError =>
   deepFreeze({ _tag: "MarkdownObjectFailed", reason })
 
-const isMarkdownObjectError = (
-  error: unknown
-): error is MarkdownObjectError =>
+const isMarkdownObjectError = (error: unknown): error is MarkdownObjectError =>
   typeof error === "object" &&
   error !== null &&
   "_tag" in error &&
@@ -103,10 +101,10 @@ export const openS3MarkdownObjectReaderUnsafe = (
           const signal = AbortSignal.any([effectSignal, timeout.signal])
           try {
             const response = await resource.client.send(
-            new GetObjectCommand({
-              Bucket: config.bucket,
-              Key: key,
-            }),
+              new GetObjectCommand({
+                Bucket: config.bucket,
+                Key: key,
+              }),
               { abortSignal: signal }
             )
             if (
@@ -137,11 +135,11 @@ export const openS3MarkdownObjectReaderUnsafe = (
           isMarkdownObjectError(error)
             ? error
             : typeof error === "object" &&
-          error !== null &&
-          "name" in error &&
-          (error.name === "NoSuchKey" || error.name === "NotFound")
-            ? failure("NotFound")
-            : failure("Unavailable"),
+                error !== null &&
+                "name" in error &&
+                (error.name === "NoSuchKey" || error.name === "NotFound")
+              ? failure("NotFound")
+              : failure("Unavailable"),
       }),
   })
   return Object.freeze({

@@ -30,9 +30,9 @@ const audioAccess = Schema.decodeUnknownSync(AudioAccessSchema)({
   expiresAt: "2026-08-12T00:05:00.000Z",
 })
 const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
-  subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+  id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
   feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
-  feedUrl: "https://feeds.example.com/news.xml",
+  enabled: true,
   createdAt: "2026-08-12T00:00:00.000Z",
 })
 const unavailable = {
@@ -95,6 +95,7 @@ const makePorts = (): GatewayPorts => ({
     Effect.succeed({
       states: { all: 0, unread: 0, saved: 0, later: 0 },
       feeds: [],
+      aiPending: 0,
     }),
   archiveArticle: () => Effect.fail(unavailable),
   listArticleTags: () => Effect.fail(unavailable),
@@ -114,6 +115,13 @@ const makePorts = (): GatewayPorts => ({
   getEnrichQueue: () => Effect.fail(unavailable),
   enrichReprocess: () => Effect.fail(unavailable),
   enrichResetDaily: () => Effect.fail(unavailable),
+  listAgentInstances: () => Effect.fail(unavailable),
+  getAgentRun: () => Effect.fail(unavailable),
+  replayAgentRunEvents: () => Effect.fail(unavailable),
+  listAgentMemories: () => Effect.fail(unavailable),
+  createAgentMemory: () => Effect.fail(unavailable),
+  approveAgentMemory: () => Effect.fail(unavailable),
+  deleteAgentMemory: () => Effect.fail(unavailable),
 })
 
 describe("gateway port handlers", () => {

@@ -232,9 +232,15 @@ const resolveStyleId = (
   fetcher: typeof fetch,
   signal: AbortSignal | undefined
 ): Effect.Effect<number, ProviderFailure> =>
-  fetchJson(config, fetcher, endpoint(config.baseUrl, "speakers"), {
-    method: "GET",
-  }, signal).pipe(
+  fetchJson(
+    config,
+    fetcher,
+    endpoint(config.baseUrl, "speakers"),
+    {
+      method: "GET",
+    },
+    signal
+  ).pipe(
     Effect.flatMap((value) =>
       parseSpeakers(projectSpeakers(value)).pipe(
         Effect.mapError(() => malformed())
@@ -384,7 +390,10 @@ const mergeWaves = (
   if (parsed.some((wave) => wave === undefined)) return undefined
   const complete = parsed as readonly ParsedWave[]
   const first = complete[0]
-  if (!first || complete.some((wave) => !equalBytes(wave.format, first.format))) {
+  if (
+    !first ||
+    complete.some((wave) => !equalBytes(wave.format, first.format))
+  ) {
     return undefined
   }
   const dataLength = complete.reduce(

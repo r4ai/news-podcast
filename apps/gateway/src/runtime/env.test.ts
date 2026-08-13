@@ -22,6 +22,9 @@ describe("Gateway environment configuration", () => {
       natsServers: ["nats://nats-a:4222", "nats://nats-b:4222"],
       requestTimeoutMillis: 2500,
       loginMethods: { development: true, google: true },
+      identityHttpOrigin: "http://identity-access:4002",
+      authProxyTimeoutMillis: 5000,
+      authProxyMaximumResponseBytes: 1048576,
     })
   })
 

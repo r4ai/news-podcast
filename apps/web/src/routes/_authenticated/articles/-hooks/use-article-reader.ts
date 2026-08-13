@@ -81,22 +81,6 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     userSource ?? (autoFallback ? "archive" : "markdown")
   const didAutoFallback = userSource === undefined && autoFallback
 
-  const archiveQuery = useQuery({
-    queryKey: ["article-archive", articleId],
-    queryFn: async () => {
-      const { data, error } = await fetchClient.GET(
-        "/v1/me/articles/{articleId}/archive",
-        {
-          params: { path: { articleId: articleId ?? "" } },
-          parseAs: "text",
-        }
-      )
-      if (error) throw error
-      return data ?? ""
-    },
-    enabled: articleId !== undefined && source === "archive",
-  })
-
   const [article, addDraft] = useOptimistic(articleQuery.data, applyPatch)
 
   const invalidate = useCallback(async () => {
@@ -218,9 +202,11 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     didAutoFallback,
     markdown: markdownQuery.data,
     isMarkdownLoading: markdownQuery.isLoading,
-    archiveHtml: archiveQuery.data,
-    isArchiveLoading: archiveQuery.isLoading,
-    archiveUnavailable: archiveQuery.isError,
+    // The functional Gateway exposes manual archival as POST, but deliberately
+    // does not expose stored raw HTML. Keep the external-source fallback honest.
+    archiveHtml: undefined as string | undefined,
+    isArchiveLoading: false,
+    archiveUnavailable: source === "archive",
     toggleSaved: () =>
       article &&
       update({ saved: !article.saved }, "保存状態を更新できませんでした"),

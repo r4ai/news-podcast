@@ -1,7 +1,10 @@
 // Imported only after bootstrap has registered automatic instrumentation.
 import { getNodeObservability } from "@news-podcast/observability/node/register"
 import { makeEffectOtlpLayerFromEnvironment } from "@news-podcast/observability"
-import { createHealthState, healthServerScoped } from "@news-podcast/service-runtime"
+import {
+  createHealthState,
+  healthServerScoped,
+} from "@news-podcast/service-runtime"
 import { Effect, Fiber } from "effect"
 
 import { listenNodeHttpUnsafe } from "./infrastructure/unsafe/node-http.js"
@@ -12,7 +15,10 @@ import {
 } from "./runtime/index.js"
 
 const observability = getNodeObservability({ serviceName: "gateway" })
-const effectTelemetry = makeEffectOtlpLayerFromEnvironment(process.env, "gateway")
+const effectTelemetry = makeEffectOtlpLayerFromEnvironment(
+  process.env,
+  "gateway"
+)
 const health = createHealthState()
 const core = readGatewayConfig(process.env).pipe(
   Effect.flatMap((config) =>
@@ -25,10 +31,10 @@ const core = readGatewayConfig(process.env).pipe(
   )
 )
 const program = Effect.scoped(
-  healthServerScoped(Number(process.env.GATEWAY_HEALTH_PORT ?? "4101"), health).pipe(
-    Effect.andThen(core),
-    Effect.ensuring(Effect.sync(health.notReady))
-  )
+  healthServerScoped(
+    Number(process.env.GATEWAY_HEALTH_PORT ?? "4101"),
+    health
+  ).pipe(Effect.andThen(core), Effect.ensuring(Effect.sync(health.notReady)))
 )
 const fiber = Effect.runFork(program)
 let stopping = false

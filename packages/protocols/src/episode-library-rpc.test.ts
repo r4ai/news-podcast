@@ -23,11 +23,13 @@ describe("episode-library RPC contracts", () => {
             id: episodeId,
             title: "Daily briefing",
             script: "A complete script.",
-            sources: [{
-              sourceKind: "web",
-              url: "https://example.com/story",
-              title: "Story",
-            }],
+            sources: [
+              {
+                sourceKind: "web",
+                url: "https://example.com/story",
+                title: "Story",
+              },
+            ],
             createdAt: "2026-08-13T00:00:00.000Z",
           },
         }),
@@ -99,8 +101,14 @@ describe("episode-library RPC contracts", () => {
   const invalidCases: ReadonlyArray<
     readonly [string, () => Effect.Effect<unknown, unknown>]
   > = [
-    ["list request excess field", () => parseListEpisodesRequest({ ownerId: "forged" })],
-    ["malformed episode ID", () => parseCreateAudioAccessRequest({ episodeId: "episode-1" })],
+    [
+      "list request excess field",
+      () => parseListEpisodesRequest({ ownerId: "forged" }),
+    ],
+    [
+      "malformed episode ID",
+      () => parseCreateAudioAccessRequest({ episodeId: "episode-1" }),
+    ],
     [
       "RSS source without snapshot",
       () =>

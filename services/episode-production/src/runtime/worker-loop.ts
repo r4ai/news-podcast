@@ -100,12 +100,7 @@ const runWithHeartbeat = (
           })
           .pipe(
             Effect.tapError((failure) =>
-              observeFailure(
-                ports,
-                "heartbeat",
-                failure,
-                leased.job.jobId
-              )
+              observeFailure(ports, "heartbeat", failure, leased.job.jobId)
             )
           )
         if (result === "StaleLease") {
@@ -118,11 +113,13 @@ const runWithHeartbeat = (
     })
 
     return yield* Effect.raceFirst(
-      ports.execute({ job: leased.job, signal: controller.signal }).pipe(
-        Effect.tapError((failure) =>
-          observeFailure(ports, "execute", failure, leased.job.jobId)
-        )
-      ),
+      ports
+        .execute({ job: leased.job, signal: controller.signal })
+        .pipe(
+          Effect.tapError((failure) =>
+            observeFailure(ports, "execute", failure, leased.job.jobId)
+          )
+        ),
       heartbeat
     ).pipe(
       Effect.map((outcome) =>

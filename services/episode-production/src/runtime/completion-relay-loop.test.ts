@@ -11,8 +11,16 @@ describe("completion relay loop", () => {
     const events: CompletionRelayEvent[] = []
     const delays: number[] = []
     const results = [
-      Effect.fail({ _tag: "PipelineFailure" as const, code: "nats", retryable: true }),
-      Effect.fail({ _tag: "PipelineFailure" as const, code: "nats", retryable: true }),
+      Effect.fail({
+        _tag: "PipelineFailure" as const,
+        code: "nats",
+        retryable: true,
+      }),
+      Effect.fail({
+        _tag: "PipelineFailure" as const,
+        code: "nats",
+        retryable: true,
+      }),
       Effect.succeed({ published: 1, duplicates: 0 }),
     ]
     const fiber = Effect.runFork(
@@ -25,7 +33,11 @@ describe("completion relay loop", () => {
             return events.length === 3 ? Effect.never : Effect.void
           },
         },
-        { intervalMillis: 1_000, initialBackoffMillis: 100, maximumBackoffMillis: 150 }
+        {
+          intervalMillis: 1_000,
+          initialBackoffMillis: 100,
+          maximumBackoffMillis: 150,
+        }
       )
     )
 

@@ -10,10 +10,7 @@ import {
   sqliteReadingDictionaryRepository,
   type SqliteReadingDictionaryRepository,
 } from "./sqlite-reading-dictionary.js"
-import {
-  OwnerIdSchema,
-  UtcTimestampSchema,
-} from "../domain/episode-job.js"
+import { OwnerIdSchema, UtcTimestampSchema } from "../domain/episode-job.js"
 import {
   ReadingDictionaryEntrySchema,
   ReadingDictionaryIdSchema,
@@ -63,9 +60,9 @@ const withRepository = async <A>(
 
 afterEach(async () => {
   await Promise.all(
-    directories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true })
-    )
+    directories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true }))
   )
 })
 

@@ -17,7 +17,6 @@ function makeArticle(overrides: Partial<Article>): Article {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
     ...overrides,
   } as Article
 }

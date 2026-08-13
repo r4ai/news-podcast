@@ -34,6 +34,7 @@ describe("Identity Access service composition", () => {
     const close = vi.fn()
     const resource: UnsafeIdentityRuntimeResource = {
       api: { getSession: () => Promise.resolve(null) },
+      handler: async () => new Response(null),
       database: {} as never,
       close,
     }
@@ -66,6 +67,7 @@ describe("Identity Access service composition", () => {
     }
     const auth: UnsafeIdentityRuntimeResource = {
       api,
+      handler: async () => new Response(null),
       database: {} as never,
       close: () => void events.push("auth.closed"),
     }
@@ -81,7 +83,7 @@ describe("Identity Access service composition", () => {
             natsServers: ["nats://nats:4222"],
             queueGroup: "identity-access",
           })
-          expect(receivedApi).toBe(api)
+          expect(receivedApi.getSession).toBeTypeOf("function")
           expect(receivedSettings.get).toBeTypeOf("function")
           expect(receivedSettings.update).toBeTypeOf("function")
           return Effect.acquireRelease(

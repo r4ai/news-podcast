@@ -149,7 +149,9 @@ const repositoryFromHandle = (
       catch: () => failure("Delete"),
     }).pipe(
       Effect.map((deleted) =>
-        deepFreeze({ _tag: deleted ? ("Deleted" as const) : ("NotFound" as const) })
+        deepFreeze({
+          _tag: deleted ? ("Deleted" as const) : ("NotFound" as const),
+        })
       )
     )
 

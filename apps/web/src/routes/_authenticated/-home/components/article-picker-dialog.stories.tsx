@@ -20,8 +20,6 @@ function article(id: string, title: string, relevanceScore?: number): Article {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
-    tags: [],
     ...(relevanceScore === undefined ? {} : { relevanceScore }),
   } as Article
 }

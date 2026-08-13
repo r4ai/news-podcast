@@ -12,10 +12,7 @@ export type Tag = components["schemas"]["Tag"]
 export type TagSuggestion = components["schemas"]["TagSuggestion"]
 
 export type ArticleState = "all" | "unread" | "saved" | "later"
-export type ArticleSort = "newest" | "oldest" | "source" | "relevance"
-/** サーバのAPIには存在しないクライアント側だけの絞り込み軸。取得済みの記事にのみ適用する。 */
-export type ArticlePeriod = "all" | "today" | "week" | "month"
-export type ArticleStatusFilter = "all" | Article["archiveStatus"]
+export type ArticleSort = "newest" | "oldest"
 
 export type ArticlesSearch = {
   readonly state: ArticleState
@@ -23,11 +20,6 @@ export type ArticlesSearch = {
   readonly q: string
   readonly feedIds: readonly string[]
   readonly includeHidden: boolean
-  readonly usedInEpisode: boolean
-  readonly period: ArticlePeriod
-  readonly archiveStatusFilter: ArticleStatusFilter
-  /** タグID（OR条件）。 */
-  readonly tagIds: readonly string[]
   /** 選択中の記事ID。URLが唯一の情報源で、リーダーの開閉もこれで表す。 */
   readonly article: string | undefined
 }
@@ -38,28 +30,11 @@ export const defaultArticlesSearch: ArticlesSearch = {
   q: "",
   feedIds: [],
   includeHidden: false,
-  usedInEpisode: false,
-  period: "all",
-  archiveStatusFilter: "all",
-  tagIds: [],
   article: undefined,
 }
 
 const states: readonly ArticleState[] = ["all", "unread", "saved", "later"]
-const sorts: readonly ArticleSort[] = [
-  "newest",
-  "oldest",
-  "source",
-  "relevance",
-]
-const periods: readonly ArticlePeriod[] = ["all", "today", "week", "month"]
-const archiveStatuses: readonly ArticleStatusFilter[] = [
-  "all",
-  "pending",
-  "archiving",
-  "succeeded",
-  "failed",
-]
+const sorts: readonly ArticleSort[] = ["newest", "oldest"]
 
 function oneOf<T extends string>(
   candidates: readonly T[],
@@ -95,17 +70,6 @@ export function validateArticlesSearch(
       search.includeHidden,
       defaultArticlesSearch.includeHidden
     ),
-    usedInEpisode: toBoolean(
-      search.usedInEpisode,
-      defaultArticlesSearch.usedInEpisode
-    ),
-    period: oneOf(periods, search.period, defaultArticlesSearch.period),
-    archiveStatusFilter: oneOf(
-      archiveStatuses,
-      search.archiveStatusFilter,
-      defaultArticlesSearch.archiveStatusFilter
-    ),
-    tagIds: toStringArray(search.tagIds),
     article:
       typeof search.article === "string" && search.article.length > 0
         ? search.article
@@ -123,17 +87,7 @@ export const stateTabs: readonly { value: ArticleState; label: string }[] = [
 export const sortOptions: readonly { value: ArticleSort; label: string }[] = [
   { value: "newest", label: "新着順" },
   { value: "oldest", label: "古い順" },
-  { value: "source", label: "媒体ごと" },
-  { value: "relevance", label: "おすすめ順" },
 ]
-
-export const periodOptions: readonly { value: ArticlePeriod; label: string }[] =
-  [
-    { value: "all", label: "すべての期間" },
-    { value: "today", label: "今日" },
-    { value: "week", label: "今週" },
-    { value: "month", label: "今月" },
-  ]
 
 const archiveLabels = {
   pending: "保存待ち",
@@ -214,34 +168,7 @@ export function groupArticlesByDate(
   return groups
 }
 
-const periodDays: Record<Exclude<ArticlePeriod, "all">, number> = {
-  today: 1,
-  week: 7,
-  month: 31,
-}
-
-/** 期間・アーカイブ状態はAPIに絞り込みパラメータが無いため、取得済み記事へクライアント側で適用する。 */
-export function applyClientFilters(
-  articles: readonly Article[],
-  filters: Pick<ArticlesSearch, "period" | "archiveStatusFilter">,
-  now: Date = new Date()
-): readonly Article[] {
-  return articles.filter((article) => {
-    if (
-      filters.archiveStatusFilter !== "all" &&
-      article.archiveStatus !== filters.archiveStatusFilter
-    ) {
-      return false
-    }
-    if (filters.period === "all") return true
-    const diffDays =
-      (now.getTime() - new Date(articleTimestamp(article)).getTime()) /
-      (24 * 60 * 60 * 1000)
-    return diffDays <= periodDays[filters.period]
-  })
-}
-
-/** `/v1/me/articles`へ渡すクエリ。クライアント専用の軸(period/archiveStatusFilter)は含めない。 */
+/** `/v1/me/articles`へ渡す、サーバが実際に適用できるクエリ。 */
 export function toListQuery(search: ArticlesSearch) {
   return {
     q: search.q.trim() || undefined,
@@ -249,8 +176,6 @@ export function toListQuery(search: ArticlesSearch) {
     feedIds: search.feedIds.length > 0 ? [...search.feedIds] : undefined,
     sort: search.sort,
     includeHidden: search.includeHidden ? "true" : undefined,
-    usedInEpisode: search.usedInEpisode ? "true" : undefined,
-    tagIds: search.tagIds.length > 0 ? [...search.tagIds] : undefined,
   } as const
 }
 
@@ -260,7 +185,6 @@ export function toFacetsQuery(search: ArticlesSearch) {
     q: search.q.trim() || undefined,
     feedIds: search.feedIds.length > 0 ? [...search.feedIds] : undefined,
     includeHidden: search.includeHidden ? "true" : undefined,
-    tagIds: search.tagIds.length > 0 ? [...search.tagIds] : undefined,
   } as const
 }
 
@@ -343,12 +267,7 @@ export function articleSnippet(
   if (typeof article.aiSummary === "string" && article.aiSummary.length > 0) {
     return aiSummarySnippet(article.aiSummary)
   }
-  return article.summary
-}
-
-/** おすすめ順のときだけ行にスコアを数値表示する。他の並び順では出さない。 */
-export function shouldShowRelevanceScore(sort: ArticleSort): boolean {
-  return sort === "relevance"
+  return article.summary ?? undefined
 }
 
 /** j/kキー送り用に、現在の記事から前後の記事IDを求める。 */

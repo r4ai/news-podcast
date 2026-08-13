@@ -111,7 +111,7 @@ export function useGeneration() {
     startTransition(async () => {
       try {
         await createJob.mutateAsync({
-          params: { header: { "Idempotency-Key": crypto.randomUUID() } },
+          params: { header: { "idempotency-key": crypto.randomUUID() } },
           body: { trigger: "manual", articleIds: [...articleIds] },
         })
         recordBrowserEvent("episode.requested", { result: "succeeded" })
@@ -129,11 +129,13 @@ export function useGeneration() {
   return {
     attempt: latestJob?.attempt,
     maxAttempts: latestJob?.maxAttempts,
-    deadlineAt: latestJob?.deadlineAt,
-    lastProgressAt: latestJob?.lastProgressAt,
-    retryAt: latestJob?.nextAttemptAt,
-    stageProgress,
-    failure: failureMessage(liveState?.failure ?? latestJob?.failure),
+    deadlineAt: latestJob?.deadlineAt ?? undefined,
+    lastProgressAt: latestJob?.lastProgressAt ?? undefined,
+    retryAt: latestJob?.nextAttemptAt ?? undefined,
+    stageProgress: stageProgress ?? undefined,
+    failure: failureMessage(
+      liveState?.failure ?? latestJob?.failure ?? undefined
+    ),
     progress: state === "running" && stage ? stagePercent(stage) : undefined,
     stage: state === "running" && stage ? stageLabel(stage) : undefined,
     state,

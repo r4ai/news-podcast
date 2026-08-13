@@ -1,13 +1,15 @@
 import { subjects } from "@news-podcast/protocols"
 import { Effect, Fiber, Schema } from "effect"
-import { describe, expect, it, vi } from "vitest"
+import { afterAll, describe, expect, it, vi } from "vitest"
 
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
 import { UtcTimestampSchema } from "../domain/episode-job.js"
 import { runNodeCreateJobRpc, runNodeProductionRpc } from "./node.js"
 
+const directory = mkdtempSync(join(tmpdir(), "production-rpc-"))
+afterAll(() => rmSync(directory, { recursive: true, force: true }))
 const config = {
-  sqlitePath: ":memory:",
+  sqlitePath: join(directory, "production.sqlite"),
   natsServers: ["nats://127.0.0.1:4222"],
   queueGroup: "episode-production",
 }
@@ -135,8 +137,12 @@ describe("episode-production Node RPC runtime", () => {
       subjects.production.cancelJob,
       subjects.production.retryJob,
       subjects.production.readingDictionary,
+      subjects.production.agentAuditMemory,
     ]
     expect(connected.sort()).toEqual([...expected].sort())
     expect(drained.sort()).toEqual([...expected].sort())
   })
 })
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"

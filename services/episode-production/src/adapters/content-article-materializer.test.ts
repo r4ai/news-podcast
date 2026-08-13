@@ -35,7 +35,9 @@ describe("Content article materializer", () => {
       })
     )
     expect(result).toEqual([article])
-    const envelope = JSON.parse(new TextDecoder().decode(request.mock.calls[0]![1]))
+    const envelope = JSON.parse(
+      new TextDecoder().decode(request.mock.calls[0]![1])
+    )
     expect(envelope.actor).toEqual({ _tag: "User", userId: "owner-1" })
     expect(envelope.payload).not.toHaveProperty("ownerId")
   })
@@ -46,10 +48,17 @@ describe("Content article materializer", () => {
         request: async () => new TextEncoder().encode('{"_tag":"NoArticles"}'),
         close: async () => undefined,
       },
-      { newMessageId: () => crypto.randomUUID(), now: () => "2026-08-13T00:00:00.000Z", timeoutMillis: 1 },
+      {
+        newMessageId: () => crypto.randomUUID(),
+        now: () => "2026-08-13T00:00:00.000Z",
+        timeoutMillis: 1,
+      }
     )
     const exit = await Effect.runPromiseExit(
-      empty.materialize({ ownerId: "owner-1" as never, selection: { _tag: "Automatic" } })
+      empty.materialize({
+        ownerId: "owner-1" as never,
+        selection: { _tag: "Automatic" },
+      })
     )
     expect(exit._tag).toBe("Failure")
   })

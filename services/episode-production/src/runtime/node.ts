@@ -4,6 +4,10 @@ import { Effect, Schema } from "effect"
 
 import { handleCreateJobRpc } from "../adapters/create-job-rpc.js"
 import {
+  makeAgentAuditRpcHandler,
+  type AgentAuditRpcDelivery,
+} from "../adapters/agent-audit-rpc.js"
+import {
   handleCancelJobRpc,
   handleGetJobRpc,
   handleListJobsRpc,
@@ -13,6 +17,7 @@ import {
 } from "../adapters/job-control-rpc.js"
 import { retryFailedJob } from "../application/job-control.js"
 import { sqliteJobRepository } from "../adapters/sqlite-job-repository.js"
+import { sqliteAgentAuditMemoryRepository } from "../adapters/sqlite-agent-audit-memory.js"
 import { sqliteReadingDictionaryRepository } from "../adapters/sqlite-reading-dictionary.js"
 import {
   makeReadingDictionaryRpcHandler,
@@ -24,6 +29,7 @@ import {
   type UtcTimestamp,
 } from "../domain/episode-job.js"
 import { ReadingDictionaryIdSchema } from "../domain/reading-dictionary.js"
+import { AgentMemoryIdSchema } from "../domain/agent-audit-memory.js"
 import {
   currentUtcTimestampUnsafe,
   randomJobIdUnsafe,
@@ -133,6 +139,7 @@ type RpcHandler = (
   delivery:
     | JobControlRpcDelivery<NodeCreateJobRpcError>
     | ReadingDictionaryRpcDelivery<NodeCreateJobRpcError>
+    | AgentAuditRpcDelivery<NodeCreateJobRpcError>
 ) => Effect.Effect<void, unknown, never>
 
 /** Runs the complete versioned Episode Production command/query RPC surface. */
@@ -149,6 +156,9 @@ export const runNodeProductionRpc = (
             Effect.mapError(() => runtimeError("Sqlite"))
           )
           const dictionary = yield* sqliteReadingDictionaryRepository(
+            config.sqlitePath
+          ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
+          const agentAudit = yield* sqliteAgentAuditMemoryRepository(
             config.sqlitePath
           ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
           const now = Effect.sync(dependencies.now)
@@ -223,6 +233,20 @@ export const runNodeProductionRpc = (
                   ),
                 newMessageId: dependencies.newJobId,
                 now: dependencies.now,
+              }),
+            ],
+            [
+              subjects.production.agentAuditMemory,
+              makeAgentAuditRpcHandler(agentAudit, {
+                newMessageId: dependencies.newJobId,
+                nextMemoryId: Effect.sync(() =>
+                  Schema.decodeUnknownSync(AgentMemoryIdSchema)(
+                    dependencies.newJobId()
+                  )
+                ),
+                now,
+                nowString: () =>
+                  Schema.encodeSync(UtcTimestampSchema)(dependencies.now()),
               }),
             ],
           ]

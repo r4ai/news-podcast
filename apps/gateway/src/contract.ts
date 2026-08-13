@@ -133,16 +133,26 @@ export const CreateEpisodeJobRequestSchema = Schema.Struct({
   ),
 }).annotate({ identifier: "CreateEpisodeJobRequest" })
 
+export const JobStatusSchema = Schema.Literals([
+  "queued",
+  "running",
+  "retrying",
+  "succeeded",
+  "failed",
+  "canceled",
+]).annotate({ identifier: "JobStatus" })
+
+export const JobStageSchema = Schema.Literals([
+  "researching_sources",
+  "fetching_sources",
+  "generating_script",
+  "synthesizing_audio",
+  "storing_episode",
+]).annotate({ identifier: "JobStage" })
+
 export const JobReceiptSchema = Schema.Struct({
   id: JobIdSchema,
-  status: Schema.Literals([
-    "queued",
-    "running",
-    "retrying",
-    "succeeded",
-    "failed",
-    "canceled",
-  ]),
+  status: JobStatusSchema,
   createdAt: UtcDateTimeStringSchema,
   attempt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
   maxAttempts: Schema.Literal(4),
@@ -152,18 +162,21 @@ export const JobReceiptSchema = Schema.Struct({
 
 const jobFields = {
   id: JobIdSchema,
-  status: Schema.Literals([
-    "queued",
-    "running",
-    "retrying",
-    "succeeded",
-    "failed",
-    "canceled",
-  ]),
+  status: JobStatusSchema,
   createdAt: UtcDateTimeStringSchema,
   articleIds: Schema.optional(Schema.Array(ArticleIdSchema)),
   attempt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
   maxAttempts: Schema.Literal(4),
+  stage: Schema.optional(JobStageSchema),
+  stageStartedAt: Schema.optional(UtcDateTimeStringSchema),
+  lastProgressAt: Schema.optional(UtcDateTimeStringSchema),
+  deadlineAt: Schema.optional(UtcDateTimeStringSchema),
+  stageProgress: Schema.optional(
+    Schema.Struct({
+      completed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      total: Schema.Int.check(Schema.isGreaterThan(0)),
+    })
+  ),
   startedAt: Schema.optional(UtcDateTimeStringSchema),
   finishedAt: Schema.optional(UtcDateTimeStringSchema),
   nextAttemptAt: Schema.optional(UtcDateTimeStringSchema),
@@ -276,9 +289,9 @@ export const AddFeedSubscriptionRequestSchema = Schema.Struct({
 }).annotate({ identifier: "AddFeedSubscriptionRequest" })
 
 const feedSubscriptionFields = {
-  subscriptionId: SubscriptionIdSchema,
+  id: SubscriptionIdSchema,
   feedId: FeedIdSchema,
-  feedUrl: CanonicalFeedUrlSchema,
+  enabled: Schema.Boolean,
   createdAt: UtcDateTimeStringSchema,
 } as const
 
@@ -301,10 +314,11 @@ export const UpdateFeedSubscriptionSchema = Schema.Struct({
 })
 export const UpdatedFeedSubscriptionSchema = Schema.Struct({
   ...feedSubscriptionFields,
-  enabled: Schema.Boolean,
 }).annotate({ identifier: "UpdatedFeedSubscription" })
 export const FeedSchema = Schema.Struct({
   id: FeedIdSchema,
+  name: boundedText(500),
+  siteUrl: AbsoluteHttpUrlSchema,
   feedUrl: CanonicalFeedUrlSchema,
 }).annotate({ identifier: "Feed" })
 export const FeedPageSchema = Schema.Struct({
@@ -342,17 +356,31 @@ export const ArticleStatePatchSchema = Schema.Struct(
 export const ArticleSchema = Schema.Struct({
   id: ArticleIdSchema,
   feedId: FeedIdSchema,
+  sourceName: boundedText(500),
   title: boundedText(500),
   url: AbsoluteHttpUrlSchema,
   publishedAt: Schema.optional(UtcDateTimeStringSchema),
+  summary: Schema.optional(Schema.String),
   discoveredAt: UtcDateTimeStringSchema,
-  archiveStatus: Schema.Literals(["pending", "succeeded"]),
+  archiveStatus: Schema.Literals([
+    "pending",
+    "archiving",
+    "succeeded",
+    "failed",
+  ]),
   snapshotId: Schema.optional(SnapshotIdSchema),
   read: Schema.Boolean,
   saved: Schema.Boolean,
   readLater: Schema.Boolean,
   hidden: Schema.Boolean,
   hiddenAt: Schema.optional(UtcDateTimeStringSchema),
+  archiveUrl: Schema.optional(Schema.String),
+  markdownUrl: Schema.optional(Schema.String),
+  aiSummary: Schema.optional(Schema.String),
+  relevanceScore: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))
+  ),
+  relevanceReason: Schema.optional(Schema.String),
 }).annotate({ identifier: "Article" })
 export const ArticlePageSchema = Schema.Struct({
   items: Schema.Array(ArticleSchema),
@@ -368,9 +396,11 @@ export const ArticleFacetsSchema = Schema.Struct({
   feeds: Schema.Array(
     Schema.Struct({
       feedId: FeedIdSchema,
+      name: boundedText(500),
       count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     })
   ),
+  aiPending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ identifier: "ArticleFacets" })
 export const BulkArticleStateSchema = Schema.Struct({
   state: Schema.optional(ArticleStateFilterSchema),
@@ -1191,6 +1221,180 @@ export const enrichResetDailyEndpoint = HttpApiEndpoint.post(
   }
 )
 
+export const AgentInstanceSchema = Schema.Struct({
+  id: Schema.String.check(Schema.isUUID(4)),
+  agentKey: boundedText(100),
+  createdAt: UtcDateTimeStringSchema,
+  updatedAt: UtcDateTimeStringSchema,
+}).annotate({ identifier: "AgentInstance" })
+export const AgentInstancePageSchema = Schema.Struct({
+  items: Schema.Array(AgentInstanceSchema),
+}).annotate({ identifier: "AgentInstancePage" })
+export const AgentRunSchema = Schema.Struct({
+  id: Schema.String.check(Schema.isUUID(4)),
+  jobId: Schema.String.check(Schema.isUUID(4)),
+  agentInstanceId: Schema.NullOr(Schema.String.check(Schema.isUUID(4))),
+  model: boundedText(100),
+  status: Schema.Literals([
+    "queued",
+    "running",
+    "waiting_approval",
+    "retrying",
+    "succeeded",
+    "failed",
+    "canceled",
+  ]),
+  policyHash: boundedText(128),
+  createdAt: UtcDateTimeStringSchema,
+  finishedAt: Schema.NullOr(UtcDateTimeStringSchema),
+  failureCode: Schema.NullOr(boundedText(100)),
+}).annotate({ identifier: "AgentRun" })
+const PublicAgentPayloadSchema = Schema.Record(
+  Schema.String,
+  Schema.Union([Schema.Null, Schema.Boolean, Schema.Number, Schema.String])
+)
+export const AgentMemorySchema = Schema.Struct({
+  id: Schema.String.check(Schema.isUUID(4)),
+  agentInstanceId: Schema.String.check(Schema.isUUID(4)),
+  kind: Schema.Literals(["preference", "episode_history", "working_note"]),
+  status: Schema.Literals(["proposed", "active", "rejected", "deleted"]),
+  version: Schema.Int,
+  content: PublicAgentPayloadSchema,
+  expiresAt: Schema.NullOr(UtcDateTimeStringSchema),
+  createdAt: UtcDateTimeStringSchema,
+  updatedAt: UtcDateTimeStringSchema,
+}).annotate({ identifier: "AgentMemory" })
+export const AgentMemoryPageSchema = Schema.Struct({
+  items: Schema.Array(AgentMemorySchema),
+}).annotate({ identifier: "AgentMemoryPage" })
+export const CreateAgentMemorySchema = Schema.Struct({
+  kind: Schema.Literals(["preference", "working_note"]),
+  content: PublicAgentPayloadSchema,
+  expiresAt: Schema.optional(UtcDateTimeStringSchema),
+})
+const agentInstanceParams = Schema.Struct({
+  agentInstanceId: Schema.String.check(Schema.isUUID(4)),
+})
+const agentMemoryParams = Schema.Struct({
+  agentInstanceId: Schema.String.check(Schema.isUUID(4)),
+  memoryId: Schema.String.check(Schema.isUUID(4)),
+})
+const agentRunParams = Schema.Struct({
+  runId: Schema.String.check(Schema.isUUID(4)),
+})
+export const AgentRunEventSchema = Schema.Struct({
+  schemaVersion: Schema.Literal(1),
+  runId: Schema.String.check(Schema.isUUID(4)),
+  sequence: Schema.Natural,
+  type: boundedText(80),
+  occurredAt: UtcDateTimeStringSchema,
+  payload: PublicAgentPayloadSchema,
+})
+export const AgentRunEventStreamSchema = HttpApiSchema.StreamSse({
+  events: Schema.Struct({
+    id: Schema.String,
+    event: boundedText(80),
+    data: Schema.fromJsonString(AgentRunEventSchema),
+  }),
+})
+export const listAgentInstancesEndpoint = HttpApiEndpoint.get(
+  "listAgentInstances",
+  "/v1/me/agent-instances",
+  {
+    headers: SessionHeadersSchema,
+    success: AgentInstancePageSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+)
+export const getAgentRunEndpoint = HttpApiEndpoint.get(
+  "getAgentRun",
+  "/v1/me/agent-runs/:runId",
+  {
+    headers: SessionHeadersSchema,
+    params: agentRunParams,
+    success: AgentRunSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const streamAgentRunEventsEndpoint = HttpApiEndpoint.get(
+  "streamAgentRunEvents",
+  "/v1/me/agent-runs/:runId/events",
+  {
+    headers: EpisodeJobEventsHeadersSchema,
+    params: agentRunParams,
+    query: EpisodeJobEventsQuerySchema,
+    success: AgentRunEventStreamSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const listAgentMemoriesEndpoint = HttpApiEndpoint.get(
+  "listAgentMemories",
+  "/v1/me/agent-instances/:agentInstanceId/memories",
+  {
+    headers: SessionHeadersSchema,
+    params: agentInstanceParams,
+    success: AgentMemoryPageSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const createAgentMemoryEndpoint = HttpApiEndpoint.post(
+  "createAgentMemory",
+  "/v1/me/agent-instances/:agentInstanceId/memories",
+  {
+    headers: SessionHeadersSchema,
+    params: agentInstanceParams,
+    payload: CreateAgentMemorySchema,
+    success: AgentMemorySchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const approveAgentMemoryEndpoint = HttpApiEndpoint.post(
+  "approveAgentMemory",
+  "/v1/me/agent-instances/:agentInstanceId/memories/:memoryId/approve",
+  {
+    headers: SessionHeadersSchema,
+    params: agentMemoryParams,
+    success: AgentMemorySchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const deleteAgentMemoryEndpoint = HttpApiEndpoint.delete(
+  "deleteAgentMemory",
+  "/v1/me/agent-instances/:agentInstanceId/memories/:memoryId",
+  {
+    headers: SessionHeadersSchema,
+    params: agentMemoryParams,
+    success: HttpApiSchema.NoContent,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+
 const systemGroup = HttpApiGroup.make("system")
   .add(healthEndpoint)
   .annotateMerge(OpenApi.annotations({ title: "System" }))
@@ -1253,6 +1457,17 @@ const personalizationGroup = HttpApiGroup.make("personalization")
     enrichResetDailyEndpoint
   )
   .annotateMerge(OpenApi.annotations({ title: "Personalization" }))
+const agentsGroup = HttpApiGroup.make("agents")
+  .add(
+    listAgentInstancesEndpoint,
+    getAgentRunEndpoint,
+    streamAgentRunEventsEndpoint,
+    listAgentMemoriesEndpoint,
+    createAgentMemoryEndpoint,
+    approveAgentMemoryEndpoint,
+    deleteAgentMemoryEndpoint
+  )
+  .annotateMerge(OpenApi.annotations({ title: "Agents" }))
 
 export const gatewayApi = HttpApi.make("gateway")
   .add(
@@ -1263,7 +1478,8 @@ export const gatewayApi = HttpApi.make("gateway")
     feedSubscriptionsGroup,
     feedsGroup,
     articlesGroup,
-    personalizationGroup
+    personalizationGroup,
+    agentsGroup
   )
   .annotateMerge(
     OpenApi.annotations({

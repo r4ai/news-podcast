@@ -210,6 +210,7 @@ describe("NATS GatewayPorts adapter", () => {
       subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
       feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
       feedUrl: "https://feeds.example.com/news.xml",
+      enabled: true,
       createdAt: "2026-08-12T00:00:00.000Z",
     }
     const client = fakeClient(async (request) => {
@@ -263,7 +264,12 @@ describe("NATS GatewayPorts adapter", () => {
     )
 
     expect(feeds.items).toEqual([
-      { id: subscription.feedId, feedUrl: subscription.feedUrl },
+      {
+        id: subscription.feedId,
+        name: "feeds.example.com",
+        siteUrl: "https://feeds.example.com/",
+        feedUrl: subscription.feedUrl,
+      },
     ])
     expect(registered.feed.id).toBe(subscription.feedId)
     expect(paused.enabled).toBe(false)
@@ -1035,7 +1041,14 @@ describe("NATS GatewayPorts adapter", () => {
       subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
       feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
       feedUrl: "https://feeds.example.com/news.xml",
+      enabled: true,
       createdAt: "2026-08-12T00:00:00.000Z",
+    }
+    const publicSubscription = {
+      id: subscription.subscriptionId,
+      feedId: subscription.feedId,
+      enabled: true,
+      createdAt: subscription.createdAt,
     }
     const client = fakeClient(async (request) => {
       requests.push(request)
@@ -1084,10 +1097,13 @@ describe("NATS GatewayPorts adapter", () => {
           }),
         })
       )
-    ).resolves.toEqual(subscription)
+    ).resolves.toEqual(publicSubscription)
     await expect(
       Effect.runPromise(ports.listFeedSubscriptions(sessionHeaders))
-    ).resolves.toEqual({ items: [subscription], page: { hasMore: false } })
+    ).resolves.toEqual({
+      items: [publicSubscription],
+      page: { hasMore: false },
+    })
     await expect(
       Effect.runPromise(
         ports.deleteFeedSubscription({

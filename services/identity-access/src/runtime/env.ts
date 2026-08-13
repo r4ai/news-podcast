@@ -46,6 +46,8 @@ const GoogleSchema = Schema.Struct({
 })
 
 export const IdentityAccessConfigSchema = Schema.Struct({
+  httpHost: Schema.NonEmptyString.check(Schema.isMaxLength(255)),
+  httpPort: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_535 })),
   databasePath: DatabasePathSchema,
   secret: SecretSchema,
   baseUrl: HttpUrlSchema,
@@ -103,6 +105,8 @@ export const readIdentityAccessConfig = (
       .filter((value) => value.length > 0)
 
     return yield* parseConfig({
+      httpHost: env.IDENTITY_HTTP_HOST?.trim() || "0.0.0.0",
+      httpPort: Number(env.IDENTITY_HTTP_PORT ?? "4002"),
       databasePath: env.IDENTITY_DATABASE_PATH?.trim() ?? "",
       secret: env.BETTER_AUTH_SECRET ?? "",
       baseUrl: env.BETTER_AUTH_URL?.trim() ?? "",

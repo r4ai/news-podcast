@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import {
   aiSummarySnippet,
-  applyClientFilters,
   archiveLabel,
   archiveMetaLabel,
   articleBaseUrl,
@@ -14,7 +13,6 @@ import {
   isArchived,
   MARKDOWN_FALLBACK_MIN_LENGTH,
   shouldFallbackToArchive,
-  shouldShowRelevanceScore,
   siblingArticleId,
   toBulkFilter,
   toFacetsQuery,
@@ -38,7 +36,6 @@ function article(overrides: Partial<Article>): Article {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
     ...overrides,
   } as Article
 }
@@ -57,10 +54,6 @@ describe("validateArticlesSearch", () => {
       q: "otel",
       feedIds: ["feed-1", "feed-2"],
       includeHidden: "true",
-      usedInEpisode: "false",
-      period: "week",
-      archiveStatusFilter: "failed",
-      tagIds: ["tag-1"],
     })
     expect(parsed).toEqual({
       state: "saved",
@@ -68,15 +61,11 @@ describe("validateArticlesSearch", () => {
       q: "otel",
       feedIds: ["feed-1", "feed-2"],
       includeHidden: true,
-      usedInEpisode: false,
-      period: "week",
-      archiveStatusFilter: "failed",
-      tagIds: ["tag-1"],
     })
   })
 
-  it("accepts the relevance sort value", () => {
-    expect(validateArticlesSearch({ sort: "relevance" }).sort).toBe("relevance")
+  it("falls back when an unimplemented sort value is supplied", () => {
+    expect(validateArticlesSearch({ sort: "relevance" }).sort).toBe("newest")
   })
 
   it("normalizes a single feedId query value into an array", () => {
@@ -110,26 +99,17 @@ describe("query builders", () => {
       feedIds: ["feed-1"],
       sort: "newest",
       includeHidden: "true",
-      usedInEpisode: undefined,
-      tagIds: undefined,
     })
     expect(toListQuery(defaultArticlesSearch).q).toBeUndefined()
     expect(toListQuery(defaultArticlesSearch).feedIds).toBeUndefined()
-    expect(toListQuery({ ...search, tagIds: ["tag-1"] }).tagIds).toEqual([
-      "tag-1",
-    ])
   })
 
-  it("keeps the facets query scoped to q/feedIds/includeHidden/tagIds", () => {
+  it("keeps the facets query scoped to q/feedIds/includeHidden", () => {
     expect(toFacetsQuery(search)).toEqual({
       q: "otel",
       feedIds: ["feed-1"],
       includeHidden: "true",
-      tagIds: undefined,
     })
-    expect(toFacetsQuery({ ...search, tagIds: ["tag-1"] }).tagIds).toEqual([
-      "tag-1",
-    ])
   })
 
   it("keeps the bulk-state filter scoped to server-known axes", () => {
@@ -178,39 +158,6 @@ describe("groupArticlesByDate", () => {
     expect(groups.map((group) => group.key)).toEqual(["today", "older"])
     expect(groups[0]?.articles).toHaveLength(2)
     expect(groups[1]?.articles).toHaveLength(1)
-  })
-})
-
-describe("applyClientFilters", () => {
-  const articles = [
-    article({
-      id: "a",
-      archiveStatus: "succeeded",
-      publishedAt: now.toISOString(),
-    }),
-    article({
-      id: "b",
-      archiveStatus: "failed",
-      publishedAt: "2026-06-01T00:00:00.000Z",
-    }),
-  ]
-
-  it("filters by archive status", () => {
-    const filtered = applyClientFilters(
-      articles,
-      { period: "all", archiveStatusFilter: "failed" },
-      now
-    )
-    expect(filtered.map((a) => a.id)).toEqual(["b"])
-  })
-
-  it("filters by period, measured from now", () => {
-    const filtered = applyClientFilters(
-      articles,
-      { period: "today", archiveStatusFilter: "all" },
-      now
-    )
-    expect(filtered.map((a) => a.id)).toEqual(["a"])
   })
 })
 
@@ -320,15 +267,6 @@ describe("articleSnippet", () => {
     expect(
       articleSnippet({ aiSummary: undefined, summary: undefined })
     ).toBeUndefined()
-  })
-})
-
-describe("shouldShowRelevanceScore", () => {
-  it("shows the score only for the relevance sort", () => {
-    expect(shouldShowRelevanceScore("relevance")).toBe(true)
-    expect(shouldShowRelevanceScore("newest")).toBe(false)
-    expect(shouldShowRelevanceScore("oldest")).toBe(false)
-    expect(shouldShowRelevanceScore("source")).toBe(false)
   })
 })
 

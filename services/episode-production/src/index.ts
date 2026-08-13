@@ -112,6 +112,19 @@ export {
   type ReadingDictionaryRpcDelivery,
   type ReadingDictionaryRpcDependencies,
 } from "./adapters/reading-dictionary-rpc.js"
+export {
+  makeAgentAuditRpcHandler,
+  type AgentAuditRpcDelivery,
+  type AgentAuditRpcDependencies,
+} from "./adapters/agent-audit-rpc.js"
+export { makeIdentityScheduleClient } from "./adapters/identity-schedule-client.js"
+export {
+  runScheduledGenerationLoop,
+  runScheduledGenerationTick,
+  type DueScheduledGeneration,
+  type ScheduledGenerationEvent,
+  type ScheduledGenerationPorts,
+} from "./application/scheduled-generation.js"
 export * from "./domain/episode-job.js"
 export * from "./domain/agent-audit-memory.js"
 export * from "./domain/provider-reliability.js"

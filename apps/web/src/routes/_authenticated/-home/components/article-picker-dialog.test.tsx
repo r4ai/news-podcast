@@ -18,8 +18,6 @@ function article(id: string, title: string): Article {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
-    tags: [],
   } as Article
 }
 

@@ -19,8 +19,6 @@ function article(id: string) {
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
-    tags: [],
   }
 }
 

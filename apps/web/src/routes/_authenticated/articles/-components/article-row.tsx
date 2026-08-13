@@ -1,6 +1,5 @@
-import { Bookmark, BookmarkCheck, Mic } from "lucide-react"
+import { Bookmark, BookmarkCheck } from "lucide-react"
 
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -14,8 +13,6 @@ import {
 export type ArticleRowProps = {
   readonly article: Article
   readonly isSelected: boolean
-  /** おすすめ順のときだけtrue。この時だけスコアを数値表示する。 */
-  readonly showRelevanceScore: boolean
   readonly onToggleSaved: (article: Article) => void
   readonly onSelect: (article: Article) => void
 }
@@ -24,7 +21,6 @@ export type ArticleRowProps = {
 export function ArticleRow({
   article,
   isSelected,
-  showRelevanceScore,
   onSelect,
   onToggleSaved,
 }: ArticleRowProps) {
@@ -70,39 +66,10 @@ export function ArticleRow({
             {compactArticleTimestamp(articleTimestamp(article))}
           </time>
           {meta ? <span>{meta}</span> : null}
-          {showRelevanceScore && typeof article.relevanceScore === "number" ? (
-            <Badge
-              aria-label={`適合度スコア ${article.relevanceScore}`}
-              className="tabular-nums"
-              variant="outline"
-            >
-              {article.relevanceScore}
-            </Badge>
-          ) : null}
-          {article.usedInEpisode ? (
-            <Mic
-              aria-label="番組で採用済み"
-              className="size-3 shrink-0"
-              role="img"
-            />
-          ) : null}
         </span>
         {snippet ? (
           <span className="line-clamp-1 text-xs text-muted-foreground">
             {snippet}
-          </span>
-        ) : null}
-        {article.tags.length > 0 ? (
-          <span className="flex flex-wrap items-center gap-1 overflow-hidden">
-            {article.tags.map((tag) => (
-              <Badge
-                className="max-w-28 truncate text-[0.625rem]"
-                key={tag}
-                variant="secondary"
-              >
-                {tag}
-              </Badge>
-            ))}
           </span>
         ) : null}
       </button>

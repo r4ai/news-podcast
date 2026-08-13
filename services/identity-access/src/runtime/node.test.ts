@@ -76,6 +76,8 @@ describe("identity-access Node RPC runtime", () => {
               localTime: "07:30" as never,
               timeZone: "Asia/Tokyo" as never,
             }),
+          findDue: () => Effect.succeed([]),
+          completeScheduled: () => Effect.void,
         },
         {
           connectNats: async (_servers, subject) => {
@@ -96,6 +98,8 @@ describe("identity-access Node RPC runtime", () => {
       subjects.identity.resolveSession,
       subjects.identity.getGenerationSettings,
       subjects.identity.updateGenerationSettings,
+      subjects.identity.discoverDueGenerations,
+      subjects.identity.completeScheduledGeneration,
     ]
     expect(connected.sort()).toEqual([...expected].sort())
     expect(drained.sort()).toEqual([...expected].sort())

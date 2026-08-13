@@ -92,15 +92,6 @@ function PickerRow({
             <time dateTime={articleTimestamp(article)}>
               {publishedAtLabel(articleTimestamp(article))}
             </time>
-            {typeof article.relevanceScore === "number" ? (
-              <Badge
-                aria-label={`適合度スコア ${article.relevanceScore}`}
-                className="ml-auto shrink-0 tabular-nums"
-                variant="outline"
-              >
-                {article.relevanceScore}
-              </Badge>
-            ) : null}
           </span>
           {snippet ? (
             <span className="line-clamp-1 text-xs text-muted-foreground">
@@ -239,7 +230,7 @@ export function ArticlePickerDialog({
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("ja"))
   const filteredArticles = deferredQuery
     ? body.articles.filter((article) =>
-        [article.title, article.sourceName, ...article.tags].some((value) =>
+        [article.title, article.sourceName].some((value) =>
           value.toLocaleLowerCase("ja").includes(deferredQuery)
         )
       )

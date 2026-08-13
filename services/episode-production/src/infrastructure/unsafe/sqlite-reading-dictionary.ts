@@ -14,8 +14,14 @@ export type ReadingDictionaryRow = Readonly<{
 
 export type UnsafeReadingDictionaryHandle = Readonly<{
   transaction: <Value>(body: () => Value) => Value
-  findOwnedById: (ownerId: string, entryId: string) => ReadingDictionaryRow | undefined
-  findOwnedBySurface: (ownerId: string, surface: string) => ReadingDictionaryRow | undefined
+  findOwnedById: (
+    ownerId: string,
+    entryId: string
+  ) => ReadingDictionaryRow | undefined
+  findOwnedBySurface: (
+    ownerId: string,
+    surface: string
+  ) => ReadingDictionaryRow | undefined
   listOwned: (ownerId: string) => readonly ReadingDictionaryRow[]
   insert: (row: ReadingDictionaryRow) => void
   update: (input: {
@@ -106,9 +112,7 @@ export const openUnsafeReadingDictionaryHandle = (
   return {
     transaction,
     findOwnedById: (ownerId, entryId) =>
-      findOwnedById.get(ownerId, entryId) as
-        | ReadingDictionaryRow
-        | undefined,
+      findOwnedById.get(ownerId, entryId) as ReadingDictionaryRow | undefined,
     findOwnedBySurface: (ownerId, surface) =>
       findOwnedBySurface.get(ownerId, surface) as
         | ReadingDictionaryRow
@@ -138,8 +142,7 @@ export const openUnsafeReadingDictionaryHandle = (
         input.entryId
       )
     },
-    remove: (ownerId, entryId) =>
-      remove.run(ownerId, entryId).changes === 1,
+    remove: (ownerId, entryId) => remove.run(ownerId, entryId).changes === 1,
     close: () => database.close(),
   }
 }

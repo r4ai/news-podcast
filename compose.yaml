@@ -14,6 +14,7 @@ services:
       GATEWAY_HEALTH_PORT: "4101"
       HEALTH_PORT: "4101"
       NATS_SERVERS: nats://nats:4222
+      IDENTITY_HTTP_ORIGIN: http://identity-access:4002
     ports:
       - "127.0.0.1:4001:4001"
       - "127.0.0.1:4101:4101"
@@ -27,7 +28,13 @@ services:
       episode-library:
         condition: service_healthy
     healthcheck: &context-health
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + process.env.HEALTH_PORT + '/health/ready').then(r=>{if(!r.ok)process.exit(1)})"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:' + process.env.HEALTH_PORT + '/health/ready').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -45,6 +52,7 @@ services:
     environment:
       IDENTITY_DATABASE_PATH: /app/data/identity.sqlite
       IDENTITY_HEALTH_PORT: "4102"
+      IDENTITY_HTTP_PORT: "4002"
       HEALTH_PORT: "4102"
       NATS_SERVERS: nats://nats:4222
     volumes:
@@ -145,7 +153,11 @@ services:
   nats-provision:
     image: natsio/nats-box:0.19.2
     command:
-      ["sh", "-ec", "nats --server nats://nats:4222 stream add EPISODE_PRODUCTION --subjects 'production.job-completed.v2' --storage file --retention limits --discard old --max-msgs=-1 --max-bytes=-1 --max-age=30d --dupe-window=2m --replicas=1 --no-allow-rollup --no-deny-delete --no-deny-purge --defaults || nats --server nats://nats:4222 stream info EPISODE_PRODUCTION"]
+      [
+        "sh",
+        "-ec",
+        "nats --server nats://nats:4222 stream add EPISODE_PRODUCTION --subjects 'production.job-completed.v2' --storage file --retention limits --discard old --max-msgs=-1 --max-bytes=-1 --max-age=30d --dupe-window=2m --replicas=1 --no-allow-rollup --no-deny-delete --no-deny-purge --defaults || nats --server nats://nats:4222 stream info EPISODE_PRODUCTION",
+      ]
     depends_on:
       nats:
         condition: service_healthy
@@ -158,77 +170,12 @@ services:
       network: host
     command: ["pnpm", "--filter", "web", "dev", "--host", "0.0.0.0"]
     environment:
-      VITE_API_PROXY_TARGET: http://api:4000
+      VITE_API_PROXY_TARGET: http://gateway:4001
     ports:
       - "127.0.0.1:4173:4173"
     depends_on:
-      api:
+      gateway:
         condition: service_healthy
-
-  api:
-    build:
-      context: .
-      dockerfile: infra/Dockerfile.node
-      network: host
-    command: ["pnpm", "--filter", "@news-podcast/api", "dev"]
-    env_file:
-      - path: .env.example
-      - path: .env
-        required: false
-    ports:
-      - "127.0.0.1:4000:4000"
-    volumes:
-      - app-data:/app/data
-      - audio-data:/app/audio:ro
-    depends_on:
-      seaweedfs:
-        condition: service_started
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)})",
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  worker:
-    build:
-      context: .
-      dockerfile: infra/Dockerfile.node
-      network: host
-    command: ["pnpm", "--filter", "@news-podcast/worker", "start"]
-    env_file:
-      - path: .env.example
-      - path: .env
-        required: false
-    environment:
-      OTEL_TRACE_SAMPLE_RATE: "1"
-      WORKER_HEALTH_PORT: "3001"
-    ports:
-      - "127.0.0.1:3001:3001"
-    volumes:
-      - app-data:/app/data
-      - audio-data:/app/audio
-    depends_on:
-      voicevox:
-        condition: service_healthy
-      seaweedfs:
-        condition: service_started
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://localhost:3001/health').then(r=>{if(!r.ok)process.exit(1)})",
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 20
 
   nats:
     image: nats:2.12.1-alpine
@@ -287,7 +234,5 @@ volumes:
   content-data:
   production-data:
   library-data:
-  app-data:
-  audio-data:
   nats-data:
   object-data:

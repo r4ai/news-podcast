@@ -38,7 +38,8 @@ export const assertHealthyDatabase = (path, profile) => {
         .map((row) => row.name)
     )
     for (const table of expectedTables(profile)) {
-      if (!present.has(table)) fail(`database is not a ${profile} service backup`)
+      if (!present.has(table))
+        fail(`database is not a ${profile} service backup`)
     }
   } finally {
     database.close()
@@ -92,14 +93,18 @@ const main = async () => {
     fail(
       "usage: sqlite-state.mjs <backup|restore> <identity|content|production|library> <source> <destination>"
     )
-  if (operation === "backup")
-    await backupDatabase(profile, source, destination)
+  if (operation === "backup") await backupDatabase(profile, source, destination)
   else await restoreDatabase(profile, source, destination)
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === resolve(import.meta.filename)
+) {
   void main().catch((error) => {
-    console.error(error instanceof Error ? error.message : "SQLite state failed")
+    console.error(
+      error instanceof Error ? error.message : "SQLite state failed"
+    )
     process.exitCode = 1
   })
 }

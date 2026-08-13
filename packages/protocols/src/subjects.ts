@@ -3,6 +3,8 @@ export const subjects = {
     resolveSession: "identity.resolve-session.v1",
     getGenerationSettings: "identity.get-generation-settings.v1",
     updateGenerationSettings: "identity.update-generation-settings.v1",
+    discoverDueGenerations: "identity.discover-due-generations.v1",
+    completeScheduledGeneration: "identity.complete-scheduled-generation.v1",
   },
   content: {
     articleArchived: "content.article-archived.v1",
@@ -23,6 +25,7 @@ export const subjects = {
     cancelJob: "production.cancel-job.v1",
     retryJob: "production.retry-job.v1",
     readingDictionary: "production.reading-dictionary.v1",
+    agentAuditMemory: "production.agent-audit-memory.v1",
     jobCompleted: "production.job-completed.v1",
     jobCompletedV2: "production.job-completed.v2",
   },

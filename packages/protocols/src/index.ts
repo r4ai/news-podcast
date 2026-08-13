@@ -128,3 +128,4 @@ export {
 export { subjects, type Subject } from "./subjects.js"
 export * from "./personalization-rpc.js"
 export * from "./article-library-rpc.js"
+export * from "./agent-audit-rpc.js"

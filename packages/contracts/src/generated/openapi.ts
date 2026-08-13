@@ -4,23 +4,6 @@
  */
 
 export interface paths {
-    "/v1/telemetry/{signal}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Forward authenticated same-origin browser OTLP telemetry. */
-        post: operations["ingestBrowserTelemetry"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/health": {
         parameters: {
             query?: never;
@@ -28,8 +11,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Return process liveness without credentials. */
-        get: operations["getHealth"];
+        /** Runtime health */
+        get: operations["health"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38,403 +21,21 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/feeds": {
+    "/api/auth/state": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** @description Search the configured RSS feed catalog. */
-        get: operations["listFeeds"];
-        put?: never;
-        /** @description Discover, register, and subscribe to an arbitrary RSS URL. */
-        post: operations["registerFeed"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List articles from the authenticated owner's subscriptions. */
-        get: operations["listArticles"];
+        /** Resolve the current session */
+        get: operations["resolveSession"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles/facets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return state and per-feed counts for the current search/filter scope. */
-        get: operations["getArticleFacets"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles/{articleId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return one owner-scoped article and archive status. */
-        get: operations["getArticle"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** @description Update read, saved, readLater, or hidden state for one article. */
-        patch: operations["updateArticleState"];
-        trace?: never;
-    };
-    "/v1/me/articles/bulk-state": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Apply read/saved/readLater/hidden state to every article matching a filter (e.g. mark all as read). */
-        post: operations["bulkUpdateArticleState"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles/{articleId}/markdown": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return the archived Markdown used by the Podcast Agent. */
-        get: operations["getArticleMarkdown"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles/{articleId}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return sanitized replay HTML with external scripts disabled. */
-        get: operations["getArticleArchive"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles/{articleId}/enrich": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Recompute the AI summary and relevance score for one article on demand. */
-        post: operations["enrichArticle"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/enrich/queue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return the AI enrichment queue status: processing, pending, failed, recent, and the daily budget. */
-        get: operations["getEnrichQueue"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/enrich/queue/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Stream the AI enrichment queue status as snapshots over SSE while it changes. */
-        get: operations["streamEnrichQueueEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/enrich/reprocess": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Explicitly enqueue all previously attempted articles for AI enrichment again, including terminal failures. */
-        post: operations["enrichReprocess"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/enrich/reset-daily": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Reset the daily AI enrichment usage counter for development convenience. */
-        post: operations["enrichResetDaily"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles/{articleId}/assets/{hash}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return one owner-scoped asset captured with an article snapshot. */
-        get: operations["getArticleAsset"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/articles/{articleId}/tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** @description Replace the manual tag set for one article. */
-        put: operations["setArticleTags"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List the authenticated owner's tag vocabulary (used both for manual tagging and as the AI candidate set). */
-        get: operations["listTags"];
-        put?: never;
-        /** @description Add a tag to the owner's vocabulary (idempotent by name). */
-        post: operations["createTag"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/tags/{tagId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** @description Remove one tag from the owner's vocabulary. */
-        delete: operations["deleteTag"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/tag-suggestions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List AI-proposed tag names that fell outside the owner's vocabulary, most frequent first. */
-        get: operations["listTagSuggestions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/tag-suggestions/promote": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Turn a suggested tag name into a real vocabulary tag and remove the suggestion. */
-        post: operations["promoteTagSuggestion"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/reading-dictionary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List the authenticated owner's reading dictionary entries (surface→reading mappings for TTS). */
-        get: operations["listReadingDictionary"];
-        put?: never;
-        /** @description Add a reading dictionary entry (idempotent by surface). */
-        post: operations["createReadingDictionary"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/reading-dictionary/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** @description Update a reading dictionary entry. */
-        put: operations["updateReadingDictionary"];
-        post?: never;
-        /** @description Delete a reading dictionary entry. */
-        delete: operations["deleteReadingDictionary"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/feed-subscriptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List the authenticated owner's feed subscriptions. */
-        get: operations["listSubscriptions"];
-        put?: never;
-        /** @description Subscribe the authenticated owner to a catalog feed. */
-        post: operations["createSubscription"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/feed-subscriptions/{subscriptionId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** @description Delete one owner-scoped subscription. */
-        delete: operations["deleteSubscription"];
-        options?: never;
-        head?: never;
-        /** @description Enable or pause one owner-scoped subscription. */
-        patch: operations["updateSubscription"];
-        trace?: never;
-    };
-    "/v1/me/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return the authenticated owner's generation schedule and interest profile. */
-        get: operations["getSettings"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** @description Update the authenticated owner's generation schedule and/or interest profile. */
-        patch: operations["updateSettings"];
         trace?: never;
     };
     "/v1/episode-jobs": {
@@ -444,10 +45,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description List recent generation jobs for the authenticated owner. */
+        /** List episode jobs */
         get: operations["listEpisodeJobs"];
         put?: never;
-        /** @description Create an idempotent asynchronous episode generation job. */
+        /** Create an idempotent episode job */
         post: operations["createEpisodeJob"];
         delete?: never;
         options?: never;
@@ -462,7 +63,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Return progress and retry state for one generation job. */
+        /** Get an episode job */
         get: operations["getEpisodeJob"];
         put?: never;
         post?: never;
@@ -481,7 +82,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Cancel queued, running, or retrying work and stop its active sandbox session. */
+        /** Cancel an episode job */
         post: operations["cancelEpisodeJob"];
         delete?: never;
         options?: never;
@@ -498,7 +99,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Create a new job from a failed job's feed, Memory, and policy snapshots. */
+        /** Retry an episode job */
         post: operations["retryEpisodeJob"];
         delete?: never;
         options?: never;
@@ -513,114 +114,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Stream generation progress as AG-UI events over SSE. The first event is always STATE_SNAPSHOT; pass Last-Event-ID to resume without gaps or duplicates. */
+        /** Replay episode job events */
         get: operations["streamEpisodeJobEvents"];
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-runs/{runId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Return one owner-scoped Agent run without private reasoning. */
-        get: operations["getAgentRun"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-runs/{runId}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List the sanitized, versioned event timeline for an Agent run. */
-        get: operations["listAgentRunEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-instances": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List durable Agent instances owned by the authenticated user. */
-        get: operations["listAgentInstances"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-instances/{agentId}/memories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description List non-deleted Memory entries for one owned Agent instance. */
-        get: operations["listAgentMemories"];
-        put?: never;
-        /** @description Propose a preference or working note for later approval. */
-        post: operations["createAgentMemory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-instances/{agentId}/memories/{memoryId}/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Activate a proposed Memory within the same owner and Agent scope. */
-        post: operations["approveAgentMemory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-instances/{agentId}/memories/{memoryId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** @description Soft-delete a Memory within the same owner and Agent scope. */
-        delete: operations["deleteAgentMemory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -633,7 +131,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description List completed episodes for the authenticated owner. */
+        /** List completed episodes */
         get: operations["listEpisodes"];
         put?: never;
         post?: never;
@@ -650,7 +148,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Return one completed episode with its sources. */
+        /** Get a completed episode */
         get: operations["getEpisode"];
         put?: never;
         post?: never;
@@ -669,7 +167,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Issue a short-lived owner-scoped audio URL. */
+        /** Issue short-lived audio access */
         post: operations["createAudioAccess"];
         delete?: never;
         options?: never;
@@ -677,18 +175,436 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/audio/{token}": {
+    "/v1/me/feed-subscriptions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** @description Stream WAV audio using a short-lived signed token and Range. */
-        get: operations["getEpisodeAudio"];
+        /** List feed subscriptions */
+        get: operations["listFeedSubscriptions"];
+        put?: never;
+        /** Subscribe to an RSS feed URL */
+        post: operations["addFeedSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/feed-subscriptions/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a feed subscription */
+        delete: operations["deleteFeedSubscription"];
+        options?: never;
+        head?: never;
+        patch: operations["feedSubscriptions.updateFeedSubscription"];
+        trace?: never;
+    };
+    "/v1/feeds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["feeds.listFeeds"];
+        put?: never;
+        post: operations["feeds.registerFeed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["articles.listArticles"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["articles.getArticleFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["articles.getArticle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["articles.patchArticle"];
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["articles.getArticleMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/bulk-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["articles.bulkPatchArticles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["articles.archiveArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["articles.listArticleTags"];
+        put: operations["articles.setArticleTags"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/enrich": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["articles.enrichArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["personalization.getSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["personalization.updateSettings"];
+        trace?: never;
+    };
+    "/v1/me/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["personalization.listTags"];
+        put?: never;
+        post: operations["personalization.createTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/tags/{tagId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["personalization.deleteTag"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/tag-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["personalization.listTagSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/tag-suggestions/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["personalization.promoteTagSuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/reading-dictionary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["personalization.listReadingDictionary"];
+        put?: never;
+        post: operations["personalization.createReadingDictionary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/reading-dictionary/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["personalization.updateReadingDictionary"];
+        post?: never;
+        delete: operations["personalization.deleteReadingDictionary"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/enrich/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["personalization.getEnrichQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/enrich/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["personalization.enrichReprocess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/enrich/reset-daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["personalization.enrichResetDaily"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/agent-instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["agents.listAgentInstances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/agent-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["agents.getAgentRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/agent-runs/{runId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["agents.streamAgentRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/agent-instances/{agentInstanceId}/memories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["agents.listAgentMemories"];
+        put?: never;
+        post: operations["agents.createAgentMemory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["agents.approveAgentMemory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["agents.deleteAgentMemory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -698,262 +614,404 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        Problem: {
+        HealthResponse: {
+            /** @enum {string} */
+            status: "ok";
+        };
+        LoginMethods: {
+            development: boolean;
+            google: boolean;
+        };
+        SessionResponse: {
+            /** @enum {boolean} */
+            authenticated: false;
+            loginMethods: components["schemas"]["LoginMethods"];
+        } | {
+            /** @enum {boolean} */
+            authenticated: true;
+            userId: string & (unknown & unknown & unknown);
+            loginMethods: components["schemas"]["LoginMethods"];
+        };
+        UnavailableProblem: {
             type: string;
-            title: string;
-            status: number;
-            code: string;
-            detail?: string;
+            title: string & (unknown & unknown & unknown);
+            /** @enum {number} */
+            status: 503;
+            code: string & (unknown & unknown & unknown);
+            detail?: string | null;
         };
-        Feed: {
-            id: components["schemas"]["Id"];
-            name: string;
-            /** Format: uri */
-            siteUrl: string;
-            /** Format: uri */
-            feedUrl: string;
+        CreateEpisodeJobRequest: {
+            /** @enum {string} */
+            trigger: "manual";
+            articleIds?: ((string & unknown)[] & (unknown & unknown)) | null;
         };
-        /** Format: uuid */
-        Id: string;
-        FeedSubscription: {
-            id: components["schemas"]["Id"];
-            feedId: components["schemas"]["Id"];
-            enabled: boolean;
-            /** Format: date-time */
+        /** @enum {string} */
+        JobStatus: "queued" | "running" | "retrying" | "succeeded" | "failed" | "canceled";
+        JobReceipt: {
+            id: string & unknown;
+            status: components["schemas"]["JobStatus"];
+            createdAt: string;
+            attempt: number & unknown;
+            /** @enum {number} */
+            maxAttempts: 4;
+        };
+        BadRequestProblem: {
+            type: string;
+            title: string & (unknown & unknown & unknown);
+            /** @enum {number} */
+            status: 400;
+            code: string & (unknown & unknown & unknown);
+            detail?: string | null;
+        };
+        UnauthorizedProblem: {
+            type: string;
+            title: string & (unknown & unknown & unknown);
+            /** @enum {number} */
+            status: 401;
+            code: string & (unknown & unknown & unknown);
+            detail?: string | null;
+        };
+        ConflictProblem: {
+            type: string;
+            title: string & (unknown & unknown & unknown);
+            /** @enum {number} */
+            status: 409;
+            code: string & (unknown & unknown & unknown);
+            detail?: string | null;
+        };
+        UnprocessableProblem: {
+            type: string;
+            title: string & (unknown & unknown & unknown);
+            /** @enum {number} */
+            status: 422;
+            code: string & (unknown & unknown & unknown);
+            detail?: string | null;
+        };
+        /** @enum {string} */
+        JobStage: "researching_sources" | "fetching_sources" | "generating_script" | "synthesizing_audio" | "storing_episode";
+        EpisodeJob: {
+            id: string & unknown;
+            status: components["schemas"]["JobStatus"];
+            createdAt: string;
+            articleIds?: (string & unknown)[] | null;
+            attempt: number & unknown;
+            /** @enum {number} */
+            maxAttempts: 4;
+            stage?: components["schemas"]["JobStage"] | null;
+            stageStartedAt?: string | null;
+            lastProgressAt?: string | null;
+            deadlineAt?: string | null;
+            stageProgress?: {
+                completed: number & unknown;
+                total: number & unknown;
+            } | null;
+            startedAt?: string | null;
+            finishedAt?: string | null;
+            nextAttemptAt?: string | null;
+            episodeId?: (string & unknown) | null;
+            failure?: {
+                code: string & (unknown & unknown & unknown);
+                message: string & (unknown & unknown & unknown);
+                retryable: boolean;
+            } | null;
+        };
+        EpisodeJobPage: {
+            items: components["schemas"]["EpisodeJob"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
+            };
+        };
+        NotFoundProblem: {
+            type: string;
+            title: string & (unknown & unknown & unknown);
+            /** @enum {number} */
+            status: 404;
+            code: string & (unknown & unknown & unknown);
+            detail?: string | null;
+        };
+        EpisodeSource: {
+            url: string;
+            title: string & (unknown & unknown & unknown);
+            publishedAt?: string | null;
+            snapshotId?: (string & unknown) | null;
+            sourceKind?: ("rss" | "web") | null;
+        };
+        Episode: {
+            id: string & unknown;
+            title: string & (unknown & unknown & unknown);
+            script: string & (unknown & unknown & unknown);
+            sources: components["schemas"]["EpisodeSource"][] & unknown;
             createdAt: string;
         };
-        Article: {
-            id: components["schemas"]["Id"];
-            feedId: components["schemas"]["Id"];
-            sourceName: string;
-            title: string;
-            /** Format: uri */
+        EpisodePage: {
+            items: components["schemas"]["Episode"][];
+            page: {
+                hasMore: boolean;
+                nextCursor?: (string & (unknown & unknown & unknown)) | null;
+            };
+        };
+        AudioAccess: {
             url: string;
-            /** Format: date-time */
-            publishedAt?: string;
-            summary?: string;
-            /** Format: date-time */
+            expiresAt: string;
+        };
+        AddFeedSubscriptionRequest: {
+            feedUrl: string & unknown;
+        };
+        CreatedFeedSubscription: {
+            id: string & unknown;
+            feedId: string & unknown;
+            enabled: boolean;
+            createdAt: string;
+        };
+        FeedSubscription: {
+            id: string & unknown;
+            feedId: string & unknown;
+            enabled: boolean;
+            createdAt: string;
+        };
+        FeedSubscriptionPage: {
+            items: components["schemas"]["FeedSubscription"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
+            };
+        };
+        UpdatedFeedSubscription: {
+            id: string & unknown;
+            feedId: string & unknown;
+            enabled: boolean;
+            createdAt: string;
+        };
+        Feed: {
+            id: string & unknown;
+            name: string & (unknown & unknown & unknown);
+            siteUrl: string;
+            feedUrl: string & unknown;
+        };
+        FeedPage: {
+            items: components["schemas"]["Feed"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
+            };
+        };
+        RegisteredFeed: {
+            feed: components["schemas"]["Feed"];
+            subscription: components["schemas"]["FeedSubscription"];
+        };
+        Article: {
+            id: string & unknown;
+            feedId: string & unknown;
+            sourceName: string & (unknown & unknown & unknown);
+            title: string & (unknown & unknown & unknown);
+            url: string;
+            publishedAt?: string | null;
+            summary?: string | null;
             discoveredAt: string;
             /** @enum {string} */
             archiveStatus: "pending" | "archiving" | "succeeded" | "failed";
-            snapshotId?: components["schemas"]["Id"];
+            snapshotId?: (string & unknown) | null;
             read: boolean;
             saved: boolean;
             readLater: boolean;
             hidden: boolean;
-            /** Format: date-time */
-            hiddenAt?: string;
-            usedInEpisode: boolean;
-            archiveUrl?: string;
-            markdownUrl?: string;
-            aiSummary?: string;
-            relevanceScore?: number;
-            relevanceReason?: string;
-            tags: string[];
+            hiddenAt?: string | null;
+            archiveUrl?: string | null;
+            markdownUrl?: string | null;
+            aiSummary?: string | null;
+            relevanceScore?: (number & unknown) | null;
+            relevanceReason?: string | null;
+        };
+        ArticlePage: {
+            items: components["schemas"]["Article"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
+            };
         };
         ArticleFacets: {
             states: {
-                all: number;
-                unread: number;
-                saved: number;
-                later: number;
+                all: number & unknown;
+                unread: number & unknown;
+                saved: number & unknown;
+                later: number & unknown;
             };
             feeds: {
-                feedId: components["schemas"]["Id"];
-                name: string;
-                count: number;
+                feedId: string & unknown;
+                name: string & (unknown & unknown & unknown);
+                count: number & unknown;
             }[];
-            aiPending: number;
+            aiPending: number & unknown;
         };
-        BulkArticleStateResult: {
-            updated: number;
+        Objects_: {
+            items: {
+                articleId: string & unknown;
+                tagId: string & unknown;
+                name: string & (unknown & unknown & unknown);
+                /** @enum {string} */
+                source: "manual" | "ai";
+                confidence: ((number & unknown) | ("Infinity" | "-Infinity" | "NaN")) | null;
+            }[] & unknown;
         };
-        EnrichQueue: {
-            processing: components["schemas"]["EnrichQueueItem"][];
-            pending: {
-                count: number;
-                items: components["schemas"]["EnrichQueueItem"][];
-            };
-            failed: {
-                count: number;
-                items: components["schemas"]["EnrichQueueItem"][];
-            };
-            recent: components["schemas"]["EnrichQueueItem"][];
-            daily: {
-                used: number;
-                limit: number;
-            };
-            reprocessable: {
-                count: number;
-            };
+        Objects_1: {
+            enqueued: number & unknown;
         };
-        EnrichQueueItem: {
-            feedItemId: components["schemas"]["Id"];
-            title: string;
-            sourceName: string;
-            priority: number;
-            /** @enum {string} */
-            reason: "new" | "reprocess";
-            /** @enum {string} */
-            status: "queued" | "processing" | "succeeded" | "failed";
-            attempt: number;
-            error?: string;
-            /** Format: date-time */
-            publishedAt?: string;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            completedAt?: string;
+        GenerationSchedule: {
+            enabled: boolean;
+            localTime: string & unknown;
+            timeZone: string & (unknown & unknown & unknown);
         };
-        Tag: {
-            id: components["schemas"]["Id"];
-            name: string;
-            /** Format: date-time */
-            createdAt: string;
-        };
-        TagSuggestion: {
-            name: string;
-            occurrences: number;
-            /** Format: date-time */
-            lastSeenAt: string;
-        };
-        ReadingDictionaryEntry: {
-            id: components["schemas"]["Id"];
-            surface: string;
-            reading: string;
-            accentType: number;
-            /** Format: uuid */
-            wordUuid?: string;
-            /** @enum {string} */
-            source: "manual" | "ai_auto";
-            episodeJobId?: components["schemas"]["Id"];
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
+        InterestProfile: {
+            include: string & unknown;
+            exclude: string & unknown;
         };
         UserSettings: {
             generationSchedule: components["schemas"]["GenerationSchedule"];
             interestProfile: components["schemas"]["InterestProfile"];
         };
-        GenerationSchedule: {
-            enabled: boolean;
-            localTime: string;
-            timeZone: string;
+        UpdateSettings: {
+            generationSchedule: components["schemas"]["GenerationSchedule"];
+            interestProfile?: components["schemas"]["InterestProfile"] | null;
+        } | {
+            generationSchedule?: components["schemas"]["GenerationSchedule"] | null;
+            interestProfile: components["schemas"]["InterestProfile"];
         };
-        InterestProfile: {
-            include: string;
-            exclude: string;
-        };
-        EpisodeJob: {
-            id: components["schemas"]["Id"];
-            status: components["schemas"]["JobStatus"];
-            /** Format: date-time */
+        Tag: {
+            id: string & unknown;
+            name: string & (unknown & unknown & unknown);
             createdAt: string;
-            articleIds?: components["schemas"]["Id"][];
-            attempt: number;
-            /** @enum {number} */
-            maxAttempts: 4;
-            stage?: components["schemas"]["JobStage"];
-            /** Format: date-time */
-            stageStartedAt?: string;
-            /** Format: date-time */
-            lastProgressAt?: string;
-            /** Format: date-time */
-            deadlineAt?: string;
-            stageProgress?: {
-                completed: number;
-                total: number;
+        };
+        TagPage: {
+            items: components["schemas"]["Tag"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
             };
-            /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            finishedAt?: string;
-            /** Format: date-time */
-            nextAttemptAt?: string;
-            episodeId?: components["schemas"]["Id"];
-            failure?: components["schemas"]["JobFailure"];
         };
-        /** @enum {string} */
-        JobStatus: "queued" | "running" | "retrying" | "succeeded" | "failed" | "canceled";
-        /** @enum {string} */
-        JobStage: "researching_sources" | "fetching_sources" | "generating_script" | "synthesizing_audio" | "storing_episode";
-        JobFailure: {
-            code: string;
-            message: string;
-            retryable: boolean;
+        Objects_2: {
+            name: string & (unknown & unknown & unknown);
         };
-        EpisodeJobReceipt: {
-            id: components["schemas"]["Id"];
-            status: components["schemas"]["JobStatus"];
-            /** Format: date-time */
+        CreatedTag: {
+            id: string & unknown;
+            name: string & (unknown & unknown & unknown);
             createdAt: string;
-            attempt: number;
-            /** @enum {number} */
-            maxAttempts: 4;
         };
-        AgentRun: {
-            id: components["schemas"]["Id"];
-            jobId: components["schemas"]["Id"];
+        TagSuggestion: {
+            name: string & (unknown & unknown & unknown);
+            occurrences: number & unknown;
+            lastSeenAt: string;
+        };
+        TagSuggestionPage: {
+            items: components["schemas"]["TagSuggestion"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
+            };
+        };
+        ReadingDictionaryEntry: {
+            id: string & unknown;
+            surface: string & (unknown & unknown & unknown);
+            reading: string & (unknown & unknown & unknown);
+            accentType: number & unknown;
             /** @enum {string} */
-            status: "queued" | "running" | "waiting_approval" | "retrying" | "succeeded" | "failed" | "canceled";
-            policyHash: string;
-            /** Format: date-time */
+            source: "manual" | "ai_auto";
+            episodeJobId?: (string & unknown) | null;
             createdAt: string;
+            updatedAt: string;
         };
-        AgentEvent: {
-            /** @enum {number} */
-            schemaVersion: 1;
-            runId: components["schemas"]["Id"];
-            sequence: number;
-            type: string;
-            /** Format: date-time */
-            occurredAt: string;
-            payload: {
-                [key: string]: unknown;
+        ReadingDictionaryPage: {
+            items: components["schemas"]["ReadingDictionaryEntry"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
+            };
+        };
+        CreatedReadingDictionaryEntry: {
+            id: string & unknown;
+            surface: string & (unknown & unknown & unknown);
+            reading: string & (unknown & unknown & unknown);
+            accentType: number & unknown;
+            /** @enum {string} */
+            source: "manual" | "ai_auto";
+            episodeJobId?: (string & unknown) | null;
+            createdAt: string;
+            updatedAt: string;
+        };
+        EnrichQueueItem: {
+            feedItemId: string & unknown;
+            title: string;
+            sourceName: string;
+            priority: number & unknown;
+            /** @enum {string} */
+            reason: "new" | "reprocess";
+            /** @enum {string} */
+            status: "queued" | "processing" | "succeeded" | "failed";
+            attempt: number & unknown;
+            error?: string | null;
+            publishedAt?: string | null;
+            createdAt: string;
+            startedAt?: string | null;
+            completedAt?: string | null;
+        };
+        EnrichQueue: {
+            processing: components["schemas"]["EnrichQueueItem"][];
+            pending: {
+                count: number & unknown;
+                items: components["schemas"]["EnrichQueueItem"][];
+            };
+            failed: {
+                count: number & unknown;
+                items: components["schemas"]["EnrichQueueItem"][];
+            };
+            recent: components["schemas"]["EnrichQueueItem"][];
+            daily: {
+                used: number & unknown;
+                limit: number & unknown;
+            };
+            reprocessable: {
+                count: number & unknown;
             };
         };
         AgentInstance: {
-            id: components["schemas"]["Id"];
-            agentKey: string;
-            /** Format: date-time */
+            id: string & unknown;
+            agentKey: string & (unknown & unknown & unknown);
             createdAt: string;
+            updatedAt: string;
+        };
+        AgentInstancePage: {
+            items: components["schemas"]["AgentInstance"][];
+        };
+        AgentRun: {
+            id: string & unknown;
+            jobId: string & unknown;
+            agentInstanceId: (string & unknown) | null;
+            model: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            status: "queued" | "running" | "waiting_approval" | "retrying" | "succeeded" | "failed" | "canceled";
+            policyHash: string & (unknown & unknown & unknown);
+            createdAt: string;
+            finishedAt: string | null;
+            failureCode: (string & (unknown & unknown & unknown)) | null;
+        };
+        Objects_3: {
+            [key: string]: null | boolean | (number | ("Infinity" | "-Infinity" | "NaN")) | string;
         };
         AgentMemory: {
-            id: components["schemas"]["Id"];
-            agentInstanceId: components["schemas"]["Id"];
+            id: string & unknown;
+            agentInstanceId: string & unknown;
             /** @enum {string} */
             kind: "preference" | "episode_history" | "working_note";
             /** @enum {string} */
             status: "proposed" | "active" | "rejected" | "deleted";
             version: number;
-            content: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
+            content: components["schemas"]["Objects_3"];
+            expiresAt: string | null;
             createdAt: string;
-            /** Format: date-time */
-            expiresAt?: string;
+            updatedAt: string;
         };
-        Episode: {
-            id: components["schemas"]["Id"];
-            title: string;
-            script: string;
-            sources: components["schemas"]["EpisodeSource"][];
-            /** Format: date-time */
-            createdAt: string;
-        };
-        EpisodeSource: {
-            /** Format: uri */
-            url: string;
-            title: string;
-            /** Format: date-time */
-            publishedAt?: string;
-            snapshotId?: components["schemas"]["Id"];
-            /** @enum {string} */
-            sourceKind?: "rss" | "web";
+        AgentMemoryPage: {
+            items: components["schemas"]["AgentMemory"][];
         };
     };
     responses: never;
@@ -964,86 +1022,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    ingestBrowserTelemetry: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                signal: "logs" | "metrics" | "traces";
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/x-protobuf": string;
-                "application/json": unknown;
-            };
-        };
-        responses: {
-            /** @description Accepted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Payload too large */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unsupported media type */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Rate limited */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getHealth: {
+    health: {
         parameters: {
             query?: never;
             header?: never;
@@ -1052,1566 +1031,90 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Alive */
+            /** @description HealthResponse */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        status: "ok";
-                    };
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
         };
     };
-    listFeeds: {
+    resolveSession: {
         parameters: {
-            query?: {
-                q?: string;
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
             };
-            header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Feed catalog */
+            /** @description SessionResponse */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["Feed"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
+                    "application/json": components["schemas"]["SessionResponse"];
                 };
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    registerFeed: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** Format: uri */
-                    feedUrl: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Registered */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        feed: components["schemas"]["Feed"];
-                        subscription: components["schemas"]["FeedSubscription"];
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Feed discovery failed */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listArticles: {
-        parameters: {
-            query?: {
-                cursor?: string;
-                limit?: number;
-                q?: string;
-                state?: "all" | "unread" | "saved" | "later";
-                feedIds?: components["schemas"]["Id"][];
-                sort?: "newest" | "oldest" | "source" | "relevance";
-                includeHidden?: string;
-                usedInEpisode?: string;
-                minScore?: number | null;
-                publishedAfter?: string;
-                publishedBefore?: string;
-                archiveStatus?: ("pending" | "archiving" | "succeeded" | "failed")[];
-                tagIds?: components["schemas"]["Id"][];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Articles */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["Article"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getArticleFacets: {
-        parameters: {
-            query?: {
-                q?: string;
-                feedIds?: components["schemas"]["Id"][];
-                includeHidden?: string;
-                publishedAfter?: string;
-                publishedBefore?: string;
-                archiveStatus?: ("pending" | "archiving" | "succeeded" | "failed")[];
-                tagIds?: components["schemas"]["Id"][];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Article facets */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleFacets"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getArticle: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                articleId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Article */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Article"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    updateArticleState: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                articleId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    read?: boolean;
-                    saved?: boolean;
-                    readLater?: boolean;
-                    hidden?: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Article"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    bulkUpdateArticleState: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    q?: string;
-                    /** @enum {string} */
-                    state?: "all" | "unread" | "saved" | "later";
-                    feedIds?: components["schemas"]["Id"][];
-                    includeHidden?: boolean;
-                    /** Format: date-time */
-                    publishedAfter?: string;
-                    /** Format: date-time */
-                    publishedBefore?: string;
-                    archiveStatus?: ("pending" | "archiving" | "succeeded" | "failed")[];
-                    read?: boolean;
-                    saved?: boolean;
-                    readLater?: boolean;
-                    hidden?: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Number of articles updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BulkArticleStateResult"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getArticleMarkdown: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                articleId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Archived article Markdown */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/markdown": string;
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getArticleArchive: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                articleId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Sanitized replay HTML */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    enrichArticle: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                articleId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recomputed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Article"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Article is not archived yet */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getEnrichQueue: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Enrich queue status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnrichQueue"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    streamEnrichQueueEvents: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Enrich queue status snapshot stream */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    enrichReprocess: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Number of enqueued articles */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        enqueued: number;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    enrichResetDaily: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Confirmation message */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        message: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getArticleAsset: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                articleId: components["schemas"]["Id"];
-                hash: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Archived asset */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/octet-stream": string;
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    setArticleTags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                articleId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    tagIds: components["schemas"]["Id"][];
-                };
-            };
-        };
-        responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Article"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listTags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tags */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["Tag"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    createTag: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    name: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tag"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    deleteTag: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tagId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listTagSuggestions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tag suggestions */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["TagSuggestion"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    promoteTagSuggestion: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    name: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Promoted */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tag"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listReadingDictionary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Reading dictionary */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["ReadingDictionaryEntry"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    createReadingDictionary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    surface: string;
-                    reading: string;
-                    /** @default 0 */
-                    accentType?: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReadingDictionaryEntry"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    updateReadingDictionary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    surface?: string;
-                    reading?: string;
-                    accentType?: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReadingDictionaryEntry"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    deleteReadingDictionary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listSubscriptions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Subscriptions */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["FeedSubscription"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    createSubscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    feedId: components["schemas"]["Id"];
-                };
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FeedSubscription"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    deleteSubscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                subscriptionId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    updateSubscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                subscriptionId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    enabled: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FeedSubscription"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Settings */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserSettings"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    updateSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    generationSchedule?: components["schemas"]["GenerationSchedule"];
-                    interestProfile?: components["schemas"]["InterestProfile"];
-                };
-            };
-        };
-        responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserSettings"];
-                };
-            };
-            /** @description Invalid */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
     };
     listEpisodeJobs: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                limit?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Jobs */
+            /** @description EpisodeJobPage */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["EpisodeJob"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
+                    "application/json": components["schemas"]["EpisodeJobPage"];
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
@@ -2620,74 +1123,72 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "Idempotency-Key": string;
+                authorization?: string | null;
+                cookie?: string | null;
+                "idempotency-key": string & (unknown & unknown & unknown);
+                traceparent?: (string & unknown) | null;
             };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @enum {string} */
-                    trigger: "manual";
-                    /** @description Restrict the episode to these archived articles. Omit for fully automatic selection. */
-                    articleIds?: components["schemas"]["Id"][];
-                };
+                "application/json": components["schemas"]["CreateEpisodeJobRequest"];
             };
         };
         responses: {
-            /** @description Accepted */
+            /** @description JobReceipt */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EpisodeJobReceipt"];
+                    "application/json": components["schemas"]["JobReceipt"];
                 };
             };
-            /** @description Invalid */
+            /** @description BadRequestProblem */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["BadRequestProblem"];
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Conflict */
+            /** @description ConflictProblem */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["ConflictProblem"];
                 };
             };
-            /** @description Unselectable articles */
+            /** @description UnprocessableProblem */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnprocessableProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
@@ -2695,15 +1196,19 @@ export interface operations {
     getEpisodeJob: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
             path: {
-                jobId: components["schemas"]["Id"];
+                jobId: string & unknown;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Job */
+            /** @description EpisodeJob */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2712,31 +1217,31 @@ export interface operations {
                     "application/json": components["schemas"]["EpisodeJob"];
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Not found */
+            /** @description NotFoundProblem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["NotFoundProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
@@ -2744,15 +1249,19 @@ export interface operations {
     cancelEpisodeJob: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
             path: {
-                jobId: components["schemas"]["Id"];
+                jobId: string & unknown;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Canceled */
+            /** @description EpisodeJob */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2761,40 +1270,40 @@ export interface operations {
                     "application/json": components["schemas"]["EpisodeJob"];
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Not found */
+            /** @description NotFoundProblem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["NotFoundProblem"];
                 };
             };
-            /** @description Already terminal */
+            /** @description ConflictProblem */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["ConflictProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
@@ -2802,57 +1311,62 @@ export interface operations {
     retryEpisodeJob: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                "idempotency-key"?: (string & (unknown & unknown & unknown)) | null;
+                traceparent?: (string & unknown) | null;
+            };
             path: {
-                jobId: components["schemas"]["Id"];
+                jobId: string & unknown;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Accepted */
+            /** @description JobReceipt */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EpisodeJobReceipt"];
+                    "application/json": components["schemas"]["JobReceipt"];
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Not found */
+            /** @description NotFoundProblem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["NotFoundProblem"];
                 };
             };
-            /** @description Job is not failed */
+            /** @description ConflictProblem */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["ConflictProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
@@ -2860,458 +1374,104 @@ export interface operations {
     streamEpisodeJobEvents: {
         parameters: {
             query?: {
-                lastEventId?: number | null;
+                lastEventId?: string | null;
             };
             header?: {
-                "Last-Event-ID"?: string;
+                authorization?: string | null;
+                cookie?: string | null;
+                "last-event-id"?: string | null;
+                traceparent?: (string & unknown) | null;
             };
             path: {
-                jobId: components["schemas"]["Id"];
+                jobId: string & unknown;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description AG-UI event stream */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": string;
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getAgentRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Agent run */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRun"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listAgentRunEvents: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Agent events */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["AgentEvent"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
+                    "text/event-stream": {
+                        id: string | null;
+                        /** @enum {string} */
+                        event: "STATE_SNAPSHOT";
+                        data: string;
                     };
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Not found */
+            /** @description NotFoundProblem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["NotFoundProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listAgentInstances: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Agent instances */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["AgentInstance"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    listAgentMemories: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Agent memories */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["AgentMemory"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    createAgentMemory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    kind: "preference" | "working_note";
-                    content: {
-                        [key: string]: unknown;
-                    };
-                    /** Format: date-time */
-                    expiresAt?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Memory proposal */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentMemory"];
-                };
-            };
-            /** @description Invalid */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    approveAgentMemory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentId: components["schemas"]["Id"];
-                memoryId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Approved memory */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentMemory"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    deleteAgentMemory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentId: components["schemas"]["Id"];
-                memoryId: components["schemas"]["Id"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
     };
     listEpisodes: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                cursor?: (string & (unknown & unknown & unknown)) | null;
+            };
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Episodes */
+            /** @description EpisodePage */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["Episode"][];
-                        page: {
-                            hasMore: boolean;
-                            nextCursor?: string;
-                        };
-                    };
+                    "application/json": components["schemas"]["EpisodePage"];
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
@@ -3319,9 +1479,13 @@ export interface operations {
     getEpisode: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
             path: {
-                episodeId: components["schemas"]["Id"];
+                episodeId: string & unknown;
             };
             cookie?: never;
         };
@@ -3336,31 +1500,31 @@ export interface operations {
                     "application/json": components["schemas"]["Episode"];
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Not found */
+            /** @description NotFoundProblem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["NotFoundProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
@@ -3368,102 +1532,2041 @@ export interface operations {
     createAudioAccess: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
             path: {
-                episodeId: components["schemas"]["Id"];
+                episodeId: string & unknown;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Short-lived audio access */
+            /** @description AudioAccess */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioAccess"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    listFeedSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description FeedSubscriptionPage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedSubscriptionPage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    addFeedSubscription: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddFeedSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description CreatedFeedSubscription */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedFeedSubscription"];
+                };
+            };
+            /** @description BadRequestProblem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BadRequestProblem"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnprocessableProblem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnprocessableProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    deleteFeedSubscription: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                subscriptionId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description <No Content> */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description BadRequestProblem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BadRequestProblem"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "feedSubscriptions.updateFeedSubscription": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                subscriptionId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description UpdatedFeedSubscription */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatedFeedSubscription"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "feeds.listFeeds": {
+        parameters: {
+            query?: {
+                q?: (string & (unknown & unknown & unknown)) | null;
+            };
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description FeedPage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedPage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "feeds.registerFeed": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddFeedSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description RegisteredFeed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisteredFeed"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnprocessableProblem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnprocessableProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.listArticles": {
+        parameters: {
+            query?: {
+                limit?: (string & unknown) | null;
+                state?: ("all" | "unread" | "saved" | "later") | null;
+                includeHidden?: ("true" | "false") | null;
+                feedIds?: (string & unknown)[] | null;
+                q?: (string & (unknown & unknown & unknown)) | null;
+                sort?: ("newest" | "oldest") | null;
+            };
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ArticlePage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticlePage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleFacets": {
+        parameters: {
+            query?: {
+                includeHidden?: ("true" | "false") | null;
+                feedIds?: (string & unknown)[] | null;
+                q?: (string & (unknown & unknown & unknown)) | null;
+            };
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ArticleFacets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleFacets"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticle": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                articleId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.patchArticle": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                articleId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    read?: boolean | null;
+                    saved?: boolean | null;
+                    readLater?: boolean | null;
+                    hidden?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description BadRequestProblem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BadRequestProblem"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleMarkdown": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                articleId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        /** Format: uri */
-                        url: string;
-                        /** Format: date-time */
-                        expiresAt: string;
+                        markdown: string & unknown;
                     };
                 };
             };
-            /** @description Unauthorized */
+            /** @description UnauthorizedProblem */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Not found */
+            /** @description NotFoundProblem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["NotFoundProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };
     };
-    getEpisodeAudio: {
+    "articles.bulkPatchArticles": {
         parameters: {
             query?: never;
-            header?: never;
-            path: {
-                token: string;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
             };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    state?: ("all" | "unread" | "saved" | "later") | null;
+                    includeHidden?: boolean | null;
+                    feedIds?: (string & unknown)[] | null;
+                    q?: (string & (unknown & unknown & unknown)) | null;
+                    read?: boolean | null;
+                    saved?: boolean | null;
+                    readLater?: boolean | null;
+                    hidden?: boolean | null;
+                };
+            };
+        };
         responses: {
-            /** @description WAV audio */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "audio/wav": string;
+                    "application/json": {
+                        updated: number & unknown;
+                    };
                 };
             };
-            /** @description Partial WAV audio */
-            206: {
+            /** @description BadRequestProblem */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "audio/wav": string;
+                    "application/json": components["schemas"]["BadRequestProblem"];
                 };
             };
-            /** @description Not found */
-            404: {
+            /** @description UnauthorizedProblem */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
-            /** @description Unavailable */
+            /** @description UnavailableProblem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.archiveArticle": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                articleId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "archived" | "already_archived";
+                    };
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.listArticleTags": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                articleId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Objects_"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.setArticleTags": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                articleId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    tagIds: (string & unknown)[] & unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Objects_"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.enrichArticle": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                articleId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Objects_1"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.getSettings": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description UserSettings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSettings"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.updateSettings": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSettings"];
+            };
+        };
+        responses: {
+            /** @description UserSettings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSettings"];
+                };
+            };
+            /** @description BadRequestProblem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BadRequestProblem"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.listTags": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description TagPage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagPage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.createTag": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Objects_2"];
+            };
+        };
+        responses: {
+            /** @description CreatedTag */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedTag"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.deleteTag": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                tagId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description <No Content> */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.listTagSuggestions": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description TagSuggestionPage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSuggestionPage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.promoteTagSuggestion": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Objects_2"];
+            };
+        };
+        responses: {
+            /** @description CreatedTag */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedTag"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.listReadingDictionary": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ReadingDictionaryPage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingDictionaryPage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.createReadingDictionary": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    surface: string & (unknown & unknown & unknown);
+                    reading: string & (unknown & unknown & unknown);
+                    accentType?: (number & unknown) | null;
+                };
+            };
+        };
+        responses: {
+            /** @description CreatedReadingDictionaryEntry */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedReadingDictionaryEntry"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.updateReadingDictionary": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                id: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    surface: string & (unknown & unknown & unknown);
+                    reading?: (string & (unknown & unknown & unknown)) | null;
+                    accentType?: (number & unknown) | null;
+                } | {
+                    surface?: (string & (unknown & unknown & unknown)) | null;
+                    reading: string & (unknown & unknown & unknown);
+                    accentType?: (number & unknown) | null;
+                } | {
+                    surface?: (string & (unknown & unknown & unknown)) | null;
+                    reading?: (string & (unknown & unknown & unknown)) | null;
+                    accentType: number & unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description ReadingDictionaryEntry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingDictionaryEntry"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.deleteReadingDictionary": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                id: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description <No Content> */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.getEnrichQueue": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description EnrichQueue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichQueue"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.enrichReprocess": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Objects_1"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "personalization.enrichResetDaily": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        message: "Daily enrichment usage reset";
+                    };
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "agents.listAgentInstances": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AgentInstancePage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentInstancePage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "agents.getAgentRun": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                runId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AgentRun */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRun"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "agents.streamAgentRunEvents": {
+        parameters: {
+            query?: {
+                lastEventId?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                "last-event-id"?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                runId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": {
+                        id: string;
+                        event: string & (unknown & unknown & unknown);
+                        data: string;
+                    };
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "agents.listAgentMemories": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                agentInstanceId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AgentMemoryPage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentMemoryPage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "agents.createAgentMemory": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                agentInstanceId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    kind: "preference" | "working_note";
+                    content: components["schemas"]["Objects_3"];
+                    expiresAt?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description AgentMemory */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentMemory"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "agents.approveAgentMemory": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                agentInstanceId: string & unknown;
+                memoryId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AgentMemory */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentMemory"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "agents.deleteAgentMemory": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                agentInstanceId: string & unknown;
+                memoryId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description <No Content> */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
                 };
             };
         };

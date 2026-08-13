@@ -102,7 +102,10 @@ describe("S3 Markdown object reader", () => {
       { ...config, timeoutMillis: 1 },
       () => ({
         client: {
-          send: async (_command: unknown, options: { abortSignal: AbortSignal }) =>
+          send: async (
+            _command: unknown,
+            options: { abortSignal: AbortSignal }
+          ) =>
             new Promise((_resolve, reject) =>
               options.abortSignal.addEventListener(
                 "abort",

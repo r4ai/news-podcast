@@ -217,7 +217,7 @@ test("subscription changes confirm destructive actions and roll back failed opti
   await expect(zenn).toBeChecked()
 })
 
-test("RSS reader shows archived articles and persists saved state", async ({
+test("RSS reader reports unavailable raw archives and persists saved state", async ({
   page,
 }) => {
   const stylesheetHash = "a".repeat(64)
@@ -235,8 +235,6 @@ test("RSS reader shows archived articles and persists saved state", async ({
     saved: false,
     readLater: false,
     hidden: false,
-    usedInEpisode: false,
-    tags: [],
     archiveUrl: "/v1/me/articles/00000000-0000-4000-8000-000000000020/archive",
     markdownUrl:
       "/v1/me/articles/00000000-0000-4000-8000-000000000020/markdown",
@@ -297,19 +295,21 @@ test("RSS reader shows archived articles and persists saved state", async ({
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  await expect(page.getByLabel("記事を検索")).toBeVisible()
-  await page.getByRole("button", { name: /保存された記事/ }).click()
+  const search = page.getByLabel("記事を検索")
+  if (!(await search.isVisible())) {
+    await page.getByRole("button", { name: "検索を開く" }).click()
+  }
+  await expect(search).toBeVisible()
+  const articleButton = page.getByRole("button", { name: /保存された記事/ })
+  await articleButton.focus()
+  await articleButton.press("Enter")
   await expect(
     page.getByRole("heading", { name: "保存された記事" })
   ).toBeVisible()
-  const archiveFrame = page.frameLocator(`iframe[title="${article.title}"]`)
   await expect(
-    archiveFrame.getByRole("heading", { name: "保存された記事" })
-  ).toHaveCSS("font-size", "32px")
-  await expect(archiveFrame.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(240, 244, 248)"
-  )
+    page.getByText("本文もアーカイブも利用できません。")
+  ).toBeVisible()
+  await expect(page.locator(`iframe[title="${article.title}"]`)).toHaveCount(0)
   expect(archiveErrors).toEqual([])
 
   await page.setViewportSize({ width: 390, height: 844 })

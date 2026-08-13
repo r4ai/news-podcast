@@ -4,9 +4,8 @@ import { Effect } from "effect"
 import type { CompletionOutboxPorts } from "../application/completion-outbox.js"
 import type { UnsafeProductionJetStream } from "../infrastructure/unsafe/nats-jetstream.js"
 
-export const makeCompletionPublisher = (
-  jetStream: UnsafeProductionJetStream
-): CompletionOutboxPorts["publish"] =>
+export const makeCompletionPublisher =
+  (jetStream: UnsafeProductionJetStream): CompletionOutboxPorts["publish"] =>
   (message) =>
     Effect.tryPromise({
       try: () =>

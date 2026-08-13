@@ -2,11 +2,13 @@ import { Effect, Layer, Schema, Tracer } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  AgentRunEventSchema,
   ArticleSchema,
   EpisodeIdSchema,
   EpisodeJobSchema,
   EpisodeSchema,
   FeedSubscriptionSchema,
+  FeedPageSchema,
   RegisteredFeedSchema,
   UpdatedFeedSubscriptionSchema,
   JobIdSchema,
@@ -68,19 +70,27 @@ const ports: GatewayPorts = {
   getEnrichQueue: () => Effect.fail(unavailable),
   enrichReprocess: () => Effect.fail(unavailable),
   enrichResetDaily: () => Effect.fail(unavailable),
+  listAgentInstances: () => Effect.fail(unavailable),
+  getAgentRun: () => Effect.fail(unavailable),
+  replayAgentRunEvents: () => Effect.fail(unavailable),
+  listAgentMemories: () => Effect.fail(unavailable),
+  createAgentMemory: () => Effect.fail(unavailable),
+  approveAgentMemory: () => Effect.fail(unavailable),
+  deleteAgentMemory: () => Effect.fail(unavailable),
 }
 
 describe("Gateway HTTP runtime", () => {
   it("serves feed catalog and owner article workflows", async () => {
     const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
-      subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
       feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
-      feedUrl: "https://feeds.example.com/news.xml",
+      enabled: true,
       createdAt: "2026-08-12T00:00:00.000Z",
     })
     const article = Schema.decodeUnknownSync(ArticleSchema)({
       id: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
       feedId: subscription.feedId,
+      sourceName: "example.com",
       title: "Stable article",
       url: "https://example.com/article",
       discoveredAt: "2026-08-12T00:00:00.000Z",
@@ -94,14 +104,28 @@ describe("Gateway HTTP runtime", () => {
     const runtime = makeGatewayWebHandler({
       ...ports,
       listFeeds: () =>
-        Effect.succeed({
-          items: [{ id: subscription.feedId, feedUrl: subscription.feedUrl }],
-          page: { hasMore: false },
-        }),
+        Effect.succeed(
+          Schema.decodeUnknownSync(FeedPageSchema)({
+            items: [
+              {
+                id: subscription.feedId,
+                name: "feeds.example.com",
+                siteUrl: "https://feeds.example.com/",
+                feedUrl: "https://feeds.example.com/news.xml",
+              },
+            ],
+            page: { hasMore: false },
+          })
+        ),
       registerFeed: () =>
         Effect.succeed(
           Schema.decodeUnknownSync(RegisteredFeedSchema)({
-            feed: { id: subscription.feedId, feedUrl: subscription.feedUrl },
+            feed: {
+              id: subscription.feedId,
+              name: "feeds.example.com",
+              siteUrl: "https://feeds.example.com/",
+              feedUrl: "https://feeds.example.com/news.xml",
+            },
             subscription,
           })
         ),
@@ -121,7 +145,10 @@ describe("Gateway HTTP runtime", () => {
       getArticleFacets: () =>
         Effect.succeed({
           states: { all: 1, unread: 1, saved: 0, later: 0 },
-          feeds: [{ feedId: subscription.feedId, count: 1 }],
+          feeds: [
+            { feedId: subscription.feedId, name: "example.com", count: 1 },
+          ],
+          aiPending: 0,
         }),
       archiveArticle: () => Effect.succeed({ status: "already_archived" }),
       listArticleTags: () => Effect.succeed({ items: [] }),
@@ -133,10 +160,10 @@ describe("Gateway HTTP runtime", () => {
       new Request("http://gateway.test/v1/feeds", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ feedUrl: subscription.feedUrl }),
+        body: JSON.stringify({ feedUrl: "https://feeds.example.com/news.xml" }),
       }),
       new Request(
-        `http://gateway.test/v1/me/feed-subscriptions/${subscription.subscriptionId}`,
+        `http://gateway.test/v1/me/feed-subscriptions/${subscription.id}`,
         {
           method: "PATCH",
           headers: { "content-type": "application/json" },
@@ -328,9 +355,9 @@ describe("Gateway HTTP runtime", () => {
 
   it("serves the owner-scoped subscription lifecycle", async () => {
     const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
-      subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
       feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
-      feedUrl: "https://feeds.example.com/news.xml",
+      enabled: true,
       createdAt: "2026-08-12T00:00:00.000Z",
     })
     const addFeedSubscription = vi.fn(() => Effect.succeed(subscription))
@@ -353,7 +380,9 @@ describe("Gateway HTTP runtime", () => {
         new Request("http://gateway.test/v1/me/feed-subscriptions", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ feedUrl: subscription.feedUrl }),
+          body: JSON.stringify({
+            feedUrl: "https://feeds.example.com/news.xml",
+          }),
         })
       )
       const listed = await runtime.handler(
@@ -361,7 +390,7 @@ describe("Gateway HTTP runtime", () => {
       )
       const deleted = await runtime.handler(
         new Request(
-          `http://gateway.test/v1/me/feed-subscriptions/${subscription.subscriptionId}`,
+          `http://gateway.test/v1/me/feed-subscriptions/${subscription.id}`,
           { method: "DELETE" }
         )
       )
@@ -434,6 +463,62 @@ describe("Gateway HTTP runtime", () => {
       for (const request of requests)
         responses.push(await runtime.handler(request))
       expect(responses.map(({ status }) => status)).toEqual(Array(14).fill(503))
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("serves bounded Agent event replay with header and query resumption", async () => {
+    const runId = "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80"
+    const replayAgentRunEvents = vi.fn(() =>
+      Effect.succeed([
+        Schema.decodeUnknownSync(AgentRunEventSchema)({
+          schemaVersion: 1 as const,
+          runId,
+          sequence: 8,
+          type: "run.updated",
+          occurredAt: "2026-08-12T00:00:00.000Z",
+          payload: { status: "running" },
+        }),
+      ])
+    )
+    const runtime = makeGatewayWebHandler({
+      ...ports,
+      replayAgentRunEvents,
+    })
+
+    try {
+      const resumedByHeader = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/agent-runs/${runId}/events?lastEventId=3`,
+          {
+            headers: {
+              authorization: "Bearer opaque",
+              cookie: "session=opaque",
+              traceparent:
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+              "last-event-id": "7",
+            },
+          }
+        )
+      )
+      const resumedByQuery = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/agent-runs/${runId}/events?lastEventId=3`
+        )
+      )
+
+      expect(resumedByHeader.status).toBe(200)
+      expect(await resumedByHeader.text()).toContain("event: run.updated")
+      expect(await resumedByQuery.text()).toContain("id: 8")
+      expect(replayAgentRunEvents).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ runId, afterSequence: 7 })
+      )
+      expect(replayAgentRunEvents).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ runId, afterSequence: 3 })
+      )
     } finally {
       await runtime.dispose()
     }

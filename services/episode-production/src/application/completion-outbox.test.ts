@@ -1,7 +1,10 @@
 import { Effect, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import { relayCompletionOutbox, type CompletionOutboxPorts } from "./completion-outbox.js"
+import {
+  relayCompletionOutbox,
+  type CompletionOutboxPorts,
+} from "./completion-outbox.js"
 import {
   EpisodeIdSchema,
   JobIdSchema,
@@ -20,17 +23,21 @@ const pending = {
     title: "Daily",
     script: "Verified script",
     audio: {
-      episodeId: decode(EpisodeIdSchema)("cd31ca98-fb40-4925-a51c-60940a535c8a"),
+      episodeId: decode(EpisodeIdSchema)(
+        "cd31ca98-fb40-4925-a51c-60940a535c8a"
+      ),
       objectKey: "episodes/owner/job/episode.wav",
       byteLength: 44,
       contentType: "audio/wav" as const,
     },
-    sources: [{
-      articleId: "article-1",
-      snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
-      url: "https://example.com/news",
-      title: "News",
-    }],
+    sources: [
+      {
+        articleId: "article-1",
+        snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
+        url: "https://example.com/news",
+        title: "News",
+      },
+    ],
     completedAt,
     traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
   },
@@ -61,16 +68,24 @@ describe("completion outbox relay", () => {
     expect(dependencies.markPublished).toHaveBeenCalledWith(jobId, completedAt)
     expect(
       vi.mocked(dependencies.publish).mock.invocationCallOrder[0]
-    ).toBeLessThan(vi.mocked(dependencies.markPublished).mock.invocationCallOrder[0]!)
+    ).toBeLessThan(
+      vi.mocked(dependencies.markPublished).mock.invocationCallOrder[0]!
+    )
   })
 
   it("does not mark when publication fails", async () => {
     const dependencies = ports()
     vi.mocked(dependencies.publish).mockReturnValue(
-      Effect.fail({ _tag: "PipelineFailure", code: "nats_unavailable", retryable: true })
+      Effect.fail({
+        _tag: "PipelineFailure",
+        code: "nats_unavailable",
+        retryable: true,
+      })
     )
 
-    const exit = await Effect.runPromiseExit(relayCompletionOutbox(dependencies))
+    const exit = await Effect.runPromiseExit(
+      relayCompletionOutbox(dependencies)
+    )
     expect(exit._tag).toBe("Failure")
     expect(dependencies.markPublished).not.toHaveBeenCalled()
   })

@@ -33,7 +33,9 @@ export const makeEffectOtlpLayerFromEnvironment = (
   if (environment.OTEL_ENABLED !== "true") return Layer.empty
   const endpoint = environment.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
   if (!endpoint)
-    throw new Error("OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL is enabled")
+    throw new Error(
+      "OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL is enabled"
+    )
   return makeEffectOtlpLayer({
     serviceName,
     serviceVersion: environment.OTEL_SERVICE_VERSION?.trim() || "development",

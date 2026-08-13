@@ -69,6 +69,36 @@ export const IdentitySettingsReplySchema = Schema.Union([
   }),
 ])
 
+export const DueGenerationWireSchema = Schema.Struct({
+  ownerId: text(255),
+  localDate,
+})
+export const ScheduledGenerationRequestSchema = Schema.Union([
+  Schema.Struct({ operation: Schema.Literal("DiscoverDue"), now: instant }),
+  Schema.Struct({
+    operation: Schema.Literal("Complete"),
+    ownerId: text(255),
+    localDate,
+  }),
+])
+export const ScheduledGenerationReplySchema = Schema.Union([
+  Schema.Struct({
+    _tag: Schema.Literal("Due"),
+    schedules: Schema.Array(DueGenerationWireSchema).check(
+      Schema.isMaxLength(10_000)
+    ),
+  }),
+  Schema.Struct({ _tag: Schema.Literal("Completed") }),
+  Schema.Struct({
+    _tag: Schema.Literal("Rejected"),
+    code: Schema.Literals([
+      "INVALID_REQUEST",
+      "UNAUTHENTICATED",
+      "STORAGE_FAILURE",
+    ]),
+  }),
+])
+
 export const TagWireSchema = Schema.Struct({
   tagId: uuid,
   name: text(50),
@@ -247,6 +277,12 @@ export const ReadingDictionaryReplySchema = Schema.Union([
 
 export const parseIdentitySettingsRequest = parse(IdentitySettingsRequestSchema)
 export const parseIdentitySettingsReply = parse(IdentitySettingsReplySchema)
+export const parseScheduledGenerationRequest = parse(
+  ScheduledGenerationRequestSchema
+)
+export const parseScheduledGenerationReply = parse(
+  ScheduledGenerationReplySchema
+)
 export const parseContentPersonalizationRequest = parse(
   ContentPersonalizationRequestSchema
 )

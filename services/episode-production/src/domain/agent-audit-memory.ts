@@ -97,7 +97,9 @@ export type PublicJson =
   | PublicJsonArray
   | PublicJsonObject
 export interface PublicJsonArray extends ReadonlyArray<PublicJson> {}
-export interface PublicJsonObject extends Readonly<Record<string, PublicJson>> {}
+export interface PublicJsonObject extends Readonly<
+  Record<string, PublicJson>
+> {}
 
 export const AgentMemorySchema = Schema.Struct({
   id: AgentMemoryIdSchema,
@@ -219,7 +221,10 @@ const inspectPublicJson = (
   }
   if (typeof value === "number") return Number.isFinite(value)
   if (Array.isArray(value)) {
-    return value.length <= 100 && value.every((item) => inspectPublicJson(item, depth + 1, maxDepth))
+    return (
+      value.length <= 100 &&
+      value.every((item) => inspectPublicJson(item, depth + 1, maxDepth))
+    )
   }
   if (typeof value !== "object") return false
   const prototype = Object.getPrototypeOf(value)

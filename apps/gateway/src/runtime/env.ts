@@ -1,10 +1,7 @@
 import { deepFreeze } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
-import {
-  parseNodeGatewayConfig,
-  type NodeGatewayRuntimeError,
-} from "./node.js"
+import { parseNodeGatewayConfig, type NodeGatewayRuntimeError } from "./node.js"
 
 const configFailure = (): NodeGatewayRuntimeError =>
   deepFreeze({
@@ -16,7 +13,8 @@ const parseBoolean = (
   value: string | undefined,
   fallback: boolean
 ): Effect.Effect<boolean, NodeGatewayRuntimeError> => {
-  if (value === undefined || value.trim() === "") return Effect.succeed(fallback)
+  if (value === undefined || value.trim() === "")
+    return Effect.succeed(fallback)
   if (value === "true") return Effect.succeed(true)
   if (value === "false") return Effect.succeed(false)
   return Effect.fail(configFailure())
@@ -41,5 +39,11 @@ export const readGatewayConfig = (
         development,
         google: Boolean(env.GOOGLE_CLIENT_ID?.trim()),
       },
+      identityHttpOrigin:
+        env.IDENTITY_HTTP_ORIGIN?.trim() || "http://identity-access:4002",
+      authProxyTimeoutMillis: Number(env.AUTH_PROXY_TIMEOUT_MS ?? "5000"),
+      authProxyMaximumResponseBytes: Number(
+        env.AUTH_PROXY_MAX_RESPONSE_BYTES ?? "1048576"
+      ),
     }).pipe(Effect.mapError(configFailure))
   })

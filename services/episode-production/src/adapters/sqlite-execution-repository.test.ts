@@ -93,7 +93,8 @@ describe("SQLite execution repository", () => {
               },
             })
           )
-          const loadedDictionary = yield* execution.loadDictionarySnapshot(jobId)
+          const loadedDictionary =
+            yield* execution.loadDictionarySnapshot(jobId)
 
           yield* execution.saveScriptCheckpoint({
             jobId,
@@ -267,8 +268,7 @@ describe("SQLite execution repository", () => {
     expect(result.beforeExtendedExpiry).toBeUndefined()
     expect(result.expired).toBe("StaleLease")
     expect(
-      result.persisted?._tag === "Running" &&
-        result.persisted.lease.leasedUntil
+      result.persisted?._tag === "Running" && result.persisted.lease.leasedUntil
     ).toEqual(timestamp("2026-08-13T00:07:00.000Z"))
   })
 
@@ -345,8 +345,7 @@ describe("SQLite execution repository", () => {
           },
         ],
         completedAt,
-        traceparent:
-          "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
       },
     })
 

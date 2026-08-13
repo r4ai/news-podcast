@@ -9,10 +9,7 @@ import {
   updateReadingDictionaryEntry,
   type ReadingDictionaryRepository,
 } from "./reading-dictionary.js"
-import {
-  OwnerIdSchema,
-  UtcTimestampSchema,
-} from "../domain/episode-job.js"
+import { OwnerIdSchema, UtcTimestampSchema } from "../domain/episode-job.js"
 import {
   ReadingDictionaryIdSchema,
   ReadingDictionaryEntrySchema,
