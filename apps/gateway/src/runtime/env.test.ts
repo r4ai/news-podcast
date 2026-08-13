@@ -25,6 +25,10 @@ describe("Gateway environment configuration", () => {
       identityHttpOrigin: "http://identity-access:4002",
       authProxyTimeoutMillis: 5000,
       authProxyMaximumResponseBytes: 1048576,
+      telemetryHttpOrigin: "http://otel-collector:4318",
+      telemetryProxyTimeoutMillis: 5000,
+      telemetryProxyMaximumRequestBytes: 1048576,
+      telemetryProxyMaximumResponseBytes: 1048576,
     })
   })
 

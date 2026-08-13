@@ -17,6 +17,10 @@ const validConfig = {
   identityHttpOrigin: "http://identity-access:4002",
   authProxyTimeoutMillis: 5_000,
   authProxyMaximumResponseBytes: 1_048_576,
+  telemetryHttpOrigin: "http://otel-collector:4318",
+  telemetryProxyTimeoutMillis: 5_000,
+  telemetryProxyMaximumRequestBytes: 1_048_576,
+  telemetryProxyMaximumResponseBytes: 1_048_576,
 }
 
 describe("Gateway Node runtime", () => {

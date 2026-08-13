@@ -10,8 +10,9 @@ import {
   currentUtcInstantUnsafe,
   randomUuidUnsafe,
 } from "../infrastructure/unsafe/runtime-values.js"
-import { makeGatewayWebHandler } from "./http.js"
 import { makeGatewayAuthProxy } from "./auth-proxy.js"
+import { makeGatewayWebHandler } from "./http.js"
+import { makeGatewayTelemetryProxy } from "./telemetry-proxy.js"
 
 const NatsServerSchema = Schema.String.check(
   Schema.isPattern(/^nats:\/\/[\w.-]+(?::\d{1,5})?$/)
@@ -52,6 +53,16 @@ export const NodeGatewayConfigSchema = Schema.Struct({
     Schema.isBetween({ minimum: 1, maximum: 30_000 })
   ),
   authProxyMaximumResponseBytes: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: 1_048_576 })
+  ),
+  telemetryHttpOrigin: HttpOriginSchema,
+  telemetryProxyTimeoutMillis: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: 30_000 })
+  ),
+  telemetryProxyMaximumRequestBytes: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: 4_194_304 })
+  ),
+  telemetryProxyMaximumResponseBytes: Schema.Int.check(
     Schema.isBetween({ minimum: 1, maximum: 1_048_576 })
   ),
 })
@@ -110,12 +121,20 @@ export const runNodeGateway = (
             ports,
             dependencies.telemetry ?? Layer.empty
           )
-          const handler = makeGatewayAuthProxy({
+          const authProxy = makeGatewayAuthProxy({
             upstream: new URL(config.identityHttpOrigin),
             timeoutMillis: config.authProxyTimeoutMillis,
             maximumResponseBytes: config.authProxyMaximumResponseBytes,
             fetch: globalThis.fetch,
             next: web.handler,
+          })
+          const handler = makeGatewayTelemetryProxy({
+            upstream: new URL(config.telemetryHttpOrigin),
+            timeoutMillis: config.telemetryProxyTimeoutMillis,
+            maximumRequestBytes: config.telemetryProxyMaximumRequestBytes,
+            maximumResponseBytes: config.telemetryProxyMaximumResponseBytes,
+            fetch: globalThis.fetch,
+            next: authProxy,
           })
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => web.dispose()).pipe(Effect.ignore)
