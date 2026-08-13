@@ -4,7 +4,7 @@
 - Date: 2026-08-10
 - Decision owners: Product owner / Agent Platform
 - Supersedes: ADR-0013
-- Superseded by: N/A
+- Superseded by: ADR-0038
 - Related: `docs/design.md` §8.4、`docs/security/agent-sandbox-threat-model.md`
 
 ## コンテキストと変更契機

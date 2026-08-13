@@ -1,16 +1,16 @@
 # システムアーキテクチャ
 
 - 更新日: 2026-08-13
-- 対象: 関数型マイクロサービスへの移行中（新旧の正本を明記）
+- 対象: 関数型マイクロサービス（supported scope移行完了）
 - 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
 ## 1. 全体像
 
-本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、tool駆動Agentが記事本文と補足Web検索から出典付きPodcastを制作する**関数型マイクロサービス**である。4 Bounded Contextを独立サービスとし、Gatewayとサービス間はNATS RPC、状態伝播はJetStream eventを使う。本文・asset・音声はSeaweedFSへ保存する。
+本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、ownerが選択した版固定済み記事から出典付きPodcastを制作する**関数型マイクロサービス**である。4 Bounded Contextを独立サービスとし、Gatewayとサービス間はNATS RPC、状態伝播はJetStream eventを使う。本文・asset・音声はSeaweedFSへ保存する。
 
 設計の軸は次の4点である。
 
-> 新規の正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。旧`apps/api`、`apps/worker`、`packages/domain|application|adapters`は外部ユースケースの移植完了まで動作比較にだけ使い、新規依存を追加しない。現在の完成/未移植/削除条件は[関数型DDDマイクロサービス移行ガイド](functional-ddd-migration.md)を正本とする。
+> 正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。default ComposeとWebは新topologyだけを使う。旧`apps/api`、`apps/worker`、`packages/domain|application|adapters`は1 releaseの比較用sourceであり、runtimeや新規実装先ではない。最終gateは[関数型DDDマイクロサービス移行ガイド](functional-ddd-migration.md)を正本とする。
 
 | 設計方針 | 要点 |
 | --- | --- |
@@ -21,7 +21,7 @@
 
 ```mermaid
 flowchart LR
-  User["利用者"] --> Web["React Web<br/>切替中"]
+  User["利用者"] --> Web["React Web"]
   Web --> Gateway["Effect API Gateway"]
   Gateway <-->|"NATS RPC"| Identity["Identity Access"]
   Gateway <-->|"NATS RPC"| Content["Content Knowledge"]
@@ -49,7 +49,7 @@ flowchart LR
 | --- | --- | --- |
 | Identity & Access | ログイン、セッション、主体の特定 | Better Auth、Google OIDC、Actor |
 | Content Knowledge | RSS購読、記事snapshot、安全なreplay、Markdown | Feed、Subscription、ArticleSnapshot、ArchiveAsset |
-| Episode Production | 生成要求、Agent実行、状態遷移、生成パイプライン | EpisodeJob、AgentRun、Script、Audio |
+| Episode Production | 生成要求、構造化生成、実行監査、状態遷移 | EpisodeJob、AgentAudit、Script、Audio |
 | Episode Library | 完成番組、出典、所有者別アクセス | Episode、EpisodeSource、短期音声URL |
 
 重要な不変条件は以下である。
@@ -57,7 +57,7 @@ flowchart LR
 - `ownerId` はセッションから導出し、URLやリクエスト本文から受け取らない。
 - ジョブ作成は `owner + route + Idempotency-Key` で一意。同じキーと異なる入力の組み合わせは競合とする。
 - ジョブ作成時の有効な購読フィードをsnapshotし、処理中の購読変更から切り離す。
-- 台本が返す出典URLは、Agentが読んだRSS記事またはWeb検索で観測したURLだけを許可する。
+- 台本が返す出典URLは、ownerが選択しContentが版固定した入力記事だけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
 - 署名付き音声URLは永続化せず、アクセス要求ごとに短期発行する。
 
@@ -96,11 +96,11 @@ flowchart TB
 | `packages/domain` | Domain | ジョブ状態遷移、terminal判定、Idempotency-Key規則 |
 | `packages/application` | Application | ジョブ作成ユースケース、RSS・要約・TTS・保存・dispatch等のポート |
 | `packages/adapters` | Infrastructure Adapter | SQLite、Better Auth、RSS、OpenAI、VOICEVOX、local音声保存 |
-| `apps/api` | Delivery / Composition Root | Hono route、認証・認可、OpenAPI schema、Node/Cloudflareの組み立て |
-| `apps/worker` | Driver / Composition Root | scheduler、lease、生成パイプライン、Node/Cloudflare entrypoint |
+| `apps/api` | Legacy source | 移行比較用。runtime・OpenAPIの正本ではない |
+| `apps/worker` | Legacy source | 移行比較用。scheduler・生成の正本ではない |
 | `apps/watchdog` | Operations | Grafana非依存health/freshness監視、SMTP通知state |
 | `apps/web` | Presentation | React、TanStack Router/Query、生成OpenAPI client |
-| `packages/contracts` | Published Contract | Hono schemaから生成したOpenAPI JSONとTypeScript型 |
+| `packages/contracts` | Published Contract | Gateway HttpApiから生成したOpenAPI JSONとTypeScript型 |
 | `packages/ui` | Presentation Shared | shadcn/Base UIベースの共通UI部品とtoken |
 | `packages/observability` | Cross-cutting Adapter | OpenTelemetry契約、Node adapter、privacy filter |
 | `infra` | Deployment / Operations | Node image、Collector、Grafana/Prometheus/Loki/Tempo設定・dashboard・alert |
@@ -123,7 +123,7 @@ flowchart LR
   Application --> Domain
 ```
 
-`apps/api/src/routes/**` のHono/Zod route schemaがHTTP契約の正本であり、そこから `openapi.json` とWeb用TypeScript型を生成する。Webはサーバー実装やDomain型ではなく、公開契約だけに依存する。
+この節の`apps/api`構造は移行比較用の記録である。HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Webはサーバー実装やDomain型ではなく、公開契約だけに依存する。
 
 ### 3.4 apps/api内部構成
 
@@ -203,12 +203,13 @@ flowchart LR
 | Surface | 状態 | 現在の証拠 |
 | --- | --- | --- |
 | immutable kernel / protocol | Done | strict parse、deep freeze、correlation envelope、version付きsubject |
-| 4 Context vertical slice | Foundation done | `services/*/src/{domain,application,adapters,runtime}`。全ユースケースの機能同等性は未完了 |
+| 4 Context services | Implemented | `services/*/src/{domain,application,adapters,runtime}`、service別所有state |
 | SQLite/NATS runtime | P0 done | service別single-writer、outbox/inbox、durable consumer、fenced heartbeat、Compose readiness |
-| Effect HttpApi Gateway | Core flow done | 認証、購読、生成依頼、Library/音声。残存公開APIとWeb切替は未完了 |
 | Grafana相関監視 | P0 done | LGTM provisioning、Effect/Node OTLP、Gateway/Identity/NATS span smoke |
-| Web生成client | Pending | Gateway OpenAPI確定後 |
-| 旧API/Worker削除 | Pending | E2E parity後 |
+| Effect HttpApi Gateway | Done | 公開API parity、認証proxy、Gateway OpenAPI、functional E2E |
+| Web生成client | Done | Gateway生成型とproxyへ切替、Web E2E 13/13 |
+| state migration/recovery | Implemented | service別DB、rollback backup、件数/hash照合、backup/restore tests |
+| 旧API/Worker runtime | Removed | default Compose/importから除外。source物理削除は1 release比較後 |
 
 移行順序と削除ゲートの詳細は[移行ガイド](functional-ddd-migration.md)を参照する。`Foundation done`を機能移植完了とはみなさない。
 
@@ -224,7 +225,7 @@ sequenceDiagram
   participant Content
   participant Production
   participant Library
-  participant Providers as Agent tools / OpenAI / VOICEVOX
+  participant Providers as OpenAI / VOICEVOX
   participant Objects as SeaweedFS / R2
 
   User->>Web: 番組を生成
@@ -238,8 +239,8 @@ sequenceDiagram
     Gateway-->>Web: status / stage / attempt
   end
   Production->>Production: token付きlease + heartbeat
-  Production->>Content: 保存Markdownをmaterialize
-  Production->>Providers: 台本 → 音声合成
+  Production->>Content: owner選択済みMarkdownをmaterialize
+  Production->>Providers: strict schema台本 → 音声合成
   Production->>Objects: WAVを保存
   Production->>Library: durable completion event
   Web->>Gateway: POST /v1/episodes/{id}/audio-access
@@ -247,16 +248,15 @@ sequenceDiagram
   Gateway-->>Web: 5分間の音声アクセスURL
 ```
 
-定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Node Workerは1秒ごとにschedule確認とjob leaseを行い、IANA time zone上で同じローカル日付に二重生成しない。
+定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はjob作成成功後だけ進める。
 
 ### 4.2 生成パイプライン
 
 ```mermaid
 flowchart LR
-  Lease["Job lease"] --> Agent["Podcast Agent"]
-  Agent --> Tools["RSS記事一覧・Markdown・Web検索"]
-  Tools --> Script["Agentが選定・調査・執筆"]
-  Script --> Verify["出典とstructured draftを検証"]
+  Lease["Job lease"] --> Input["owner選択済み記事snapshot"]
+  Input --> Script["有界な構造化生成"]
+  Script --> Verify["strict schema・入力出典・上限を検証"]
   Verify --> TTS["VOICEVOXでWAV生成"]
   TTS --> Store["音声を保存"]
   Store --> Commit["Episode・出典・Jobをcommit"]
@@ -315,25 +315,24 @@ erDiagram
 | `episodes` / `episode_sources` | 台本・音声keyと、入力RSSへ遡れるprovenance |
 | `agent_runs` / `agent_tool_calls` | Agent実行結果と、思考過程を含めないtool監査要約 |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
-| `job_outbox` | D1からQueueへの送信を安全に連携するための境界（cloud実装は未完） |
+| `job_outbox` | 移行元Cloud設計の比較用schema。supported runtimeでは使わない |
 | Better Auth tables | user、session、account、verification |
 
 SQLiteはforeign key、WAL、5秒のbusy timeout、`BEGIN IMMEDIATE` transactionを使用する。音声本体はDBへ格納せず、DBにはstorage keyとbyte lengthだけを保持する。
 
 ## 6. 実行環境
 
-| 能力 | ローカル / オンプレミス | Cloudflare |
-| --- | --- | --- |
-| Web | Vite / React | 静的Web配信を想定 |
-| API | Hono on Node | Hono on Workers |
-| DB | SQLite | D1 |
-| 非同期実行 | DB polling + lease | Queues consumer |
-| object | SeaweedFS S3（記事・音声） | R2 |
-| TTS | Compose内のVOICEVOX | Cloudflare外のVOICEVOX endpoint |
-| 起動定義 | `compose.yaml` | `apps/*/wrangler.toml` |
-| 現在の完成度 | 主要vertical slice実装済み | bindingとentrypointのみ。業務処理は未接続 |
+supported runtimeはNode self-hostだけである（[ADR-0039](adr/0039-support-node-self-host-runtime-only.md)）。
 
-Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition rootへ接続されていない。Cloudflare Workerもメッセージを処理せずretryする安全なstubである。このため、現時点の実動構成はNode + SQLite + SeaweedFSを正とする。
+| 能力 | supported構成 |
+| --- | --- |
+| Web / Gateway | Vite React / Effect HttpApi on Node |
+| 業務service | Identity、Content、Production、LibraryのNode process |
+| DB / messaging | service別SQLite / NATS JetStream |
+| object / TTS | SeaweedFS S3 / VOICEVOX |
+| 起動定義 | `compose.yaml` |
+
+Cloudflare/D1/R2/Queues adapterと旧API/Workerはruntime未接続の比較用sourceであり、SLO、復旧手順、運用supportの対象外である。再導入は事業要件、owner、contract suiteを揃えた後続ADRで判断する。
 
 ## 7. 横断設計
 
@@ -341,7 +340,7 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 | --- | --- |
 | 認証 | Better Authのsession cookie。Google OIDCはログイン上流であり、Google tokenをAPI bearerとして扱わない |
 | 認可 | 全 `/v1` resourceをowner scopeで検索し、他人のIDと存在しないIDをともに404へ正規化 |
-| API契約 | Hono/Zod code-first OpenAPI、RFC 9457 Problem Details、生成型の差分検査 |
+| API契約 | Effect HttpApi code-first OpenAPI、RFC 9457 Problem Details、生成型の差分検査 |
 | 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
@@ -354,11 +353,10 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 | 項目 | 現状 | 次に境界を強化する場合の方向 |
 | --- | --- | --- |
 | Domain model | ジョブ状態と冪等性規則に限定され、比較的小さい | Feed、Episode、生成ポリシーの不変条件が増えた時だけDomainへ昇格する |
-| Worker use case | 生成pipelineのオーケストレーションが `apps/worker` にある | `packages/application` のユースケースへ移し、Workerを純粋なdriverにする |
-| 状態遷移 | Domainに状態機械はあるが、LocalStoreのSQL更新は直接statusを書き換える | repository境界でDomain遷移を必ず経由させるか、DB制約で同等規則を保証する |
-| Adapter集約 | `LocalStore` が複数repository責務を兼ねる | 複雑化した時にFeed、Job、Episode、Settings単位へ分割する |
-| Cloud runtime | topologyとbindingsは定義済み、実処理は未実装 | D1/R2/Queues adapter、outbox relay、Better Auth D1を接続する |
-| Outbox | schemaのみ存在 | job作成transactionでoutboxへ書き、dispatcher/reconcilerでQueueへ送る |
+| 旧Worker use case | `apps/worker`に移行元実装が残る | 比較用sourceに限定。新規生成はEpisode Productionだけへ追加する |
+| 一般Agent/Web検索 | 旧sourceにHarness/tool-loopが残る | 本番未接続。品質要件とSLOが揃った時だけADR-0038を再検討する |
+| Cloud runtime | 旧binding/entrypoint sourceが残る | unsupported。事業要件とcontract suiteが揃った時だけADR-0039を再検討する |
+| 旧共有state | legacy SQLite schemaが残る | migration/rollback比較用。runtimeはservice別SQLiteだけを使う |
 
 現状の規模では、これらを先回りして細分化するより、境界を文書とinterfaceで維持し、変更理由や独立scaleの必要性が実測された時に分割する。サービス分割の再検討条件は、モジュールごとの独立配備・独立scale・組織所有境界が必要になった場合である。
 
@@ -380,3 +378,5 @@ Cloudflare APIは現在、D1認証・repository・queue dispatchがcomposition r
 - [ADR-0025: 自動計装を正本とするトレース保証](adr/0025-automatic-instrumentation-and-trace-guarantee.md)
 - [ADR-0033: Bounded Contextとサービスのコロケーション](adr/0033-colocate-bounded-context-with-service.md)
 - [ADR-0034: 関数型ドメインモデルとEffect境界](adr/0034-functional-domain-model-and-effect-boundaries.md)
+- [ADR-0038: 保存済み出典による有界な構造化生成](adr/0038-bounded-structured-production-generation.md)
+- [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

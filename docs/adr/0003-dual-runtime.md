@@ -4,7 +4,7 @@
 - Date: 2026-08-09
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
-- Superseded by: ADR-0011（ローカル音声保存方式のみ。二系統のcomposition rootは継続）
+- Superseded by: ADR-0011（ローカル音声保存方式）、ADR-0039（二系統runtime）
 - Related: `docs/design.md` 6章
 
 ## コンテキストと変更契機

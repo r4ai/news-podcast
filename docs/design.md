@@ -1,28 +1,28 @@
 # RSSニュース・ポッドキャスト 設計書
 
-- 状態: 関数型マイクロサービスへ全面移行中
-- 更新日: 2026-08-11
-- 契約の正本: `apps/gateway` のEffect HttpApi（移行完了までは旧Hono契約とparity検査）
+- 状態: 関数型マイクロサービスへのsupported scope移行完了
+- 更新日: 2026-08-13
+- 契約の正本: `apps/gateway` のEffect HttpApi
 - Context間契約: `packages/protocols` のEffect Schemaとversion付きNATS subject
 - 生成契約: Gateway HttpApiから生成するOpenAPI
 - 判断記録: `docs/adr/`
 
 ## 1. 目的と今回の停止位置
 
-RSSからニュース項目を取得し、出典を追跡できる事実ベースの台本を生成し、VOICEVOXで音声化してWebで配信・再生する。重い処理は非同期ジョブとし、オンプレミスとCloudflareの二つの配備形態を同じ中核で支える。
+RSSからニュース項目を取得し、ownerが選択した版固定済み記事から出典を追跡できる台本を生成し、VOICEVOXで音声化してWebで配信・再生する。重い処理は非同期ジョブとし、Node self-host runtimeだけをsupportする。
 
-今回実装するのは、リポジトリ、契約、ドメイン状態機械、ポート、アダプター設定、API/Worker/Webのcomposition root、配備スキャフォールドまでである。初期ユースケースは、ログイン後のRSS購読、日次生成時刻設定、手動または定期生成、進捗確認、完成音声と出典の再生に確定した。
+実装範囲はGateway、4 Context services、Web、service別state migration、配備・観測基盤である。公開ユースケースは、ログイン後のRSS購読・記事管理・個人設定、手動または定期生成、進捗/再試行/取消、完成音声と出典の再生に確定した。
 
 ## 2. 確定事項
 
 - Web: Vite / React / TypeScript / Tailwind CSS / shadcn/ui neutral / Base UI。
-- API: Hono、OpenAPI-first REST。
+- API: Effect HttpApi、code-first OpenAPI。
 - 認証: Better Authのアプリセッション。初期ログインはGoogle OIDCで、将来ほかのOIDCを追加可能にする。
 - ニュース源: RSSのみ。初期カタログはZenn、azukiazusaさんの技術ブログ、Hacker News。媒体カタログとユーザー購読は分離する。
 - 要約: OpenAI `gpt-5.6-luna` が既定。モデルIDは環境変数で差し替える。APIキーはユーザーが後で設定し、キーなしでビルド・テストできる。
 - TTS: 外部VOICEVOX Engine。既定キャラクター名は「ずんだもん」。数値style IDは起動中Engineの `/speakers` から解決し、固定しない。
-- オンプレ: Docker Compose、SQLiteジョブ表、ポーリングWorker、ローカル音声保存。
-- Cloudflare: Workers、D1、R2、Queues。VOICEVOXはCloudflare外部に配置する。
+- runtime: Docker Compose、service別SQLite、NATS JetStream、SeaweedFS、VOICEVOX。
+- Cloudflare adapterはruntime未接続の比較用sourceで、support対象外（ADR-0039）。
 - 非同期生成: `POST /v1/episode-jobs`、`202 Accepted`、`Location`、`Idempotency-Key`、状態 `queued/running/retrying/succeeded/failed/canceled`。
 
 ## 3. モジュールと依存方向
@@ -51,24 +51,24 @@ flowchart LR
 | ----------------- | ------------------------------ | -------------------------------------------------- |
 | IdentityAccess    | セッション主体、認可           | Better Auth、Google OIDC                           |
 | FeedManagement    | 媒体カタログ、所有者別購読     | FeedReader                                         |
-| EpisodeProduction | ジョブ、Agent実行、冪等性、出典 | PodcastAgentRunner、SpeechSynthesizer、JobDispatcher |
+| EpisodeProduction | ジョブ、構造化生成、冪等性、出典、実行監査 | ScriptGenerator、SpeechSynthesizer、JobDispatcher |
 | EpisodeLibrary    | 所有者別一覧、音声アクセス       | ObjectStore、短期URL発行                              |
 
 ## 4. 非同期パイプライン
 
 1. 認証済みユーザーが `Idempotency-Key` 付きで生成ジョブを作成する。
 2. APIは `owner + method + canonical route + key` を一意に保存し、同一request hashなら同じreceiptを返す。異なるhashなら409にする。
-3. Workerはジョブをleaseして `queued -> running` へ遷移する。
+3. Episode Productionはジョブをleaseして `queued -> running` へ遷移する。
 4. RSS取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にし、検証済み台本と音声chunkから再開する。
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
-6. D1からQueuesへの送信はoutboxで原子的に記録し、reconcilerで再送する。Queuesの重複配送はジョブleaseと段階冪等性で吸収する。
+6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 
-Node Workerは単一flightの逐次loopで動き、60秒leaseを15秒ごとに更新する。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。Agent、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
+Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
 
 ## 5. REST契約方針
 
 - `/v1/feeds` は媒体カタログ、`/v1/me/feed-subscriptions` は現在ユーザーの購読。body/pathにuserIdを置かない。
-- `/v1/me/settings` はPATCH。ただし設定項目は確認ゲートまでスキーマを確定しない。
+- `/v1/me/settings` はGET/PATCHとし、Gatewayが各Contextのowner-scoped projectionを合成する。
 - ジョブとエピソードはrepository query自体をownerで絞る。他人のIDと存在しないIDは404へ正規化する。
 - 401はセッション欠落/失効、403は認証済みだが許可されない操作。エラーはRFC 9457 Problem Details。
 - 一覧はopaque cursor、`limit` 1..100、安定順序、filterに束縛する。`totalCount`は初期契約に入れない。
@@ -79,25 +79,21 @@ Node Workerは単一flightの逐次loopで動き、60秒leaseを15秒ごとに�
 
 ## 6. 配備トポロジー
 
-| 能力  | オンプレミス                           | Cloudflare                      |
-| ----- | -------------------------------------- | ------------------------------- |
-| API   | Hono / Node                            | Hono / Workers                  |
-| DB    | SQLite                                 | D1                              |
-| Job   | SQLite table + polling Worker          | D1 outbox + Queues consumer     |
-| Object | SeaweedFS S3 + opaque access token | R2 + short-lived authorized URL |
-| TTS   | Composeの別VOICEVOX service            | 外部VOICEVOX endpoint           |
-| Auth  | Better Auth + SQLite                   | Better Auth + D1 adapter        |
+| 能力 | supported Node self-host構成 |
+| --- | --- |
+| API / service | Effect Gateway + 4 Node Context services |
+| DB / messaging | service別SQLite + NATS JetStream |
+| Object / TTS | SeaweedFS S3 + VOICEVOX |
+| Auth | Better Auth + Identity SQLite、Gateway固定origin proxy |
 
-SQLiteとD1で共有できるSQL制約はmigrationに置くが、ランタイムadapterは別exportにしてNode専用依存をWorkers bundleへ混ぜない。
+Cloudflare/D1/R2/Queuesはsupport対象外である。再導入条件は[ADR-0039](adr/0039-support-node-self-host-runtime-only.md)を正本とする。
 
 ### 6.1 監視トポロジー
 
 ```mermaid
 flowchart LR
-  Browser["Browser OTel Web SDK"] -->|"認証済み same-origin"| Gateway["API /v1/telemetry/*"]
-  Cloudflare["Cloudflare Web / API / Worker"] -->|"native OTLP logs/traces"| Ingress["HTTPS OTLP ingress"]
-  Node["Local Node API / Worker"] -->|"OTLP HTTP"| Ingress
-  Gateway -->|"Bearer OTLP"| Ingress
+  Browser["Browser OTel Web SDK"] -->|"許可済みOTLP origin"| Ingress
+  Node["Gateway + 4 Node services"] -->|"OTLP HTTP"| Ingress["HTTPS OTLP ingress"]
   Ingress --> Collector["OpenTelemetry Collector"]
   Collector --> Prometheus[("Prometheus / Metrics")]
   Collector --> Loki[("Loki / Logs")]
@@ -110,7 +106,7 @@ flowchart LR
   Watchdog -->|"direct SMTP"| OnCall["Operations"]
 ```
 
-Cloudflareへのアプリ配備とLinux上の監視基盤は独立させる。Domain/Applicationは監視実装を知らず、appsとadapterだけが`packages/observability`を使う。BrowserからAPIまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Workerは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はWorker trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
+Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packages/observability`を使う。BrowserからGatewayまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Productionは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はProduction trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
 Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningでdashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理し、watchdogはGrafana停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
@@ -149,26 +145,25 @@ Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% 
 
 実アプリは生成OpenAPI型とTanStack Query/RouterでAPIへ接続する。StorybookのfixtureはUIの独立確認専用で、実アプリのデータ源には使用しない。
 
-## 8. RSS Reader・アーカイブ・Agent生成
+## 8. RSS Reader・アーカイブ・構造化生成
 
-セルフホスト環境を正とし、RSS同期で発見した新着記事を自動的に静的archiveへ変換する。記事本文と音声を含む大きなobjectはSeaweedFS、検索・認可・状態・provenanceはSQLiteへ保存する。Podcast生成は固定promptの一括変換ではなく、read-only toolを使うagentが記事選定、本文読解、補足検索、構成、執筆を行う。
+セルフホスト環境を正とし、RSS同期で発見した新着記事を静的archiveへ変換する。記事本文と音声を含む大きなobjectはSeaweedFS、検索・認可・状態・provenanceはSQLiteへ保存する。Podcast生成はownerが選択した版固定済み記事だけを入力にし、strict schemaで有界な台本を生成する。
 
-任意URLを取得するNode API/Workerは、protocol・credential・解決IPを検査し、その検査済みpublic IP集合をsocket lookupへ固定する。通常fetchによるDNS再解決は許可せず、redirectごとに再検査する。pinはrequest単位の参照としてprocess memoryだけに保持し、接続確立・失敗時に解放する。同時hostname数を1,024件へ制限し、停止時にconnection dispatcherをcloseする。Cloudflareとテスト注入はruntime固有のfetch seamを維持する。詳細は[ADR-0023](adr/0023-node-dns-pinned-safe-fetch.md)を正本とする。
+任意URLを取得するContent serviceは、protocol・credential・解決IPを検査し、その検査済みpublic IP集合をsocket lookupへ固定する。通常fetchによるDNS再解決は許可せず、redirectごとに再検査する。pinはrequest単位の参照としてprocess memoryだけに保持し、接続確立・失敗時に解放する。同時hostname数を1,024件へ制限し、停止時にconnection dispatcherをcloseする。テスト注入はruntime固有のfetch seamを維持する。詳細は[ADR-0023](adr/0023-node-dns-pinned-safe-fetch.md)を正本とする。
 
 ```mermaid
 flowchart LR
-  Web["RSS Reader Web"] --> API["Hono API"]
-  API --> DB[("SQLite metadata")]
-  API --> S3[("SeaweedFS / S3")]
-  Scheduler --> Sync["RSS Sync"]
+  Web["RSS Reader Web"] --> API["Effect Gateway"]
+  API --> Content["Content Knowledge"]
+  Content --> DB[("Content SQLite")]
+  Content --> S3[("SeaweedFS / S3")]
+  Scheduler --> Sync["Content RSS Sync"]
   Sync --> Archive["Safe Web Archive"]
   Archive --> S3
   Archive --> DB
-  EpisodeJob --> Agent["Podcast Agent"]
-  Agent --> Tools["RSS / Archive / Web Search tools"]
-  Tools --> DB
-  Tools --> S3
-  Agent --> Verify["Structured draft + provenance validation"]
+  EpisodeJob --> Input["owner選択済みarchive snapshot"]
+  Input --> Generate["strict structured generation"]
+  Generate --> Verify["Schema + input provenance validation"]
   Verify --> Voicevox
   Voicevox --> S3
 ```
@@ -179,8 +174,8 @@ flowchart LR
 | --- | --- | --- |
 | FeedManagement | 任意feed登録、購読、同期、記事状態 | FeedReader、FeedRepository |
 | ContentArchive | 安全な取得、snapshot、HTML replay、Markdown | ArticleFetcher、ArchiveBuilder、ObjectStore |
-| AgentRuntime | tool権限、turn/費用制限、実行監査 | PodcastAgentRunner、AgentTool |
-| EpisodeProduction | draft検証、出典、TTS、完成処理 | SpeechSynthesizer、EpisodeRepository |
+| AgentAudit | owner/job/attempt lineage、memory lifecycle | AgentAuditRepository |
+| EpisodeProduction | 有界生成、draft検証、出典、TTS、完成処理 | ScriptGenerator、SpeechSynthesizer、EpisodeRepository |
 
 ### 8.2 保存規則
 
@@ -197,19 +192,18 @@ bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去�
 
 初期HTMLで参照される静的resourceは、linked stylesheetを起点にCSSの`@import`と`url()`を再帰取得し、inline style、画像、`srcset`、font、audio/videoも同一snapshotへ保存する。content hashが同じresourceは上限へ重複計上しない。既定上限はHTML 5 MiB、単一asset 20 MiB、snapshotあたりasset 512件かつ合計100 MiBとし、環境変数で変更できる。主要stylesheetが取得失敗または上限超過した場合は、壊れた元レイアウトではなく保存本文をreader viewで返す。JavaScript実行後にだけ生成されるDOMは対象外とする。
 
-### 8.3 Agentの裁量と制約
+### 8.3 構造化生成の裁量と制約
 
-| Agentへ委ねる | Applicationが強制する |
+| LLMへ委ねる | Applicationが強制する |
 | --- | --- |
-| 記事選定、調査順序、番組構成 | owner scope、read-only tool |
-| 話題数、語り口、補足検索 | turn、tool call、HTTP時間上限 |
-| 使用する根拠の選択 | source ID検証、structured result、TTS可能性 |
+| owner選択済み記事の構成、語り口 | 入力snapshot、strict schema、deadline、byte上限 |
+| 記事間の説明順序 | 入力外source拒否、TTS可能性、retry分類 |
 
 台本完成後・音声合成前に、英略語・英数字技術語・固有名詞の読み候補をstrict JSON Schemaで最大30件抽出する。全角カタカナ・長さ・アクセントを検証し、ownerの既存辞書とNFKC正規化キーで重複を除いた候補だけをSQLiteとVOICEVOX辞書へ同期する。抽出失敗は`reading_dictionary.extraction_failed`として記録し、番組生成自体は継続する。詳細は[ADR-0028](adr/0028-structured-reading-dictionary-extraction.md)を正本とする。
 
 LLM応答はJSON Schemaの形だけでなく、要求集合との完全な対応を永続化前に検証する。バッチIDは入力と出力を1対1にし、選択記事は全件の読込と引用を要求する。HTTP 200後の空・不完全・不正応答はbounded retryへ、request 4xxとrefusalは終端へ、caller cancellationは理由を変換せず元の状態遷移へ渡す。任意成果物の失敗は主要成果物から隔離するが、正常な空集合へ偽装せず既存の失敗イベントへ記録する。詳細は[ADR-0031](adr/0031-complete-isolated-llm-response-boundaries.md)を正本とする。
 
-初期toolは`list_rss_articles`、`read_article`、Responses APIのhosted `web_search`、`submit_episode_draft`とする。RSS記事を主題の起点にし、Web検索は補足と事実確認に使い、異なるsource kindとして保存する。RSS出典はagentが保存済みMarkdown本文を読んだ記事だけを受理する。
+hosted Web検索と一般Agent Harnessは本番経路へ接続しない。入力外sourceを必要とする品質要件とSLOが得られた場合だけ[ADR-0038](adr/0038-bounded-structured-production-generation.md)を再検討する。
 
 記事要約では本文を必須成果物、Mermaidを任意の補助成果物として分離する。Mermaidは保存前に検証して1回だけ修復し、それでも不正なら図だけを除去して本文を保存する。縮退は`article.enrich.summary.degraded`へ記録し、反復時にalertする。本文まで空になる場合だけ要約を失敗させる。詳細は[ADR-0030](adr/0030-degrade-invalid-summary-diagrams.md)を正本とする。
 
@@ -217,41 +211,34 @@ LLM応答はJSON Schemaの形だけでなく、要求集合との完全な対応
 
 AG-UI timelineは`job.retrying`、`RUN_ERROR`、`RUN_FINISHED`で未完了step/toolを閉じる。retry時は次の`RUN_STARTED`と`STEP_STARTED`で同じstageを再開し、backendが停止中または終端済みなのにspinnerだけが動き続ける状態を許さない。
 
-### 8.4 隔離型Agent Harness
+### 8.4 Agent監査境界
 
-Agentはjob処理中だけTypeScript Worker上のHarnessとして動き、shell/Python/CLIは専用KVM hostのFirecracker microVMへ委譲する。RSS、Web検索、Memoryはowner scopedなMCP Tool Brokerが仲介し、出典検証、VOICEVOX、Episode commitはsandbox外のApplicationが行う。
+Episode Productionはrun/tool/memoryをowner・job・attemptで分離して監査するが、一般Agent、shell、workspace、Firecrackerは実行しない。credential、記事本文全体、chain-of-thoughtは保存しない。
 
 ```mermaid
 flowchart LR
-  OpenAI["OpenAI model"] <-->|turn / tool call| Harness["TS Agent Harness"]
-  Harness <-->|MCP| Broker["RSS / Web / Memory"]
-  Harness <-->|internal API| Runner["Rust sandbox-runner"]
-  Runner <-->|vsock| VM["Firecracker microVM"]
-  Harness --> Verify["Source validation / TTS / commit"]
+  Job["Episode job / attempt"] --> Audit["owner-scoped audit"]
+  Audit --> Event["run / tool summary"]
+  Audit --> Memory["validated memory lifecycle"]
+  Job --> Generate["bounded structured generation"]
+  Generate --> Verify["Source validation / TTS / commit"]
 ```
 
-Agentは常駐せず、手動・定期jobのlease時に開始し、terminal時にVMを破棄する。承認待ちはworkspaceをcheckpointしてVMを止める。一時障害はtool call台帳とcheckpointから新VMへ復元する。長期Memoryは`owner + Agent instance`で分離し、生workspaceではなく検証済みMemoryだけを次runへread-onlyで渡す。詳細なuse case、状態、権限は[ADR-0015](adr/0015-firecracker-agent-harness.md)を正本とする。
+旧Harness設計の履歴はADR-0015に残すが、現行判断は[ADR-0038](adr/0038-bounded-structured-production-generation.md)がsupersedeする。
 
-## 9. 実装DAGと順序
+## 9. 実装と変更の順序
 
 ```mermaid
 flowchart TD
-  S0["S0 workspace / toolchain"] --> S1["S1 design + ADR"]
-  S1 --> S2A["S2A OpenAPI common contract"]
-  S1 --> S2B["S2B domain state machine"]
-  S2A --> S3["S3 application ports"]
-  S2B --> S3
-  S3 --> S4A["S4A local adapters + API/Worker roots"]
-  S3 --> S4B["S4B Cloudflare adapter roots"]
-  S2A --> S5["S5 Web + Storybook QA scaffold"]
-  S4A --> S6["S6 Compose smoke"]
-  S4B --> S7["S7 Wrangler dry-run"]
-  S5 --> Gate["Functional use-case confirmation gate"]
-  S6 --> Gate
-  S7 --> Gate
+  Contract["protocol / Gateway contract"] --> Red["state table + failing test"]
+  Red --> Domain["domain transition"]
+  Domain --> App["application + owned port"]
+  App --> Adapter["SQLite / NATS / provider"]
+  Adapter --> E2E["service + Web E2E"]
+  E2E --> Gate["coverage / observability / migration gate"]
 ```
 
-実装順は S0 → S1 → S2A/S2B（並行）→ S3 → S4A/S4B/S5 → S6/S7 → 確認ゲート。確認後は最小縦スライスを「契約test → domain/application → adapter → API → UI story → E2E」の順で追加する。
+新規変更はContextごとの縦断sliceを「契約test → domain/application → adapter → Gateway → Web → E2E」の順で閉じる。Cloud adapterや旧API/Workerへ機能を追加しない。
 
 ## 10. 追加機能の確認ゲート
 
@@ -269,14 +256,12 @@ flowchart TD
 ## 11. 主要リスク
 
 - RSSだけで事実確認できる範囲と著作権上許容される引用量。
-- Cloudflareから外部VOICEVOXへのTLS、認証、到達性、長文分割。
 - VOICEVOXのstyle ID変動。数値固定を避け、名前解決と起動時検証を行う。
-- D1/Queuesのat-least-once配送とD1→Queue間の原子性。outboxを必須とする。
-- Better AuthのSQLite/D1 adapter差とcookie設定。セッションcookie名をOpenAPIへ手書き固定しない。
+- Better Authのcookie設定。セッションcookie名をOpenAPIへ手書き固定しない。
 - OpenAIのproviderエラーや生成根拠を外部レスポンスへ露出しない。
 - 任意RSSと記事redirectによるSSRF。接続前とredirectごとに解決IPを検査する。
 - SQLiteとObjectStore間の孤児object。現在は冪等keyと再試行で利用経路を保護し、運用reconcilerを追加する。
-- agentの費用・latency・非決定性。実行limitと代表fixtureのevalを持つ。
+- LLMの費用・latency・非決定性。strict schema、実行limit、代表fixtureのevalを持つ。
 
 ## 12. ADR一覧
 
@@ -298,3 +283,5 @@ flowchart TD
 - [ADR-0016 Episode生成を有界leaseと永続checkpointで実行する](adr/0016-bounded-observable-episode-execution.md)
 - [ADR-0017 同期HTTPを継続し非同期生成をSpan Linkで相関する](adr/0017-linked-distributed-tracing.md)
 - [ADR-0025 自動計装を正本とするトレース保証](adr/0025-automatic-instrumentation-and-trace-guarantee.md)
+- [ADR-0038 保存済み出典による有界な構造化生成](adr/0038-bounded-structured-production-generation.md)
+- [ADR-0039 Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

@@ -74,11 +74,11 @@ flowchart LR
 | --- | --- | --- | --- |
 | 設計書 | 個人設定の所有Contextを明示 | Done | 本ADR |
 | Identity | schedule domain、SQLite、due/complete | Done | `services/identity-access` tests |
-| Content | article state、tag/enrichment transaction | In progress | `services/content-knowledge` tests |
-| Production | dictionary snapshot、Agent audit | In progress | `services/episode-production` tests |
-| Protocols/Gateway | ownerをactorから導出しprojectionを合成 | In progress | protocol/Gateway tests |
-| OpenAPI/Web | 外部shapeを維持し新Gatewayへ切替 | Pending | contract/Web E2E |
-| Migration | owner別export/importと件数/hash照合 | Pending | migration runbook |
+| Content | article state、tag/enrichment transaction | Done | `services/content-knowledge` tests |
+| Production | dictionary snapshot、Agent audit | Done | `services/episode-production` tests |
+| Protocols/Gateway | ownerをactorから導出しprojectionを合成 | Done | protocol/Gateway tests |
+| OpenAPI/Web | 実装済み能力の外部shapeで新Gatewayへ切替 | Done | Gateway contract、Web E2E 13/13 |
+| Migration | owner別export/importと件数/hash照合 | Done | migration script/tests、recovery runbook |
 
 ## 再検討条件
 
@@ -89,5 +89,4 @@ flowchart LR
 ## 受け入れゲートと未決事項
 
 - 旧runtime削除前に、owner別の設定・タグ・辞書件数と内容hashを新DBと照合する。
-- Gateway統合E2Eで、別ownerのIDを指定してもデータが見えないことを確認する。
-
+- 最終gateでGateway/functional E2Eを再実行し、owner分離とschedule完了順序を確認する。

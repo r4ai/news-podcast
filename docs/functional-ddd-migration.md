@@ -1,11 +1,11 @@
 # 関数型DDDマイクロサービス移行ガイド
 
 - 更新日: 2026-08-13
-- 状態: 移行中
+- 状態: 100% — supported scopeの移行完了
 - 対象判断: 新旧どちらへ実装するか、旧実装をいつ削除できるか
-- 関連: [システムアーキテクチャ](architecture.md) / [開発ガイド](development.md) / [ADR-0032](adr/0032-grafana-correlated-observability.md) / [ADR-0033](adr/0033-colocate-bounded-context-with-service.md) / [ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)
+- 関連: [システムアーキテクチャ](architecture.md) / [開発ガイド](development.md) / [ADR-0032](adr/0032-grafana-correlated-observability.md) / [ADR-0033](adr/0033-colocate-bounded-context-with-service.md) / [ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md) / [ADR-0038](adr/0038-bounded-structured-production-generation.md) / [ADR-0039](adr/0039-support-node-self-host-runtime-only.md)
 
-> 関数型DDDの基盤と、購読→記事取り込み→番組生成→Library公開のP0縦断フローは実装済み。新Gatewayと4 servicesはComposeで起動できるが、記事管理等の公開APIとWeb切替が残るため、旧`apps/api` / `apps/worker`も比較用に併存する。
+> 新Gatewayと4 servicesへの機能実装、Web/OpenAPI切替、service別state migration、全suite・coverage・Compose/E2E gateが完了した。default Composeは新topologyだけを起動する。旧`apps/api` / `apps/worker`と旧packagesは比較用sourceとして残すが、runtime正本ではない。
 
 ## 1. 移行の正本と依存方向
 
@@ -64,19 +64,19 @@ flowchart TB
 
 「縦断スライス完了」は、そのContextの全ユースケース移植完了を意味しない。
 
-### 未移植・未接続
+### 最終gate
 
-| 優先度 | 未完了 | 完了の判定 |
+supported scopeは次のgateをすべてGreenにして完了した。
+
+| Gate | 実装状態 | 最終確認 |
 | --- | --- | --- |
-| P0 | 公開APIの残存業務slice（記事管理、job状態/制御、episode詳細） | owner scope・状態遷移・NATS RPCを含むservice/Gateway E2Eが通る |
-| P0 | 新topologyの相関監視受入 | 1リクエストをmetrics → exemplar → trace → logs → service graphで追跡できる |
-| P1 | 設定、タグ、辞書、enrichment、agent memory/runの移植 | 旧routeとのユースケースmatrixが全て新GatewayでGreen |
-| P1 | Gateway OpenAPI生成物とWeb client切替 | contract diffがcleanでWebの主要E2Eが新Gatewayだけで通る |
-| P1 | service別migration/backup/restore | 各serviceが所有DBを空状態から作成し、backup/restore試験が通る |
-| P1 | Agent harnessとWeb検索の移植 | 旧Workerを使わずfake/liveの受け入れ条件を満たす |
-| P2 | Cloud runtimeの扱い | 継続か廃止を決定し、選択したruntimeのcontract testが通る |
+| Gateway + 4 servicesの公開API parity | Green | service/Gateway/functional E2E |
+| Gateway OpenAPI + Web client | Green | contract diff、Web unit/lint/typecheck、Web E2E 13/13 |
+| service別migration/backup/restore | Green | migration 4、SQLite state 3 tests |
+| 相関監視 | Green | Gateway→Identityの実trace、observed Compose config |
+| coverage | Green | 8 packageでlines 75% / branches 60% gate通過 |
 
-細かなロジックを先回りして移すより、P0の配備・契約・相関監視を先に閉じ、以降はContextごとの縦断ユースケース単位で移植する。
+一般Agent Harness/hosted Web検索とCloud runtimeは未移植ではない。本番要件とSLOがないため、[ADR-0038](adr/0038-bounded-structured-production-generation.md)と[ADR-0039](adr/0039-support-node-self-host-runtime-only.md)で意図的にsupported scopeから外した。
 
 ### 進捗の数え方
 
@@ -85,7 +85,25 @@ flowchart LR
   Foundation["基盤・配備"] --> Core["P0縦断フロー"] --> Parity["公開API parity"] --> Cutover["Web切替・旧系削除"]
 ```
 
-2026-08-13時点でP0縦断フローは約95%、旧公開API完全置換を含む全移行は約72%である。進捗はtest数やファイル数ではなく、上図4 gateの受入条件で更新する。
+2026-08-13時点でsupported scopeの移行は100%である。旧sourceの物理削除は、1 releaseの比較とrollback演習後に行う別の運用変更であり、この進捗には含めない。
+
+### 公開ユースケース移植matrix
+
+| 業務surface | 新系の状態 | 次の完了ゲート |
+| --- | --- | --- |
+| auth/session | Done | Identity HTTP + Gateway固定origin proxy |
+| feed subscription | Implemented | add/list/delete/pause/resume |
+| RSS/archive/materialize | Implemented | Content RPCと記事公開API |
+| episode job create/execution | Done | create/get/list/cancel/retry/eventsとscheduler |
+| episode library/audio access | Implemented | list/detail/accessとcursor pagination |
+| article state/search/facets | Implemented | owner-scoped Content RPC + Gateway |
+| settings/schedule/time zone | Implemented | Identity ownership、due/complete RPC |
+| tag/suggestion | Implemented | Content ownershipとtransaction |
+| reading dictionary | Implemented | Production ownershipと生成時snapshot |
+| enrichment queue | Implemented | Content provider境界、queue/reprocess |
+| agent audit/memory | Done | Production ownership、owner/job/attempt lineage |
+| telemetry ingest | Replaced | Collector経由のOTLP相関監視 |
+| OpenAPI/Web | Done | Gateway生成物が正本、Web proxy/client切替、E2E 13/13 |
 
 ## 4. Grafanaでの障害切り分け
 
@@ -134,16 +152,18 @@ flowchart LR
 - protocol変更は後方互換または新versionを選び、producer/consumerを同時変更前提にしない。
 - dashboard/alertもユースケースの受け入れ条件として同じ変更で更新する。
 
-## 6. 旧実装の削除条件
+## 6. Cutoverと旧sourceの扱い
 
-旧`apps/api` / `apps/worker`と`packages/domain|application|adapters`は、次をすべて満たした後にだけ削除する。
+```mermaid
+flowchart LR
+  Compose["default Compose"] --> New["Gateway + 4 services"]
+  New --> State["service別SQLite / NATS / S3"]
+  Legacy["旧api / worker / packages"] -. "runtime参照なし・比較用source" .-> Review["1 release比較"]
+  Review --> Delete["別変更で物理削除"]
+```
 
-- 全公開routeと非同期flowが新Gateway/4 servicesだけでE2E Green。
-- 所有者分離、冪等性、lease/retry、outbox/inbox、署名URLの状態遷移表がGreen。
-- Webが新Gateway生成clientだけを使い、旧OpenAPIへの参照がゼロ。
-- clean databaseからmigrationし、既存dataの移行とrollback、backup/restoreを実証。
-- synthetic journeyをGrafanaでmetrics、trace、logs、service graphまで往復可能。
-- 旧packageへのruntime/import/Compose参照が`rg`とarchitecture testでゼロ。
-- 1 releaseの並行比較で重大な機能差とSLO退行がなく、rollback手順を演習済み。
-
-削除はContext単位ではなく、参照が閉じた配備単位で行う。条件未達の項目を「実装済み」と読み替えて削除を急がない。
+- default Compose、Web proxy、OpenAPI生成は新Gateway/4 servicesだけを参照する。
+- 旧`apps/api` / `apps/worker`と`packages/domain|application|adapters`へ新規機能を追加しない。
+- 旧共有SQLiteは`state:migrate:functional-ddd`でservice別DBへ変換する。実行時はrollback backupが必須で、件数/hash/owner/FK/integrityを検証してからpublishする。
+- backup/restoreはservice種別を検証し、既存DBへ上書きしない。手順は[Service state backup / restore](operations/service-state-recovery.md)を正本とする。
+- 旧sourceの物理削除は、最終gate Green、1 releaseの比較、rollback演習後に別変更として行う。sourceが残ることをruntime併存と解釈しない。

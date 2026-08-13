@@ -4,7 +4,7 @@
 - Date: 2026-08-10
 - Decision owners: Product owner / Editorial
 - Supersedes: ADR-0007
-- Superseded by: ADR-0015
+- Superseded by: ADR-0015、ADR-0038
 - Related: OpenAI Responses API、ADR-0012
 
 ## コンテキストと変更契機
