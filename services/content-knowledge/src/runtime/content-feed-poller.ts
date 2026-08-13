@@ -3,7 +3,8 @@ import { Effect } from "effect"
 
 import { createHttpRssFeedReader } from "../adapters/http-rss-feed-reader.js"
 import { archiveArticle } from "../application/archive-article.js"
-import { pollSubscriptions } from "../application/poll-subscriptions.js"
+import { pollFeed } from "../application/poll-subscriptions.js"
+import { runFeedSyncCycle } from "../application/feed-sync-worker.js"
 import {
   contentKnowledgeActorUnsafe,
   currentCapturedAtUnsafe,
@@ -14,7 +15,11 @@ import {
   randomTraceparentUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import type { HttpS3ArticleCaptureResource } from "../infrastructure/unsafe/http-s3-article-capture.js"
-import { runFeedPollLoop, type FeedPollLoopConfig } from "./feed-poll-loop.js"
+import {
+  runFeedPollLoop,
+  type FeedPollLoopConfig,
+  type FeedPollWakeup,
+} from "./feed-poll-loop.js"
 import type { NodeContentKnowledgeRuntime } from "./node.js"
 
 export type ContentFeedPollerConfig = Readonly<{
@@ -47,7 +52,7 @@ export const makeContentFeedPollOnce = (
   config: Pick<ContentFeedPollerConfig, "http">,
   runtime: Pick<
     NodeContentKnowledgeRuntime,
-    "articles" | "store" | "subscriptions"
+    "articles" | "store" | "subscriptions" | "feedSyncQueue"
   >,
   captureResource: Pick<HttpS3ArticleCaptureResource, "capture" | "fetcher">,
   dependencies: ContentFeedPollerDependencies = defaultDependencies
@@ -58,7 +63,7 @@ export const makeContentFeedPollOnce = (
     newSnapshotId: dependencies.newSnapshotId,
     now: dependencies.now,
   })
-  return pollSubscriptions({
+  const ports = {
     subscriptions: runtime.subscriptions,
     catalog: runtime.articles,
     reader: createHttpRssFeedReader(config.http, captureResource.fetcher),
@@ -72,6 +77,12 @@ export const makeContentFeedPollOnce = (
         traceparent: dependencies.newTraceparent(),
         actor: contentKnowledgeActorUnsafe,
       }),
+  } as const
+  return runFeedSyncCycle({
+    subscriptions: runtime.subscriptions,
+    queue: runtime.feedSyncQueue,
+    pollFeed: pollFeed(ports),
+    now: dependencies.now,
   })
 }
 
@@ -80,12 +91,19 @@ export const runContentFeedPoller = (
   config: ContentFeedPollerConfig,
   runtime: Pick<
     NodeContentKnowledgeRuntime,
-    "articles" | "store" | "subscriptions"
+    "articles" | "store" | "subscriptions" | "feedSyncQueue"
   >,
   captureResource: Pick<HttpS3ArticleCaptureResource, "capture" | "fetcher">,
-  dependencies: ContentFeedPollerDependencies = defaultDependencies
+  dependencies: ContentFeedPollerDependencies = defaultDependencies,
+  wakeup?: FeedPollWakeup
 ): Effect.Effect<void> =>
   runFeedPollLoop(
     config.loop,
-    makeContentFeedPollOnce(config, runtime, captureResource, dependencies)
+    makeContentFeedPollOnce(config, runtime, captureResource, dependencies),
+    wakeup === undefined
+      ? undefined
+      : {
+          waitForNextCycle: (delayMillis) =>
+            Effect.race(Effect.sleep(delayMillis), wakeup.wait()),
+        }
   )

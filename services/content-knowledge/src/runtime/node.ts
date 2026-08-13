@@ -8,6 +8,7 @@ import {
   createSqliteArchiveStore,
   createSqliteContentTaxonomy,
   createSqliteEnrichmentQueue,
+  createSqliteFeedSyncQueue,
   createSqliteInterestProfileRepository,
   createSqliteSubscriptionRepository,
   makeOpenAiEnrichmentProvider,
@@ -30,6 +31,7 @@ import {
 import { createContentTaxonomy } from "../application/content-taxonomy.js"
 import { createInterestProfileOperations } from "../application/interest-profile.js"
 import type { SubscriptionRepository } from "../application/subscription-ports.js"
+import type { FeedSyncQueueRepository } from "../application/feed-sync-queue.js"
 import { archiveArticle } from "../application/archive-article.js"
 import {
   openHttpS3ArticleCaptureUnsafe,
@@ -67,6 +69,7 @@ import {
   unavailableEnrichmentProvider,
 } from "./enrichment-runtime.js"
 import { runEnrichmentWorkerLoop } from "./enrichment-worker-loop.js"
+import { makeFeedPollWakeup } from "./feed-poll-loop.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -201,6 +204,7 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
   readonly articles: ArticleCatalog
   readonly library: ArticleLibraryRepository
   readonly subscriptions: SubscriptionRepository
+  readonly feedSyncQueue: FeedSyncQueueRepository
   readonly taxonomy: ReturnType<typeof createContentTaxonomy>
   readonly interestProfiles: ReturnType<typeof createInterestProfileOperations>
   readonly createEnrichment: (input: {
@@ -295,6 +299,7 @@ export const startNodeRuntime = (
                 createSqliteSubscriptionRepository(database),
                 createSqliteContentTaxonomy(database),
                 createSqliteEnrichmentQueue(database),
+                createSqliteFeedSyncQueue(database),
                 createSqliteInterestProfileRepository(
                   database,
                   dependencies.now
@@ -308,6 +313,7 @@ export const startNodeRuntime = (
                     subscriptions,
                     taxonomyRepository,
                     enrichmentQueue,
+                    feedSyncQueue,
                     interestProfileRepository,
                   ]) =>
                     Effect.tryPromise({
@@ -373,6 +379,7 @@ export const startNodeRuntime = (
                           articles,
                           library,
                           subscriptions,
+                          feedSyncQueue,
                           taxonomy,
                           interestProfiles,
                           createEnrichment,
@@ -444,6 +451,7 @@ export const runNodeService = (
                   (markdown) => markdown.close
                 ).pipe(
                   Effect.flatMap((markdown) => {
+                    const feedPollWakeup = makeFeedPollWakeup()
                     const enrichment = runtime.createEnrichment({
                       source: makeEnrichmentSource(markdown.reader),
                       provider:
@@ -491,12 +499,15 @@ export const runNodeService = (
                             taxonomy: runtime.taxonomy,
                             interestProfiles: runtime.interestProfiles,
                             enrichment,
-                          }
+                          },
+                          feedPollWakeup
                         ),
                         dependencies.runPoller(
                           config.feedPoller,
                           runtime,
-                          capture
+                          capture,
+                          undefined,
+                          feedPollWakeup
                         ),
                         dependencies.runEnrichment(
                           config.enrichment.loop,

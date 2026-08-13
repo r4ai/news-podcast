@@ -1,7 +1,7 @@
 import { Effect, Fiber } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import { runFeedPollLoop } from "./feed-poll-loop.js"
+import { makeFeedPollWakeup, runFeedPollLoop } from "./feed-poll-loop.js"
 
 describe("feed polling scheduler", () => {
   it("serializes cycles and backs off after a runtime failure", async () => {
@@ -51,5 +51,40 @@ describe("feed polling scheduler", () => {
     expect(maximumActive).toBe(1)
     expect(delays).toEqual([100, 1_000])
     expect(outcomes).toEqual(["FeedPollCycleFailed", "FeedPollCycleSucceeded"])
+  })
+
+  it("wakes the five-minute scheduler when a subscription is added", async () => {
+    const wakeup = makeFeedPollWakeup()
+    let calls = 0
+    const fiber = Effect.runFork(
+      runFeedPollLoop(
+        {
+          intervalMillis: 300_000,
+          initialBackoffMillis: 100,
+          maximumBackoffMillis: 300_000,
+        },
+        () =>
+          Effect.sync(() => {
+            calls += 1
+            return {
+              feeds: 0,
+              discovered: 0,
+              archived: 0,
+              alreadyArchived: 0,
+              failed: 0,
+              failures: [],
+            }
+          }),
+        {
+          waitForNextCycle: () => Effect.race(Effect.never, wakeup.wait()),
+          observe: () => Effect.void,
+        }
+      )
+    )
+
+    await vi.waitFor(() => expect(calls).toBe(1))
+    wakeup.notify()
+    await vi.waitFor(() => expect(calls).toBe(2))
+    await Effect.runPromise(Fiber.interrupt(fiber))
   })
 })

@@ -7,7 +7,7 @@ import {
   type ArchiveRequestId,
   type ArticleId,
 } from "../domain/article.js"
-import type { FeedId } from "../domain/subscription.js"
+import type { FeedId, FeedUrl } from "../domain/subscription.js"
 import type {
   ArchiveArticleInvocation,
   ArchiveArticleResult,
@@ -93,6 +93,83 @@ const oneFailure = (
 
 const parseArchiveCommand = parse(ArchiveCommandSchema)
 
+/** Polls one feed; item-level failures are reported without aborting the feed. */
+export const pollFeed =
+  (ports: PollSubscriptionsPorts) =>
+  (feed: { readonly feedId: FeedId; readonly feedUrl: FeedUrl }) =>
+    ports.reader.read(feed.feedUrl).pipe(
+      Effect.flatMap((items) =>
+        Effect.forEach(
+          items,
+          (item) => {
+            const identity = ports.deriveArticleIdentity({
+              feedId: feed.feedId,
+              externalId: item.externalId,
+            })
+            return parseArchiveCommand({
+              ...identity,
+              sourceUrl: item.url,
+              title: item.title,
+            }).pipe(
+              Effect.flatMap((command) =>
+                (ports.catalog === undefined
+                  ? Effect.void
+                  : ports.catalog.upsert({
+                      articleId: command.articleId,
+                      feedId: feed.feedId,
+                      externalId: item.externalId,
+                      sourceUrl: command.sourceUrl,
+                      title: command.title,
+                      ...(item.publishedAt === undefined
+                        ? {}
+                        : { publishedAt: item.publishedAt }),
+                      discoveredAt: ports.now(),
+                    })
+                ).pipe(
+                  Effect.andThen(
+                    ports.archive(
+                      deepFreeze({
+                        command,
+                        context: ports.newContext(),
+                      })
+                    )
+                  )
+                )
+              ),
+              Effect.match({
+                onFailure: (failure): FeedPollResult =>
+                  oneFailure(
+                    typeof failure === "object" &&
+                      failure !== null &&
+                      "_tag" in failure
+                      ? "ArchiveFailed"
+                      : "InvalidItem",
+                    1
+                  ),
+                onSuccess: (result): FeedPollResult =>
+                  deepFreeze({
+                    ...empty(),
+                    discovered: 1,
+                    archived: result._tag === "Archived" ? 1 : 0,
+                    alreadyArchived: result._tag === "AlreadyArchived" ? 1 : 0,
+                  }),
+              })
+            )
+          },
+          { concurrency: 1 }
+        ).pipe(Effect.map((results) => results.reduce(combine, empty())))
+      ),
+      Effect.match({
+        onFailure: (failure): FeedPollResult =>
+          deepFreeze({
+            ...oneFailure(failure.reason),
+            feeds: 1,
+          }),
+        onSuccess: (result): FeedPollResult =>
+          deepFreeze({ ...result, feeds: 1 }),
+      })
+    )
+
 /** Polls feeds sequentially so a slow origin cannot amplify outbound load. */
 export const pollSubscriptions =
   (ports: PollSubscriptionsPorts) =>
@@ -102,86 +179,7 @@ export const pollSubscriptions =
   > =>
     ports.subscriptions.listFeedsForPolling().pipe(
       Effect.flatMap((feeds) =>
-        Effect.forEach(
-          feeds,
-          (feed) =>
-            ports.reader.read(feed.feedUrl).pipe(
-              Effect.flatMap((items) =>
-                Effect.forEach(
-                  items,
-                  (item) => {
-                    const identity = ports.deriveArticleIdentity({
-                      feedId: feed.feedId,
-                      externalId: item.externalId,
-                    })
-                    return parseArchiveCommand({
-                      ...identity,
-                      sourceUrl: item.url,
-                      title: item.title,
-                    }).pipe(
-                      Effect.flatMap((command) =>
-                        (ports.catalog === undefined
-                          ? Effect.void
-                          : ports.catalog.upsert({
-                              articleId: command.articleId,
-                              feedId: feed.feedId,
-                              externalId: item.externalId,
-                              sourceUrl: command.sourceUrl,
-                              title: command.title,
-                              ...(item.publishedAt === undefined
-                                ? {}
-                                : { publishedAt: item.publishedAt }),
-                              discoveredAt: ports.now(),
-                            })
-                        ).pipe(
-                          Effect.andThen(
-                            ports.archive(
-                              deepFreeze({
-                                command,
-                                context: ports.newContext(),
-                              })
-                            )
-                          )
-                        )
-                      ),
-                      Effect.match({
-                        onFailure: (failure): FeedPollResult =>
-                          oneFailure(
-                            typeof failure === "object" &&
-                              failure !== null &&
-                              "_tag" in failure
-                              ? "ArchiveFailed"
-                              : "InvalidItem",
-                            1
-                          ),
-                        onSuccess: (result): FeedPollResult =>
-                          deepFreeze({
-                            ...empty(),
-                            discovered: 1,
-                            archived: result._tag === "Archived" ? 1 : 0,
-                            alreadyArchived:
-                              result._tag === "AlreadyArchived" ? 1 : 0,
-                          }),
-                      })
-                    )
-                  },
-                  { concurrency: 1 }
-                ).pipe(
-                  Effect.map((results) => results.reduce(combine, empty()))
-                )
-              ),
-              Effect.match({
-                onFailure: (failure): FeedPollResult =>
-                  deepFreeze({
-                    ...oneFailure(failure.reason),
-                    feeds: 1,
-                  }),
-                onSuccess: (result): FeedPollResult =>
-                  deepFreeze({ ...result, feeds: 1 }),
-              })
-            ),
-          { concurrency: 1 }
-        )
+        Effect.forEach(feeds, pollFeed(ports), { concurrency: 1 })
       ),
       Effect.map((results) => results.reduce(combine, empty()))
     )

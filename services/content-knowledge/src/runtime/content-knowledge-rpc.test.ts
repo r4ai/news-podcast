@@ -72,14 +72,22 @@ describe("Content Knowledge RPC handler", () => {
     const materialize = vi.fn(() =>
       Effect.succeed({ _tag: "NoArticles" } as const)
     )
-    const handler = makeContentKnowledgeRpcHandler(repository, materialize, {
-      newSubscriptionIdentity: () => ({
-        subscriptionId: subscription.subscriptionId,
-        feedId: subscription.feedId,
-      }),
-      newMessageId: () => "00508c91-8d8a-452f-82d3-fc621faea801",
-      now: () => "2026-08-13T01:00:00.000Z",
-    })
+    const enqueue = vi.fn(() => Effect.succeed({} as never))
+    const onSubscriptionAdded = vi.fn()
+    const handler = makeContentKnowledgeRpcHandler(
+      repository,
+      materialize,
+      {
+        newSubscriptionIdentity: () => ({
+          subscriptionId: subscription.subscriptionId,
+          feedId: subscription.feedId,
+        }),
+        newMessageId: () => "00508c91-8d8a-452f-82d3-fc621faea801",
+        now: () => "2026-08-13T01:00:00.000Z",
+        onSubscriptionAdded,
+      },
+      { enqueue } as never
+    )
 
     const calls = [
       [subjects.content.addSubscription, { feedUrl: subscription.feedUrl }],
@@ -113,6 +121,11 @@ describe("Content Knowledge RPC handler", () => {
     expect(repository.add).toHaveBeenCalledWith(
       expect.objectContaining({ ownerId: "owner-a" })
     )
+    expect(enqueue).toHaveBeenCalledWith(
+      subscription.feedId,
+      "2026-08-13T01:00:00.000Z"
+    )
+    expect(onSubscriptionAdded).toHaveBeenCalledOnce()
     expect(repository.list).toHaveBeenCalledWith("owner-a")
     expect(repository.remove).toHaveBeenCalledWith(
       "owner-a",

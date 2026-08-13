@@ -5,11 +5,7 @@ import type {
   FeedSyncQueueError,
   FeedSyncQueueRepository,
 } from "../application/feed-sync-queue.js"
-import {
-  FeedSyncJobSchema,
-  type FeedSyncJob,
-  SyncJobIdSchema,
-} from "../domain/feed-sync.js"
+import { FeedSyncJobSchema, SyncJobIdSchema } from "../domain/feed-sync.js"
 import { FeedIdSchema, FeedUrlSchema } from "../domain/subscription.js"
 import type { SqlitePort } from "./sqlite-port.js"
 
@@ -128,8 +124,7 @@ export const createSqliteFeedSyncQueue = (
               ) as { readonly status: string } | undefined
               if (
                 current === undefined ||
-                (current.status !== "Queued" &&
-                  current.status !== "Processing")
+                (current.status !== "Queued" && current.status !== "Processing")
               ) {
                 database.run(
                   `INSERT INTO feed_sync_jobs
@@ -142,10 +137,12 @@ export const createSqliteFeedSyncQueue = (
                   [
                     current === undefined
                       ? crypto.randomUUID()
-                      : (database.get(
-                          "SELECT job_id FROM feed_sync_jobs WHERE feed_id = ?",
-                          [feedId]
-                        ) as { readonly job_id: string }).job_id,
+                      : (
+                          database.get(
+                            "SELECT job_id FROM feed_sync_jobs WHERE feed_id = ?",
+                            [feedId]
+                          ) as { readonly job_id: string }
+                        ).job_id,
                     feedId,
                     now,
                   ]
@@ -165,10 +162,14 @@ export const createSqliteFeedSyncQueue = (
             database.transaction(() => {
               for (const feed of feeds) {
                 const current = database.get(
-                  "SELECT job_id, status FROM feed_sync_jobs WHERE feed_id = ?",
+                  "SELECT job_id, status, attempt FROM feed_sync_jobs WHERE feed_id = ?",
                   [feed.feedId]
                 ) as
-                  | { readonly job_id: string; readonly status: string }
+                  | {
+                      readonly job_id: string
+                      readonly status: string
+                      readonly attempt: number
+                    }
                   | undefined
                 if (
                   current !== undefined &&
@@ -176,24 +177,38 @@ export const createSqliteFeedSyncQueue = (
                     current.status === "Processing")
                 )
                   continue
-                database.run(
-                  `INSERT INTO feed_sync_jobs
-                     (job_id, feed_id, status, attempt, discovered, archived, failed, created_at)
-                   VALUES (?, ?, 'Queued', 0, 0, 0, 0, ?)
-                   ON CONFLICT(feed_id) DO UPDATE SET
-                     status = 'Queued', attempt = 0, lease_expires_at = NULL,
-                     discovered = 0, archived = 0, failed = 0, error = NULL,
-                     created_at = excluded.created_at, started_at = NULL, completed_at = NULL`,
-                  [current?.job_id ?? crypto.randomUUID(), feed.feedId, now]
+                if (
+                  current?.status === "Failed" &&
+                  current.attempt >= FEED_SYNC_MAX_ATTEMPTS
                 )
+                  continue
+                if (current === undefined) {
+                  database.run(
+                    `INSERT INTO feed_sync_jobs
+                       (job_id, feed_id, status, attempt, discovered, archived, failed, created_at)
+                     VALUES (?, ?, 'Queued', 0, 0, 0, 0, ?)`,
+                    [crypto.randomUUID(), feed.feedId, now]
+                  )
+                } else {
+                  database.run(
+                    `UPDATE feed_sync_jobs
+                        SET status = 'Queued', attempt = ?, lease_expires_at = NULL,
+                            discovered = 0, archived = 0, failed = 0, error = NULL,
+                            created_at = ?, started_at = NULL, completed_at = NULL
+                      WHERE job_id = ?`,
+                    [
+                      current.status === "Failed" ? current.attempt : 0,
+                      now,
+                      current.job_id,
+                    ]
+                  )
+                }
               }
             }),
           catch: () => failure("Enqueue"),
         }).pipe(Effect.asVoid)
 
-      const listForOwner: FeedSyncQueueRepository["listForOwner"] = (
-        ownerId
-      ) =>
+      const listForOwner: FeedSyncQueueRepository["listForOwner"] = (ownerId) =>
         Effect.try({
           try: () =>
             database.all(
@@ -212,10 +227,7 @@ export const createSqliteFeedSyncQueue = (
           Effect.map(deepFreeze)
         )
 
-      const claim: FeedSyncQueueRepository["claim"] = (
-        now,
-        leaseExpiresAt
-      ) =>
+      const claim: FeedSyncQueueRepository["claim"] = (now, leaseExpiresAt) =>
         Effect.try({
           try: () =>
             database.transaction(() => {
@@ -226,8 +238,17 @@ export const createSqliteFeedSyncQueue = (
                 [now]
               )
               const candidate = database.get(
-                `${select} WHERE job.status = 'Queued'
-                 ORDER BY job.created_at, job.job_id LIMIT 1`
+                `${select}
+                 WHERE job.status = 'Queued'
+                   AND job.attempt < ?
+                   AND EXISTS (
+                     SELECT 1
+                       FROM feed_subscriptions active_subscription
+                      WHERE active_subscription.feed_id = job.feed_id
+                        AND active_subscription.enabled = 1
+                   )
+                 ORDER BY job.created_at, job.job_id LIMIT 1`,
+                [FEED_SYNC_MAX_ATTEMPTS]
               ) as { readonly jobId?: string } | undefined
               if (candidate?.jobId === undefined) return undefined
               database.run(

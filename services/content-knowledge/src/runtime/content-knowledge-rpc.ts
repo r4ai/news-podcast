@@ -5,6 +5,7 @@ import {
   DeleteFeedSubscriptionReplySchema,
   ListFeedCatalogReplySchema,
   ListFeedSubscriptionsReplySchema,
+  ListFeedSyncJobsReplySchema,
   MaterializeArticlesReplySchema,
   UpdateFeedSubscriptionReplySchema,
   MessageEnvelopeSchema,
@@ -12,6 +13,7 @@ import {
   parseDeleteFeedSubscriptionRequest,
   parseListFeedCatalogRequest,
   parseListFeedSubscriptionsRequest,
+  parseListFeedSyncJobsRequest,
   parseMaterializeArticlesRequest,
   parseUpdateFeedSubscriptionRequest,
   parseMessageEnvelope,
@@ -22,6 +24,7 @@ import {
 import { Effect, Schema } from "effect"
 
 import type { SubscriptionRepository } from "../application/subscription-ports.js"
+import type { FeedSyncQueueRepository } from "../application/feed-sync-queue.js"
 import type {
   MaterializeResult,
   MaterializeSelection,
@@ -49,6 +52,7 @@ export type ContentKnowledgeRpcDependencies = Readonly<{
   }>
   readonly newMessageId: () => string
   readonly now: () => string
+  readonly onSubscriptionAdded?: () => void
 }>
 
 type Materialize = (input: {
@@ -73,6 +77,8 @@ const replySchema = (subject: string) => {
       return UpdateFeedSubscriptionReplySchema
     case subjects.content.listFeedCatalog:
       return ListFeedCatalogReplySchema
+    case subjects.content.listFeedSyncJobs:
+      return ListFeedSyncJobsReplySchema
     case subjects.content.materializeArticles:
       return MaterializeArticlesReplySchema
     default:
@@ -152,7 +158,8 @@ export const makeContentKnowledgeRpcHandler =
   (
     subscriptions: SubscriptionRepository,
     materialize: Materialize,
-    dependencies: ContentKnowledgeRpcDependencies
+    dependencies: ContentKnowledgeRpcDependencies,
+    feedSyncQueue?: FeedSyncQueueRepository
   ) =>
   <ReplyError>(delivery: ContentKnowledgeRpcDelivery<ReplyError>) =>
     Effect.try({
@@ -192,6 +199,24 @@ export const makeContentKnowledgeRpcHandler =
                           enabled: true,
                           createdAt,
                         })
+                      ),
+                      Effect.flatMap((result) =>
+                        feedSyncQueue === undefined
+                          ? Effect.succeed(result)
+                          : feedSyncQueue
+                              .enqueue(
+                                result.subscription.feedId,
+                                dependencies.now()
+                              )
+                              .pipe(
+                                Effect.mapError(() =>
+                                  rejection("STORAGE_FAILURE")
+                                )
+                              )
+                              .pipe(Effect.as(result))
+                      ),
+                      Effect.tap(() =>
+                        Effect.sync(() => dependencies.onSubscriptionAdded?.())
                       ),
                       Effect.map((result) =>
                         deepFreeze({
@@ -270,6 +295,26 @@ export const makeContentKnowledgeRpcHandler =
                   ),
                   Effect.map((feeds) =>
                     deepFreeze({ _tag: "Catalog" as const, feeds })
+                  )
+                )
+              }
+              if (delivery.subject === subjects.content.listFeedSyncJobs) {
+                return parseListFeedSyncJobsRequest(request.payload).pipe(
+                  Effect.mapError(() => rejection("INVALID_REQUEST")),
+                  Effect.flatMap(() =>
+                    feedSyncQueue === undefined
+                      ? Effect.fail(rejection("INTERNAL_ERROR"))
+                      : feedSyncQueue
+                          .listForOwner(ownerId)
+                          .pipe(
+                            Effect.mapError(() => rejection("STORAGE_FAILURE"))
+                          )
+                  ),
+                  Effect.map((jobs) =>
+                    deepFreeze({
+                      _tag: "Listed" as const,
+                      jobs: jobs.map((job) => deepFreeze({ ...job })),
+                    })
                   )
                 )
               }

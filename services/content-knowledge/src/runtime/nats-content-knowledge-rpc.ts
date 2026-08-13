@@ -18,6 +18,7 @@ import { makeArticleLibraryRpcHandler } from "./article-library-rpc.js"
 import { makePersonalizationRpcHandler } from "./personalization-rpc.js"
 import type { makeArticleLibraryHandler } from "./article-library-handler.js"
 import type { NodeContentKnowledgeRuntime, NodeRuntimeError } from "./node.js"
+import type { FeedPollWakeup } from "./feed-poll-loop.js"
 
 export type ContentKnowledgeRpcServerConfig = DeepReadonly<{
   readonly natsServers: readonly string[]
@@ -49,11 +50,13 @@ const runtimeFailure = (): NodeRuntimeError =>
 /** Serves all owner-scoped Content RPCs over one queue-group connection. */
 export const runNatsContentKnowledgeRpc = (
   config: ContentKnowledgeRpcServerConfig,
-  runtime: Pick<NodeContentKnowledgeRuntime, "articles" | "subscriptions">,
+  runtime: Pick<NodeContentKnowledgeRuntime, "articles" | "subscriptions"> &
+    Partial<Pick<NodeContentKnowledgeRuntime, "feedSyncQueue">>,
   objects: MarkdownObjectReader,
   dependencies: ContentKnowledgeRpcServerDependencies = defaultDependencies,
   articleLibrary?: ReturnType<typeof makeArticleLibraryHandler>,
-  personalization?: Parameters<typeof makePersonalizationRpcHandler>[0]
+  personalization?: Parameters<typeof makePersonalizationRpcHandler>[0],
+  pollerWakeup?: Pick<FeedPollWakeup, "notify">
 ): Effect.Effect<void, NodeRuntimeError> =>
   Effect.scoped(
     Effect.acquireRelease(
@@ -67,6 +70,7 @@ export const runNatsContentKnowledgeRpc = (
               subjects.content.deleteSubscription,
               subjects.content.updateSubscription,
               subjects.content.listFeedCatalog,
+              subjects.content.listFeedSyncJobs,
               subjects.content.materializeArticles,
               subjects.content.articleLibrary,
               subjects.content.personalization,
@@ -81,7 +85,11 @@ export const runNatsContentKnowledgeRpc = (
         const handler = makeContentKnowledgeRpcHandler(
           runtime.subscriptions,
           materializeArticles({ catalog: runtime.articles, objects }),
-          dependencies
+          {
+            ...dependencies,
+            onSubscriptionAdded: pollerWakeup?.notify,
+          },
+          runtime.feedSyncQueue
         )
         const libraryHandler =
           articleLibrary === undefined

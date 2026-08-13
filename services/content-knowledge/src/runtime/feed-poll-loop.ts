@@ -23,8 +23,39 @@ export type FeedPollCycleOutcome = DeepReadonly<
 
 export type FeedPollLoopRuntime = Readonly<{
   readonly wait: (delayMillis: number) => Effect.Effect<void>
+  readonly waitForNextCycle?: (delayMillis: number) => Effect.Effect<void>
   readonly observe: (outcome: FeedPollCycleOutcome) => Effect.Effect<void>
 }>
+
+export type FeedPollWakeup = Readonly<{
+  readonly notify: () => void
+  readonly wait: () => Effect.Effect<void>
+}>
+
+/** Allows a newly queued feed to interrupt the long periodic scheduler delay. */
+export const makeFeedPollWakeup = (): FeedPollWakeup => {
+  let pending = false
+  let resolve: (() => void) | undefined
+  return deepFreeze({
+    notify: () => {
+      pending = true
+      const current = resolve
+      resolve = undefined
+      current?.()
+    },
+    wait: () =>
+      Effect.promise(() =>
+        pending
+          ? ((pending = false), Promise.resolve())
+          : new Promise<void>((resume) => {
+              resolve = () => {
+                pending = false
+                resume()
+              }
+            })
+      ),
+  })
+}
 
 const liveRuntime: FeedPollLoopRuntime = Object.freeze({
   wait: (delayMillis) => Effect.sleep(delayMillis),
@@ -51,6 +82,7 @@ export const runFeedPollLoop = <Failure>(
   runtime: Partial<FeedPollLoopRuntime> = liveRuntime
 ): Effect.Effect<void> => {
   const wait = runtime.wait ?? liveRuntime.wait
+  const waitForNextCycle = runtime.waitForNextCycle ?? wait
   const observe = runtime.observe ?? liveRuntime.observe
   const loop = (
     consecutiveFailures: number,
@@ -65,7 +97,7 @@ export const runFeedPollLoop = <Failure>(
             nextDelayMillis: backoffMillis,
           })
           return observe(outcome).pipe(
-            Effect.andThen(wait(backoffMillis)),
+            Effect.andThen(waitForNextCycle(backoffMillis)),
             Effect.andThen(
               Effect.suspend(() =>
                 loop(
@@ -83,7 +115,7 @@ export const runFeedPollLoop = <Failure>(
             nextDelayMillis: config.intervalMillis,
           })
           return observe(outcome).pipe(
-            Effect.andThen(wait(config.intervalMillis)),
+            Effect.andThen(waitForNextCycle(config.intervalMillis)),
             Effect.andThen(
               Effect.suspend(() => loop(0, config.initialBackoffMillis))
             )
