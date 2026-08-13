@@ -13,6 +13,15 @@ const expectedDashboards = [
   "news-podcast-dependencies",
   "news-podcast-platform",
 ]
+const expectedAlertRules = [
+  "np-generation-failure",
+  "np-generation-queue-age",
+  "np-service-errors",
+  "np-service-latency",
+  "np-api-5xx",
+  "np-otel-export-failure",
+  "np-uninstrumented-entry",
+]
 
 const auth = `Basic ${Buffer.from(
   `${process.env.GRAFANA_ADMIN_USER ?? "admin"}:${process.env.GRAFANA_ADMIN_PASSWORD ?? "local-only-change-me"}`
@@ -86,6 +95,14 @@ const main = async () => {
     console.log(`datasource=${uid} status=${datasource.status}`)
   }
 
+  const alertRules = await grafanaRequest("/api/v1/provisioning/alert-rules")
+  const registeredAlerts = new Set(alertRules.map((rule) => rule.uid))
+  for (const uid of expectedAlertRules)
+    assert(registeredAlerts.has(uid), `Alert rule is not provisioned: ${uid}`)
+  console.log(
+    `alerts=${alertRules.length} expected=${expectedAlertRules.length}`
+  )
+
   const acceptedSpans = await queryPrometheus(
     "sum(otelcol_receiver_accepted_spans_total)"
   )
@@ -95,10 +112,15 @@ const main = async () => {
   const failedExports = await queryPrometheus(
     "sum(otelcol_exporter_send_failed_spans_total)"
   )
+  const serviceGraphEdges = await queryPrometheus(
+    'traces_service_graph_request_total{client=~".+",server=~".+"}'
+  )
   assert(acceptedSpans.length > 0, "Collector has not accepted any spans")
+  assert(serviceGraphEdges.length > 0, "Service graph has no edges")
   console.log(
     `collector accepted=${acceptedSpans[0].value[1]} refused=${refusedSpans[0]?.value[1] ?? "0"} export_failed=${failedExports[0]?.value[1] ?? "0"}`
   )
+  console.log(`service_graph_edges=${serviceGraphEdges.length}`)
 
   await request(`${gateway}/v1/telemetry/traces`, {
     method: "POST",
