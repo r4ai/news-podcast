@@ -113,6 +113,9 @@ async function fakeApi(request: Request): Promise<Response> {
   if (path === "/v1/me/feed-subscriptions" && request.method === "GET") {
     return json({ items: [state.subscription], page: { hasMore: false } })
   }
+  if (path === "/v1/me/feed-sync-jobs" && request.method === "GET") {
+    return json({ items: [], page: { hasMore: false } })
+  }
   if (path === `/v1/me/feed-subscriptions/${subscriptionId}`) {
     if (request.method === "PATCH") {
       const patch = (await request.json()) as { enabled: boolean }

@@ -56,6 +56,7 @@ const baseArgs = {
   q: "",
   isLoading: false,
   isError: false,
+  isSyncing: false,
   hasNextPage: false,
   isFetchingNextPage: false,
   nextPageFailed: false,

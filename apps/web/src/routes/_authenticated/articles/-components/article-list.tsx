@@ -1,4 +1,4 @@
-import { Newspaper, SearchX } from "lucide-react"
+import { LoaderCircle, Newspaper, SearchX } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
@@ -38,6 +38,16 @@ export function ArticleList({
 
   return (
     <div className="flex min-h-full flex-col">
+      {list.isSyncing ? (
+        <div
+          aria-live="polite"
+          className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+          role="status"
+        >
+          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+          RSSを同期中です。記事一覧は完了すると自動更新されます。
+        </div>
+      ) : null}
       <ArticleToolbarSticky
         facets={list.facets}
         onStateChange={list.setState}

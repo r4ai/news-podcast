@@ -4,6 +4,7 @@ import { toast } from "@workspace/ui/components/sonner"
 
 import {
   feedsQueryOptions,
+  feedSyncJobsQueryOptions,
   subscriptionsQueryOptions,
   type Feed,
 } from "@/features/subscriptions"
@@ -39,9 +40,14 @@ export function useFeedCatalog() {
     startTransition(async () => {
       try {
         await add.mutateAsync({ body: { feedUrl: selectedFeed.feedUrl } })
-        await queryClient.invalidateQueries({
-          queryKey: subscriptionsQueryOptions.queryKey,
-        })
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: subscriptionsQueryOptions.queryKey,
+          }),
+          queryClient.invalidateQueries({
+            queryKey: feedSyncJobsQueryOptions.queryKey,
+          }),
+        ])
         setSelectedFeedId("")
         recordBrowserEvent("subscription.changed", {
           action: "add",

@@ -217,6 +217,79 @@ test("subscription changes confirm destructive actions and roll back failed opti
   await expect(zenn).toBeChecked()
 })
 
+test("shows RSS sync progress and refreshes the article list after completion", async ({
+  page,
+}) => {
+  let syncStatus: "processing" | "succeeded" = "processing"
+  const syncedArticle = {
+    id: "00000000-0000-4000-8000-000000000099",
+    feedId: "00000000-0000-4000-8000-000000000001",
+    sourceName: "Zenn",
+    title: "同期完了後に追加された記事",
+    url: "https://zenn.dev/synced-after-queue",
+    publishedAt: "2026-08-13T00:00:00.000Z",
+    discoveredAt: "2026-08-13T00:00:00.000Z",
+    archiveStatus: "succeeded",
+    snapshotId: "00000000-0000-4000-8000-000000000098",
+    read: false,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  }
+
+  await page.route("**/v1/me/feed-sync-jobs", (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        items: [
+          {
+            jobId: "00000000-0000-4000-8000-000000000097",
+            feedId: "00000000-0000-4000-8000-000000000001",
+            feedUrl: "https://zenn.dev/feed",
+            status: syncStatus,
+            attempt: 1,
+            maxAttempts: 4,
+            discovered: syncStatus === "succeeded" ? 1 : 0,
+            archived: syncStatus === "succeeded" ? 1 : 0,
+            failed: 0,
+            createdAt: "2026-08-13T00:00:00.000Z",
+            completedAt:
+              syncStatus === "succeeded"
+                ? "2026-08-13T00:00:02.000Z"
+                : undefined,
+          },
+        ],
+        page: { hasMore: false },
+      }),
+      contentType: "application/json",
+    })
+  )
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles",
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({
+          items: syncStatus === "succeeded" ? [syncedArticle] : [],
+          page: { hasMore: false },
+        }),
+        contentType: "application/json",
+      })
+  )
+
+  await page.goto("/subscriptions")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  await expect(page.getByText("同期中", { exact: true })).toBeVisible()
+  await page.goto("/articles")
+  await expect(page.getByText(/RSSを同期中です/)).toBeVisible()
+
+  syncStatus = "succeeded"
+  await expect(
+    page.getByRole("button", { name: /同期完了後に追加された記事/ })
+  ).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByText(/RSSを同期中です/)).toHaveCount(0)
+})
+
 test("RSS reader reports unavailable raw archives and persists saved state", async ({
   page,
 }) => {

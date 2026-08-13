@@ -4,6 +4,7 @@ import { toast } from "@workspace/ui/components/sonner"
 
 import {
   feedsQueryOptions,
+  feedSyncJobsQueryOptions,
   subscriptionsQueryOptions,
 } from "@/features/subscriptions"
 import { api } from "@/shared/api"
@@ -27,6 +28,9 @@ export function useFeedRegistration() {
           }),
           queryClient.invalidateQueries({
             queryKey: feedsQueryOptions.queryKey,
+          }),
+          queryClient.invalidateQueries({
+            queryKey: feedSyncJobsQueryOptions.queryKey,
           }),
         ])
         toast.success("RSSフィードを登録しました")

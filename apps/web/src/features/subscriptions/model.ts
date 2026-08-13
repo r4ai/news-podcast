@@ -2,6 +2,11 @@ import type { components } from "@news-podcast/contracts/openapi"
 
 export type Subscription = components["schemas"]["FeedSubscription"]
 export type Feed = components["schemas"]["Feed"]
+export type FeedSyncJob = components["schemas"]["FeedSyncJob"]
+
+export function isFeedSyncActive(job: FeedSyncJob): boolean {
+  return job.status === "queued" || job.status === "processing"
+}
 
 /** OSのlocale実装に依存せず、visual testと表示順を安定させる。 */
 export function compareFeedNames(left: string, right: string): number {

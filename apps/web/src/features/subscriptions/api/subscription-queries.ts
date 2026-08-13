@@ -9,3 +9,9 @@ export const subscriptionsQueryOptions = api.queryOptions(
 export const feedsQueryOptions = api.queryOptions("get", "/v1/feeds", {
   params: { query: {} },
 })
+
+/** 購読直後の同期状態を画面間で共有する。 */
+export const feedSyncJobsQueryOptions = api.queryOptions(
+  "get",
+  "/v1/me/feed-sync-jobs"
+)

@@ -10,6 +10,7 @@ import {
 import { toast } from "@workspace/ui/components/sonner"
 
 import { api } from "@/shared/api"
+import { isFeedSyncActive } from "@/features/subscriptions"
 import {
   groupArticlesByDate,
   toBulkFilter,
@@ -56,6 +57,18 @@ export function useArticleList({
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
 
+  const syncJobsQuery = api.useQuery(
+    "get",
+    "/v1/me/feed-sync-jobs",
+    undefined,
+    {
+      refetchInterval: (query) =>
+        query.state.data?.items.some(isFeedSyncActive) ? 1_000 : false,
+    }
+  )
+  const syncActive = syncJobsQuery.data?.items.some(isFeedSyncActive) ?? false
+  const wasSyncActive = useRef(false)
+
   const listQuery = api.useInfiniteQuery(
     "get",
     "/v1/me/articles",
@@ -63,6 +76,7 @@ export function useArticleList({
     {
       initialPageParam: undefined as string | undefined,
       getNextPageParam: () => undefined,
+      refetchInterval: syncActive ? 1_000 : false,
     }
   )
 
@@ -80,6 +94,16 @@ export function useArticleList({
   )
   const [items, addDraft] = useOptimistic(serverItems, applyDraft)
   const articles = items
+
+  useEffect(() => {
+    const wasActive = wasSyncActive.current
+    wasSyncActive.current = syncActive
+    if (!wasActive || syncActive) return
+    void queryClient.invalidateQueries({ queryKey: ["get", "/v1/me/articles"] })
+    void queryClient.invalidateQueries({
+      queryKey: ["get", "/v1/me/articles/facets"],
+    })
+  }, [queryClient, syncActive])
 
   async function invalidate() {
     await Promise.all([
@@ -140,6 +164,7 @@ export function useArticleList({
     aiPending: facetsQuery.data?.aiPending,
     isLoading: listQuery.isPending,
     isError: listQuery.isError,
+    isSyncing: syncActive,
     hasNextPage: listQuery.hasNextPage ?? false,
     isFetchingNextPage: listQuery.isFetchingNextPage,
     nextPageFailed: Boolean(listQuery.data) && listQuery.isError,
