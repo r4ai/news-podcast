@@ -142,4 +142,39 @@ describe("HTTP to S3 article capture", () => {
       )
     ).toEqual({ _tag: "CaptureFailed", reason: "Blocked" })
   })
+
+  it("aborts an outbound request at the configured deadline", async () => {
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      { ...config, timeoutMillis: 5 },
+      {
+        createS3: () => ({
+          client: { send: vi.fn() } as never,
+          close: vi.fn(),
+        }),
+        createSafeFetch: () => ({
+          fetch: vi.fn(
+            (_input, init) =>
+              new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener(
+                  "abort",
+                  () => reject(init.signal?.reason),
+                  { once: true }
+                )
+              })
+          ) as never,
+          close: vi.fn(async () => undefined),
+        }),
+      }
+    )
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          resource.capture({
+            sourceUrl: "https://news.example.com/slow" as never,
+          })
+        )
+      )
+    ).resolves.toEqual({ _tag: "CaptureFailed", reason: "Unavailable" })
+  })
 })

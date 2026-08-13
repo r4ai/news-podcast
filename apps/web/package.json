@@ -63,8 +63,6 @@
   },
   "devDependencies": {
     "@hono/node-server": "2.0.10",
-    "@news-podcast/adapters": "workspace:*",
-    "@news-podcast/application": "workspace:*",
     "@playwright/test": "1.62.1",
     "@storybook/addon-a11y": "10.5.7",
     "@storybook/addon-vitest": "10.5.7",

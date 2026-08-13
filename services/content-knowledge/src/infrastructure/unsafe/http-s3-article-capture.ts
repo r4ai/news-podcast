@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto"
 
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { createNodeSafeFetcher } from "@news-podcast/adapters/http/safe"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
@@ -10,6 +9,7 @@ import type {
   CaptureError,
 } from "../../application/ports.js"
 import { ArchiveCaptureSchema } from "../../domain/article.js"
+import { createNodeSafeFetcher } from "./safe-fetch.js"
 
 export type HttpS3ArticleCaptureConfig = DeepReadonly<{
   readonly endpoint: string

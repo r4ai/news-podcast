@@ -269,12 +269,6 @@ importers:
       '@hono/node-server':
         specifier: 2.0.10
         version: 2.0.10(hono@4.13.1)
-      '@news-podcast/adapters':
-        specifier: workspace:*
-        version: link:../../packages/adapters
-      '@news-podcast/application':
-        specifier: workspace:*
-        version: link:../../packages/application
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
@@ -677,9 +671,6 @@ importers:
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
-      '@news-podcast/adapters':
-        specifier: workspace:*
-        version: link:../../packages/adapters
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -695,6 +686,12 @@ importers:
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102
+      ipaddr.js:
+        specifier: 1.9.1
+        version: 1.9.1
+      undici:
+        specifier: 8.10.0
+        version: 8.10.0
     devDependencies:
       '@types/node':
         specifier: 24.12.4
