@@ -34,6 +34,24 @@ services:
         condition: service_started
     networks: [observability]
 
+  grafana-dashboard-init:
+    image: busybox:1.37.0
+    command:
+      - sh
+      - -c
+      - >-
+        set -eu;
+        rm -f /dashboards/*.json;
+        cp /source/*.json /dashboards/;
+        chmod 0444 /dashboards/*.json
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    restart: "no"
+    volumes:
+      - ./grafana/dashboards:/source:ro
+      - grafana-dashboards:/dashboards
+
   prometheus:
     image: prom/prometheus:v3.13.1
     command:
@@ -107,14 +125,7 @@ services:
       - ./grafana/provisioning/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
       - ./grafana/provisioning/alerting/contact-points.yaml:/etc/grafana/provisioning/alerting/contact-points.yaml:ro
       - ./grafana/provisioning/alerting/rules.yaml:/etc/grafana/provisioning/alerting/rules.yaml:ro
-      - ./grafana/dashboards/episode-production.json:/var/lib/grafana/dashboards/episode-production.json:ro
-      - ./grafana/dashboards/logs.json:/var/lib/grafana/dashboards/logs.json:ro
-      - ./grafana/dashboards/overview.json:/var/lib/grafana/dashboards/overview.json:ro
-      - ./grafana/dashboards/service-map.json:/var/lib/grafana/dashboards/service-map.json:ro
-      - ./grafana/dashboards/service-drilldown.json:/var/lib/grafana/dashboards/service-drilldown.json:ro
-      - ./grafana/dashboards/telemetry-platform.json:/var/lib/grafana/dashboards/telemetry-platform.json:ro
-      - ./grafana/dashboards/web-experience.json:/var/lib/grafana/dashboards/web-experience.json:ro
-      - ./grafana/dashboards/dependencies.json:/var/lib/grafana/dashboards/dependencies.json:ro
+      - grafana-dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "127.0.0.1:3100:3000"
     depends_on:
@@ -124,6 +135,8 @@ services:
         condition: service_started
       tempo:
         condition: service_started
+      grafana-dashboard-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
       interval: 10s
@@ -137,6 +150,7 @@ networks:
 
 volumes:
   grafana-data:
+  grafana-dashboards:
   prometheus-data:
   loki-data:
   tempo-data:
