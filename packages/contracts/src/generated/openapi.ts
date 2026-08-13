@@ -193,6 +193,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/feed-sync-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List RSS feed synchronization jobs */
+        get: operations["listFeedSyncJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/feed-subscriptions/{subscriptionId}": {
         parameters: {
             query?: never;
@@ -772,6 +789,30 @@ export interface components {
         };
         FeedSubscriptionPage: {
             items: components["schemas"]["FeedSubscription"][];
+            page: {
+                /** @enum {boolean} */
+                hasMore: false;
+            };
+        };
+        FeedSyncJob: {
+            jobId: string & unknown;
+            feedId: string & unknown;
+            feedUrl: string & unknown;
+            /** @enum {string} */
+            status: "queued" | "processing" | "succeeded" | "failed";
+            attempt: number & unknown;
+            /** @enum {number} */
+            maxAttempts: 4;
+            discovered: number & unknown;
+            archived: number & unknown;
+            failed: number & unknown;
+            createdAt: string;
+            startedAt?: string | null;
+            completedAt?: string | null;
+            error?: (string & (unknown & unknown & unknown)) | null;
+        };
+        FeedSyncJobPage: {
+            items: components["schemas"]["FeedSyncJob"][];
             page: {
                 /** @enum {boolean} */
                 hasMore: false;
@@ -1675,6 +1716,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnprocessableProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    listFeedSyncJobs: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description FeedSyncJobPage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedSyncJobPage"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
             /** @description UnavailableProblem */

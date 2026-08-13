@@ -81,6 +81,9 @@ export const JobIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
 export const SubscriptionIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("ContentSubscriptionId")
 )
+export const FeedSyncJobIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
+  Schema.brand("FeedSyncJobId")
+)
 const FeedIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("ContentFeedId")
 )
@@ -309,6 +312,25 @@ export const FeedSubscriptionPageSchema = Schema.Struct({
   items: Schema.Array(FeedSubscriptionSchema),
   page: Schema.Struct({ hasMore: Schema.Literal(false) }),
 }).annotate({ identifier: "FeedSubscriptionPage" })
+export const FeedSyncJobSchema = Schema.Struct({
+  jobId: FeedSyncJobIdSchema,
+  feedId: FeedIdSchema,
+  feedUrl: CanonicalFeedUrlSchema,
+  status: Schema.Literals(["queued", "processing", "succeeded", "failed"]),
+  attempt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+  maxAttempts: Schema.Literal(4),
+  discovered: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  archived: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  failed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  createdAt: UtcDateTimeStringSchema,
+  startedAt: Schema.optional(UtcDateTimeStringSchema),
+  completedAt: Schema.optional(UtcDateTimeStringSchema),
+  error: Schema.optional(boundedText(200)),
+}).annotate({ identifier: "FeedSyncJob" })
+export const FeedSyncJobPageSchema = Schema.Struct({
+  items: Schema.Array(FeedSyncJobSchema),
+  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+}).annotate({ identifier: "FeedSyncJobPage" })
 export const UpdateFeedSubscriptionSchema = Schema.Struct({
   enabled: Schema.Boolean,
 })
@@ -856,6 +878,21 @@ export const listFeedSubscriptionsEndpoint = HttpApiEndpoint.get(
   OpenApi.annotations({
     identifier: "listFeedSubscriptions",
     summary: "List feed subscriptions",
+  })
+)
+
+export const listFeedSyncJobsEndpoint = HttpApiEndpoint.get(
+  "listFeedSyncJobs",
+  "/v1/me/feed-sync-jobs",
+  {
+    headers: SessionHeadersSchema,
+    success: FeedSyncJobPageSchema,
+    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+  }
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "listFeedSyncJobs",
+    summary: "List RSS feed synchronization jobs",
   })
 )
 
@@ -1418,6 +1455,7 @@ const feedSubscriptionsGroup = HttpApiGroup.make("feedSubscriptions")
   .add(
     addFeedSubscriptionEndpoint,
     listFeedSubscriptionsEndpoint,
+    listFeedSyncJobsEndpoint,
     deleteFeedSubscriptionEndpoint,
     updateFeedSubscriptionEndpoint
   )

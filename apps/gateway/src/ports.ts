@@ -25,6 +25,7 @@ import {
   EpisodePageSchema,
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
+  FeedSyncJobPageSchema,
   FeedPageSchema,
   RegisteredFeedSchema,
   UpdatedFeedSubscriptionSchema,
@@ -174,6 +175,13 @@ export type GatewayPorts = Readonly<{
     headers: TypeOf<typeof SessionHeadersSchema>
   ) => Effect.Effect<
     TypeOf<typeof FeedSubscriptionPageSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  listFeedSyncJobs: (
+    headers: TypeOf<typeof SessionHeadersSchema>
+  ) => Effect.Effect<
+    TypeOf<typeof FeedSyncJobPageSchema>,
     | TypeOf<typeof UnauthorizedProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >

@@ -21,6 +21,7 @@ describe("versioned NATS subjects", () => {
         deleteSubscription: "content.delete-subscription.v1",
         updateSubscription: "content.update-subscription.v1",
         listFeedCatalog: "content.list-feed-catalog.v1",
+        listFeedSyncJobs: "content.list-feed-sync-jobs.v1",
         materializeArticles: "content.materialize-articles.v1",
         personalization: "content.personalization.v1",
       },

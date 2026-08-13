@@ -53,6 +53,7 @@ describe("gateway HttpApi contract", () => {
       "/v1/me/enrich/reset-daily",
       "/v1/me/feed-subscriptions",
       "/v1/me/feed-subscriptions/{subscriptionId}",
+      "/v1/me/feed-sync-jobs",
       "/v1/me/reading-dictionary",
       "/v1/me/reading-dictionary/{id}",
       "/v1/me/settings",

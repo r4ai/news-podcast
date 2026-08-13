@@ -1597,6 +1597,100 @@
         "summary": "List feed subscriptions"
       }
     },
+    "/v1/me/feed-sync-jobs": {
+      "get": {
+        "tags": [
+          "Feed subscriptions"
+        ],
+        "operationId": "listFeedSyncJobs",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "FeedSyncJobPage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedSyncJobPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List RSS feed synchronization jobs"
+      }
+    },
     "/v1/me/feed-subscriptions/{subscriptionId}": {
       "delete": {
         "tags": [
@@ -7456,6 +7550,173 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FeedSubscription"
+            }
+          },
+          "page": {
+            "type": "object",
+            "properties": {
+              "hasMore": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              }
+            },
+            "required": [
+              "hasMore"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "additionalProperties": false
+      },
+      "FeedSyncJob": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "format": "uuid"
+              }
+            ]
+          },
+          "feedId": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "format": "uuid"
+              }
+            ]
+          },
+          "feedUrl": {
+            "type": "string",
+            "allOf": [
+              {
+                "maxLength": 2048
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "processing",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "attempt": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0,
+                "maximum": 4
+              }
+            ]
+          },
+          "maxAttempts": {
+            "type": "number",
+            "enum": [
+              4
+            ]
+          },
+          "discovered": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "archived": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "failed": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "\\S"
+                  },
+                  {
+                    "maxLength": 200
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "jobId",
+          "feedId",
+          "feedUrl",
+          "status",
+          "attempt",
+          "maxAttempts",
+          "discovered",
+          "archived",
+          "failed",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "FeedSyncJobPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedSyncJob"
             }
           },
           "page": {

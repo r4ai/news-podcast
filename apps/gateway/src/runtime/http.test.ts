@@ -42,6 +42,7 @@ const ports: GatewayPorts = {
   createAudioAccess: () => Effect.fail(unavailable),
   addFeedSubscription: () => Effect.fail(unavailable),
   listFeedSubscriptions: () => Effect.fail(unavailable),
+  listFeedSyncJobs: () => Effect.fail(unavailable),
   deleteFeedSubscription: () => Effect.fail(unavailable),
   updateFeedSubscription: () => Effect.fail(unavailable),
   listFeeds: () => Effect.fail(unavailable),

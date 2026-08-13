@@ -10,6 +10,7 @@ import {
   type AddFeedSubscriptionReply,
   CorrelationIdSchema,
   type DeleteFeedSubscriptionReply,
+  type ListFeedSyncJobsReply,
   type ListFeedSubscriptionsReply,
   type CreateAudioAccessReply,
   MessageEnvelopeSchema,
@@ -21,6 +22,7 @@ import {
   parseGetEpisodeReply,
   parseListEpisodesReply,
   parseListFeedSubscriptionsReply,
+  parseListFeedSyncJobsReply,
   parseListFeedCatalogReply,
   parseUpdateFeedSubscriptionReply,
   parseIdentitySettingsReply,
@@ -47,6 +49,7 @@ import {
   EpisodePageSchema,
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
+  FeedSyncJobPageSchema,
   FeedPageSchema,
   RegisteredFeedSchema,
   UpdatedFeedSubscriptionSchema,
@@ -247,6 +250,7 @@ const toAudioAccess = (
 
 type FeedSubscription = TypeOf<typeof FeedSubscriptionSchema>
 type FeedSubscriptionPage = TypeOf<typeof FeedSubscriptionPageSchema>
+type FeedSyncJobPage = TypeOf<typeof FeedSyncJobPageSchema>
 type AddSubscriptionFailure =
   | ReturnType<typeof unauthorized>
   | ReturnType<typeof unprocessable>
@@ -254,6 +258,7 @@ type AddSubscriptionFailure =
 type ListSubscriptionsFailure =
   | ReturnType<typeof unauthorized>
   | ReturnType<typeof unavailable>
+type ListSyncJobsFailure = ListSubscriptionsFailure
 type DeleteSubscriptionFailure =
   | ReturnType<typeof badRequest>
   | ReturnType<typeof unauthorized>
@@ -291,6 +296,44 @@ const toSubscriptionPage = (
   return reply.code === "UNAUTHENTICATED"
     ? Effect.fail(unauthorized())
     : Effect.fail(unavailable())
+}
+
+const toSyncJobStatus = {
+  Queued: "queued",
+  Processing: "processing",
+  Succeeded: "succeeded",
+  Failed: "failed",
+} as const
+
+const toSyncJobPage = (
+  reply: ListFeedSyncJobsReply
+): Effect.Effect<FeedSyncJobPage, ListSyncJobsFailure> => {
+  if (reply._tag !== "Listed") {
+    return reply.code === "UNAUTHENTICATED"
+      ? Effect.fail(unauthorized())
+      : Effect.fail(unavailable())
+  }
+
+  return parse(FeedSyncJobPageSchema)({
+    items: reply.jobs.map((job) => ({
+      jobId: job.jobId,
+      feedId: job.feedId,
+      feedUrl: job.feedUrl,
+      status: toSyncJobStatus[job.status],
+      attempt: job.attempt,
+      maxAttempts: job.maxAttempts,
+      discovered: job.discovered,
+      archived: job.archived,
+      failed: job.failed,
+      createdAt: job.createdAt,
+      ...(job.startedAt === undefined ? {} : { startedAt: job.startedAt }),
+      ...(job.completedAt === undefined
+        ? {}
+        : { completedAt: job.completedAt }),
+      ...(job.error === undefined ? {} : { error: job.error }),
+    })),
+    page: { hasMore: false },
+  }).pipe(Effect.mapError(unavailable))
 }
 
 const toDeleted = (
@@ -887,6 +930,14 @@ const makeAdapter = (
         }),
         Effect.flatMap(toSubscriptionPage)
       ),
+    listFeedSyncJobs: (headers) =>
+      ownerRpc(
+        headers,
+        subjects.content.listFeedSyncJobs,
+        "content-knowledge",
+        {},
+        parseListFeedSyncJobsReply
+      ).pipe(Effect.flatMap(toSyncJobPage)),
     deleteFeedSubscription: ({ headers, subscriptionId }) =>
       authenticated(headers).pipe(
         Effect.flatMap(({ actor, lineage: parent }) => {

@@ -81,6 +81,9 @@ export const makeGatewayHandlers = (ports: GatewayPorts) =>
     listFeedSubscriptions: (
       headers: Parameters<GatewayPorts["listFeedSubscriptions"]>[0]
     ) => freezeSuccess(ports.listFeedSubscriptions(deepFreeze(headers))),
+    listFeedSyncJobs: (
+      headers: Parameters<GatewayPorts["listFeedSyncJobs"]>[0]
+    ) => freezeSuccess(ports.listFeedSyncJobs(deepFreeze(headers))),
     deleteFeedSubscription: (
       input: Parameters<GatewayPorts["deleteFeedSubscription"]>[0]
     ) => freezeSuccess(ports.deleteFeedSubscription(deepFreeze(input))),
@@ -266,6 +269,9 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
         )
         .handle("listFeedSubscriptions", ({ headers }) =>
           handlers.listFeedSubscriptions(headers)
+        )
+        .handle("listFeedSyncJobs", ({ headers }) =>
+          handlers.listFeedSyncJobs(headers)
         )
         .handle("deleteFeedSubscription", ({ headers, params }) =>
           handlers.deleteFeedSubscription({

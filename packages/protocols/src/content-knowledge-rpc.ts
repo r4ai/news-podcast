@@ -39,6 +39,7 @@ const SubscriptionIdSchema = uuid("ContentSubscriptionId")
 const FeedIdSchema = uuid("ContentFeedId")
 const ArticleIdSchema = uuid("ContentArticleId")
 const SnapshotIdSchema = uuid("ContentSnapshotId")
+const SyncJobIdSchema = uuid("ContentFeedSyncJobId")
 
 export const ContentFeedSubscriptionSchema = Schema.Struct({
   subscriptionId: SubscriptionIdSchema,
@@ -162,6 +163,37 @@ export const ListFeedCatalogReplySchema = Schema.Union([
   ContentKnowledgeRejectionSchema,
 ])
 export const parseListFeedCatalogReply = parse(ListFeedCatalogReplySchema)
+
+export const ListFeedSyncJobsRequestSchema = Schema.Struct({})
+export const parseListFeedSyncJobsRequest = parse(ListFeedSyncJobsRequestSchema)
+export const ContentFeedSyncJobSchema = Schema.Struct({
+  jobId: SyncJobIdSchema,
+  feedId: FeedIdSchema,
+  feedUrl: HttpUrlSchema,
+  status: Schema.Literals(["Queued", "Processing", "Succeeded", "Failed"]),
+  attempt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+  maxAttempts: Schema.Literal(4),
+  discovered: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  archived: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  failed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  createdAt: UtcInstantSchema,
+  startedAt: Schema.optional(UtcInstantSchema),
+  completedAt: Schema.optional(UtcInstantSchema),
+  error: Schema.optional(bounded(200)),
+})
+export type ContentFeedSyncJob = Schema.Schema.Type<
+  typeof ContentFeedSyncJobSchema
+>
+export const ListFeedSyncJobsReplySchema = Schema.Union([
+  Schema.TaggedStruct("Listed", {
+    jobs: Schema.Array(ContentFeedSyncJobSchema).check(Schema.isMaxLength(100)),
+  }),
+  ContentKnowledgeRejectionSchema,
+])
+export type ListFeedSyncJobsReply = Schema.Schema.Type<
+  typeof ListFeedSyncJobsReplySchema
+>
+export const parseListFeedSyncJobsReply = parse(ListFeedSyncJobsReplySchema)
 
 export const MaterializeArticlesRequestSchema = Schema.Struct({
   selection: Schema.Union([
