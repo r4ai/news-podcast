@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto"
 
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
+import {
+  noopObservability,
+  type Observability,
+} from "@news-podcast/observability"
 import { DateTime, Effect, Schema } from "effect"
 
 import { makeCompletionPublisher } from "../adapters/completion-publisher.js"
@@ -27,7 +31,10 @@ import {
 } from "../infrastructure/unsafe/identity.js"
 import { runCompletionRelayLoop } from "./completion-relay-loop.js"
 import { NodeCreateJobRpcConfigSchema, runNodeProductionRpc } from "./node.js"
-import { runEpisodeWorkerLoop } from "./worker-loop.js"
+import {
+  runEpisodeWorkerLoop,
+  type EpisodeWorkerEvent,
+} from "./worker-loop.js"
 
 const positive = (maximum: number) =>
   Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(maximum))
@@ -118,6 +125,10 @@ export type NodeEpisodeProductionServiceError = DeepReadonly<{
   component: "Config" | "Content" | "Execution" | "JetStream" | "S3"
 }>
 
+export type EpisodeProductionServiceDependencies = Readonly<{
+  readonly observability?: Observability
+}>
+
 const runtimeError = (
   component: NodeEpisodeProductionServiceError["component"]
 ): NodeEpisodeProductionServiceError =>
@@ -129,13 +140,16 @@ const addMillis = (value: DateTime.Utc, milliseconds: number) =>
 /** Runs RPC, one fenced worker, and the completion relay in one scoped process. */
 export const runNodeEpisodeProductionService = (
   input: unknown,
-  onReady: () => void = () => undefined
+  onReady: () => void = () => undefined,
+  dependencies: EpisodeProductionServiceDependencies = {}
 ): Effect.Effect<void, NodeEpisodeProductionServiceError | unknown> =>
   parseNodeEpisodeProductionServiceConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
     Effect.flatMap((config) =>
       Effect.scoped(
         Effect.gen(function* () {
+          const observability =
+            dependencies.observability ?? noopObservability
           const execution = yield* sqliteExecutionRepository(
             config.rpc.sqlitePath
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
@@ -205,6 +219,68 @@ export const runNodeEpisodeProductionService = (
             now,
             nextRetryAt: () => addMillis(now(), config.worker.retryDelayMillis),
           })
+          const observeWorkerEvent = (event: EpisodeWorkerEvent) =>
+            Effect.gen(function* () {
+              yield* Effect.sync(() => {
+                switch (event._tag) {
+                  case "JobLeased":
+                    observability.count("episode.started", 1, {
+                      "job.attempt": event.attempt,
+                    })
+                    if (event.recovered)
+                      observability.count("episode.lease.recovered")
+                    break
+                  case "JobFinished":
+                    if (event.outcome === "Succeeded")
+                      observability.count("episode.succeeded")
+                    if (event.outcome === "Retrying")
+                      observability.count("episode.retry")
+                    if (event.outcome === "Failed")
+                      observability.count("episode.failed")
+                    if (event.outcome === "Canceled")
+                      observability.count("episode.canceled")
+                    if (event.outcome === "StaleLease")
+                      observability.count("episode.lease.lost")
+                    break
+                  case "WorkerFailed":
+                    observability.count("process.error", 1, {
+                      "failure.code": event.code,
+                      "operation.stage": event.stage,
+                    })
+                    break
+                }
+              })
+              const snapshot = yield* jobs
+                .statusSnapshot()
+                .pipe(
+                  Effect.matchEffect({
+                    onFailure: () => Effect.succeed([] as const),
+                    onSuccess: (value) => Effect.succeed(value),
+                  })
+                )
+              yield* Effect.sync(() => {
+                for (const state of snapshot)
+                  observability.gauge("episode.jobs", state.count, {
+                    "job.status": state.status,
+                  })
+                const oldest = snapshot
+                  .map((state) => state.oldestActiveAt)
+                  .filter((value): value is string => value !== undefined)
+                  .sort()[0]
+                observability.gauge(
+                  "episode.queue.oldest.age",
+                  oldest === undefined
+                    ? 0
+                    : Math.max(
+                        0,
+                        Date.parse(DateTime.formatIso(now())) - Date.parse(oldest)
+                      )
+                )
+              })
+              yield* Effect.logInfo("episode worker state", {
+                event_name: event._tag,
+              })
+            })
           const worker = runEpisodeWorkerLoop(
             {
               leaseNext: execution.leaseNext,
@@ -217,10 +293,7 @@ export const runNodeEpisodeProductionService = (
               heartbeatMillis: config.worker.heartbeatMillis,
               backoffMillis: () => config.worker.idleMillis,
               wait: (delay) => Effect.sleep(delay),
-              observe: (event) =>
-                Effect.logInfo("episode worker state", {
-                  event_name: event._tag,
-                }),
+              observe: observeWorkerEvent,
             },
             controller.signal
           ).pipe(Effect.mapError(() => runtimeError("Execution")))

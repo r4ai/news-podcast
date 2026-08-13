@@ -122,6 +122,11 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => ({
         Effect.all(documents.map(decodeDocument), { concurrency: 1 })
       )
     ),
+  statusSnapshot: () =>
+    Effect.try({
+      try: () => handle.statusSnapshot(),
+      catch: (cause) => persistenceError("status-snapshot", cause),
+    }),
   listOwnedStatusEvents: (input: {
     readonly ownerId: OwnerId
     readonly jobId: JobId

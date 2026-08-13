@@ -51,6 +51,34 @@ const job = (
   })
 
 describe("SQLite job repository", () => {
+  it("reports job-state counts and the oldest active timestamp", async () => {
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* sqliteJobRepository(":memory:")
+          yield* repository.saveIdempotently(job("10e2d4e1-c127-479f-a124-2ea037bd9319"))
+          yield* repository.saveIdempotently(
+            job(
+              "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+              "manual",
+              undefined,
+              "daily-2026-08-12-second"
+            )
+          )
+          return yield* repository.statusSnapshot()
+        })
+      )
+    )
+
+    expect(result).toEqual([
+      {
+        status: "queued",
+        count: 2,
+        oldestActiveAt: "2026-08-12T00:00:00.000Z",
+      },
+    ])
+  })
+
   it("backfills the original queued timestamp into legacy state documents", () => {
     const path = join(
       mkdtempSync(join(tmpdir(), "episode-production-migration-")),

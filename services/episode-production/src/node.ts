@@ -22,7 +22,9 @@ const health = createHealthState()
 const core = readEpisodeProductionServiceConfig(process.env)
   .pipe(
     Effect.flatMap((config) =>
-      runNodeEpisodeProductionService(config, health.ready)
+      runNodeEpisodeProductionService(config, health.ready, {
+        observability,
+      })
     )
   )
   .pipe(Effect.provide(effectTelemetry))

@@ -26,10 +26,17 @@ export type StoredJobStatusEventRow = Readonly<{
   readonly document: string
 }>
 
+export type SqliteJobStatusSnapshot = Readonly<{
+  readonly status: string
+  readonly count: number
+  readonly oldestActiveAt?: string
+}>
+
 export type SqliteJobHandle = Readonly<{
   findById: (jobId: string) => string | undefined
   findOwned: (ownerId: string, jobId: string) => string | undefined
   listOwned: (ownerId: string, limit: number) => readonly string[]
+  statusSnapshot: () => readonly SqliteJobStatusSnapshot[]
   listOwnedStatusEvents: (input: {
     readonly ownerId: string
     readonly jobId: string
@@ -243,6 +250,21 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
     ORDER BY sequence
     LIMIT ?
   `)
+  const statusSnapshot = database.prepare(`
+    SELECT
+      json_extract(document, '$._tag') AS status,
+      COUNT(*) AS count,
+      MIN(
+        CASE json_extract(document, '$._tag')
+          WHEN 'Queued' THEN json_extract(document, '$.enqueuedAt')
+          WHEN 'Retrying' THEN json_extract(document, '$.retryAt')
+          WHEN 'Running' THEN json_extract(document, '$.startedAt')
+        END
+      ) AS oldest_active_at
+    FROM episode_jobs
+    GROUP BY json_extract(document, '$._tag')
+    ORDER BY status
+  `)
   const findByKey = database.prepare(`
     SELECT request_fingerprint, document
     FROM episode_jobs
@@ -345,6 +367,20 @@ export const openSqliteJobHandle = (databasePath: string): SqliteJobHandle => {
           readonly document: string
         }[]
       ).map((row) => row.document),
+    statusSnapshot: () =>
+      (
+        statusSnapshot.all() as unknown as readonly {
+          readonly status: string
+          readonly count: number
+          readonly oldest_active_at: string | null
+        }[]
+      ).map((row) => ({
+        status: row.status.toLowerCase(),
+        count: Number(row.count),
+        ...(row.oldest_active_at === null
+          ? {}
+          : { oldestActiveAt: row.oldest_active_at }),
+      })),
     listOwnedStatusEvents: (input) =>
       (
         listOwnedStatusEvents.all(
