@@ -164,6 +164,20 @@ pnpm observability:validate
 
 Grafanaは<http://localhost:3100>。障害時はmetrics → exemplar → Tempo trace → 同じ`trace_id`のLoki logの順に追う。default `OTEL_ENABLED=false`ではno-op adapterを使い、Collector障害で業務処理を止めない。
 
+`pnpm dev:up:observed`をremote host上で実行している場合、以下のワンライナーで公開している全portをlocalへforwardできる。
+
+```bash
+ssh -N user@remote-host \
+  -L 4001:localhost:4001 -L 4101:localhost:4101 \
+  -L 4173:localhost:4173 \
+  -L 4222:localhost:4222 -L 8222:localhost:8222 \
+  -L 8333:localhost:8333 -L 9333:localhost:9333 \
+  -L 50021:localhost:50021 \
+  -L 4317:localhost:4317 -L 4318:localhost:4318 -L 8888:localhost:8888 \
+  -L 9090:localhost:9090 \
+  -L 3100:localhost:3100
+```
+
 ```mermaid
 flowchart LR
   Services["Gateway + 4 services"] -->|"OTLP"| Collector["OTel Collector"]
