@@ -60,6 +60,8 @@ flowchart LR
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 
+RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease付きworkerで進める。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。
+
 Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
 
 ## 5. REST契約方針
@@ -153,9 +155,12 @@ Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% 
 flowchart LR
   Web["RSS Reader Web"] --> API["Effect Gateway"]
   API --> Content["Content Knowledge"]
+  Content --> Queue[("feed_sync_jobs")]
   Content --> DB[("Content SQLite")]
   Content --> S3[("SeaweedFS / S3")]
-  Scheduler --> Sync["Content RSS Sync"]
+  Scheduler --> Sync["Content RSS Sync / Worker"]
+  Queue --> Sync
+  Sync --> Queue
   Sync --> Archive["Safe Web Archive"]
   Archive --> S3
   Archive --> DB
@@ -283,3 +288,4 @@ flowchart TD
 - [ADR-0025 自動計装を正本とするトレース保証](adr/0025-automatic-instrumentation-and-trace-guarantee.md)
 - [ADR-0038 保存済み出典による有界な構造化生成](adr/0038-bounded-structured-production-generation.md)
 - [ADR-0039 Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)
+- [ADR-0041 RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)

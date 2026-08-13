@@ -234,6 +234,7 @@ erDiagram
   USER ||--o{ SESSION : has
   USER ||--o{ FEED_SUBSCRIPTION : owns
   FEED_CATALOG ||--o{ FEED_SUBSCRIPTION : selected_by
+  FEED_CATALOG ||--o{ FEED_SYNC_JOB : queues
   FEED_CATALOG ||--o{ FEED_ITEM : publishes
   FEED_ITEM ||--o{ ARTICLE_SNAPSHOT : archived_as
   USER ||--o{ ARTICLE_USER_STATE : tracks
@@ -252,6 +253,7 @@ erDiagram
 | データ | 設計上の意味 |
 | --- | --- |
 | `feed_catalog` / `feed_subscriptions` | 共通の媒体カタログとユーザーの選択を分離 |
+| `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果 |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_user_states` | ユーザーごとの既読・保存状態 |
 | `episode_jobs` / `episode_job_feeds` | 状態、lease、retry、冪等性、生成時点の購読snapshot |
@@ -311,6 +313,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0009: TanStack Router/Query](adr/0009-async-react-tanstack.md)
 - [ADR-0032: Grafana相関監視基盤](adr/0032-grafana-correlated-observability.md)
 - [ADR-0040: 全経路Observabilityと再起動検証](adr/0040-full-path-observability-validation.md)
+- [ADR-0041: RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
