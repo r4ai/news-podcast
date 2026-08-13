@@ -1,4 +1,5 @@
 import { telemetryEnabled } from "./preference"
+import { start } from "./otel"
 
 export function startBrowserObservability(): void {
   if (
@@ -7,10 +8,5 @@ export function startBrowserObservability(): void {
   ) {
     return
   }
-  const start = () => void import("./otel").then(({ start }) => start())
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(start, { timeout: 2_000 })
-  } else {
-    setTimeout(start, 0)
-  }
+  start()
 }
