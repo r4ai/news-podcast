@@ -15,7 +15,10 @@ services:
     networks: [default, observability]
 
   episode-production:
-    environment: *context-otel
+    environment:
+      <<: *context-otel
+      PROVIDER_MODE: fake
+      OPENAI_API_KEY: ""
     networks: [default, observability]
 
   episode-library:
