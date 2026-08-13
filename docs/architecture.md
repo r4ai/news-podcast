@@ -1,7 +1,7 @@
 # システムアーキテクチャ
 
 - 更新日: 2026-08-13
-- 対象: 関数型マイクロサービス（supported scope移行完了）
+- 対象: 関数型マイクロサービス（旧実装削除済み）
 - 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
 ## 1. 全体像
@@ -10,14 +10,14 @@
 
 設計の軸は次の4点である。
 
-> 正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。default ComposeとWebは新topologyだけを使う。旧`apps/api`、`apps/worker`、`packages/domain|application|adapters`は1 releaseの比較用sourceであり、runtimeや新規実装先ではない。最終gateは[関数型DDDマイクロサービス移行ガイド](functional-ddd-migration.md)を正本とする。
+> 正本は`services/*`、`apps/gateway`、`packages/kernel`、`packages/protocols`である。旧runtime、共有package、Cloud adapter、汎用Agent sandboxは物理削除済みで、後方互換経路は持たない。
 
 | 設計方針 | 要点 |
 | --- | --- |
 | DDD | 認証、購読、番組生成、ライブラリを業務上の境界として捉える |
 | オニオンアーキテクチャ | 外側の技術から内側の業務ルールへ一方向に依存する |
 | Ports and Adapters | DB、LLM、RSS、TTS、音声保存をポート越しに差し替える |
-| 非同期処理 | APIはジョブを受け付け、Workerが取得・台本・音声・保存を実行する |
+| 非同期処理 | Gatewayはジョブを受け付け、Episode Productionが取得・台本・音声・保存を実行する |
 
 ```mermaid
 flowchart LR
@@ -63,95 +63,38 @@ flowchart LR
 
 ## 3. レイヤー構成と依存方向
 
-### 3.1 旧モジュラーモノリスのオニオン構造（移行元）
-
-```mermaid
-flowchart TB
-  subgraph Outer["外側: Frameworks / Drivers"]
-    Apps["apps/*\nAPI・Worker・Web・composition root\nHono / React / runtime固有技術"]
-  end
-  subgraph AdapterLayer["Adapters"]
-    Adapters["packages/adapters\nポートの技術実装"]
-  end
-  subgraph ApplicationLayer["Application"]
-    Application["packages/application\nユースケース・ポート"]
-  end
-  subgraph DomainLayer["中心: Domain"]
-    Domain["packages/domain\n業務ルール・状態機械"]
-  end
-
-  Apps --> Adapters
-  Apps --> Application
-  Adapters --> Application
-  Adapters --> Domain
-  Application --> Domain
-```
-
-矢印はcompile-timeの依存方向であり、すべて外側から内側へ向く。DomainはHTTP、DB、OpenAI、VOICEVOX、Cloudflareを知らない。Applicationが必要な外部能力をinterface（ポート）として定義し、Adaptersが実装する。
-
-### 3.2 移行元ディレクトリと責務
+### 3.1 ディレクトリと責務
 
 | パス | レイヤー | 現在の責務 |
 | --- | --- | --- |
-| `packages/domain` | Domain | ジョブ状態遷移、terminal判定、Idempotency-Key規則 |
-| `packages/application` | Application | ジョブ作成ユースケース、RSS・要約・TTS・保存・dispatch等のポート |
-| `packages/adapters` | Infrastructure Adapter | SQLite、Better Auth、RSS、OpenAI、VOICEVOX、local音声保存 |
-| `apps/api` | Legacy source | 移行比較用。runtime・OpenAPIの正本ではない |
-| `apps/worker` | Legacy source | 移行比較用。scheduler・生成の正本ではない |
+| `apps/gateway` | Presentation / Integration | Effect HttpApi、認証proxy、NATS RPC adapter、OpenAPI正本 |
 | `apps/watchdog` | Operations | Grafana非依存health/freshness監視、SMTP通知state |
 | `apps/web` | Presentation | React、TanStack Router/Query、生成OpenAPI client |
+| `services/*` | Bounded Context | service内のdomain、application、adapter、runtime |
+| `packages/kernel` | Shared Kernel | Context非依存のimmutable primitive |
+| `packages/protocols` | Integration Contract | version付きNATS RPC/event Schema |
 | `packages/contracts` | Published Contract | Gateway HttpApiから生成したOpenAPI JSONとTypeScript型 |
 | `packages/ui` | Presentation Shared | shadcn/Base UIベースの共通UI部品とtoken |
 | `packages/observability` | Cross-cutting Adapter | OpenTelemetry契約、Node adapter、privacy filter |
 | `infra` | Deployment / Operations | Node image、Collector、Grafana/Prometheus/Loki/Tempo設定・dashboard・alert |
 
-### 3.3 移行元package依存関係
+### 3.2 package依存関係
 
 ```mermaid
 flowchart LR
   Web["apps/web"] --> Contracts["packages/contracts"]
   Web --> UI["packages/ui"]
-  API["apps/api"] --> Application["packages/application"]
-  API --> Adapters["packages/adapters"]
-  Worker["apps/worker"] --> Application
-  Worker --> Adapters
-  API --> Observability["packages/observability"]
-  Worker --> Observability
+  Gateway["apps/gateway"] --> Protocols["packages/protocols"]
+  Gateway --> Observability["packages/observability"]
+  Services["services/*"] --> Protocols
+  Services --> Kernel["packages/kernel"]
+  Services --> Observability
   Watchdog["apps/watchdog"] --> SMTP["SMTP"]
-  Adapters --> Application
-  Adapters --> Domain["packages/domain"]
-  Application --> Domain
 ```
 
-この節の`apps/api`構造は移行比較用の記録である。HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Webはサーバー実装やDomain型ではなく、公開契約だけに依存する。
+HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Webはservice実装やdomain型ではなく、公開契約だけに依存する。
 
-### 3.4 apps/api内部構成
-
-`apps/api/src` はルーティングに沿ってディレクトリを分けている（ADR-0018のcolocationルールをAPI側にも適用）。
-
-```
-apps/api/src/
-  app.ts              createApp(): ミドルウェア登録 + registerRoutes呼び出しのみ
-  dependencies.ts      AppDependencies（中核依存/任意依存）
-  node.ts / cloudflare.ts   composition root（Node/Workers）
-  http/
-    schemas.ts          Zod/OpenAPIスキーマの正本
-    problem.ts           RFC 7807 Problem Detailsヘルパ
-    context.ts            Variables/ApiApp/RouteRegistrar型
-    sse.ts                 SSEのポーリング+ハートビートループ共通化
-    middleware/            observability・authentication
-  routes/
-    index.ts             全ルートの登録順を決める唯一の場所
-    <resource>/           1リソース1ディレクトリ、1ルート1ファイル
-      <verb>.ts             createRoute定義とhandlerを併置
-      presenter.ts           DTO変換（複数ルートから使う場合）
-  testing/
-    fixtures.ts          テスト用一時SQLite・JSONヘルパ
-```
-
-`routes/<resource>/<verb>.ts` は `createRoute` 定義と `app.openapi(route, handler)` を同一ファイルに持つ。ルート定義がHono route(=契約)である以上、契約とその実装を分けて別ファイルに置くと差分の把握がかえって難しくなるため、意図して併置している。
-
-### 3.5 関数型マイクロサービスへの移行後構成
+### 3.3 service構成
 
 Bounded Contextと配備サービスは1対1にし、純粋な中核と実行shellを別top-level directoryへ分散させず、同じ所有単位へコロケーションする。Context間はdomain型をimportせず、version付きNATS protocolだけで通信する。
 
@@ -184,7 +127,7 @@ flowchart LR
 
 各service内の依存は`runtime/adapters → application → domain`のみとし、package export、lint、architecture testで逆向きimportとContext横断importを拒否する。詳細は[ADR-0033](adr/0033-colocate-bounded-context-with-service.md)を正本とする。
 
-### 3.6 型と副作用の境界
+### 3.4 型と副作用の境界
 
 ```mermaid
 flowchart LR
@@ -198,7 +141,7 @@ flowchart LR
 
 `parse, don't validate`を適用し、検査結果をBooleanで返して元の型を使い続けるAPIは作らない。外部入力、永続JSON、NATS messageは`unknown`として受け、余剰propertyも拒否する共通parserの成功値だけを内側へ渡す。job状態はdiscriminated unionで表し、例えば4回目の`Running`を`Retrying`へ渡せないことを型で保証する。詳細は[ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)を正本とする。
 
-### 3.7 移行進捗
+### 3.5 完成状態
 
 | Surface | 状態 | 現在の証拠 |
 | --- | --- | --- |
@@ -208,10 +151,10 @@ flowchart LR
 | Grafana相関監視 | P0 done | LGTM provisioning、Effect/Node OTLP、Gateway/Identity/NATS span smoke |
 | Effect HttpApi Gateway | Done | 公開API parity、認証proxy、Gateway OpenAPI、functional E2E |
 | Web生成client | Done | Gateway生成型とproxyへ切替、Web E2E 13/13 |
-| state migration/recovery | Implemented | service別DB、rollback backup、件数/hash照合、backup/restore tests |
-| 旧API/Worker runtime | Removed | default Compose/importから除外。source物理削除は1 release比較後 |
+| state backup/recovery | Implemented | service種別検証、online backup、検証restore、rollback drill |
+| 旧実装 | Removed | source、workspace、Docker、CI、文書から物理削除 |
 
-移行順序と削除ゲートの詳細は[移行ガイド](functional-ddd-migration.md)を参照する。`Foundation done`を機能移植完了とはみなさない。
+削除内容と最終gateは[移行ガイド](functional-ddd-migration.md)を参照する。
 
 ## 4. 主要なシステムフロー
 
@@ -226,7 +169,7 @@ sequenceDiagram
   participant Production
   participant Library
   participant Providers as OpenAI / VOICEVOX
-  participant Objects as SeaweedFS / R2
+  participant Objects as SeaweedFS / S3
 
   User->>Web: 番組を生成
   Web->>Gateway: POST /v1/episode-jobs<br/>Idempotency-Key
@@ -282,7 +225,7 @@ stateDiagram-v2
   canceled --> [*]
 ```
 
-`running` 中の新規生成は`researching_sources`、`synthesizing_audio`、`storing_episode`を使う。従来stageは既存jobとの契約互換のため残す。
+`running` 中のstageは`researching_sources`、`synthesizing_audio`、`storing_episode`に限定する。
 
 ## 5. データ設計
 
@@ -315,7 +258,7 @@ erDiagram
 | `episodes` / `episode_sources` | 台本・音声keyと、入力RSSへ遡れるprovenance |
 | `agent_runs` / `agent_tool_calls` | Agent実行結果と、思考過程を含めないtool監査要約 |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
-| `job_outbox` | 移行元Cloud設計の比較用schema。supported runtimeでは使わない |
+| `job_outbox` | Productionが完成eventをJetStreamへ確実に配信するtransactional outbox |
 | Better Auth tables | user、session、account、verification |
 
 SQLiteはforeign key、WAL、5秒のbusy timeout、`BEGIN IMMEDIATE` transactionを使用する。音声本体はDBへ格納せず、DBにはstorage keyとbyte lengthだけを保持する。
@@ -332,7 +275,7 @@ supported runtimeはNode self-hostだけである（[ADR-0039](adr/0039-support-
 | object / TTS | SeaweedFS S3 / VOICEVOX |
 | 起動定義 | `compose.yaml` |
 
-Cloudflare/D1/R2/Queues adapterと旧API/Workerはruntime未接続の比較用sourceであり、SLO、復旧手順、運用supportの対象外である。再導入は事業要件、owner、contract suiteを揃えた後続ADRで判断する。
+Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、事業要件、owner、contract suiteを揃えた後続ADRで新規設計する。
 
 ## 7. 横断設計
 
@@ -346,19 +289,15 @@ Cloudflare/D1/R2/Queues adapterと旧API/Workerはruntime未接続の比較用so
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |
 
-## 8. 移行元の評価と設計上の注意点
+## 8. 設計上の注意点
 
-目標アーキテクチャと現在の実装には、次の意図的な差分がある。
-
-| 項目 | 現状 | 次に境界を強化する場合の方向 |
+| 項目 | 現在の判断 | 再検討条件 |
 | --- | --- | --- |
-| Domain model | ジョブ状態と冪等性規則に限定され、比較的小さい | Feed、Episode、生成ポリシーの不変条件が増えた時だけDomainへ昇格する |
-| 旧Worker use case | `apps/worker`に移行元実装が残る | 比較用sourceに限定。新規生成はEpisode Productionだけへ追加する |
-| 一般Agent/Web検索 | 旧sourceにHarness/tool-loopが残る | 本番未接続。品質要件とSLOが揃った時だけADR-0038を再検討する |
-| Cloud runtime | 旧binding/entrypoint sourceが残る | unsupported。事業要件とcontract suiteが揃った時だけADR-0039を再検討する |
-| 旧共有state | legacy SQLite schemaが残る | migration/rollback比較用。runtimeはservice別SQLiteだけを使う |
+| Domain model | 各service内で必要な不変条件だけを純粋関数として表す | 規則増加時に同じservice内で昇格する |
+| 一般Agent/Web検索 | 実装しない | 品質要件、出典保存、費用・latency SLOが揃う |
+| Cloud runtime | 実装しない | Cloud固有要件と同一contract suiteが揃う |
 
-現状の規模では、これらを先回りして細分化するより、境界を文書とinterfaceで維持し、変更理由や独立scaleの必要性が実測された時に分割する。サービス分割の再検討条件は、モジュールごとの独立配備・独立scale・組織所有境界が必要になった場合である。
+サービス境界は文書、protocol、architecture testで維持する。独立scaleや組織所有境界が変わった場合は後続ADRで分割を再検討する。
 
 ## 9. 重要な設計判断
 

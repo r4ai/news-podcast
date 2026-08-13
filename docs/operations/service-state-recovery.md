@@ -22,53 +22,6 @@ flowchart LR
 | `episode-production` | `production` | `/app/data/production.sqlite` | `episode_jobs` |
 | `episode-library` | `library` | `/app/data/library.sqlite` | `episodes` |
 
-## 旧共有DBからの初回分割
-
-旧`app.sqlite`を直接変更せず、まずdry-runでschema・外部キー・件数manifestを検査する。移行先4 DBのいずれかが存在する場合は中断するため、必ず空のdirectoryを指定する。
-
-```mermaid
-flowchart LR
-  Legacy["legacy app.sqlite / read-only"] --> Dry["dry-run + manifest"]
-  Dry --> Backup["SQLite online rollback backup"]
-  Backup --> Tx["4 service DBs / individual transactions"]
-  Tx --> Verify["integrity_check + foreign_key_check"]
-  Verify --> Publish["all four DBsを同時公開"]
-  Tx -->|"failure"| Clean["temporary DBを全削除"]
-  Clean --> Backup
-```
-
-```bash
-pnpm state:migrate:functional-ddd -- \
-  --source data/app.sqlite \
-  --destination-dir data/functional \
-  --dry-run \
-  --manifest data/migration-dry-run.json
-
-pnpm state:migrate:functional-ddd -- \
-  --source data/app.sqlite \
-  --destination-dir data/functional \
-  --backup backups/app-pre-functional-ddd.sqlite \
-  --manifest backups/functional-ddd-migration.json
-```
-
-| 変換対象 | 方針 |
-| --- | --- |
-| auth・schedule | Identityへowner IDを保持して移行 |
-| feeds・subscriptions・articles・snapshots・state・tags・enrichment | Contentへ移行。旧snapshotで不足するartifact別hashは旧content hashを互換metadataとして保持し、manifestへ記録 |
-| jobs | Productionへ移行。未完了jobは二重副作用防止のため`legacy-migration-requires-retry`で停止 |
-| dictionary・agent audit・memory | Productionへ移行。未完了agent runは停止し、旧event/tool/approval payloadは機密情報・reasoningを移さず監査metadataだけ保持 |
-| episodes・sources | Libraryへ移行。audioまたはRSS snapshot参照が欠けるrecordは全移行を中断 |
-| legacy execution draft/audio chunk | 再開せずmanifestに破棄予定件数を記録。rollback backupには完全保持 |
-
-CLIは次をfail closedで扱う。
-
-- 現行旧schemaの必須tableがない、`integrity_check`/`foreign_key_check`が失敗する。
-- snapshotのSHA-256・object key・時刻、episodeのaudio、RSS sourceのsnapshotが不正または欠落する。
-- agent runとjobのownerが一致しない。
-- rollback backupまたは移行先DBが既に存在する。
-
-成功後はmanifestのsource/target件数を運用記録へ添付し、4 serviceを停止した状態でComposeの各DB pathへ配置する。readinessとowner-scoped smokeが完了するまで、旧共有DBと`--backup`で作成したrollback backupを削除しない。
-
 ## Backup
 
 例はProduction。日時を固定した一意なfile名に置き換える。

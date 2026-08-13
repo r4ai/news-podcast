@@ -1,17 +1,17 @@
 # RSSニュース・ポッドキャスト 設計書
 
-- 状態: 関数型マイクロサービスへのsupported scope移行完了
+- 状態: 関数型マイクロサービス移行・旧実装削除完了
 - 更新日: 2026-08-13
 - 契約の正本: `apps/gateway` のEffect HttpApi
 - Context間契約: `packages/protocols` のEffect Schemaとversion付きNATS subject
 - 生成契約: Gateway HttpApiから生成するOpenAPI
 - 判断記録: `docs/adr/`
 
-## 1. 目的と今回の停止位置
+## 1. 目的と実装範囲
 
 RSSからニュース項目を取得し、ownerが選択した版固定済み記事から出典を追跡できる台本を生成し、VOICEVOXで音声化してWebで配信・再生する。重い処理は非同期ジョブとし、Node self-host runtimeだけをsupportする。
 
-実装範囲はGateway、4 Context services、Web、service別state migration、配備・観測基盤である。公開ユースケースは、ログイン後のRSS購読・記事管理・個人設定、手動または定期生成、進捗/再試行/取消、完成音声と出典の再生に確定した。
+実装範囲はGateway、4 Context services、Web、service別state、配備・観測基盤である。公開ユースケースは、ログイン後のRSS購読・記事管理・個人設定、手動または定期生成、進捗/再試行/取消、完成音声と出典の再生に確定した。
 
 ## 2. 確定事項
 
@@ -22,28 +22,25 @@ RSSからニュース項目を取得し、ownerが選択した版固定済み記
 - 要約: OpenAI `gpt-5.6-luna` が既定。モデルIDは環境変数で差し替える。APIキーはユーザーが後で設定し、キーなしでビルド・テストできる。
 - TTS: 外部VOICEVOX Engine。既定キャラクター名は「ずんだもん」。数値style IDは起動中Engineの `/speakers` から解決し、固定しない。
 - runtime: Docker Compose、service別SQLite、NATS JetStream、SeaweedFS、VOICEVOX。
-- Cloudflare adapterはruntime未接続の比較用sourceで、support対象外（ADR-0039）。
+- Cloudflare runtimeは実装しない（ADR-0039）。
 - 非同期生成: `POST /v1/episode-jobs`、`202 Accepted`、`Location`、`Idempotency-Key`、状態 `queued/running/retrying/succeeded/failed/canceled`。
 
 ## 3. モジュールと依存方向
 
-目標構成と移行規則は[システムアーキテクチャ](architecture.md) §3.5–3.7、型・副作用境界は[ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)を正本とする。以下は移行前の公開ユースケースとparity要件を保持するための記録である。
+service構成は[システムアーキテクチャ](architecture.md) §3、型・副作用境界は[ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)を正本とする。
 
 ```mermaid
 flowchart LR
   Web["apps/web"] --> Contract["packages/contracts"]
-  Api["apps/api"] --> Contract
-  Api --> App["packages/application"]
-  Worker["apps/worker"] --> App
-  Adapter["packages/adapters"] --> App
-  App --> Domain["packages/domain"]
-  Api --> Adapter
-  Worker --> Adapter
-  Api --> Observability["packages/observability"]
-  Worker --> Observability
+  Gateway["apps/gateway"] --> Contract
+  Gateway --> Protocols["packages/protocols"]
+  Services["services/*"] --> Protocols
+  Services --> Kernel["packages/kernel"]
+  Gateway --> Observability["packages/observability"]
+  Services --> Observability
 ```
 
-依存は外側から内側へだけ向ける。DomainはHTTP、DB、Cloudflare、OpenAI、VOICEVOXを知らない。Applicationはユースケースのポートを所有する。Adaptersはそのポートを実装し、appsは実行環境ごとのcomposition rootになる。WebはOpenAPIから生成した型だけをHTTP契約として使う。
+各service内の依存は`runtime/adapters → application → domain`だけにする。DomainはHTTP、DB、OpenAI、VOICEVOXを知らず、Applicationがportを所有する。WebはOpenAPIから生成した型だけをHTTP契約として使う。
 
 ### 境界づけたモジュール
 
@@ -86,7 +83,7 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
 | Object / TTS | SeaweedFS S3 + VOICEVOX |
 | Auth | Better Auth + Identity SQLite、Gateway固定origin proxy |
 
-Cloudflare/D1/R2/Queuesはsupport対象外である。再導入条件は[ADR-0039](adr/0039-support-node-self-host-runtime-only.md)を正本とする。
+Cloudflare/D1/R2/Queuesは実装しない。再導入条件は[ADR-0039](adr/0039-support-node-self-host-runtime-only.md)を正本とする。
 
 ### 6.1 監視トポロジー
 
@@ -110,13 +107,13 @@ Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packa
 
 Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningでdashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理し、watchdogはGrafana停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
-計装は呼び出しごとの手動spanではなく、**自動計装（`instrumentation-http` + `instrumentation-undici`）を正本**にする。Node APIはbootstrapで`@news-podcast/observability/node/register`を初期化してからcomposition rootを動的importし、依存moduleの評価より先に`node:http`をpatchする。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）へspanを自動生成する。W3C trace headerの注入はallowlist（既定`api.openai.com`・`localhost`・`127.0.0.1`、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは注入しない（ADR-0017の「外部へ送らない」方針を部分改訂）。span自体は生成・記録され続け、受信は常にW3Cで継続する。非HTTP入口（Workerのtick）は`withGuaranteedSpan`でroot spanを合成して`trace.entry.synthesized`を計数し、本番はmetric/ruleで、非本番は`assertActiveSpan`で計装欠落を検出する。エラー詳細はredact済み`error.message`・`error.type`をlogs/spansへ記録し、metric属性は低cardinalityに限定する（高cardinalityの`error.message`はmetricsへ入れない）。詳細は[ADR-0025](adr/0025-automatic-instrumentation-and-trace-guarantee.md)を正本とする。
+計装は呼び出しごとの手動spanではなく、**自動計装（`instrumentation-http` + `instrumentation-undici`）を正本**にする。Node processはbootstrapで`@news-podcast/observability/node/register`を初期化してからcomposition rootを動的importし、依存moduleの評価より先に`node:http`をpatchする。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）へspanを自動生成する。W3C trace headerの注入はallowlist（既定`api.openai.com`・`localhost`・`127.0.0.1`、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは注入しない（ADR-0017の「外部へ送らない」方針を部分改訂）。span自体は生成・記録され続け、受信は常にW3Cで継続する。schedulerやconsumerなど非HTTP入口は`withGuaranteedSpan`でroot spanを合成して`trace.entry.synthesized`を計数し、本番はmetric/ruleで、非本番は`assertActiveSpan`で計装欠落を検出する。エラー詳細はredact済み`error.message`・`error.type`をlogs/spansへ記録し、metric属性は低cardinalityに限定する（高cardinalityの`error.message`はmetricsへ入れない）。詳細は[ADR-0025](adr/0025-automatic-instrumentation-and-trace-guarantee.md)を正本とする。
 
 ## 7. 品質戦略
 
 - Domain: 公開interfaceから確認できる規則をunit testし、ドメインロジック100%を維持する。行カバレッジを全体KPIにはしない。
 - Application: portのfakeを使ったユースケース統合テスト。
-- Adapters: SQLite/D1、local/R2、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは全採用モデル共通の可搬サブセット型と実行時allow-listを通し、モデル変更時は実API smokeで互換性を確認する。外部実通信は資格情報のないCIでは行わない。
+- Adapters: SQLite、SeaweedFS S3、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは採用モデルのstrict schemaと実行時allow-listを通し、モデル変更時は実API smokeで適合性を確認する。外部実通信は資格情報のないCIでは行わない。
 - API: OpenAPI lint/validation、型生成差分、認証matrix、Problem Details、owner isolation、pagination、冪等性競合。
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
 - E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生を重要導線として確認するが、確認ゲート後に実装する。
@@ -224,7 +221,7 @@ flowchart LR
   Generate --> Verify["Source validation / TTS / commit"]
 ```
 
-旧Harness設計の履歴はADR-0015に残すが、現行判断は[ADR-0038](adr/0038-bounded-structured-production-generation.md)がsupersedeする。
+過去のHarness判断はADR-0015に履歴として残すが、現行判断は[ADR-0038](adr/0038-bounded-structured-production-generation.md)がsupersedeする。
 
 ## 9. 実装と変更の順序
 
@@ -238,7 +235,7 @@ flowchart TD
   E2E --> Gate["coverage / observability / migration gate"]
 ```
 
-新規変更はContextごとの縦断sliceを「契約test → domain/application → adapter → Gateway → Web → E2E」の順で閉じる。Cloud adapterや旧API/Workerへ機能を追加しない。
+新規変更はContextごとの縦断sliceを「契約test → domain/application → adapter → Gateway → Web → E2E」の順で閉じる。
 
 ## 10. 追加機能の確認ゲート
 

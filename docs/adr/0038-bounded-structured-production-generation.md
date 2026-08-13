@@ -17,7 +17,7 @@ ADR-0013はhosted Web検索を使うtool駆動Agent、ADR-0015はFirecracker上�
 
 本番の台本生成は、ownerが選択した版固定済み記事だけを入力にする有界な構造化生成を唯一の経路とする。OpenAI adapterは厳格なJSON schema、byte/deadline上限、一時障害だけの有界retryを適用し、入力にないURLを出典として受理しない。
 
-一般Agent Harness、shell/workspace、MCP Broker、Firecracker、hosted Web検索は本番経路へ接続しない。Agent run/tool call/memoryの監査APIは、思考過程やcredentialを保存せず、owner・job・attemptのlineageを記録する境界として維持する。
+一般Agent Harness、shell/workspace、MCP Broker、Firecracker、hosted Web検索は実装しない。2026-08-13に旧Agent Runtime、Firecracker runner/crates、sandbox threat modelを物理削除した。Agent run/tool call/memoryの監査APIは、思考過程やcredentialを保存せず、owner・job・attemptのlineageを記録する境界として維持する。
 
 ```mermaid
 flowchart LR
@@ -26,8 +26,6 @@ flowchart LR
   Input --> LLM["OpenAI<br/>strict structured response"]
   LLM --> Verify["schema・出典・上限を検証"]
   Verify --> TTS["VOICEVOX"]
-  Search["hosted Web検索"] -. "本番未接続" .-> LLM
-  Harness["汎用Agent / sandbox"] -. "本番未接続" .-> LLM
 ```
 
 ## 判断要因
@@ -55,7 +53,7 @@ flowchart LR
 ### 欠点とリスク
 
 - 保存済み記事の外にある最新情報を自動補足できない。
-- 旧Agent Runtime sourceは比較・履歴用途で残り、正本を誤認しない管理が必要になる。
+- sandbox toolや入力外Web検索を必要とする生成は提供できない。
 - Agent監査APIは実行自由度を意味せず、名称だけでは誤解され得る。
 
 ## 影響と同期
@@ -67,7 +65,7 @@ flowchart LR
 | OpenAPI/外部契約 | N/A — LLM/tool実装は公開HTTP契約に露出しない | Done | Gateway OpenAPI |
 | コード/ポート | strict Responses adapterと出典検証 | Done | `services/episode-production/src/adapters/openai-script-generator.ts` |
 | データ/ストレージ | Agent監査をowner/job/attemptで分離 | Done | Episode Production repository tests |
-| 実行/配備 | Harness/Web検索をdefault Composeへ接続しない | Done | `compose.yaml` |
+| 実行/配備 | Harness/Web検索とFirecracker実装を物理削除 | Done | workspace、Docker、architecture gate |
 | 認証/セキュリティ | owner選択外sourceを受理しない | Done | script generator tests |
 | フロント/品質保証 | N/A — Webはjobと出典を表示し、生成方式へ依存しない | Done | Web contract |
 | テスト/運用 | fake provider、provider境界、縦断E2E | Done | functional E2E、coverage gate |
@@ -78,9 +76,10 @@ flowchart LR
 - 利用者が補足Web調査またはsandbox toolを必要とするユースケースを承認する。
 - 検索sourceの版固定、prompt injection対策、月額費用、p95 latencyのSLOを定義する。
 
-## 受け入れゲートと未決事項
+## 受け入れゲート
 
-- 最終gateでfake providerを使う購読→生成→Library E2Eと、provider timeout/retry/schema拒否testを再実行する。
+- fake providerを使う購読→生成→Library E2Eと、provider timeout/retry/schema拒否testがGreenである。
+- workspace、Docker、CIから旧Agent RuntimeとFirecracker参照が消えている。
 
 ## 検証証拠
 

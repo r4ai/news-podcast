@@ -1,6 +1,6 @@
 # 開発ガイド
 
-このガイドは、supported runtimeであるNode self-host構成をローカルで起動・検証する手順を示す。正本はGatewayと4 Context servicesである。旧`apps/api` / `apps/worker`は移行比較用sourceで、起動対象ではない。
+このガイドは、唯一のruntimeであるNode self-host構成をローカルで起動・検証する手順を示す。正本はGatewayと4 Context servicesである。
 
 ## クイックスタート
 
@@ -60,7 +60,7 @@ flowchart LR
   Production --> Voicevox["VOICEVOX"]
 ```
 
-各Contextは専用SQLiteを所有する。Context間でDBを共有せず、同期query/commandはNATS RPC、確実な状態伝播はJetStreamを使う。default Composeは旧API/WorkerやCloud adapterを起動しない。
+各Contextは専用SQLiteを所有する。Context間でDBを共有せず、同期query/commandはNATS RPC、確実な状態伝播はJetStreamを使う。
 
 | service | health port | state |
 | --- | ---: | --- |
@@ -146,29 +146,12 @@ pnpm contract:lint
 | `pnpm test:coverage:functional` | 8 functional packagesのlines 75% / branches 60% |
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
 | `pnpm test:e2e` | Web主要journey |
-| `pnpm test:state-migration` | 旧共有DB→4 service DBの変換・照合 |
 | `pnpm test:sqlite-state` | service別backup/restore拒否規則 |
 | `pnpm observability:validate` | LGTM provisioningと相関設定 |
 
 bug修正は再現testを先に追加する。LLM接続ではsuccessだけでなく、timeout、429/5xx、invalid schema、response上限、non-retryable failureをprovider境界で確認する。
 
-## State migrationと復旧
-
-旧共有SQLiteは直接変更せず、dry-runとmanifestを先に作る。実移行はrollback backupが必須で、4 DBを個別transactionへ作成し、全DBの件数/hash/owner/FK/integrity確認後だけpublishする。
-
-```bash
-pnpm state:migrate:functional-ddd -- \
-  --source data/app.sqlite \
-  --destination-dir data/functional \
-  --dry-run \
-  --manifest data/migration-dry-run.json
-
-pnpm state:migrate:functional-ddd -- \
-  --source data/app.sqlite \
-  --destination-dir data/functional \
-  --backup backups/app-pre-functional-ddd.sqlite \
-  --manifest backups/functional-ddd-migration.json
-```
+## State backupと復旧
 
 online backup、別pathへの検証restore、offline cutover、rollbackは[Service state backup / restore](operations/service-state-recovery.md)を正本とする。既存DBへの上書きと別serviceのbackup復元はCLIが拒否する。
 

@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Agent Platform
 - Supersedes: ADR-0013
 - Superseded by: ADR-0038
-- Related: `docs/design.md` §8.4、`docs/security/agent-sandbox-threat-model.md`
+- Related: `docs/design.md` §8.4、ADR-0038
 
 ## コンテキストと変更契機
 

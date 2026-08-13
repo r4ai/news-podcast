@@ -7,6 +7,10 @@
 - Superseded by: N/A
 - Related: ADR-0011、ADR-0033、`compose.yaml`、`docs/functional-ddd-migration.md`
 
+## 追補（2026-08-13）
+
+Product ownerが後方互換性と比較用sourceを不要と確認したため、旧runtimeとCloud runtimeのsourceを物理削除する。これはsupported deploymentをNode self-hostだけにする本決定を完全に実施する追補であり、配備境界は変更しない。
+
 ## コンテキストと変更契機
 
 ADR-0003はNode/SQLiteとCloudflare/D1の二系統を想定したが、Cloudflare側は業務repository、queue consumer、認証、VOICEVOX接続が完成せず、同一contractを保証するtestもない。関数型DDD移行で実装・運用検証されたのは、Node、service別SQLite、NATS JetStream、SeaweedFS、VOICEVOXからなるself-host構成である。
@@ -17,7 +21,7 @@ ADR-0003はNode/SQLiteとCloudflare/D1の二系統を想定したが、Cloudflar
 
 Node self-host runtimeを唯一のsupported deploymentとする。default `compose.yaml`はGateway、4 Context services、NATS JetStream、SeaweedFS、VOICEVOX、Webを起動する。
 
-Cloudflare/D1/R2/Queues adapterと旧`apps/api` / `apps/worker`はruntime・Composeから外す。sourceは移行比較と履歴のため残してよいが、新規機能、運用手順、SLOの対象にしない。Cloud runtimeを再導入する場合は、後続ADRで利用理由とcontract suiteを承認する。
+Cloudflare/D1/R2/Queues adapter、旧API/Worker、共有domain/application/adapter、旧共有DB migration CLIを物理削除し、互換経路を持たない。Cloud runtimeを再導入する場合は、後続ADRで利用理由とcontract suiteを承認し、現在の境界に沿って新規実装する。
 
 ```mermaid
 flowchart LR
@@ -27,8 +31,6 @@ flowchart LR
   Services --> NATS["NATS JetStream"]
   Services --> S3["SeaweedFS S3"]
   Services --> TTS["VOICEVOX"]
-  Cloud["Cloudflare adapters"] -. "unsupported / runtime未接続" .-> Services
-  Legacy["旧 api / worker source"] -. "比較用のみ" .-> Services
 ```
 
 ## 判断要因
@@ -42,8 +44,8 @@ flowchart LR
 | 案 | 却下理由 | 再検討条件 |
 | --- | --- | --- |
 | Node/Cloudflare両方をsupportedに維持 | Cloud側の業務処理・認証・contract testがない | Cloud固有の事業要件、owner、運用SLO、同一contract suiteが揃う |
-| 旧API/Workerをdefault Composeへ残す | 二重の正本と共有DB依存を復活させる | rollback演習で一時起動が必要な場合に限定した別定義を作る |
-| sourceを直ちに削除 | 比較・監査に必要な履歴まで同時に失う | 1 releaseの比較とrollback演習が完了する |
+| 旧API/Workerをdefault Composeへ残す | 二重の正本と共有DB依存を復活させる | 再採用しない。Git履歴を参照する |
+| 比較用sourceを保持する | 正本の誤認、依存の残存、CI負荷を継続する | 再採用しない。比較にはGit履歴を使う |
 
 ## 結果
 
@@ -55,7 +57,7 @@ flowchart LR
 ### 欠点とリスク
 
 - managed edge runtimeの選択肢を現時点では提供しない。
-- 残存sourceをruntime正本と誤認しないためのarchitecture gateが必要になる。
+- 旧DB形式やCloud runtimeからのin-place upgradeは提供しない。
 
 ## 影響と同期
 
@@ -64,8 +66,8 @@ flowchart LR
 | 設計書 | supported topologyをNode self-hostに限定 | Done | `docs/architecture.md`、移行ガイド |
 | ドメイン/ユースケース | N/A — runtime非依存 | Done | service内依存境界 |
 | OpenAPI/外部契約 | Gatewayを唯一の正本にする | Done | `apps/gateway/src/contract.ts`、`packages/contracts` |
-| コード/ポート | 旧/Cloud sourceは比較用でruntime未接続 | Done | composition root、architecture test |
-| データ/ストレージ | service別migration/backup/restore | Done | state migration/SQLite state tests、runbook |
+| コード/ポート | 旧/Cloud sourceを物理削除 | Done | workspace、composition root、architecture test |
+| データ/ストレージ | service別backup/restoreに限定 | Done | SQLite state tests、runbook |
 | 実行/配備 | default Composeを新topologyだけにする | Done | `compose.yaml` |
 | 認証/セキュリティ | Identity HTTPをGatewayだけからproxy | Done | Identity/Gateway auth proxy tests |
 | フロント/品質保証 | Web proxyをGatewayへ向ける | Done | Compose、Web contract tests |
@@ -76,13 +78,13 @@ flowchart LR
 - Cloud固有の配備要件、可用性または費用優位が定量化される。
 - D1/R2/Queues、認証、外部TTSを同じ公開契約で検証するcontract suiteと運用ownerを用意する。
 
-## 受け入れゲートと未決事項
+## 受け入れゲート
 
-- 旧sourceの物理削除は1 releaseの比較とrollback演習後に別変更として行う。
+- workspace、Docker、CI、現行文書が削除済みsourceを参照しない。
+- `docker compose config`、architecture gate、functional/Web E2E、service別backup/restore testがGreenである。
 
 ## 検証証拠
 
 - `docker compose config`
 - `pnpm architecture:check`
-- `pnpm test:state-migration`
 - `pnpm test:sqlite-state`
