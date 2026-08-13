@@ -9,6 +9,7 @@ import { DateTime, Effect, Schema } from "effect"
 
 import { makeCompletionPublisher } from "../adapters/completion-publisher.js"
 import { makeContentArticleMaterializer } from "../adapters/content-article-materializer.js"
+import { makeFakeScriptGenerator } from "../adapters/fake-script-generator.js"
 import { makeIdentityScheduleClient } from "../adapters/identity-schedule-client.js"
 import { makeOpenAiScriptGenerator } from "../adapters/openai-script-generator.js"
 import { sqliteExecutionRepository } from "../adapters/sqlite-execution-repository.js"
@@ -60,9 +61,10 @@ const retryPolicy = Schema.Struct({
 export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
   rpc: NodeCreateJobRpcConfigSchema,
   contentRequestTimeoutMillis: positive(30_000),
+  providerMode: Schema.Union([Schema.Literal("fake"), Schema.Literal("live")]),
   openAi: Schema.Struct({
     endpoint: httpUrl,
-    apiKey: secret,
+    apiKey: Schema.String.check(Schema.isMaxLength(4_096)),
     model: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
     requestTimeoutMillis: positive(300_000),
     retryPolicy,
@@ -109,7 +111,13 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
     failureBackoffMillis: positive(3_600_000),
     requestTimeoutMillis: positive(30_000),
   }),
-})
+}).check(
+  Schema.makeFilter((config) =>
+    config.providerMode === "fake" || config.openAi.apiKey.length > 0
+      ? true
+      : "OPENAI_API_KEY is required in live provider mode"
+  )
+)
 export type NodeEpisodeProductionServiceConfig = DeepReadonly<
   Schema.Schema.Type<typeof NodeEpisodeProductionServiceConfigSchema>
 >
@@ -185,10 +193,13 @@ export const runNodeEpisodeProductionService = (
             now: () => DateTime.formatIso(now()),
             timeoutMillis: config.contentRequestTimeoutMillis,
           })
-          const script = makeOpenAiScriptGenerator({
-            ...config.openAi,
-            endpoint: new URL(config.openAi.endpoint),
-          })
+          const script =
+            config.providerMode === "fake"
+              ? makeFakeScriptGenerator()
+              : makeOpenAiScriptGenerator({
+                  ...config.openAi,
+                  endpoint: new URL(config.openAi.endpoint),
+                })
           const speech = makeVoicevoxSpeechSynthesizer({
             ...config.voicevox,
             baseUrl: new URL(config.voicevox.baseUrl),

@@ -58,12 +58,13 @@ export const readEpisodeProductionServiceConfig = (
           env.CONTENT_REQUEST_TIMEOUT_MS,
           5_000
         ),
+        providerMode: env.PROVIDER_MODE?.trim() === "live" ? "live" : "fake",
         openAi: {
           endpoint:
             env.OPENAI_RESPONSES_URL?.trim() ||
             "https://api.openai.com/v1/responses",
           apiKey: env.OPENAI_API_KEY ?? "",
-          model: env.OPENAI_MODEL?.trim() ?? "",
+          model: env.OPENAI_MODEL?.trim() || "fake",
           requestTimeoutMillis: integer(env.OPENAI_REQUEST_TIMEOUT_MS, 120_000),
           retryPolicy: {
             maximumAttempts: integer(env.PROVIDER_MAXIMUM_ATTEMPTS, 3),

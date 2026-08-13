@@ -27,6 +27,7 @@ describe("Episode Production environment configuration", () => {
     )
 
     expect(config.rpc.sqlitePath).toBe("/data/production.sqlite")
+    expect(config.providerMode).toBe("fake")
     expect(config.openAi).toMatchObject({ model: "gpt-test" })
     expect(config.voicevox.baseUrl).toBe("http://voicevox:50021")
     expect(config.completionRelay.batchSize).toBe(50)
@@ -40,9 +41,31 @@ describe("Episode Production environment configuration", () => {
         EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
         NATS_SERVERS: "nats://nats:4222",
         EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
+        PROVIDER_MODE: "live",
       })
     )
     expect(exit._tag).toBe("Failure")
+  })
+
+  it("accepts fake mode without an OpenAI credential", async () => {
+    const config = await Effect.runPromise(
+      readEpisodeProductionServiceConfig({
+        EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
+        NATS_SERVERS: "nats://nats:4222",
+        EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
+        PROVIDER_MODE: "fake",
+        VOICEVOX_BASE_URL: "http://voicevox:50021",
+        VOICEVOX_CHARACTER_NAME: "ずんだもん",
+        S3_ENDPOINT: "http://seaweedfs:8333",
+        S3_REGION: "us-east-1",
+        S3_BUCKET: "news-podcast",
+        S3_ACCESS_KEY_ID: "access",
+        S3_SECRET_ACCESS_KEY: "secret",
+      })
+    )
+
+    expect(config.providerMode).toBe("fake")
+    expect(config.openAi.apiKey).toBe("")
   })
 
   it("rejects a heartbeat interval above one third of the lease", async () => {
