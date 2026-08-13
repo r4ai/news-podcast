@@ -28,6 +28,7 @@
     "setup:env": "node scripts/setup-env.mjs",
     "observability:infra:up": "bash scripts/observability-up.sh",
     "observability:infra:down": "docker compose -f infra/observability/compose.yaml down",
+    "observability:smoke": "bash scripts/observability-smoke.sh",
     "observability:validate": "bash scripts/validate-observability.sh"
   },
   "devDependencies": {
