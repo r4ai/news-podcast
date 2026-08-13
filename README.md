@@ -23,3 +23,13 @@ RSSから選んだニュースを、出典付きの短い音声番組として�
 環境構築、ローカルでの操作、コマンド、環境変数は[開発ガイド](docs/development.md)を参照してください。
 
 システムの全体像は[アーキテクチャ](docs/architecture.md)、詳細設計と判断の記録は[設計書](docs/design.md)と[ADR](docs/adr/)にあります。
+
+## Observability
+
+```bash
+pnpm dev:up:observed
+pnpm observability:validate
+pnpm observability:smoke
+```
+
+Grafanaは <http://localhost:3100>。Dashboardは[運用手順](infra/observability/README.md)にある8つを自動provisionし、`Alert → Service Drilldown → Tempo → Loki → Prometheus exemplar`の順で原因を追えます。

@@ -6,6 +6,8 @@ OpenTelemetryを唯一の計装契約とし、Prometheus・Loki・TempoをGrafan
 flowchart LR
   Entry["HTTP / NATS / Scheduler"] --> App["API / Context Services"]
   App -->|"OTLP metrics + logs + traces"| Collector["OTel Collector"]
+  Browser["Browser :4173"] -->|"/v1/telemetry/*"| Gateway["Gateway :4001"]
+  Gateway -->|"/v1/{traces,logs,metrics}"| Collector
   Collector --> Prometheus["Prometheus · 180d"]
   Collector --> Loki["Loki · 30d"]
   Collector --> Tempo["Tempo · 15d"]
@@ -21,6 +23,16 @@ flowchart LR
 ```bash
 pnpm setup:env
 pnpm dev:up:observed
+```
+
+完全再起動（volumeは保持）:
+
+```bash
+docker compose -f compose.yaml -f compose.observability.yaml down --remove-orphans
+docker compose -f infra/observability/compose.yaml down --remove-orphans
+pnpm dev:up:observed
+pnpm observability:validate
+pnpm observability:smoke
 ```
 
 | 接続先 | URL |
@@ -50,9 +62,25 @@ provisioningされるダッシュボード:
 
 - `Overview`: RED指標、サービス別traffic/error/latency、警告ログ
 - `Service Map & Tracing`: サービス依存、edge別RED、代表trace
+- `Service Drilldown`: サービス/operation別RED、p95、exemplar、TraceQL、相関ログ
 - `Correlated Logs`: level別volume、trace coverage、traceへ戻れるログ
-- `Episode Production`: queue、stage、retry、provider、storage、lease
+- `Episode Production`: queue、worker state、stage/span、retry diagnostics、provider/client、storage、lease
+- `Web Experience`: Browser span/error、Web Vital OTLP、Browser TraceQL、相関ログ
+- `Dependencies`: service map、client/NATS/HTTP依存、依存先p95、相関ログ
 - `Telemetry Platform`: Collector queue/export、backend、host resource
+
+UIDとURLは次の通り。UIで作り直さず、`grafana/dashboards/*.json`を変更して再provisionする。
+
+| Dashboard | URL |
+| --- | --- |
+| Overview | `/d/news-podcast-overview` |
+| Service Map | `/d/news-podcast-service-map` |
+| Service Drilldown | `/d/news-podcast-service-drilldown` |
+| Correlated Logs | `/d/news-podcast-logs` |
+| Episode Production | `/d/news-podcast-episode` |
+| Web Experience | `/d/news-podcast-web` |
+| Dependencies | `/d/news-podcast-dependencies` |
+| Telemetry Platform | `/d/news-podcast-platform` |
 
 ## アラートと独立監視
 
@@ -77,10 +105,10 @@ docker compose \
 
 ## 合格基準
 
-1. 5ダッシュボード、7アラート、3データソースが起動時に自動生成される。
+1. 8ダッシュボード、7アラート、3データソースが起動時に自動生成される。
 2. Prometheus、Loki、Tempoのhealth checkとCollectorの全exporterが成功する。
 3. synthetic requestをサービス間で流し、service graph、trace、同一`trace_id`のログ、metric exemplarを辿れる。
 4. CollectorまたはGrafanaを停止し、watchdogの障害通知と復旧通知を確認する。
 5. metrics 180日、logs 30日、traces 15日のretentionとvolume backup/restoreを定期的に確認する。
 
-設定の構文検証は各公式imageで行い、Grafana APIでdatasource healthとprovisioning結果を確認する。rollbackは直前commitの設定へ戻してComposeを再適用する。volumeは`docker compose down`では削除されない。
+設定の構文検証は各公式imageで行い、`pnpm observability:smoke`でDashboard UID、datasource health、Collector accepted/refused/export、Browser OTLP proxy、NATS/VOICEVOX/SeaweedFS endpointを確認する。`OBSERVABILITY_TRACE_ID`を指定するとTempo trace、Loki同一trace_id、Prometheus span metricも検証する。rollbackは直前commitの設定へ戻してComposeを再適用する。volumeは`docker compose down`では削除されない。

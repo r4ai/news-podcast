@@ -147,7 +147,8 @@ pnpm contract:lint
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
 | `pnpm test:e2e` | Web主要journey |
 | `pnpm test:sqlite-state` | service別backup/restore拒否規則 |
-| `pnpm observability:validate` | LGTM provisioningと相関設定 |
+| `pnpm observability:validate` | LGTM構文、Dashboard UID、未確認metric参照 |
+| `pnpm observability:smoke` | 起動後のGrafana API、datasource、Collector、Browser OTLP、依存endpoint |
 
 bug修正は再現testを先に追加する。LLM接続ではsuccessだけでなく、timeout、429/5xx、invalid schema、response上限、non-retryable failureをprovider境界で確認する。
 
@@ -160,9 +161,12 @@ online backup、別pathへの検証restore、offline cutover、rollbackは[Servi
 ```bash
 pnpm dev:up:observed
 pnpm observability:validate
+pnpm observability:smoke
 ```
 
-Grafanaは<http://localhost:3100>。障害時はmetrics → exemplar → Tempo trace → 同じ`trace_id`のLoki logの順に追う。default `OTEL_ENABLED=false`ではno-op adapterを使い、Collector障害で業務処理を止めない。
+Grafanaは<http://localhost:3100>。DashboardはOverview、Service Map、Service Drilldown、Logs、Episode、Web、Dependencies、Platformの8つを自動provisionする。障害時は`Alert → Overview → Service Drilldown → Service Map → Tempo trace → 同じtrace_idのLoki log → Prometheus metric/exemplar`の順に追う。default `OTEL_ENABLED=false`ではno-op adapterを使い、Collector障害で業務処理を止めない。
+
+BrowserのOTLPはWebの相対URLからGatewayへ転送され、GatewayがCollectorの`/v1/traces`、`/v1/logs`、`/v1/metrics`へ固定マッピングする。Collector originをBrowserへ公開しない。Gatewayのproxyにはrequest/response byte上限とtimeoutを設定する。
 
 `pnpm dev:up:observed`をremote host上で実行している場合、以下のワンライナーで公開している全portをlocalへforwardできる。
 

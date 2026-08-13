@@ -148,7 +148,7 @@ flowchart LR
 | immutable kernel / protocol | Done | strict parse、deep freeze、correlation envelope、version付きsubject |
 | 4 Context services | Implemented | `services/*/src/{domain,application,adapters,runtime}`、service別所有state |
 | SQLite/NATS runtime | P0 done | service別single-writer、outbox/inbox、durable consumer、fenced heartbeat、Compose readiness |
-| Grafana相関監視 | P0 done | LGTM provisioning、Effect/Node OTLP、Gateway/Identity/NATS span smoke |
+| Grafana相関監視 | P0 done | 8 dashboard、Gateway Browser OTLP proxy、Episode state metrics、LGTM provisioning、smoke script |
 | Effect HttpApi Gateway | Done | 公開API parity、認証proxy、Gateway OpenAPI、functional E2E |
 | Web生成client | Done | Gateway生成型とproxyへ切替、Web E2E 13/13 |
 | state backup/recovery | Implemented | service種別検証、online backup、検証restore、rollback drill |
@@ -284,7 +284,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 | 認証 | Better Authのsession cookie。Google OIDCはログイン上流であり、Google tokenをAPI bearerとして扱わない |
 | 認可 | 全 `/v1` resourceをowner scopeで検索し、他人のIDと存在しないIDをともに404へ正規化 |
 | API契約 | Effect HttpApi code-first OpenAPI、RFC 9457 Problem Details、生成型の差分検査 |
-| 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
+| 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。BrowserはGatewayの相対OTLP proxyを経由し、Collector originを公開しない。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |
@@ -310,6 +310,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0008: Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)
 - [ADR-0009: TanStack Router/Query](adr/0009-async-react-tanstack.md)
 - [ADR-0032: Grafana相関監視基盤](adr/0032-grafana-correlated-observability.md)
+- [ADR-0040: 全経路Observabilityと再起動検証](adr/0040-full-path-observability-validation.md)
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
