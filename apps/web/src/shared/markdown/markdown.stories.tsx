@@ -4,7 +4,7 @@ import { Markdown } from "./markdown"
 import { markdownStory, markdownThemeDecorator } from "./story-helpers"
 
 /**
- * アーカイブ記事変換(`packages/adapters/src/archive`)が実際に出力する記法を
+ * Content Knowledgeのアーカイブ処理が出力する記法を
  * できるだけ再現した長文fixture。GFMテーブル、GitHub Alerts風callout、
  * 脚注、数式、ファイル名付き/無しコードブロック、`<details>`生HTML、
  * Mermaidを一通り含む。

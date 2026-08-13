@@ -13,10 +13,6 @@ overrides:
 # transitive sources.
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
-minimumReleaseAgeExclude:
-  # Cloudflare publishes this generated type package daily; retain the
-  # explicitly pinned version required by this repository.
-  - "@cloudflare/workers-types@5.20260809.1"
 trustPolicy: no-downgrade
 trustPolicyExclude:
   # Audited transitive releases required by Spectral/Storybook. Keep these
@@ -33,7 +29,6 @@ allowBuilds:
   esbuild: true
   msgpackr-extract: false
   protobufjs: true
-  workerd: true
 
 # `pnpm add` writes exact versions; committed manifests and the lockfile remain
 # the source of truth for upgrades.

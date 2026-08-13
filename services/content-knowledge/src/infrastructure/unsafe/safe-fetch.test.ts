@@ -50,9 +50,11 @@ describe("Content safe HTTP boundary", () => {
   })
 
   it("bounds redirect chains", async () => {
-    const baseFetch = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(null, { status: 302, headers: { location: "/again" } })
-    )
+    const baseFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(null, { status: 302, headers: { location: "/again" } })
+      )
 
     await expect(
       createSafeFetcher(baseFetch)("https://93.184.216.34/start")
