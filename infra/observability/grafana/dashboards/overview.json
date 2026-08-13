@@ -7,8 +7,11 @@
   "id": null,
   "links": [
     { "title": "Service map and traces", "type": "link", "url": "/d/news-podcast-service-map", "keepTime": true },
+    { "title": "Service drilldown", "type": "link", "url": "/d/news-podcast-service-drilldown", "keepTime": true },
     { "title": "Correlated logs", "type": "link", "url": "/d/news-podcast-logs", "keepTime": true },
     { "title": "Episode production", "type": "link", "url": "/d/news-podcast-episode", "keepTime": true },
+    { "title": "Web experience", "type": "link", "url": "/d/news-podcast-web", "keepTime": true },
+    { "title": "Dependencies", "type": "link", "url": "/d/news-podcast-dependencies", "keepTime": true },
     { "title": "Telemetry platform", "type": "link", "url": "/d/news-podcast-platform", "keepTime": true }
   ],
   "panels": [
@@ -96,4 +99,3 @@
   "uid": "news-podcast-overview",
   "version": 1
 }
-

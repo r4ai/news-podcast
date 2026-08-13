@@ -83,7 +83,7 @@ groups:
             relativeTimeRange: { from: 600, to: 0 }
             model:
               editorMode: code
-              expr: 'sum by (service_name, http_route) (increase(http_server_error_total[5m]))'
+              expr: 'sum by (service_name, http_response_status_code) (increase(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))'
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -104,7 +104,7 @@ groups:
         execErrState: Error
         for: 1m
         annotations:
-          summary: '{{ $labels.service_name }} returned 5xx on {{ $labels.http_route }}'
+          summary: '{{ $labels.service_name }} returned a 5xx response'
           description: Inspect the linked trace and logs with the same trace_id before retrying the operation.
         labels: { severity: critical, team: platform }
 
@@ -122,7 +122,7 @@ groups:
             relativeTimeRange: { from: 600, to: 0 }
             model:
               editorMode: code
-              expr: 'sum by (failure_code) (increase(episode_failed_total[5m]))'
+              expr: 'sum by (span_name) (rate(traces_spanmetrics_calls_total{service_name="episode-production",status_code="STATUS_CODE_ERROR"}[5m]))'
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -143,7 +143,7 @@ groups:
         execErrState: Error
         for: 1m
         annotations:
-          summary: 'Episode generation failed: {{ $labels.failure_code }}'
+          summary: 'Episode Production error span: {{ $labels.span_name }}'
           description: Open Episode Production, find the error log, and follow trace_id across worker, provider, storage, and database spans.
         labels: { severity: critical, team: platform }
 

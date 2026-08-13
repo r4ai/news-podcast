@@ -1,0 +1,91 @@
+{
+  "annotations": { "list": [] },
+  "description": "Browser traces, errors, and Web Vital OTLP metrics. Browser errors and events are linked to their trace_id logs.",
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "title": "Overview", "type": "link", "url": "/d/news-podcast-overview", "keepTime": true },
+    { "title": "Service drilldown", "type": "link", "url": "/d/news-podcast-service-drilldown", "keepTime": true },
+    { "title": "Correlated logs", "type": "link", "url": "/d/news-podcast-logs", "keepTime": true }
+  ],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "auto" },
+      "targets": [{ "editorMode": "code", "expr": "sum(rate(traces_spanmetrics_calls_total{service_name=\"news-podcast-web\"}[5m]))", "legendFormat": "browser spans", "range": true, "refId": "A" }],
+      "title": "Browser span rate",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "auto" },
+      "targets": [{ "editorMode": "code", "expr": "sum(count_over_time({service_name=\"news-podcast-web\"} |= `browser.error` [5m]))", "legendFormat": "browser errors", "queryType": "range", "refId": "A" }],
+      "title": "Browser errors in last 5m",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "auto" },
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "p95", "range": true, "refId": "A", "exemplars": true }],
+      "title": "Browser interaction/request p95",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" }, "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.75, sum by (le, span_name) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "{{span_name}} p75", "range": true, "refId": "A" }],
+      "title": "Browser operation latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" }, "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.75, sum by (le, web_vital_name) (rate(browser_web_vital_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "{{web_vital_name}} p75", "range": true, "refId": "A" }],
+      "title": "Web Vitals p75 — LCP/INP/CLS/FCP/TTFB",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 14 },
+      "id": 6,
+      "options": { "spanBar": { "type": "Tag", "tag": "http.route" } },
+      "targets": [{ "limit": 100, "query": "{ resource.service.name = \"news-podcast-web\" }", "queryType": "traceql", "refId": "A", "tableType": "traces" }],
+      "title": "Browser traces — open one to backend and correlated logs",
+      "type": "traces"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 26 },
+      "id": 7,
+      "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [{ "editorMode": "code", "expr": "{service_name=\"news-podcast-web\"} |~ `browser.error|route.error|panel.error`", "queryType": "range", "refId": "A" }],
+      "title": "Browser error logs — TraceID opens Tempo",
+      "type": "logs"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["news-podcast", "web", "browser", "vitals", "managed"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "News Podcast / Web Experience",
+  "uid": "news-podcast-web",
+  "version": 1
+}

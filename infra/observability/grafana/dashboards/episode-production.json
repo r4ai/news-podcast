@@ -31,13 +31,13 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
       "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
       "id": 3,
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["sum"], "values": false }, "textMode": "auto" },
-      "targets": [{ "editorMode": "code", "expr": "sum(increase(episode_retry_total[$__range]))", "legendFormat": "retries", "range": true, "refId": "A" }],
-      "title": "Retries in range",
+      "targets": [{ "editorMode": "code", "expr": "sum(count_over_time({service_name=\"episode-production\"} |~ `retry|Retry` [$__range]))", "legendFormat": "retry diagnostics", "queryType": "range", "refId": "A" }],
+      "title": "Retry diagnostics in range",
       "type": "stat"
     },
     {
@@ -46,8 +46,8 @@
       "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
       "id": 4,
       "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["sum"], "values": false }, "textMode": "auto" },
-      "targets": [{ "editorMode": "code", "expr": "sum(increase(episode_failed_total[$__range]))", "legendFormat": "failed", "range": true, "refId": "A" }],
-      "title": "Terminal failures in range",
+      "targets": [{ "editorMode": "code", "expr": "sum(rate(traces_spanmetrics_calls_total{service_name=\"episode-production\",status_code=\"STATUS_CODE_ERROR\"}[5m]))", "legendFormat": "error spans", "range": true, "refId": "A" }],
+      "title": "Production error span rate",
       "type": "stat"
     },
     {
@@ -66,8 +66,8 @@
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 5 },
       "id": 6,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "editorMode": "code", "expr": "max by (operation_stage) (episode_stage_oldest_age)", "legendFormat": "{{operation_stage}}", "range": true, "refId": "A" }],
-      "title": "Oldest stage age",
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le, span_name) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"episode-production\"}[5m])))", "legendFormat": "{{span_name}}", "range": true, "refId": "A" }],
+      "title": "Stage and operation p95 latency",
       "type": "timeseries"
     },
     {
@@ -76,18 +76,18 @@
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 5 },
       "id": 7,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le, provider_name, provider_operation) (rate(provider_request_duration_bucket[5m])))", "legendFormat": "{{provider_name}} / {{provider_operation}}", "range": true, "refId": "A" }],
-      "title": "Provider p95 latency",
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(http_client_request_duration_seconds_bucket[5m])))", "legendFormat": "{{service_name}}", "range": true, "refId": "A" }],
+      "title": "Dependency client p95 latency",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 40, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } }, "unit": "ops" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 },
       "id": 8,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "editorMode": "code", "expr": "sum by (checkpoint_result) (rate(episode_checkpoint_total[5m]))", "legendFormat": "{{checkpoint_result}}", "range": true, "refId": "A" }],
-      "title": "Checkpoint outcomes",
+      "targets": [{ "editorMode": "code", "expr": "{service_name=\"episode-production\"} |~ `checkpoint|lease`", "queryType": "range", "refId": "A" }],
+      "title": "Checkpoint and lease diagnostics",
       "type": "timeseries"
     },
     {
@@ -110,9 +110,8 @@
       "id": 10,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "editorMode": "code", "expr": "sum(rate(episode_lease_lost_total[5m]))", "legendFormat": "lost", "range": true, "refId": "A" },
-        { "editorMode": "code", "expr": "sum(rate(episode_lease_recovered_total[5m]))", "legendFormat": "recovered", "range": true, "refId": "B" },
-        { "editorMode": "code", "expr": "sum(rate(episode_lease_expired_total[5m]))", "legendFormat": "expired", "range": true, "refId": "C" }
+        { "editorMode": "code", "expr": "sum(rate(traces_spanmetrics_calls_total{service_name=\"episode-production\",status_code=\"STATUS_CODE_ERROR\"}[5m]))", "legendFormat": "error spans", "range": true, "refId": "A" },
+        { "editorMode": "code", "expr": "sum(episode_queue_oldest_age)", "legendFormat": "queue age", "range": true, "refId": "B" }
       ],
       "title": "Lease anomalies",
       "type": "timeseries"
@@ -137,4 +136,3 @@
   "uid": "news-podcast-episode",
   "version": 1
 }
-

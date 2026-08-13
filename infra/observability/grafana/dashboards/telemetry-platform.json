@@ -89,8 +89,8 @@
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
       "id": 8,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "editorMode": "code", "expr": "max by (mountpoint) (system_filesystem_utilization{state=\"used\"})", "legendFormat": "{{mountpoint}}", "range": true, "refId": "A" }],
-      "title": "Host filesystem utilization",
+      "targets": [{ "editorMode": "code", "expr": "max by (mountpoint) (system_filesystem_usage_bytes{state=\"used\"})", "legendFormat": "{{mountpoint}}", "range": true, "refId": "A" }],
+      "title": "Host filesystem used bytes",
       "type": "timeseries"
     }
   ],

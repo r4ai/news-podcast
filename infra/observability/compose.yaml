@@ -50,6 +50,11 @@ services:
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [observability]
 
   loki:
@@ -60,6 +65,11 @@ services:
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
       - loki-data:/loki
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [observability]
 
   tempo:
@@ -71,6 +81,11 @@ services:
     volumes:
       - ./tempo/config.yaml:/etc/tempo/config.yaml:ro
       - tempo-data:/var/tempo
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [observability]
 
   grafana:
@@ -98,17 +113,32 @@ services:
       - /tmp
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana/provisioning/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./grafana/provisioning/alerting/contact-points.yaml:/etc/grafana/provisioning/alerting/contact-points.yaml:ro
+      - ./grafana/provisioning/alerting/rules.yaml:/etc/grafana/provisioning/alerting/rules.yaml:ro
+      - ./grafana/dashboards/episode-production.json:/var/lib/grafana/dashboards/episode-production.json:ro
+      - ./grafana/dashboards/logs.json:/var/lib/grafana/dashboards/logs.json:ro
+      - ./grafana/dashboards/overview.json:/var/lib/grafana/dashboards/overview.json:ro
+      - ./grafana/dashboards/service-map.json:/var/lib/grafana/dashboards/service-map.json:ro
+      - ./grafana/dashboards/service-drilldown.json:/var/lib/grafana/dashboards/service-drilldown.json:ro
+      - ./grafana/dashboards/telemetry-platform.json:/var/lib/grafana/dashboards/telemetry-platform.json:ro
+      - ./grafana/dashboards/web-experience.json:/var/lib/grafana/dashboards/web-experience.json:ro
+      - ./grafana/dashboards/dependencies.json:/var/lib/grafana/dashboards/dependencies.json:ro
     ports:
       - "127.0.0.1:3100:3000"
     depends_on:
       prometheus:
-        condition: service_started
+        condition: service_healthy
       loki:
-        condition: service_started
+        condition: service_healthy
       tempo:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [observability]
 
 networks:

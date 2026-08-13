@@ -35,6 +35,37 @@ for dashboard in "$OBSERVABILITY_DIR"/grafana/dashboards/*.json; do
   jq -e . "$dashboard" >/dev/null
 done
 
+expected_dashboard_uids=(
+  news-podcast-overview
+  news-podcast-service-map
+  news-podcast-service-drilldown
+  news-podcast-logs
+  news-podcast-episode
+  news-podcast-web
+  news-podcast-dependencies
+  news-podcast-platform
+)
+for uid in "${expected_dashboard_uids[@]}"; do
+  dashboard="$OBSERVABILITY_DIR/grafana/dashboards/${uid#news-podcast-}.json"
+  case "$uid" in
+    news-podcast-overview) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/overview.json" ;;
+    news-podcast-service-map) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/service-map.json" ;;
+    news-podcast-service-drilldown) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/service-drilldown.json" ;;
+    news-podcast-logs) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/logs.json" ;;
+    news-podcast-episode) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/episode-production.json" ;;
+    news-podcast-web) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/web-experience.json" ;;
+    news-podcast-dependencies) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/dependencies.json" ;;
+    news-podcast-platform) dashboard="$OBSERVABILITY_DIR/grafana/dashboards/telemetry-platform.json" ;;
+  esac
+  jq -e --arg uid "$uid" '.uid == $uid' "$dashboard" >/dev/null
+done
+
+if rg -n 'http_server_error_total|provider_request_duration_bucket|episode_stage_oldest_age|episode_checkpoint_total|episode_lease_(lost|recovered|expired)_total|system_filesystem_utilization' \
+  "$OBSERVABILITY_DIR/grafana" >/dev/null; then
+  echo "Dashboard or alert references an unverified metric." >&2
+  exit 1
+fi
+
 docker compose -f "$OBSERVABILITY_DIR/compose.yaml" config --quiet
 docker compose \
   -f "$REPOSITORY_ROOT/compose.yaml" \
