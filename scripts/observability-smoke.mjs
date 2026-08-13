@@ -22,7 +22,9 @@ const request = async (url, init = {}) => {
   const response = await fetch(url, init)
   const body = await response.text()
   if (!response.ok)
-    throw new Error(`${init.method ?? "GET"} ${url} -> ${response.status}: ${body.slice(0, 300)}`)
+    throw new Error(
+      `${init.method ?? "GET"} ${url} -> ${response.status}: ${body.slice(0, 300)}`
+    )
   try {
     return JSON.parse(body)
   } catch {
@@ -56,10 +58,14 @@ const main = async () => {
   const registered = new Set(dashboards.map((dashboard) => dashboard.uid))
   for (const uid of expectedDashboards)
     assert(registered.has(uid), `Dashboard is not provisioned: ${uid}`)
-  console.log(`dashboards=${dashboards.length} expected=${expectedDashboards.length}`)
+  console.log(
+    `dashboards=${dashboards.length} expected=${expectedDashboards.length}`
+  )
 
   for (const uid of ["prometheus", "loki", "tempo"]) {
-    const datasource = await grafanaRequest(`/api/datasources/uid/${uid}/health`)
+    const datasource = await grafanaRequest(
+      `/api/datasources/uid/${uid}/health`
+    )
     assert(datasource.status === "OK", `Datasource is not healthy: ${uid}`)
     console.log(`datasource=${uid} status=${datasource.status}`)
   }
@@ -105,14 +111,24 @@ const main = async () => {
     const logs = await grafanaRequest(
       `/api/datasources/proxy/uid/loki/loki/api/v1/query?query=${encodeURIComponent(`{service_name=~".+"} | trace_id = "${traceId}"`)}`
     )
-    assert(logs.data?.result?.length > 0, `No Loki log carries trace_id=${traceId}`)
+    assert(
+      logs.data?.result?.length > 0,
+      `No Loki log carries trace_id=${traceId}`
+    )
     const metrics = await queryPrometheus(
       'traces_spanmetrics_calls_total{service_name=~".+"}'
     )
-    assert(metrics.length > 0, "No span metrics are available for trace correlation")
-    console.log(`trace_id=${traceId} tempo=batches:${trace.batches.length} loki=streams:${logs.data.result.length} prometheus=spanmetrics:${metrics.length}`)
+    assert(
+      metrics.length > 0,
+      "No span metrics are available for trace correlation"
+    )
+    console.log(
+      `trace_id=${traceId} tempo=batches:${trace.batches.length} loki=streams:${logs.data.result.length} prometheus=spanmetrics:${metrics.length}`
+    )
   } else {
-    console.log("trace_correlation=skipped (set OBSERVABILITY_TRACE_ID after a real service flow)")
+    console.log(
+      "trace_correlation=skipped (set OBSERVABILITY_TRACE_ID after a real service flow)"
+    )
   }
 }
 

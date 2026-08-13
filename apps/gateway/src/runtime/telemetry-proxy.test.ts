@@ -7,10 +7,8 @@ describe("Gateway browser telemetry proxy", () => {
     const fetch = vi.fn(async (url: URL, init?: RequestInit) => {
       expect(url.toString()).toBe("http://otel-collector:4318/v1/traces")
       expect(init?.method).toBe("POST")
-      expect(init?.headers).toBeInstanceOf(Headers)
-      expect((init?.headers as Headers).get("content-type")).toBe(
-        "application/json"
-      )
+      const headers = new Headers(init?.headers)
+      expect(headers.get("content-type")).toBe("application/json")
       expect(await new Response(init?.body).text()).toBe('{"resourceSpans":[]}')
       return Response.json({ ok: true }, { status: 200 })
     })

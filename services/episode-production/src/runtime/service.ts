@@ -31,10 +31,7 @@ import {
 } from "../infrastructure/unsafe/identity.js"
 import { runCompletionRelayLoop } from "./completion-relay-loop.js"
 import { NodeCreateJobRpcConfigSchema, runNodeProductionRpc } from "./node.js"
-import {
-  runEpisodeWorkerLoop,
-  type EpisodeWorkerEvent,
-} from "./worker-loop.js"
+import { runEpisodeWorkerLoop, type EpisodeWorkerEvent } from "./worker-loop.js"
 
 const positive = (maximum: number) =>
   Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(maximum))
@@ -148,8 +145,7 @@ export const runNodeEpisodeProductionService = (
     Effect.flatMap((config) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const observability =
-            dependencies.observability ?? noopObservability
+          const observability = dependencies.observability ?? noopObservability
           const execution = yield* sqliteExecutionRepository(
             config.rpc.sqlitePath
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
@@ -250,14 +246,12 @@ export const runNodeEpisodeProductionService = (
                     break
                 }
               })
-              const snapshot = yield* jobs
-                .statusSnapshot()
-                .pipe(
-                  Effect.matchEffect({
-                    onFailure: () => Effect.succeed([] as const),
-                    onSuccess: (value) => Effect.succeed(value),
-                  })
-                )
+              const snapshot = yield* jobs.statusSnapshot().pipe(
+                Effect.matchEffect({
+                  onFailure: () => Effect.succeed([] as const),
+                  onSuccess: (value) => Effect.succeed(value),
+                })
+              )
               yield* Effect.sync(() => {
                 for (const state of snapshot)
                   observability.gauge("episode.jobs", state.count, {
@@ -273,7 +267,8 @@ export const runNodeEpisodeProductionService = (
                     ? 0
                     : Math.max(
                         0,
-                        Date.parse(DateTime.formatIso(now())) - Date.parse(oldest)
+                        Date.parse(DateTime.formatIso(now())) -
+                          Date.parse(oldest)
                       )
                 )
               })

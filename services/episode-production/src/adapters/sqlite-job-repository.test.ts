@@ -56,7 +56,9 @@ describe("SQLite job repository", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const repository = yield* sqliteJobRepository(":memory:")
-          yield* repository.saveIdempotently(job("10e2d4e1-c127-479f-a124-2ea037bd9319"))
+          yield* repository.saveIdempotently(
+            job("10e2d4e1-c127-479f-a124-2ea037bd9319")
+          )
           yield* repository.saveIdempotently(
             job(
               "6518412b-ce2f-4641-9f2c-a02dd515bc31",

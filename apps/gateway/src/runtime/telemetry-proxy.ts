@@ -67,14 +67,15 @@ const readBounded = async (
 }
 
 /** Proxies browser-relative OTLP requests to the Collector without exposing its origin. */
-export const makeGatewayTelemetryProxy = (input: {
-  readonly upstream: URL
-  readonly timeoutMillis: number
-  readonly maximumRequestBytes: number
-  readonly maximumResponseBytes: number
-  readonly fetch: typeof globalThis.fetch
-  readonly next: (request: Request) => Promise<Response>
-}) =>
+export const makeGatewayTelemetryProxy =
+  (input: {
+    readonly upstream: URL
+    readonly timeoutMillis: number
+    readonly maximumRequestBytes: number
+    readonly maximumResponseBytes: number
+    readonly fetch: typeof globalThis.fetch
+    readonly next: (request: Request) => Promise<Response>
+  }) =>
   async (request: Request): Promise<Response> => {
     const source = new URL(request.url)
     const upstreamPath = telemetryPaths.get(source.pathname)
@@ -89,8 +90,7 @@ export const makeGatewayTelemetryProxy = (input: {
     const deadline = setTimeout(() => controller.abort(), input.timeoutMillis)
     try {
       const requestLength = Number(request.headers.get("content-length") ?? "0")
-      if (requestLength > input.maximumRequestBytes)
-        throw requestTooLarge
+      if (requestLength > input.maximumRequestBytes) throw requestTooLarge
       const body = await readBounded(
         request.body,
         input.maximumRequestBytes,
