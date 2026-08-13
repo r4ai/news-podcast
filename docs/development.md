@@ -168,6 +168,8 @@ Grafanaは<http://localhost:3100>。DashboardはOverview、Service Map、Service
 
 BrowserのOTLPはWebの相対URLからGatewayへ転送され、GatewayがCollectorの`/v1/traces`、`/v1/logs`、`/v1/metrics`へ固定マッピングする。Collector originをBrowserへ公開しない。Gatewayのproxyにはrequest/response byte上限とtimeoutを設定する。
 
+observed stackは課金APIへ接続しないため、`compose.observability.yaml`がEpisode Productionの`PROVIDER_MODE=fake`と空の`OPENAI_API_KEY`を強制する。初期paintのWeb Vitalを収集するため、Browser SDKはアプリ描画前に開始する。
+
 `pnpm dev:up:observed`をremote host上で実行している場合、以下のワンライナーで公開している全portをlocalへforwardできる。
 
 ```bash

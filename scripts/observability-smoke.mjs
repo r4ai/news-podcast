@@ -50,6 +50,22 @@ const queryPrometheus = async (query) => {
   return result.data.result
 }
 
+const queryPrometheusExemplars = async (query, start, end) => {
+  const params = new URLSearchParams({
+    query,
+    start: String(start),
+    end: String(end),
+  })
+  const result = await request(
+    `${prometheus}/api/v1/query_exemplars?${params.toString()}`
+  )
+  assert(
+    result.status === "success",
+    `Prometheus exemplar query failed: ${query}`
+  )
+  return result.data
+}
+
 const main = async () => {
   const health = await grafanaRequest("/api/health")
   assert(health.database === "ok", "Grafana database is not healthy")
@@ -108,8 +124,15 @@ const main = async () => {
       `/api/datasources/proxy/uid/tempo/api/traces/${encodeURIComponent(traceId)}`
     )
     assert(trace.batches?.length > 0, `Tempo trace has no batches: ${traceId}`)
+    const now = Math.floor(Date.now() / 1_000)
+    const logParams = new URLSearchParams({
+      query: `{service_name=~".+"} | trace_id = "${traceId}"`,
+      start: String((now - 86_400) * 1_000_000_000),
+      end: String(now * 1_000_000_000),
+      limit: "100",
+    })
     const logs = await grafanaRequest(
-      `/api/datasources/proxy/uid/loki/loki/api/v1/query?query=${encodeURIComponent(`{service_name=~".+"} | trace_id = "${traceId}"`)}`
+      `/api/datasources/proxy/uid/loki/loki/api/v1/query_range?${logParams.toString()}`
     )
     assert(
       logs.data?.result?.length > 0,
@@ -122,8 +145,24 @@ const main = async () => {
       metrics.length > 0,
       "No span metrics are available for trace correlation"
     )
+    const exemplars = await queryPrometheusExemplars(
+      'traces_spanmetrics_calls_total{service_name=~".+"}',
+      now - 86_400,
+      now
+    )
+    const exemplarTraceIds = new Set(
+      exemplars.flatMap((series) =>
+        (series.exemplars ?? [])
+          .map((exemplar) => exemplar.labels?.trace_id)
+          .filter((value) => typeof value === "string")
+      )
+    )
+    assert(
+      exemplarTraceIds.has(traceId),
+      `No Prometheus exemplar carries trace_id=${traceId}`
+    )
     console.log(
-      `trace_id=${traceId} tempo=batches:${trace.batches.length} loki=streams:${logs.data.result.length} prometheus=spanmetrics:${metrics.length}`
+      `trace_id=${traceId} tempo=batches:${trace.batches.length} loki=streams:${logs.data.result.length} prometheus=spanmetrics:${metrics.length} exemplars:${exemplarTraceIds.size}`
     )
   } else {
     console.log(

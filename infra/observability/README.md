@@ -35,6 +35,8 @@ pnpm observability:validate
 pnpm observability:smoke
 ```
 
+`compose.observability.yaml`は課金経路を開かないよう、observed stackのEpisode Productionを`PROVIDER_MODE=fake`、`OPENAI_API_KEY=""`で固定する。BrowserのWeb Vitalは初期paintを取りこぼさないよう、SDKをアプリ描画前に開始する。
+
 | 接続先 | URL |
 | --- | --- |
 | Grafana | <http://localhost:3100> |
@@ -111,4 +113,4 @@ docker compose \
 4. CollectorまたはGrafanaを停止し、watchdogの障害通知と復旧通知を確認する。
 5. metrics 180日、logs 30日、traces 15日のretentionとvolume backup/restoreを定期的に確認する。
 
-設定の構文検証は各公式imageで行い、`pnpm observability:smoke`でDashboard UID、datasource health、Collector accepted/refused/export、Browser OTLP proxy、NATS/VOICEVOX/SeaweedFS endpointを確認する。`OBSERVABILITY_TRACE_ID`を指定するとTempo trace、Loki同一trace_id、Prometheus span metricも検証する。rollbackは直前commitの設定へ戻してComposeを再適用する。volumeは`docker compose down`では削除されない。
+設定の構文検証は各公式imageで行い、`pnpm observability:smoke`でDashboard UID、datasource health、Collector accepted/refused/export、Browser OTLP proxy、NATS/VOICEVOX/SeaweedFS endpointを確認する。`OBSERVABILITY_TRACE_ID`を指定するとTempo trace、Loki同一trace_id、Prometheus span metric、同じtrace_idのexemplarも検証する。rollbackは直前commitの設定へ戻してComposeを再適用する。volumeは`docker compose down`では削除されない。
