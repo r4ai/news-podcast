@@ -56,7 +56,7 @@
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
       "id": 5,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.75, sum by (le, web_vital_name) (rate(browser_web_vital_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "{{web_vital_name}} p75", "range": true, "refId": "A" }],
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.75, sum by (le, web_vital_name) (rate(browser_web_vital_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "{{web_vital_name}} p75", "range": true, "refId": "A" }],
       "title": "Web Vitals p75 — LCP/INP/CLS/FCP/TTFB",
       "type": "timeseries"
     },
