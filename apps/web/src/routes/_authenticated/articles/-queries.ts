@@ -1,0 +1,154 @@
+import {
+  infiniteQueryOptions,
+  queryOptions,
+  type QueryClient,
+} from "@tanstack/react-query"
+
+import { api, fetchClient } from "@/shared/api"
+import {
+  applyFacetsDelta,
+  replaceArticleInPages,
+  toFacetsQuery,
+  toListQuery,
+  type Article,
+  type ArticleFacets,
+  type ArticleFlags,
+  type ArticlePage,
+  type ArticlesSearch,
+} from "./-model"
+
+export const PAGE_SIZE = 50
+
+/**
+ * 一覧のqueryKey接頭辞。`api.queryOptions`が作る`["get", path, init]`と
+ * 揃えることで、既存の`invalidateQueries({queryKey: ARTICLES_QUERY_KEY})`が
+ * そのまま効く。
+ */
+export const ARTICLES_QUERY_KEY = ["get", "/v1/me/articles"] as const
+export const ARTICLE_FACETS_QUERY_KEY = [
+  "get",
+  "/v1/me/articles/facets",
+] as const
+export const ARTICLE_QUERY_KEY = ["get", "/v1/me/articles/{articleId}"] as const
+
+type ArticleListInit = {
+  readonly params: {
+    readonly query: ReturnType<typeof toListQuery> & {
+      readonly limit: string
+    }
+  }
+}
+
+function listInit(search: ArticlesSearch): ArticleListInit {
+  return {
+    params: { query: { ...toListQuery(search), limit: String(PAGE_SIZE) } },
+  }
+}
+
+/**
+ * 一覧の無限クエリ。`cursor`は先頭ページで送らないので、
+ * `openapi-react-query`のpageParam既定値(`0`)が混入する経路を避け、
+ * queryFnを自前で持つ。routeのloaderからも同じ定義を先読みできる。
+ */
+export function articlesInfiniteQueryOptions(search: ArticlesSearch) {
+  const init = listInit(search)
+  return infiniteQueryOptions({
+    queryKey: [...ARTICLES_QUERY_KEY, init] as const,
+    queryFn: async ({ pageParam, signal }) => {
+      const { data, error } = await fetchClient.GET("/v1/me/articles", {
+        signal,
+        params: {
+          query: {
+            ...init.params.query,
+            ...(pageParam === undefined ? {} : { cursor: pageParam }),
+          },
+        },
+      })
+      if (error) throw error
+      return data as ArticlePage
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last: ArticlePage) =>
+      last.page.hasMore ? last.page.nextCursor : undefined,
+  })
+}
+
+export function articleFacetsQueryOptions(search: ArticlesSearch) {
+  return api.queryOptions("get", "/v1/me/articles/facets", {
+    params: { query: toFacetsQuery(search) },
+  })
+}
+
+export function articleQueryOptions(articleId: string) {
+  return api.queryOptions("get", "/v1/me/articles/{articleId}", {
+    params: { path: { articleId } },
+  })
+}
+
+/** 本文Markdownは記事ごとに不変なので、切り替えで取り直さないよう長めに保つ。 */
+export function articleMarkdownQueryOptions(articleId: string) {
+  return queryOptions({
+    queryKey: ["article-markdown", articleId] as const,
+    queryFn: async ({ signal }) => {
+      const { data, error } = await fetchClient.GET(
+        "/v1/me/articles/{articleId}/markdown",
+        { signal, params: { path: { articleId } }, parseAs: "text" }
+      )
+      if (error) throw error
+      return data ?? ""
+    },
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * 1件更新の結果をキャッシュへ直接畳み込む。
+ *
+ * 状態トグルのたびに一覧とfacetsを`invalidateQueries`すると、ブックマーク
+ * 1クリックで全件が再取得される。サーバ応答は更新後の記事そのものなので、
+ * 該当行とfacetsの差分だけを書き戻せば再取得は要らない。
+ */
+export function writeArticleToCaches(
+  queryClient: QueryClient,
+  input: {
+    readonly article: Article
+    readonly before: ArticleFlags
+    readonly includeHidden: boolean
+  }
+): void {
+  const { article, before, includeHidden } = input
+  // 非表示にした記事は、非表示を含めない絞り込みからは消える。
+  const drop = article.hidden && !includeHidden
+
+  queryClient.setQueryData(articleQueryOptions(article.id).queryKey, article)
+
+  queryClient.setQueriesData<{
+    pages: readonly ArticlePage[]
+    pageParams: readonly unknown[]
+  }>({ queryKey: ARTICLES_QUERY_KEY }, (data) =>
+    data
+      ? { ...data, pages: replaceArticleInPages(data.pages, article, { drop }) }
+      : data
+  )
+
+  queryClient.setQueriesData<ArticleFacets>(
+    { queryKey: ARTICLE_FACETS_QUERY_KEY },
+    (facets) =>
+      applyFacetsDelta(facets, {
+        feedId: article.feedId,
+        includeHidden,
+        before,
+        after: article,
+      })
+  )
+}
+
+/** 一括更新のように差分を数え切れない操作だけ、一覧とfacetsを取り直す。 */
+export async function refetchArticleCollections(
+  queryClient: QueryClient
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ARTICLES_QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: ARTICLE_FACETS_QUERY_KEY }),
+  ])
+}

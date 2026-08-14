@@ -1,11 +1,7 @@
 import { parse } from "@news-podcast/kernel"
 import { Schema } from "effect"
 
-import {
-  CreatedAtSchema,
-  FeedIdSchema,
-  FeedUrlSchema,
-} from "./subscription.js"
+import { CreatedAtSchema, FeedIdSchema, FeedUrlSchema } from "./subscription.js"
 
 const uuid = <Brand extends string>(brand: Brand) =>
   Schema.String.check(Schema.isUUID(4)).pipe(Schema.brand(brand))

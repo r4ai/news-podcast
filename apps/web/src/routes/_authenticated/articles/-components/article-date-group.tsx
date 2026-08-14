@@ -1,6 +1,7 @@
 import type { ArticleGroup } from "../-model"
 import { ArticleRow } from "./article-row"
 import type { ArticleRowProps } from "./article-row"
+import { ARTICLE_GROUP_STICKY_TOP } from "./article-list-header"
 
 export type ArticleDateGroupProps = {
   readonly group: ArticleGroup
@@ -11,6 +12,10 @@ export type ArticleDateGroupProps = {
   readonly onSelect: ArticleRowProps["onSelect"]
 }
 
+/**
+ * `ul`は`li`以外を子に持てないので、日付見出しはリストの外に置いて
+ * 見出し+リストの対にする。見出しはlgでツールバーの直下へ吸着する。
+ */
 export function ArticleDateGroup({
   group,
   showHeader,
@@ -19,13 +24,16 @@ export function ArticleDateGroup({
   onSelect,
 }: ArticleDateGroupProps) {
   return (
-    <div>
+    <section aria-labelledby={showHeader ? `group-${group.key}` : undefined}>
       {showHeader ? (
-        <div className="sticky top-10 z-[5] border-b bg-background/95 px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur">
+        <h3
+          className={`sticky z-10 border-b border-border/60 bg-background/70 px-3 py-1.5 text-[0.6875rem] font-semibold tracking-wide text-muted-foreground uppercase backdrop-blur-xl ${ARTICLE_GROUP_STICKY_TOP}`}
+          id={`group-${group.key}`}
+        >
           {group.label}
-        </div>
+        </h3>
       ) : null}
-      <div>
+      <ul>
         {group.articles.map((article) => (
           <ArticleRow
             article={article}
@@ -35,7 +43,7 @@ export function ArticleDateGroup({
             onToggleSaved={onToggleSaved}
           />
         ))}
-      </div>
-    </div>
+      </ul>
+    </section>
   )
 }

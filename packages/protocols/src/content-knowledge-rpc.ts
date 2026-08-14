@@ -74,6 +74,16 @@ export const parseDeleteFeedSubscriptionRequest = parse(
   DeleteFeedSubscriptionRequestSchema
 )
 
+export const SyncFeedSubscriptionRequestSchema = Schema.Struct({
+  subscriptionId: SubscriptionIdSchema,
+})
+export type SyncFeedSubscriptionRequest = Schema.Schema.Type<
+  typeof SyncFeedSubscriptionRequestSchema
+>
+export const parseSyncFeedSubscriptionRequest = parse(
+  SyncFeedSubscriptionRequestSchema
+)
+
 export const UpdateFeedSubscriptionRequestSchema = Schema.Struct({
   subscriptionId: SubscriptionIdSchema,
   enabled: Schema.Boolean,
@@ -194,6 +204,18 @@ export type ListFeedSyncJobsReply = Schema.Schema.Type<
   typeof ListFeedSyncJobsReplySchema
 >
 export const parseListFeedSyncJobsReply = parse(ListFeedSyncJobsReplySchema)
+
+export const SyncFeedSubscriptionReplySchema = Schema.Union([
+  Schema.TaggedStruct("Synced", { job: ContentFeedSyncJobSchema }),
+  Schema.TaggedStruct("NotFound", {}),
+  ContentKnowledgeRejectionSchema,
+])
+export type SyncFeedSubscriptionReply = Schema.Schema.Type<
+  typeof SyncFeedSubscriptionReplySchema
+>
+export const parseSyncFeedSubscriptionReply = parse(
+  SyncFeedSubscriptionReplySchema
+)
 
 export const MaterializeArticlesRequestSchema = Schema.Struct({
   selection: Schema.Union([

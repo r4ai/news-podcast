@@ -104,3 +104,89 @@ describe("Markdown", () => {
     expect(container.textContent).toContain("graph TD;")
   })
 })
+
+describe("Markdown heading placement", () => {
+  async function renderLeveled(props: {
+    markdown: string
+    headingBaseLevel?: number
+    omitLeadingTitle?: string
+  }) {
+    const view = render(<Markdown {...props} />)
+    await waitFor(() =>
+      expect(
+        view.container.querySelector("h1, h2, h3, h4, h5, h6, p")
+      ).not.toBeNull()
+    )
+    return view
+  }
+
+  const levelsOf = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("h1, h2, h3, h4, h5, h6")).map(
+      (node) => `${node.tagName.toLowerCase()}:${node.textContent}`
+    )
+
+  it("grafts the shallowest heading onto the requested level, keeping depth", async () => {
+    const { container } = await renderLeveled({
+      markdown: "# 章\n\n本文\n\n## 節\n\n本文\n\n### 項\n\n本文",
+      headingBaseLevel: 3,
+    })
+
+    expect(levelsOf(container)).toEqual(["h3:章", "h4:節", "h5:項"])
+  })
+
+  it("lifts a body that starts deeper than the requested level", async () => {
+    const { container } = await renderLeveled({
+      markdown: "### 章\n\n本文\n\n#### 節\n\n本文",
+      headingBaseLevel: 2,
+    })
+
+    expect(levelsOf(container)).toEqual(["h2:章", "h3:節"])
+  })
+
+  it("never pushes a heading past h6", async () => {
+    const { container } = await renderLeveled({
+      markdown: "# 章\n\n本文\n\n###### 最深\n\n本文",
+      headingBaseLevel: 3,
+    })
+
+    expect(levelsOf(container)).toEqual(["h3:章", "h6:最深"])
+  })
+
+  it("keeps headings untouched when no level is requested", async () => {
+    const { container } = await renderLeveled({ markdown: "# 章\n\n本文" })
+
+    expect(levelsOf(container)).toEqual(["h1:章"])
+  })
+
+  it("drops a leading heading that repeats the title, without leaving a gap", async () => {
+    const { container } = await renderLeveled({
+      markdown: "# React 19 の並行機能\n\n本文です。\n\n## 節\n\n本文",
+      headingBaseLevel: 3,
+      omitLeadingTitle: "React 19の並行機能",
+    })
+
+    // 再掲を落とすと最浅がh2になるので、そのh2がh3へ来る。段が飛ばない。
+    expect(container.textContent).not.toContain("React 19 の並行機能")
+    expect(levelsOf(container)).toEqual(["h3:節"])
+  })
+
+  it("keeps a leading heading that differs from the title", async () => {
+    const { container } = await renderLeveled({
+      markdown: "# 別の見出し\n\n本文です。",
+      headingBaseLevel: 3,
+      omitLeadingTitle: "React 19の並行機能",
+    })
+
+    expect(levelsOf(container)).toEqual(["h3:別の見出し"])
+  })
+
+  it("keeps a matching heading that is not at the very start", async () => {
+    const { container } = await renderLeveled({
+      markdown: "本文です。\n\n# React 19の並行機能\n\nつづき。",
+      headingBaseLevel: 3,
+      omitLeadingTitle: "React 19の並行機能",
+    })
+
+    expect(levelsOf(container)).toEqual(["h3:React 19の並行機能"])
+  })
+})

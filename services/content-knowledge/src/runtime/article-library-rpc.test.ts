@@ -57,6 +57,40 @@ describe("article library RPC handler", () => {
     })
   })
 
+  it("passes the continuation cursor through and reports the next page", async () => {
+    const cursor = "cG9zaXRpb24"
+    const nextCursor = "bmV4dA"
+    const list = vi.fn(() =>
+      Effect.succeed(deepFreeze({ items: [], nextCursor }))
+    )
+    const reply = vi.fn((_payload: string) => Effect.void)
+    const query = {
+      limit: 50,
+      state: "All",
+      includeHidden: false,
+      feedIds: [],
+      order: "Newest",
+      cursor,
+    }
+    await Effect.runPromise(
+      makeArticleLibraryRpcHandler(
+        { list } as never,
+        dependencies
+      )({
+        subject: subjects.content.articleLibrary,
+        payload: request({ operation: "List", query }),
+        reply,
+      })
+    )
+
+    expect(list).toHaveBeenCalledWith({ ownerId, query })
+    expect(JSON.parse(reply.mock.calls[0]![0] as string).payload).toEqual({
+      _tag: "Listed",
+      articles: [],
+      nextCursor,
+    })
+  })
+
   it("rejects service actors without invoking the library", async () => {
     const find = vi.fn(() => Effect.die("must not run"))
     const reply = vi.fn((_payload: string) => Effect.void)

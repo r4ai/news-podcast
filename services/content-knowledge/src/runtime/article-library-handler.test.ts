@@ -50,6 +50,49 @@ describe("article library handler", () => {
     expect(ports.articles.find).not.toHaveBeenCalled()
   })
 
+  it("refuses continuation cursors it cannot decode", async () => {
+    const ports = dependencies()
+    const handler = makeArticleLibraryHandler(
+      ports as unknown as ArticleLibraryHandlerDependencies
+    )
+    const query = {
+      state: "All",
+      includeHidden: false,
+      feedIds: [],
+      limit: 50,
+      order: "Newest",
+    }
+    for (const cursor of [
+      "",
+      "tampered",
+      Buffer.from(JSON.stringify({ sortKey: "2026-08-13" }), "utf8").toString(
+        "base64url"
+      ),
+    ]) {
+      await expect(
+        Effect.runPromise(
+          handler.list({ ownerId: "owner-a", query: { ...query, cursor } })
+        )
+      ).rejects.toMatchObject({ _tag: "ArticleLibraryRequestRejected" })
+    }
+    expect(ports.articles.list).not.toHaveBeenCalled()
+
+    const cursor = Buffer.from(
+      JSON.stringify({
+        sortKey: "2026-08-13T00:00:00.000Z",
+        articleId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+      }),
+      "utf8"
+    ).toString("base64url")
+    await Effect.runPromise(
+      handler.list({ ownerId: "owner-a", query: { ...query, cursor } })
+    )
+    expect(ports.articles.list).toHaveBeenCalledWith("owner-a", {
+      ...query,
+      cursor,
+    })
+  })
+
   it("accepts only a non-empty patch and supplies the service clock", async () => {
     const ports = dependencies()
     const handler = makeArticleLibraryHandler(

@@ -43,6 +43,7 @@ const ports: GatewayPorts = {
   addFeedSubscription: () => Effect.fail(unavailable),
   listFeedSubscriptions: () => Effect.fail(unavailable),
   listFeedSyncJobs: () => Effect.fail(unavailable),
+  syncFeedSubscription: () => Effect.fail(unavailable),
   deleteFeedSubscription: () => Effect.fail(unavailable),
   updateFeedSubscription: () => Effect.fail(unavailable),
   listFeeds: () => Effect.fail(unavailable),

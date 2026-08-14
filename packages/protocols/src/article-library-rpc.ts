@@ -50,6 +50,15 @@ const filters = {
   ),
 } as const
 const state = Schema.Literals(["All", "Unread", "Saved", "Later"])
+/**
+ * 一覧の継続位置。中身はContent Knowledgeだけが解釈する不透明tokenで、
+ * この境界では「base64urlの有界文字列」であることだけを保証する。
+ */
+const cursor = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(512),
+  Schema.isPattern(/^[A-Za-z0-9_-]+$/)
+)
 const patchFields = {
   read: Schema.optional(Schema.Boolean),
   saved: Schema.optional(Schema.Boolean),
@@ -72,6 +81,7 @@ export const ArticleLibraryRequestSchema = Schema.Union([
       state,
       ...filters,
       order: Schema.Literals(["Newest", "Oldest"]),
+      cursor: Schema.optional(cursor),
     }),
   }),
   Schema.Struct({
@@ -135,6 +145,8 @@ export const ArticleLibraryReplySchema = Schema.Union([
     articles: Schema.Array(ContentArticleViewSchema).check(
       Schema.isMaxLength(100)
     ),
+    /** 次ページが無ければ`null`。省略は許さず、常に明示させる。 */
+    nextCursor: Schema.NullOr(cursor),
   }),
   Schema.TaggedStruct("Found", { article: ContentArticleViewSchema }),
   Schema.TaggedStruct("Markdown", {

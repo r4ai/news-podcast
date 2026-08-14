@@ -188,6 +188,105 @@ export function toFacetsQuery(search: ArticlesSearch) {
   } as const
 }
 
+// --- 一覧キャッシュの差し替え ------------------------------------------
+
+export type ArticlePage = {
+  readonly items: readonly Article[]
+  readonly page: { readonly hasMore: boolean; readonly nextCursor?: string }
+}
+
+/**
+ * 取得済みページ群の中の1件だけを差し替える (`drop`なら取り除く)。
+ * 変化しなかったページは同一参照で返し、React側の再レンダリング範囲を絞る。
+ */
+export function replaceArticleInPages<Page extends ArticlePage>(
+  pages: readonly Page[],
+  article: Article,
+  options: { readonly drop?: boolean } = {}
+): readonly Page[] {
+  let changed = false
+  const next = pages.map((page) => {
+    if (!page.items.some((item) => item.id === article.id)) return page
+    changed = true
+    return {
+      ...page,
+      items: options.drop
+        ? page.items.filter((item) => item.id !== article.id)
+        : page.items.map((item) => (item.id === article.id ? article : item)),
+    }
+  })
+  return changed ? next : pages
+}
+
+// --- facetsの差分更新 --------------------------------------------------
+//
+// 状態を1件更新するたびにfacetsを再取得すると、保存ボタン1回で一覧全体が
+// 再フェッチされる。1件の遷移は前後のフラグから正確に差分を計算できるので、
+// サーバへ問い合わせずにキャッシュを進める。
+
+export type ArticleFlags = Pick<
+  Article,
+  "read" | "saved" | "readLater" | "hidden"
+>
+
+export type ArticleFacetsChange = {
+  readonly feedId: string
+  /** 現在の絞り込み。falseなら非表示記事はどの件数にも数えられない。 */
+  readonly includeHidden: boolean
+  readonly before: ArticleFlags
+  readonly after: ArticleFlags
+}
+
+/** 絞り込みの母集合に入るか。facetsのすべての件数がこの判定に従属する。 */
+function isCounted(flags: ArticleFlags, includeHidden: boolean): boolean {
+  return includeHidden || !flags.hidden
+}
+
+function contribution(flags: ArticleFlags, includeHidden: boolean) {
+  const counted = isCounted(flags, includeHidden)
+  return {
+    all: counted ? 1 : 0,
+    unread: counted && !flags.read ? 1 : 0,
+    saved: counted && flags.saved ? 1 : 0,
+    later: counted && flags.readLater ? 1 : 0,
+  }
+}
+
+const atLeastZero = (value: number) => (value < 0 ? 0 : value)
+
+/**
+ * 1件の状態遷移をfacetsへ反映する。
+ * facetsに載っていない媒体の件数は動かさない (絞り込みの母集合外なので、
+ * 次のfacets取得まで持ち越す)。`aiPending`は状態遷移と無関係なので保つ。
+ */
+export function applyFacetsDelta(
+  facets: ArticleFacets | undefined,
+  change: ArticleFacetsChange
+): ArticleFacets | undefined {
+  if (!facets) return facets
+  const before = contribution(change.before, change.includeHidden)
+  const after = contribution(change.after, change.includeHidden)
+  const membershipDelta = after.all - before.all
+
+  return {
+    ...facets,
+    states: {
+      all: atLeastZero(facets.states.all + membershipDelta),
+      unread: atLeastZero(facets.states.unread + after.unread - before.unread),
+      saved: atLeastZero(facets.states.saved + after.saved - before.saved),
+      later: atLeastZero(facets.states.later + after.later - before.later),
+    },
+    feeds:
+      membershipDelta === 0
+        ? facets.feeds
+        : facets.feeds.map((feed) =>
+            feed.feedId === change.feedId
+              ? { ...feed, count: atLeastZero(feed.count + membershipDelta) }
+              : feed
+          ),
+  }
+}
+
 /** 「すべて既読」など一括操作のfilterボディ。 */
 export function toBulkFilter(search: ArticlesSearch) {
   return {

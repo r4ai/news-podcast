@@ -84,6 +84,9 @@ export const makeGatewayHandlers = (ports: GatewayPorts) =>
     listFeedSyncJobs: (
       headers: Parameters<GatewayPorts["listFeedSyncJobs"]>[0]
     ) => freezeSuccess(ports.listFeedSyncJobs(deepFreeze(headers))),
+    syncFeedSubscription: (
+      input: Parameters<GatewayPorts["syncFeedSubscription"]>[0]
+    ) => freezeSuccess(ports.syncFeedSubscription(deepFreeze(input))),
     deleteFeedSubscription: (
       input: Parameters<GatewayPorts["deleteFeedSubscription"]>[0]
     ) => freezeSuccess(ports.deleteFeedSubscription(deepFreeze(input))),
@@ -273,6 +276,12 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
         .handle("listFeedSyncJobs", ({ headers }) =>
           handlers.listFeedSyncJobs(headers)
         )
+        .handle("syncFeedSubscription", ({ headers, params }) =>
+          handlers.syncFeedSubscription({
+            headers,
+            subscriptionId: params.subscriptionId,
+          })
+        )
         .handle("deleteFeedSubscription", ({ headers, params }) =>
           handlers.deleteFeedSubscription({
             headers,
@@ -317,6 +326,7 @@ export const makeGatewayHandlerLayer = (ports: GatewayPorts) => {
               ...(query.sort === "newest" || query.sort === "oldest"
                 ? { sort: query.sort }
                 : {}),
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
             },
           })
         )

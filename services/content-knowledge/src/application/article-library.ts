@@ -10,6 +10,7 @@ import {
   type ObjectKey,
 } from "../domain/article.js"
 import {
+  ArticleCursorSchema,
   ArticleStatePatchSchema,
   type ArticleStatePatch,
   type ArticleView,
@@ -54,9 +55,23 @@ export const ArticleListQuerySchema = Schema.Struct({
     )
   ),
   order: Schema.Literals(["Newest", "Oldest"]),
+  /** 直前ページ末尾の位置。未指定なら先頭ページ。 */
+  cursor: Schema.optional(ArticleCursorSchema),
 })
 export type ArticleListQuery = Schema.Schema.Type<typeof ArticleListQuerySchema>
 export const parseArticleListQuery = parse(ArticleListQuerySchema)
+
+/** ページングを持たない操作 (facets・一括更新) が受け取れる絞り込みだけの形。 */
+export type ArticleFilterQuery = Omit<
+  ArticleListQuery,
+  "limit" | "order" | "cursor"
+>
+
+export type ArticleListPage = DeepReadonly<{
+  readonly items: readonly ArticleView[]
+  /** 次ページが無ければ`null`。`items.length === limit`でも次が無ければ`null`になる。 */
+  readonly nextCursor: string | null
+}>
 
 export type ArticleFacets = DeepReadonly<{
   readonly states: {
@@ -91,7 +106,7 @@ export type ArticleLibraryRepository = DeepReadonly<{
   readonly list: (
     ownerId: OwnerId,
     query: ArticleListQuery
-  ) => Effect.Effect<readonly ArticleView[], ArticleLibraryError>
+  ) => Effect.Effect<ArticleListPage, ArticleLibraryError>
   readonly find: (
     ownerId: OwnerId,
     articleId: ArticleId
@@ -108,13 +123,13 @@ export type ArticleLibraryRepository = DeepReadonly<{
   ) => Effect.Effect<ArticleLookup, ArticleLibraryError>
   readonly bulkPatch: (
     ownerId: OwnerId,
-    query: Omit<ArticleListQuery, "limit" | "order">,
+    query: ArticleFilterQuery,
     patch: ArticleStatePatch,
     changedAt: CapturedAt
   ) => Effect.Effect<number, ArticleLibraryError>
   readonly facets: (
     ownerId: OwnerId,
-    query: Omit<ArticleListQuery, "limit" | "order" | "state">
+    query: Omit<ArticleFilterQuery, "state">
   ) => Effect.Effect<ArticleFacets, ArticleLibraryError>
 }>
 

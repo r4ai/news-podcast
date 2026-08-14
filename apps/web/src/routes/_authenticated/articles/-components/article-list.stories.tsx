@@ -233,6 +233,33 @@ export const WithAiSummary: Story = {
   },
 }
 
+export const SelectedRow: Story = {
+  args: { selectedArticleId: "a2" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    // 選択は`aria-current`で伝える。行は保存ボタンを内包するのでoptionにできない。
+    await expect(
+      canvas.getByRole("button", {
+        name: /OpenTelemetryでWebフロントの分散traceを組む/,
+      })
+    ).toHaveAttribute("aria-current", "true")
+  },
+}
+
+export const HasNextPage: Story = {
+  args: { hasNextPage: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(
+      canvas.getByRole("button", { name: "もっと読み込む" })
+    ).toBeVisible()
+  },
+}
+
+export const LoadingNextPage: Story = {
+  args: { hasNextPage: true, isFetchingNextPage: true },
+}
+
 export const MobileWidth: Story = {
   decorators: [
     (Story) => (

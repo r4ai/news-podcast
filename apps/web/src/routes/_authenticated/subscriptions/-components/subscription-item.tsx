@@ -1,3 +1,5 @@
+import { LoaderCircle, RefreshCw } from "lucide-react"
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,12 +29,14 @@ export type SubscriptionItemProps = {
   readonly disabled: boolean
   readonly onToggle: (subscription: Subscription) => void
   readonly onRemove: (subscription: Subscription) => void
+  readonly onSync: (subscription: Subscription) => void
 }
 
 export function SubscriptionItem({
   disabled,
   feedName,
   onRemove,
+  onSync,
   onToggle,
   subscription,
 }: SubscriptionItemProps) {
@@ -45,6 +49,20 @@ export function SubscriptionItem({
         </ItemDescription>
       </ItemContent>
       <ItemActions>
+        <Button
+          aria-label={`${feedName}を今すぐ同期`}
+          disabled={disabled || !subscription.enabled}
+          onClick={() => onSync(subscription)}
+          size="sm"
+          variant="outline"
+        >
+          {disabled ? (
+            <LoaderCircle aria-hidden="true" className="animate-spin" />
+          ) : (
+            <RefreshCw aria-hidden="true" />
+          )}
+          同期
+        </Button>
         <Switch
           aria-label={`${feedName}を生成対象にする`}
           checked={subscription.enabled}

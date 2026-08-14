@@ -1,6 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 
-import { createMarkdownProcessor } from "../pipeline/create-processor"
+import {
+  createMarkdownProcessor,
+  type MarkdownProcessorOptions,
+} from "../pipeline/create-processor"
 
 export type MarkdownCompileState =
   | { readonly status: "loading" }
@@ -18,17 +21,23 @@ function errorMessage(error: unknown): string {
  */
 export function useCompiledMarkdown(
   markdown: string,
-  baseUrl: string | undefined
+  options: MarkdownProcessorOptions
 ): MarkdownCompileState {
   const [state, setState] = useState<MarkdownCompileState>({
     status: "loading",
   })
+  // optionsはpropsから毎render新しい物体で渡るので、値で固定してから依存にする。
+  const { baseUrl, headingBaseLevel, omitLeadingTitle } = options
+  const settings = useMemo(
+    () => ({ baseUrl, headingBaseLevel, omitLeadingTitle }),
+    [baseUrl, headingBaseLevel, omitLeadingTitle]
+  )
 
   useEffect(() => {
     let cancelled = false
     setState({ status: "loading" })
 
-    createMarkdownProcessor(baseUrl)
+    createMarkdownProcessor(settings)
       .process(markdown)
       .then((file: { result: unknown }) => {
         if (!cancelled) {
@@ -44,7 +53,7 @@ export function useCompiledMarkdown(
     return () => {
       cancelled = true
     }
-  }, [markdown, baseUrl])
+  }, [markdown, settings])
 
   return state
 }

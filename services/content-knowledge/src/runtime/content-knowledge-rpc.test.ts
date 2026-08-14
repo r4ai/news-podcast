@@ -207,4 +207,72 @@ describe("Content Knowledge RPC handler", () => {
       expect(decoded.payload ?? decoded).toMatchObject({ _tag: "Rejected" })
     }
   })
+
+  it("enqueues a manual sync for an owned enabled subscription", async () => {
+    const subscription = deepFreeze({
+      subscriptionId: Schema.decodeUnknownSync(SubscriptionIdSchema)(
+        "9aa2225d-07e7-4af4-a8e6-e4788f801a91"
+      ),
+      feedId: Schema.decodeUnknownSync(FeedIdSchema)(
+        "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd"
+      ),
+      ownerId: Schema.decodeUnknownSync(OwnerIdSchema)("owner-a"),
+      feedUrl: Schema.decodeUnknownSync(FeedUrlSchema)(
+        "https://feeds.example.com/news.xml"
+      ),
+      enabled: true,
+      createdAt: Schema.decodeUnknownSync(CreatedAtSchema)(
+        "2026-08-13T01:00:00.000Z"
+      ),
+    })
+    const repository = {
+      list: vi.fn(() => Effect.succeed([subscription])),
+    }
+    const job = deepFreeze({
+      jobId: "6e9f7a7c-0d1d-47b1-9b0b-0f2f95c45d1d",
+      feedId: subscription.feedId,
+      feedUrl: subscription.feedUrl,
+      status: "Queued" as const,
+      attempt: 0,
+      maxAttempts: 4 as const,
+      discovered: 0,
+      archived: 0,
+      failed: 0,
+      createdAt: "2026-08-13T01:00:00.000Z",
+    })
+    const enqueue = vi.fn(() => Effect.succeed(job))
+    const handler = makeContentKnowledgeRpcHandler(
+      repository as never,
+      vi.fn(() => Effect.succeed({ _tag: "NoArticles" } as const)),
+      {
+        newSubscriptionIdentity: vi.fn(),
+        newMessageId: () => "00508c91-8d8a-452f-82d3-fc621faea801",
+        now: () => "2026-08-13T01:00:00.000Z",
+      },
+      { enqueue } as never
+    )
+    let output = ""
+
+    await Effect.runPromise(
+      handler({
+        subject: "content.sync-subscription.v1",
+        payload: envelope({
+          subscriptionId: subscription.subscriptionId,
+        }),
+        reply: (payload) =>
+          Effect.sync(() => {
+            output = payload
+          }),
+      })
+    )
+
+    expect(enqueue).toHaveBeenCalledWith(
+      subscription.feedId,
+      "2026-08-13T01:00:00.000Z"
+    )
+    expect((await decodeReply(output)).payload).toMatchObject({
+      _tag: "Synced",
+      job,
+    })
+  })
 })

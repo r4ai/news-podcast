@@ -11,6 +11,7 @@ export const subjects = {
     addSubscription: "content.add-subscription.v1",
     listSubscriptions: "content.list-subscriptions.v1",
     deleteSubscription: "content.delete-subscription.v1",
+    syncSubscription: "content.sync-subscription.v1",
     updateSubscription: "content.update-subscription.v1",
     listFeedCatalog: "content.list-feed-catalog.v1",
     listFeedSyncJobs: "content.list-feed-sync-jobs.v1",

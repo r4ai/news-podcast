@@ -53,6 +53,7 @@ describe("gateway HttpApi contract", () => {
       "/v1/me/enrich/reset-daily",
       "/v1/me/feed-subscriptions",
       "/v1/me/feed-subscriptions/{subscriptionId}",
+      "/v1/me/feed-subscriptions/{subscriptionId}/sync",
       "/v1/me/feed-sync-jobs",
       "/v1/me/reading-dictionary",
       "/v1/me/reading-dictionary/{id}",
@@ -80,6 +81,10 @@ describe("gateway HttpApi contract", () => {
       specification.paths["/v1/me/feed-subscriptions/{subscriptionId}"]?.delete
         ?.responses
     ).toHaveProperty("204")
+    expect(
+      specification.paths["/v1/me/feed-subscriptions/{subscriptionId}/sync"]
+        ?.post?.responses
+    ).toHaveProperty("202")
   })
 
   it("accepts only canonical credential-free feed URLs", async () => {
@@ -118,6 +123,7 @@ describe("gateway HttpApi contract", () => {
       .filter(Boolean)
 
     expect(queryNames?.sort()).toEqual([
+      "cursor",
       "feedIds",
       "includeHidden",
       "limit",
@@ -128,9 +134,23 @@ describe("gateway HttpApi contract", () => {
     const article = specification.components?.schemas?.Article
     expect(JSON.stringify(article)).not.toContain("usedInEpisode")
     expect(JSON.stringify(article)).not.toContain('"tags"')
-    expect(
-      JSON.stringify(specification.components?.schemas?.ArticlePage)
-    ).not.toContain("nextCursor")
+  })
+
+  it("publishes article pages as an opaque cursor contract", () => {
+    const page = generateOpenApi().components?.schemas?.ArticlePage
+    const properties = (page as { properties?: Record<string, unknown> })
+      ?.properties
+    const pageMeta = properties?.page as {
+      properties?: Record<string, unknown>
+      required?: readonly string[]
+    }
+
+    // hasMoreはfalse固定をやめ、nextCursorは次ページがある時だけ現れる。
+    expect(pageMeta?.properties?.hasMore).toEqual({ type: "boolean" })
+    expect(pageMeta?.required).toEqual(["hasMore"])
+    expect(pageMeta?.properties).toHaveProperty("nextCursor")
+    // totalCountは初期契約に入れない (docs/design.md §5)。
+    expect(JSON.stringify(page)).not.toContain("totalCount")
   })
 
   it("parses only valid episode job creation payloads", async () => {

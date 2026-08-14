@@ -68,6 +68,7 @@ export const runNatsContentKnowledgeRpc = (
               subjects.content.addSubscription,
               subjects.content.listSubscriptions,
               subjects.content.deleteSubscription,
+              subjects.content.syncSubscription,
               subjects.content.updateSubscription,
               subjects.content.listFeedCatalog,
               subjects.content.listFeedSyncJobs,

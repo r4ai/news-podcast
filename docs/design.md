@@ -60,7 +60,7 @@ flowchart LR
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 
-RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease付きworkerで進める。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。
+RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease付きworkerで進める。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。
 
 Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
 
@@ -71,6 +71,7 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
 - ジョブとエピソードはrepository query自体をownerで絞る。他人のIDと存在しないIDは404へ正規化する。
 - 401はセッション欠落/失効、403は認証済みだが許可されない操作。エラーはRFC 9457 Problem Details。
 - 一覧はopaque cursor、`limit` 1..100、安定順序、filterに束縛する。`totalCount`は初期契約に入れない。
+  - 記事一覧`GET /v1/me/articles`は`cursor`クエリと`page.hasMore` / `page.nextCursor`で継続する。cursorは`(公開日時 ?? 発見日時, articleId)`のkeyset位置をbase64urlへ畳んだ不透明tokenで、Content Knowledgeだけが解釈する。OFFSETと違い、ページを跨いで記事が増減しても重複・欠落しない。復号できないcursorは不正要求として閉じる。
 - Episodeへ署名URLを保存しない。音声アクセス操作が短期URLを発行し、`Cache-Control: private, no-store`を返す。
 - Better Authの `/api/auth/**` はBetter Auth側の生成契約を正本とし、アプリOpenAPIへ複製しない。Google tokenを `/v1` のbearer tokenとして扱わない。
 
@@ -132,6 +133,13 @@ Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% 
 - UI部品はshadcn/ui neutral + Base UIを優先し、layoutだけをTailwindで構成する。色や状態はsemantic tokenを使い、独自のraw colorを置かない。
 - 記事ページはdesktop(`lg`)でページヘッダーを置かず、記事一覧と本文リーダーをそれぞれ独立したスクロール領域にする。モバイルは1カラムの自然スクロールに落とす。
 - 記事の既読は「開いた瞬間」ではなく「離れたタイミング」(別記事への切り替え・一覧へ戻る・ページ遷移・タブを閉じる)で反映する。開いている間は一覧でも未読表示のまま保つ。
+- 記事一覧のヘッダー(検索・状態タブ)は常設し、スクロール位置に関わらず操作できる。日付見出しはそのヘッダーの直下へ吸着する。吸着位置は`--app-bar-h`と`--article-header-h`だけで決め、各所へ数値を散らさない。スクロール領域の祖先に`overflow-hidden`を置くと吸着が死ぬので使わない。
+- ページには必ずlevel-1見出しを置く。記事ページのようにヘッダーを視覚化しない画面では`sr-only`の`h1`を置き、見出しレベルを飛ばさない。
+- Markdown本文はグローバルCSS（`prose`など）ではなく、要素ごとのReactコンポーネントで描画する。`rehype-react`のcomponent mapに`h1`〜`h6`、`p`、`ul/ol/li`、`table`、`blockquote`、`pre/code`などを個別に割り当て、shadcn/uiのtypographyに倣った見た目をコンポーネント側が持つ。
+- 取り込んだ本文の見出しは、埋め込み先の階層へ接ぎ木する。`<Markdown headingBaseLevel>`は「本文の最も浅い見出しに与えるレベル」を指定する。固定のオフセットにしないのは、タイトル再掲の除去で最浅レベルが変わり、見出し順に穴が空くため。リーダー本文は`3`（ページh1 + 記事タイトルh2の下）、AI要約内は`4`。
+- リーダーは記事タイトルを自前の見出しで表示するので、本文先頭の同じ見出しは`omitLeadingTitle`で落とす。判定は先頭ノードに限り、本文中の見出しには触れない。
+- 文字色は背景ごとに4.5:1を確認する。選択行(`accent`)やセグメンテッドコントロールの溝(`muted`)の上では`muted-foreground`が基準を割るため、前景寄りの色へ上げる。
+- 行内の操作(保存など)をhoverだけで出さない。タッチとキーボードから到達できなくなるため、フォーカス時と選択済み状態では常に見せる。
 
 ### 7.2 初期画面構成
 
@@ -181,6 +189,8 @@ flowchart LR
 | EpisodeProduction | 有界生成、draft検証、出典、TTS、完成処理 | ScriptGenerator、SpeechSynthesizer、EpisodeRepository |
 
 構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後にFeedItemへ正規化し、記事HTMLは`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。XML/HTML/Markdownのタグ境界を正規表現で解釈しない。対象境界のimportと正規表現構文は`pnpm parser:check`で検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)）。
+
+保存するMarkdownは「取得元ページの断片」であり、埋め込み先の見出し階層は保存時点では決まらない。そこで変換時に見出しを**最も浅いものがlevel 1になる正規形**へ畳み、相対関係だけを残す（`<h2>`から始まるサイトと`<h1>`から始まるサイトの差を吸収する）。実際の見出しレベルは、埋め込み文脈を知っている表示側が決める。
 
 ### 8.2 保存規則
 

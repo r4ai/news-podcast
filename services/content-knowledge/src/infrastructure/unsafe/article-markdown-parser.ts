@@ -211,6 +211,41 @@ type MarkdownNode = Readonly<{
   readonly children?: readonly MarkdownNode[]
 }>
 
+type HeadingNode = { type: string; depth?: number; children?: unknown[] }
+
+const forEachHeading = (
+  tree: MdastRoot,
+  visit: (heading: HeadingNode) => void
+): void => {
+  const stack: HeadingNode[] = [...(tree.children as unknown as HeadingNode[])]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    if (node.type === "heading" && typeof node.depth === "number") visit(node)
+    if (Array.isArray(node.children))
+      stack.push(...(node.children as HeadingNode[]))
+  }
+}
+
+/**
+ * 見出しを、最も浅いものがlevel 1になる正規形へ畳む。
+ *
+ * 保存するMarkdownは取得元ページの断片で、`<h2>`から始まるサイトもあれば
+ * `<h1>`から始まるサイトもある。埋め込み先の見出し階層は保存時点では
+ * 決まらないので、ここでは相対関係だけを残し、実レベルは表示側へ委ねる。
+ * 相対関係を壊さないよう、全体を同じ量だけ持ち上げる (個別に詰めない)。
+ */
+const normalizeHeadingDepths = (tree: MdastRoot): void => {
+  let shallowest = 7
+  forEachHeading(tree, (heading) => {
+    shallowest = Math.min(shallowest, heading.depth!)
+  })
+  const shift = shallowest - 1
+  if (shift <= 0) return
+  forEachHeading(tree, (heading) => {
+    heading.depth = Math.max(1, heading.depth! - shift)
+  })
+}
+
 const validateMarkdownTree = (tree: MdastRoot): void => {
   let nodeCount = 0
   let hasMeaningfulContent = false
@@ -264,6 +299,7 @@ export const createArticleArchiveArtifacts = (
     throw failure("MalformedResponse")
   }
   validateMarkdownTree(tree)
+  normalizeHeadingDepths(tree)
 
   tree.children.push({
     type: "paragraph",

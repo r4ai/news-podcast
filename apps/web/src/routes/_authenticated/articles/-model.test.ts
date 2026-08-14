@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest"
 
 import {
   aiSummarySnippet,
+  applyFacetsDelta,
   archiveLabel,
   archiveMetaLabel,
   articleBaseUrl,
   articleSnippet,
+  replaceArticleInPages,
   dateGroupKey,
   defaultArticlesSearch,
   groupArticlesByDate,
@@ -19,6 +21,7 @@ import {
   toListQuery,
   validateArticlesSearch,
   type Article,
+  type ArticleFlags,
 } from "./-model"
 
 const now = new Date("2026-08-11T12:00:00.000Z")
@@ -293,5 +296,151 @@ describe("siblingArticleId", () => {
 
   it("returns undefined for an empty list", () => {
     expect(siblingArticleId([], "a", 1)).toBeUndefined()
+  })
+})
+
+describe("applyFacetsDelta", () => {
+  const facets = {
+    states: { all: 10, unread: 4, saved: 3, later: 2 },
+    feeds: [
+      { feedId: "feed-1", name: "Zenn", count: 6 },
+      { feedId: "feed-2", name: "HN", count: 4 },
+    ],
+    aiPending: 5,
+  }
+  const flags: ArticleFlags = {
+    read: false,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  }
+  type Delta = Partial<Record<"all" | "unread" | "saved" | "later", number>>
+  const change = (
+    before: Partial<ArticleFlags>,
+    after: Partial<ArticleFlags>,
+    includeHidden = false
+  ) =>
+    applyFacetsDelta(facets, {
+      feedId: "feed-1",
+      includeHidden,
+      before: { ...flags, ...before },
+      after: { ...flags, ...after },
+    })!
+
+  it.each<[string, Partial<ArticleFlags>, Partial<ArticleFlags>, Delta]>([
+    ["reading an unread article", {}, { read: true }, { unread: -1 }],
+    ["restoring it to unread", { read: true }, {}, { unread: 1 }],
+    ["saving", {}, { saved: true }, { saved: 1 }],
+    ["unsaving", { saved: true }, {}, { saved: -1 }],
+    ["deferring", {}, { readLater: true }, { later: 1 }],
+  ])(
+    "shifts only the affected count when %s",
+    (_name, before, after, delta) => {
+      expect(change(before, after).states).toEqual({
+        all: facets.states.all + (delta.all ?? 0),
+        unread: facets.states.unread + (delta.unread ?? 0),
+        saved: facets.states.saved + (delta.saved ?? 0),
+        later: facets.states.later + (delta.later ?? 0),
+      })
+    }
+  )
+
+  it("drops a hidden article out of every count, including its feed", () => {
+    const next = change({}, { hidden: true })
+    expect(next.states).toEqual({ all: 9, unread: 3, saved: 3, later: 2 })
+    expect(next.feeds).toEqual([
+      { feedId: "feed-1", name: "Zenn", count: 5 },
+      { feedId: "feed-2", name: "HN", count: 4 },
+    ])
+  })
+
+  it("brings an unhidden article back into every count it belongs to", () => {
+    const next = change({ hidden: true, saved: true }, { saved: true })
+    expect(next.states).toEqual({ all: 11, unread: 5, saved: 4, later: 2 })
+    expect(next.feeds[0]).toEqual({ feedId: "feed-1", name: "Zenn", count: 7 })
+  })
+
+  it("ignores hidden transitions while hidden articles are included", () => {
+    expect(change({}, { hidden: true }, true)).toEqual(facets)
+  })
+
+  it("leaves counts untouched when nothing that is counted changed", () => {
+    expect(change({ hidden: true }, { hidden: true, saved: true })).toEqual(
+      facets
+    )
+  })
+
+  it("never lets a count fall below zero", () => {
+    const empty = {
+      states: { all: 0, unread: 0, saved: 0, later: 0 },
+      feeds: [{ feedId: "feed-1", name: "Zenn", count: 0 }],
+      aiPending: 0,
+    }
+    const next = applyFacetsDelta(empty, {
+      feedId: "feed-1",
+      includeHidden: false,
+      before: { ...flags },
+      after: { ...flags, hidden: true },
+    })!
+    expect(next.states).toEqual({ all: 0, unread: 0, saved: 0, later: 0 })
+    expect(next.feeds[0]?.count).toBe(0)
+  })
+
+  it("keeps the AI backlog and unknown feeds out of the state delta", () => {
+    const next = applyFacetsDelta(facets, {
+      feedId: "feed-unlisted",
+      includeHidden: false,
+      before: { ...flags },
+      after: { ...flags, read: true },
+    })!
+    expect(next.aiPending).toBe(5)
+    expect(next.feeds).toEqual(facets.feeds)
+    expect(next.states.unread).toBe(3)
+  })
+
+  it("returns the same reference when there are no facets yet", () => {
+    expect(
+      applyFacetsDelta(undefined, {
+        feedId: "feed-1",
+        includeHidden: false,
+        before: { ...flags },
+        after: { ...flags, read: true },
+      })
+    ).toBeUndefined()
+  })
+})
+
+describe("replaceArticleInPages", () => {
+  const pages = [
+    {
+      items: [article({ id: "a" }), article({ id: "b" })],
+      page: { hasMore: true, nextCursor: "c1" },
+    },
+    { items: [article({ id: "c" })], page: { hasMore: false } },
+  ]
+
+  it("replaces the matching article in the page that holds it", () => {
+    const next = replaceArticleInPages(pages, article({ id: "b", saved: true }))
+    expect(next[0]?.items[1]?.saved).toBe(true)
+    expect(next[0]?.items[0]).toBe(pages[0]?.items[0])
+    // 触れていないページは同一参照のまま渡し、再レンダリングを広げない。
+    expect(next[1]).toBe(pages[1])
+  })
+
+  it("drops the article from every page when it must leave the filter", () => {
+    const next = replaceArticleInPages(pages, article({ id: "b" }), {
+      drop: true,
+    })
+    expect(next[0]?.items.map((item) => item.id)).toEqual(["a"])
+    expect(next[1]).toBe(pages[1])
+  })
+
+  it("keeps the page cursors intact so the next fetch still continues", () => {
+    const next = replaceArticleInPages(pages, article({ id: "a", read: true }))
+    expect(next[0]?.page).toEqual({ hasMore: true, nextCursor: "c1" })
+  })
+
+  it("returns the same pages when the article is not cached", () => {
+    expect(replaceArticleInPages(pages, article({ id: "zzz" }))).toBe(pages)
   })
 })

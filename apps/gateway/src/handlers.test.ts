@@ -84,6 +84,7 @@ const makePorts = (): GatewayPorts => ({
     Effect.succeed({ items: [subscription], page: { hasMore: false } }),
   listFeedSyncJobs: () =>
     Effect.succeed({ items: [], page: { hasMore: false } }),
+  syncFeedSubscription: () => Effect.fail(unavailable),
   deleteFeedSubscription: () => Effect.void,
   updateFeedSubscription: () => Effect.fail(unavailable),
   listFeeds: () => Effect.succeed({ items: [], page: { hasMore: false } }),

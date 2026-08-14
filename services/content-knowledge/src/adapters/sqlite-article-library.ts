@@ -5,12 +5,18 @@ import type {
   ArticleFacets,
   ArticleLibraryError,
   ArticleLibraryRepository,
+  ArticleListPage,
   ArticleListQuery,
   ArticleLookup,
   ArticleObjectLookup,
 } from "../application/article-library.js"
 import { ObjectKeySchema } from "../domain/article.js"
-import { ArticleViewSchema } from "../domain/article-library.js"
+import {
+  ArticleViewSchema,
+  articleSortKey,
+  decodeArticleCursor,
+  encodeArticleCursor,
+} from "../domain/article-library.js"
 import { FeedIdSchema } from "../domain/subscription.js"
 import { articleOwnerStatesSchema } from "./sqlite-article-state-schema.js"
 import type { SqlitePort } from "./sqlite-port.js"
@@ -106,6 +112,26 @@ const queryFilter = (
   return deepFreeze({ sql, parameters })
 }
 
+/** ORDER BYとカーソル比較で同じ式を使い、並びと継続位置がずれないようにする。 */
+const sortKeyExpression = "COALESCE(i.published_at, i.discovered_at)"
+
+/**
+ * `(sortKey, articleId)`の辞書式順序で「カーソルより後」を表すkeyset条件。
+ * OFFSETと違い、ページ跨ぎで行が挿入・削除されても重複・欠落しない。
+ */
+const keysetFilter = (query: Pick<ArticleListQuery, "cursor" | "order">) => {
+  const position =
+    query.cursor === undefined ? undefined : decodeArticleCursor(query.cursor)
+  if (position === undefined) return deepFreeze({ sql: [], parameters: [] })
+  const comparison = query.order === "Newest" ? "<" : ">"
+  return deepFreeze({
+    sql: [
+      `(${sortKeyExpression} ${comparison} ? OR (${sortKeyExpression} = ? AND i.article_id ${comparison} ?))`,
+    ],
+    parameters: [position.sortKey, position.sortKey, position.articleId],
+  })
+}
+
 const decodeArticle = (
   row: unknown,
   operation: ArticleLibraryError["operation"]
@@ -145,26 +171,45 @@ export const createSqliteArticleLibrary = (
         ownerId: string,
         query: ArticleListQuery,
         operation: ArticleLibraryError["operation"]
-      ) => {
+      ): Effect.Effect<ArticleListPage, ArticleLibraryError> => {
         const filter = queryFilter(query)
-        const where = ["sub.owner_id = ?", ...filter.sql].join(" AND ")
+        const keyset = keysetFilter(query)
+        const where = ["sub.owner_id = ?", ...filter.sql, ...keyset.sql].join(
+          " AND "
+        )
         const order =
           query.order === "Newest"
-            ? "COALESCE(i.published_at, i.discovered_at) DESC, i.article_id DESC"
-            : "COALESCE(i.published_at, i.discovered_at) ASC, i.article_id ASC"
+            ? `${sortKeyExpression} DESC, i.article_id DESC`
+            : `${sortKeyExpression} ASC, i.article_id ASC`
         return Effect.try({
           try: () =>
+            // 次ページの有無は1件多く読んで判定する。COUNTの二重走査を避ける。
             database.all(`${select} WHERE ${where} ORDER BY ${order} LIMIT ?`, [
               ownerId,
               ...filter.parameters,
-              query.limit,
+              ...keyset.parameters,
+              query.limit + 1,
             ]),
           catch: () => failure(operation),
         }).pipe(
           Effect.flatMap((found) =>
-            Effect.forEach(found, (row) => decodeArticle(row, operation))
-          ),
-          Effect.map(deepFreeze)
+            Effect.forEach(found.slice(0, query.limit), (row) =>
+              decodeArticle(row, operation)
+            ).pipe(
+              Effect.map((items) =>
+                deepFreeze({
+                  items,
+                  nextCursor:
+                    found.length > query.limit && items.at(-1) !== undefined
+                      ? encodeArticleCursor({
+                          sortKey: articleSortKey(items.at(-1)!) as never,
+                          articleId: items.at(-1)!.articleId,
+                        })
+                      : null,
+                })
+              )
+            )
+          )
         )
       }
 

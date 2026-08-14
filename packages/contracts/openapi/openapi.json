@@ -1691,6 +1691,134 @@
         "summary": "List RSS feed synchronization jobs"
       }
     },
+    "/v1/me/feed-subscriptions/{subscriptionId}/sync": {
+      "post": {
+        "tags": [
+          "Feed subscriptions"
+        ],
+        "operationId": "syncFeedSubscription",
+        "parameters": [
+          {
+            "name": "subscriptionId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "202": {
+            "description": "AcceptedFeedSyncJob",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedFeedSyncJob"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequestProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Start an immediate RSS feed synchronization"
+      }
+    },
     "/v1/me/feed-subscriptions/{subscriptionId}": {
       "delete": {
         "tags": [
@@ -2353,6 +2481,32 @@
                   "enum": [
                     "newest",
                     "oldest"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "allOf": [
+                    {
+                      "minLength": 1
+                    },
+                    {
+                      "maxLength": 512
+                    },
+                    {
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    }
                   ]
                 },
                 {
@@ -7741,6 +7895,142 @@
         ],
         "additionalProperties": false
       },
+      "AcceptedFeedSyncJob": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "format": "uuid"
+              }
+            ]
+          },
+          "feedId": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "format": "uuid"
+              }
+            ]
+          },
+          "feedUrl": {
+            "type": "string",
+            "allOf": [
+              {
+                "maxLength": 2048
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "processing",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "attempt": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0,
+                "maximum": 4
+              }
+            ]
+          },
+          "maxAttempts": {
+            "type": "number",
+            "enum": [
+              4
+            ]
+          },
+          "discovered": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "archived": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "failed": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "\\S"
+                  },
+                  {
+                    "maxLength": 200
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "jobId",
+          "feedId",
+          "feedUrl",
+          "status",
+          "attempt",
+          "maxAttempts",
+          "discovered",
+          "archived",
+          "failed",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "UpdatedFeedSubscription": {
         "type": "object",
         "properties": {
@@ -8077,9 +8367,27 @@
             "type": "object",
             "properties": {
               "hasMore": {
-                "type": "boolean",
-                "enum": [
-                  false
+                "type": "boolean"
+              },
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      },
+                      {
+                        "maxLength": 512
+                      },
+                      {
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               }
             },

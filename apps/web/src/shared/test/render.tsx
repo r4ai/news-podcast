@@ -52,13 +52,24 @@ export type FetchRoute = {
   readonly path: string
   readonly status?: number
   readonly body?: unknown
+  /**
+   * クエリ文字列で応答を出し分けたい時に使う。指定した組だけが一致条件になり、
+   * 値に`undefined`を渡すと「そのパラメータが無いこと」を要求する。
+   * ページングのように同じpathで別の結果を返す場合に必要。
+   */
+  readonly query?: Readonly<Record<string, string | undefined>>
   /** text/markdown・text/htmlなどJSON以外のボディをそのまま返したい時に使う。 */
   readonly raw?: string
   readonly contentType?: string
 }
 
 export function stubFetch(routes: readonly FetchRoute[]) {
-  const calls: Array<{ method: string; url: string; body?: unknown }> = []
+  const calls: Array<{
+    method: string
+    url: string
+    search: URLSearchParams
+    body?: unknown
+  }> = []
 
   const fetchMock = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
@@ -68,13 +79,17 @@ export function stubFetch(routes: readonly FetchRoute[]) {
     calls.push({
       method,
       url: url.pathname,
+      search: url.searchParams,
       body: rawBody ? JSON.parse(rawBody) : undefined,
     })
 
     const route = routes.find(
       (candidate) =>
         candidate.path === url.pathname &&
-        (candidate.method ?? "GET").toUpperCase() === method
+        (candidate.method ?? "GET").toUpperCase() === method &&
+        Object.entries(candidate.query ?? {}).every(
+          ([key, value]) => (url.searchParams.get(key) ?? undefined) === value
+        )
     )
     if (!route) {
       return new Response(JSON.stringify({ message: "not stubbed" }), {

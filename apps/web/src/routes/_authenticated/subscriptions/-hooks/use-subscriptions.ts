@@ -1,5 +1,5 @@
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
-import { useOptimistic, useTransition } from "react"
+import { useOptimistic, useState, useTransition } from "react"
 import { toast } from "@workspace/ui/components/sonner"
 
 import {
@@ -40,7 +40,12 @@ export function useSubscriptions() {
     "delete",
     "/v1/me/feed-subscriptions/{subscriptionId}"
   )
+  const sync = api.useMutation(
+    "post",
+    "/v1/me/feed-subscriptions/{subscriptionId}/sync"
+  )
   const [pending, startTransition] = useTransition()
+  const [syncingId, setSyncingId] = useState<string | undefined>()
   const [items, addDraft] = useOptimistic(
     data.items as readonly Subscription[],
     applyDraft
@@ -76,7 +81,7 @@ export function useSubscriptions() {
 
   return {
     items,
-    pending,
+    pending: pending || syncingId !== undefined,
     toggle: (item: Subscription) =>
       run(
         { kind: "toggle", id: item.id, enabled: !item.enabled },
@@ -96,5 +101,26 @@ export function useSubscriptions() {
           }),
         "購読を削除しました"
       ),
+    syncItem: (item: Subscription) => {
+      if (!item.enabled || pending || syncingId !== undefined) return
+      startTransition(async () => {
+        setSyncingId(item.id)
+        try {
+          await sync.mutateAsync({
+            params: { path: { subscriptionId: item.id } },
+          })
+          await queryClient.invalidateQueries({
+            queryKey: feedSyncJobsQueryOptions.queryKey,
+          })
+          recordBrowserEvent("subscription.changed", { result: "succeeded" })
+          toast.success("同期を開始しました")
+        } catch {
+          recordBrowserEvent("subscription.changed", { result: "failed" })
+          toast.error("同期を開始できませんでした")
+        } finally {
+          setSyncingId(undefined)
+        }
+      })
+    },
   } as const
 }

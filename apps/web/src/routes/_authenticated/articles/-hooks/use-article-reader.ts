@@ -9,7 +9,14 @@ import {
 } from "react"
 import { toast } from "@workspace/ui/components/sonner"
 
-import { api, fetchClient } from "@/shared/api"
+import { api } from "@/shared/api"
+import { createActionQueue } from "@/shared/lib/action-queue"
+import {
+  articleMarkdownQueryOptions,
+  articleQueryOptions,
+  refetchArticleCollections,
+  writeArticleToCaches,
+} from "../-queries"
 import {
   shouldFallbackToArchive,
   type Article,
@@ -32,36 +39,29 @@ function applyPatch(
 
 export type UseArticleReaderParams = {
   readonly articleId: string | undefined
+  /** 一覧の`includeHidden`。非表示にした記事を一覧から外すかの判断に使う。 */
+  readonly includeHidden?: boolean
 }
 
 /**
  * 選択中の記事の詳細取得・本文/アーカイブ取得・状態更新をまとめるhook。
  * viewはpropsだけを受け取る (ADR-0018)。
  */
-export function useArticleReader({ articleId }: UseArticleReaderParams) {
+export function useArticleReader({
+  articleId,
+  includeHidden = false,
+}: UseArticleReaderParams) {
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
+  const enqueueRef = useRef(createActionQueue())
 
-  const articleQuery = api.useQuery(
-    "get",
-    "/v1/me/articles/{articleId}",
-    { params: { path: { articleId: articleId ?? "" } } },
-    { enabled: articleId !== undefined }
-  )
+  const articleQuery = useQuery({
+    ...articleQueryOptions(articleId ?? ""),
+    enabled: articleId !== undefined,
+  })
 
   const markdownQuery = useQuery({
-    queryKey: ["article-markdown", articleId],
-    queryFn: async () => {
-      const { data, error } = await fetchClient.GET(
-        "/v1/me/articles/{articleId}/markdown",
-        {
-          params: { path: { articleId: articleId ?? "" } },
-          parseAs: "text",
-        }
-      )
-      if (error) throw error
-      return data ?? ""
-    },
+    ...articleMarkdownQueryOptions(articleId ?? ""),
     enabled: articleId !== undefined,
   })
 
@@ -83,22 +83,20 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
 
   const [article, addDraft] = useOptimistic(articleQuery.data, applyPatch)
 
-  const invalidate = useCallback(async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: ["get", "/v1/me/articles/{articleId}"],
-      }),
-      queryClient.invalidateQueries({ queryKey: ["get", "/v1/me/articles"] }),
-      queryClient.invalidateQueries({
-        queryKey: ["get", "/v1/me/articles/facets"],
-      }),
-    ])
-  }, [queryClient])
-
   const patchMutation = api.useMutation("patch", "/v1/me/articles/{articleId}")
   const enrichMutation = api.useMutation(
     "post",
     "/v1/me/articles/{articleId}/enrich"
+  )
+
+  const settle = useCallback(
+    (before: Article, updated: Article) =>
+      writeArticleToCaches(queryClient, {
+        article: updated,
+        before,
+        includeHidden,
+      }),
+    [queryClient, includeHidden]
   )
 
   const update = useCallback(
@@ -108,17 +106,19 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
       startTransition(async () => {
         addDraft(patch)
         try {
-          await patchMutation.mutateAsync({
-            params: { path: { articleId: target.id } },
-            body: patch,
-          })
-          await invalidate()
+          const updated = await enqueueRef.current(() =>
+            patchMutation.mutateAsync({
+              params: { path: { articleId: target.id } },
+              body: patch,
+            })
+          )
+          settle(target, updated as Article)
         } catch {
           toast.error(errorMessage)
         }
       })
     },
-    [article, addDraft, patchMutation, invalidate]
+    [article, addDraft, patchMutation, settle]
   )
 
   const pendingReadRef = useRef<ReadonlyMap<string, Article>>(new Map())
@@ -134,15 +134,18 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
     pendingReadRef.current = new Map()
     void Promise.allSettled(
       [...pending.values()].map((target) =>
-        patchMutation
-          .mutateAsync({
-            params: { path: { articleId: target.id } },
-            body: { read: true },
-          })
+        enqueueRef
+          .current(() =>
+            patchMutation.mutateAsync({
+              params: { path: { articleId: target.id } },
+              body: { read: true },
+            })
+          )
+          .then((updated) => settle(target, updated as Article))
           .catch(() => toast.error("既読にできませんでした"))
       )
-    ).then(() => void invalidate())
-  }, [patchMutation, invalidate])
+    )
+  }, [patchMutation, settle])
 
   // 記事を離れる瞬間 (切り替え・一覧へ戻る・unmount) に、開いていた未読記事を既読へフラッシュする。
   useEffect(() => {
@@ -184,12 +187,18 @@ export function useArticleReader({ articleId }: UseArticleReaderParams) {
       await enrichMutation.mutateAsync({
         params: { path: { articleId: target.id } },
       })
-      await invalidate()
+      // AI要約と適合度はサーバ側で作り直されるので、ここは取り直すしかない。
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: articleQueryOptions(target.id).queryKey,
+        }),
+        refetchArticleCollections(queryClient),
+      ])
       toast.success("AI要約と適合度スコアを再計算しました")
     } catch {
       toast.error("AIの再計算に失敗しました")
     }
-  }, [article, enrichMutation, invalidate])
+  }, [article, enrichMutation, queryClient])
 
   return {
     articleId,

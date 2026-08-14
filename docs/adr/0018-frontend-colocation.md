@@ -60,7 +60,12 @@ graph TD
 
 表示境界は`shared/components/panel.tsx`の`Panel`へ集約する。`@tanstack/react-router`の`CatchBoundary`と`Suspense`を組み合わせ、新規依存を追加しない。`Panel`はcatch時に`recordBrowserEvent("panel.error")`を記録し、`reset`を再試行操作へ接続する。routeの`loader`は`ensureQueryData`をawaitせず先読みだけ行い、未達のpanelのみがfallbackを表示する。
 
-購読変更などのAction内更新は`useOptimistic`と`startTransition`で行い、楽観適用はpure reducerとして切り出して環境非依存にテストする。確定状態はserver responseとし、成功後に`invalidateQueries`をawaitしてからTransitionを閉じる。componentは`@/app/query-client`のmodule singletonをimportせず`useQueryClient()`を使う。
+購読変更などのAction内更新は`useOptimistic`と`startTransition`で行い、楽観適用はpure reducerとして切り出して環境非依存にテストする。確定状態はserver responseとし、Transitionは確定を書き戻してから閉じる。componentは`@/app/query-client`のmodule singletonをimportせず`useQueryClient()`を使う。
+
+Action内更新には次の2つを併せて適用する。
+
+- **投入順への直列化**: 同じ対象への連打が並行すると、最後に投げた要求と最後に返った応答が一致せず、確定時にUIが巻き戻る。`shared/lib/action-queue.ts`の`createActionQueue`で実行順を投入順へ固定する。失敗は呼び出し元へ伝えるだけでキューは止めない。
+- **確定はキャッシュへ畳み込む**: 1件更新の応答は更新後の実体そのものなので、`invalidateQueries`で一覧を取り直さず`setQueryData`で該当分だけ書き戻す。一覧の再取得は、差分を数え切れない一括更新や再生成に限る。件数(facets)のように応答へ含まれない派生値は、前後の状態から差分を求めるpure functionを用意し、そのテストで正しさを担保する。
 
 テストは、pure functionとcustom hookをVitest(jsdom + `@testing-library/react`の`renderHook`)、presentational viewをStorybook interaction test、画面全体をPlaywrightで検証する。fetchのstub点は`shared/api/client.ts`の単一`openapi-fetch` clientに限定する。
 
@@ -96,7 +101,8 @@ graph TD
 - 既存pageの分解でファイル数が増え、一時的にimport経路の追跡が増える。
 - routeのdirectory移行で`routeTree.gen.ts`のroute IDが変化する。URL不変をE2Eで確認する必要がある。
 - jsdomとtesting-libraryの追加でdev依存が増え、Storybook `addon-vitest`との実行設定を分離する必要が生じ得る。
-- `useOptimistic`の楽観値はTransition終了時にbase valueへ戻るため、`invalidateQueries`のawait順序を誤ると一瞬古い値が見える。
+- `useOptimistic`の楽観値はTransition終了時にbase valueへ戻るため、確定の書き戻し順序を誤ると一瞬古い値が見える。
+- キャッシュへ畳み込む方式は、サーバの派生値(件数など)の算出規則をclientにも一つ持つことになる。規則が変わったときに二箇所を直す必要があり、pure functionのテストがその同期点になる。
 
 ## 影響と同期
 

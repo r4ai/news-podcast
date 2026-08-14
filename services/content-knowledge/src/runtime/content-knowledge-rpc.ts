@@ -7,6 +7,7 @@ import {
   ListFeedSubscriptionsReplySchema,
   ListFeedSyncJobsReplySchema,
   MaterializeArticlesReplySchema,
+  SyncFeedSubscriptionReplySchema,
   UpdateFeedSubscriptionReplySchema,
   MessageEnvelopeSchema,
   parseAddFeedSubscriptionRequest,
@@ -15,6 +16,7 @@ import {
   parseListFeedSubscriptionsRequest,
   parseListFeedSyncJobsRequest,
   parseMaterializeArticlesRequest,
+  parseSyncFeedSubscriptionRequest,
   parseUpdateFeedSubscriptionRequest,
   parseMessageEnvelope,
   subjects,
@@ -79,6 +81,8 @@ const replySchema = (subject: string) => {
       return ListFeedCatalogReplySchema
     case subjects.content.listFeedSyncJobs:
       return ListFeedSyncJobsReplySchema
+    case subjects.content.syncSubscription:
+      return SyncFeedSubscriptionReplySchema
     case subjects.content.materializeArticles:
       return MaterializeArticlesReplySchema
     default:
@@ -295,6 +299,52 @@ export const makeContentKnowledgeRpcHandler =
                   ),
                   Effect.map((feeds) =>
                     deepFreeze({ _tag: "Catalog" as const, feeds })
+                  )
+                )
+              }
+              if (delivery.subject === subjects.content.syncSubscription) {
+                return parseSyncFeedSubscriptionRequest(request.payload).pipe(
+                  Effect.mapError(() => rejection("INVALID_REQUEST")),
+                  Effect.flatMap(({ subscriptionId }) =>
+                    parse(SubscriptionIdSchema)(subscriptionId).pipe(
+                      Effect.mapError(() => rejection("INVALID_REQUEST")),
+                      Effect.flatMap((domainSubscriptionId) =>
+                        subscriptions.list(ownerId).pipe(
+                          Effect.flatMap(
+                            (items): Effect.Effect<unknown, unknown, never> => {
+                              const subscription = items.find(
+                                (item) =>
+                                  item.subscriptionId === domainSubscriptionId
+                              )
+                              if (subscription === undefined)
+                                return Effect.succeed({
+                                  _tag: "NotFound" as const,
+                                })
+                              if (!subscription.enabled)
+                                return Effect.fail(rejection("INVALID_REQUEST"))
+                              if (feedSyncQueue === undefined)
+                                return Effect.fail(rejection("INTERNAL_ERROR"))
+                              return feedSyncQueue
+                                .enqueue(
+                                  subscription.feedId,
+                                  dependencies.now()
+                                )
+                                .pipe(
+                                  Effect.mapError(() =>
+                                    rejection("STORAGE_FAILURE")
+                                  ),
+                                  Effect.map((job) =>
+                                    deepFreeze({
+                                      _tag: "Synced" as const,
+                                      job: deepFreeze({ ...job }),
+                                    })
+                                  )
+                                )
+                            }
+                          )
+                        )
+                      )
+                    )
                   )
                 )
               }

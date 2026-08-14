@@ -259,6 +259,23 @@ test("refreshes RSS sync status after a subscription is deleted", async ({
   ).toBeVisible()
 })
 
+test("manually queues an RSS sync and shows it in the sync status", async ({
+  page,
+}) => {
+  await page.goto("/subscriptions")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  const syncButton = page.getByRole("button", {
+    name: "Zennを今すぐ同期",
+  })
+  await syncButton.click()
+
+  await expect(page.getByText("同期を開始しました")).toBeVisible()
+  await expect(page.getByText("待機中", { exact: true })).toBeVisible()
+  await expect(page.getByText(/RSSの取得待ちです/)).toBeVisible()
+})
+
 test("shows RSS sync progress and refreshes the article list after completion", async ({
   page,
 }) => {
@@ -327,7 +344,8 @@ test("shows RSS sync progress and refreshes the article list after completion", 
 
   syncStatus = "succeeded"
   await expect(
-    page.getByRole("button", { name: /同期完了後に追加された記事/ })
+    // 行の保存ボタンも記事名を含むので、題名で始まる本文ボタンだけに絞る。
+    page.getByRole("button", { name: /^同期完了後に追加された記事/ })
   ).toBeVisible({ timeout: 5_000 })
   await expect(page.getByText(/RSSを同期中です/)).toHaveCount(0)
 })
@@ -410,12 +428,9 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  const search = page.getByLabel("記事を検索")
-  if (!(await search.isVisible())) {
-    await page.getByRole("button", { name: "検索を開く" }).click()
-  }
-  await expect(search).toBeVisible()
-  const articleButton = page.getByRole("button", { name: /保存された記事/ })
+  // 検索欄はスクロール位置に関わらず常設で、開く操作を挟まない。
+  await expect(page.getByLabel("記事を検索")).toBeVisible()
+  const articleButton = page.getByRole("button", { name: /^保存された記事/ })
   await articleButton.focus()
   await articleButton.press("Enter")
   await expect(
@@ -443,6 +458,136 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
   )
   await saveButton.click()
   await expect(saveButton).toHaveAttribute("aria-pressed", "true")
+})
+
+test("the article list walks the server cursor and toggles save without refetching", async ({
+  page,
+}) => {
+  const makeArticle = (index: number) => ({
+    id: `00000000-0000-4000-8000-0000000003${String(index).padStart(2, "0")}`,
+    feedId: "00000000-0000-4000-8000-000000000001",
+    sourceName: "Example Feed",
+    title: `ページング記事 ${index}`,
+    url: `https://example.com/paged-${index}`,
+    publishedAt: `2026-08-${String(10 - index).padStart(2, "0")}T00:00:00.000Z`,
+    discoveredAt: "2026-08-10T00:01:00.000Z",
+    archiveStatus: "succeeded",
+    snapshotId: "00000000-0000-4000-8000-000000000021",
+    read: false,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  })
+  const first = makeArticle(1)
+  const second = makeArticle(2)
+  const listRequests: (string | null)[] = []
+
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles",
+    (route) => {
+      const cursor = new URL(route.request().url()).searchParams.get("cursor")
+      listRequests.push(cursor)
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(
+          cursor === null
+            ? {
+                items: [first],
+                page: { hasMore: true, nextCursor: "Y3Vyc29yLTI" },
+              }
+            : { items: [second], page: { hasMore: false } }
+        ),
+      })
+    }
+  )
+  await page.route(
+    (url) => url.pathname === `/v1/me/articles/${first.id}`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...first,
+          ...((route.request().postDataJSON() as object | null) ?? {}),
+        }),
+      })
+  )
+
+  await page.goto("/articles")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  await expect(
+    page.getByRole("button", { name: /^ページング記事 1/ })
+  ).toBeVisible()
+  // 2ページ目はsentinelが視界へ入った時点で自動的に続く。
+  await expect(
+    page.getByRole("button", { name: /^ページング記事 2/ })
+  ).toBeVisible()
+  expect(listRequests).toEqual([null, "Y3Vyc29yLTI"])
+
+  const save = page.getByRole("button", { name: "「ページング記事 1」を保存" })
+  await save.click()
+  await expect(
+    page.getByRole("button", { name: "「ページング記事 1」の保存を解除" })
+  ).toBeVisible()
+  // 状態更新は応答をキャッシュへ畳み込むだけで、一覧を取り直さない。
+  expect(listRequests).toEqual([null, "Y3Vyc29yLTI"])
+})
+
+test("the list header and date headings stay pinned while scrolling", async ({
+  page,
+}) => {
+  // 2つの日付グループに跨る十分な件数を用意して、実際にスクロールさせる。
+  const many = Array.from({ length: 40 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-0000000004${String(index).padStart(2, "0")}`,
+    feedId: "00000000-0000-4000-8000-000000000001",
+    sourceName: "Example Feed",
+    title: `スクロール記事 ${index}`,
+    url: `https://example.com/scroll-${index}`,
+    publishedAt:
+      index < 20 ? new Date().toISOString() : "2026-01-01T00:00:00.000Z",
+    discoveredAt: new Date().toISOString(),
+    archiveStatus: "succeeded",
+    snapshotId: "00000000-0000-4000-8000-000000000021",
+    read: false,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  }))
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles",
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: many, page: { hasMore: false } }),
+      })
+  )
+
+  await page.goto("/articles")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  const search = page.getByLabel("記事を検索")
+  await expect(search).toBeVisible()
+  const before = await search.boundingBox()
+
+  const scroller = page.locator("main div").filter({ has: search }).last()
+  await scroller.evaluate((node) => {
+    const box = node.closest<HTMLElement>("[class*='overflow-y-auto']") ?? node
+    box.scrollTop = 1_200
+  })
+
+  // 吸着しているので、スクロール後も同じ位置に留まり操作できる。
+  const after = await search.boundingBox()
+  expect(after).not.toBeNull()
+  expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(1)
+  await expect(search).toBeInViewport()
+
+  // 日付見出しはヘッダーの直下に重ならずに続く。
+  const heading = page.getByRole("heading", { name: "それ以前" })
+  await expect(heading).toBeInViewport()
+  const headingBox = await heading.boundingBox()
+  expect(headingBox!.y).toBeGreaterThanOrEqual(before!.y)
 })
 
 test("development login to generated episode playback completes", async ({

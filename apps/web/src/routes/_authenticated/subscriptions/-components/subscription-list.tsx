@@ -27,13 +27,14 @@ import { SubscriptionItem } from "./subscription-item"
 
 /** データ接続: hookを呼び、viewへ渡すだけ。 */
 export function SubscriptionList() {
-  const { items, pending, removeItem, toggle } = useSubscriptions()
+  const { items, pending, removeItem, syncItem, toggle } = useSubscriptions()
   const { data: feeds } = useSuspenseQuery(feedsQueryOptions)
 
   return (
     <SubscriptionListView
       feeds={feeds.items as readonly Feed[]}
       onRemove={removeItem}
+      onSync={syncItem}
       onToggle={toggle}
       pending={pending}
       subscriptions={items}
@@ -47,11 +48,13 @@ export type SubscriptionListViewProps = {
   readonly pending: boolean
   readonly onToggle: (subscription: Subscription) => void
   readonly onRemove: (subscription: Subscription) => void
+  readonly onSync: (subscription: Subscription) => void
 }
 
 export function SubscriptionListView({
   feeds,
   onRemove,
+  onSync,
   onToggle,
   pending,
   subscriptions,
@@ -80,6 +83,7 @@ export function SubscriptionListView({
                 feedName={feedName(subscription.feedId)}
                 key={subscription.id}
                 onRemove={onRemove}
+                onSync={onSync}
                 onToggle={onToggle}
                 subscription={subscription}
               />

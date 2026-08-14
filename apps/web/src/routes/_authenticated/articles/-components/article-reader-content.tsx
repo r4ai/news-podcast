@@ -72,5 +72,14 @@ export function ArticleReaderContent({
   if (!markdown) {
     return <NoContentNotice article={article} />
   }
-  return <Markdown baseUrl={articleBaseUrl(article.id)} markdown={markdown} />
+  // ページはh1(記事)、リーダーはh2(記事タイトル)を既に使っているので、
+  // 本文の見出しはh3から始める。
+  return (
+    <Markdown
+      baseUrl={articleBaseUrl(article.id)}
+      headingBaseLevel={3}
+      markdown={markdown}
+      omitLeadingTitle={article.title}
+    />
+  )
 }

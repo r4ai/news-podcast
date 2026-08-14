@@ -1,5 +1,10 @@
-import { useQueryClient } from "@tanstack/react-query"
 import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
+import {
+  useCallback,
   useEffect,
   useMemo,
   useOptimistic,
@@ -11,12 +16,18 @@ import { toast } from "@workspace/ui/components/sonner"
 
 import { api } from "@/shared/api"
 import { isFeedSyncActive } from "@/features/subscriptions"
+import { createActionQueue } from "@/shared/lib/action-queue"
+import {
+  articleFacetsQueryOptions,
+  articlesInfiniteQueryOptions,
+  refetchArticleCollections,
+  writeArticleToCaches,
+} from "../-queries"
 import {
   groupArticlesByDate,
   toBulkFilter,
-  toFacetsQuery,
-  toListQuery,
   type Article,
+  type ArticlePage,
   type ArticleSort,
   type ArticleState,
   type ArticlesSearch,
@@ -40,7 +51,8 @@ export function applyDraft(
 }
 
 const SEARCH_DEBOUNCE_MS = 300
-const PAGE_SIZE = 50
+/** 同期中の追い取得。1秒ポーリングは一覧全ページを叩くので、間隔を緩める。 */
+const SYNC_POLL_MS = 2_000
 
 export type UseArticleListParams = {
   readonly search: ArticlesSearch
@@ -56,6 +68,8 @@ export function useArticleList({
 }: UseArticleListParams) {
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
+  // 連打を投入順へ直列化する。hookの生存期間で1本だけ持つ。
+  const enqueueRef = useRef(createActionQueue())
 
   const syncJobsQuery = api.useQuery(
     "get",
@@ -69,19 +83,18 @@ export function useArticleList({
   const syncActive = syncJobsQuery.data?.items.some(isFeedSyncActive) ?? false
   const wasSyncActive = useRef(false)
 
-  const listQuery = api.useInfiniteQuery(
-    "get",
-    "/v1/me/articles",
-    { params: { query: { ...toListQuery(search), limit: String(PAGE_SIZE) } } },
-    {
-      initialPageParam: undefined as string | undefined,
-      getNextPageParam: () => undefined,
-      refetchInterval: syncActive ? 1_000 : false,
-    }
-  )
+  const listQuery = useInfiniteQuery({
+    ...articlesInfiniteQueryOptions(search),
+    // 続きを読み込んだ後は再取得が全ページに及ぶので、先頭ページの間だけ追う。
+    refetchInterval: (query) =>
+      syncActive && (query.state.data?.pages.length ?? 0) <= 1
+        ? SYNC_POLL_MS
+        : false,
+  })
 
-  const facetsQuery = api.useQuery("get", "/v1/me/articles/facets", {
-    params: { query: toFacetsQuery(search) },
+  const facetsQuery = useQuery({
+    ...articleFacetsQueryOptions(search),
+    staleTime: 30_000,
   })
 
   const patchMutation = api.useMutation("patch", "/v1/me/articles/{articleId}")
@@ -89,53 +102,56 @@ export function useArticleList({
 
   const serverItems = useMemo(
     () =>
-      (listQuery.data?.pages ?? []).flatMap((page) => page.items) as Article[],
+      (listQuery.data?.pages ?? []).flatMap(
+        (page: ArticlePage) => page.items
+      ) as Article[],
     [listQuery.data]
   )
-  const [items, addDraft] = useOptimistic(serverItems, applyDraft)
-  const articles = items
+  const [articles, addDraft] = useOptimistic(serverItems, applyDraft)
+  const groups = useMemo(() => groupArticlesByDate(articles), [articles])
 
   useEffect(() => {
     const wasActive = wasSyncActive.current
     wasSyncActive.current = syncActive
     if (!wasActive || syncActive) return
-    void queryClient.invalidateQueries({ queryKey: ["get", "/v1/me/articles"] })
-    void queryClient.invalidateQueries({
-      queryKey: ["get", "/v1/me/articles/facets"],
-    })
+    void refetchArticleCollections(queryClient)
   }, [queryClient, syncActive])
 
-  async function invalidate() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["get", "/v1/me/articles"] }),
-      queryClient.invalidateQueries({
-        queryKey: ["get", "/v1/me/articles/facets"],
-      }),
-    ])
-  }
-
-  function update(article: Article, next: ArticlePatch) {
-    startTransition(async () => {
-      addDraft({ id: article.id, patch: next })
-      try {
-        await patchMutation.mutateAsync({
-          params: { path: { articleId: article.id } },
-          body: next,
-        })
-        await invalidate()
-      } catch {
-        toast.error("記事の状態を更新できませんでした")
-      }
-    })
-  }
+  const update = useCallback(
+    (article: Article, next: ArticlePatch) => {
+      startTransition(async () => {
+        addDraft({ id: article.id, patch: next })
+        try {
+          const updated = await enqueueRef.current(() =>
+            patchMutation.mutateAsync({
+              params: { path: { articleId: article.id } },
+              body: next,
+            })
+          )
+          // 応答は更新後の記事そのもの。該当行とfacetsだけ書き戻し、再取得しない。
+          writeArticleToCaches(queryClient, {
+            article: updated as Article,
+            before: article,
+            includeHidden: search.includeHidden,
+          })
+        } catch {
+          toast.error("記事の状態を更新できませんでした")
+        }
+      })
+    },
+    [addDraft, patchMutation, queryClient, search.includeHidden]
+  )
 
   function markAllRead() {
     startTransition(async () => {
       try {
-        const result = await bulkMutation.mutateAsync({
-          body: { ...toBulkFilter(search), read: true },
-        })
-        await invalidate()
+        const result = await enqueueRef.current(() =>
+          bulkMutation.mutateAsync({
+            body: { ...toBulkFilter(search), read: true },
+          })
+        )
+        // 一括更新は差分を数え切れないので、ここだけは取り直す。
+        await refetchArticleCollections(queryClient)
         toast.success(`${result.updated}件を既読にしました`)
       } catch {
         toast.error("一括で既読にできませんでした")
@@ -159,13 +175,13 @@ export function useArticleList({
 
   return {
     articles,
-    groups: groupArticlesByDate(articles),
+    groups,
     facets: facetsQuery.data,
     aiPending: facetsQuery.data?.aiPending,
     isLoading: listQuery.isPending,
     isError: listQuery.isError,
     isSyncing: syncActive,
-    hasNextPage: listQuery.hasNextPage ?? false,
+    hasNextPage: listQuery.hasNextPage,
     isFetchingNextPage: listQuery.isFetchingNextPage,
     nextPageFailed: Boolean(listQuery.data) && listQuery.isError,
     fetchNextPage: () => void listQuery.fetchNextPage(),

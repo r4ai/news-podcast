@@ -25,6 +25,7 @@ import {
   EpisodePageSchema,
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
+  FeedSyncJobSchema,
   FeedSyncJobPageSchema,
   FeedPageSchema,
   RegisteredFeedSchema,
@@ -185,6 +186,16 @@ export type GatewayPorts = Readonly<{
     | TypeOf<typeof UnauthorizedProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
+  syncFeedSubscription: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly subscriptionId: TypeOf<typeof SubscriptionIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof FeedSyncJobSchema>,
+    | TypeOf<typeof BadRequestProblemSchema>
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
   deleteFeedSubscription: (input: {
     readonly headers: TypeOf<typeof SessionHeadersSchema>
     readonly subscriptionId: TypeOf<typeof SubscriptionIdSchema>
@@ -231,6 +242,7 @@ export type GatewayPorts = Readonly<{
       readonly feedIds?: readonly string[]
       readonly q?: string
       readonly sort?: "newest" | "oldest"
+      readonly cursor?: string
     }>
   }) => Effect.Effect<
     TypeOf<typeof ArticlePageSchema>,

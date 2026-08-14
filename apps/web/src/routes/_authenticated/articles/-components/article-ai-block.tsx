@@ -40,44 +40,47 @@ export function ArticleAiBlock({
   onRecalculate,
   isRecalculating,
 }: ArticleAiBlockProps) {
-  if (!hasAiEnrichment(article)) return null
+  const summary = article.aiSummary
+  if (!hasAiEnrichment(article) || !summary) return null
 
-  const hasScore = typeof article.relevanceScore === "number"
+  const score = article.relevanceScore
+  const relevance = typeof score === "number" ? scoreLabel(score) : undefined
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4">
+    <section
+      aria-label="AIによる要約と適合度"
+      className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4"
+    >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Sparkles aria-hidden="true" className="size-3.5" />
           AI要約
-        </div>
-        {hasScore ? (
-          <div className="flex items-center gap-1.5">
-            <span
-              className={cn(
-                "text-xs font-medium tabular-nums",
-                scoreLabel(article.relevanceScore!).className
-              )}
-            >
-              {scoreLabel(article.relevanceScore!).label}{" "}
-              {article.relevanceScore}
-            </span>
-          </div>
+        </h3>
+        {relevance ? (
+          <span
+            className={cn(
+              "text-xs font-medium tabular-nums",
+              relevance.className
+            )}
+          >
+            {relevance.label} {score}
+          </span>
         ) : (
           <span className="text-xs text-muted-foreground">適合度未計算</span>
         )}
       </div>
 
-      {hasScore ? (
+      {relevance ? (
         <Progress
-          aria-label={`適合度 ${article.relevanceScore}`}
-          className={cn(scoreLabel(article.relevanceScore!).className)}
-          value={article.relevanceScore ?? null}
+          aria-label={`適合度 ${score}`}
+          className={cn(relevance.className)}
+          value={score ?? null}
         />
       ) : null}
 
       <div className="text-sm">
-        <Markdown markdown={article.aiSummary!} />
+        {/* 「AI要約」がh3なので、要約内の見出しはh4から始める。 */}
+        <Markdown headingBaseLevel={4} markdown={summary} />
       </div>
 
       {article.relevanceReason ? (
@@ -113,6 +116,6 @@ export function ArticleAiBlock({
           興味プロフィールを調整
         </Button>
       </div>
-    </div>
+    </section>
   )
 }

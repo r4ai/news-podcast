@@ -174,7 +174,7 @@ describe("useArticleList", () => {
     })
   })
 
-  it("does not advertise pagination beyond the bounded public result", async () => {
+  it("does not advertise pagination when the server reports the final page", async () => {
     const { result } = renderList([
       {
         path: "/v1/me/articles",
@@ -187,6 +187,95 @@ describe("useArticleList", () => {
     ])
     await waitFor(() => expect(result.current.articles).toHaveLength(1))
     expect(result.current.hasNextPage).toBe(false)
+  })
+
+  it("continues from the server cursor and appends the next page once", async () => {
+    const { result, calls } = renderList([
+      {
+        path: "/v1/me/articles",
+        query: { cursor: undefined },
+        body: {
+          items: [items[0]],
+          page: { hasMore: true, nextCursor: "cursor-2" },
+        },
+      },
+      {
+        path: "/v1/me/articles",
+        query: { cursor: "cursor-2" },
+        body: { items: [items[1]], page: { hasMore: false } },
+      },
+      { path: "/v1/me/articles/facets", body: facets },
+    ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(1))
+    expect(result.current.hasNextPage).toBe(true)
+
+    await act(async () => result.current.fetchNextPage())
+
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+    expect(result.current.articles.map((article) => article.id)).toEqual([
+      "a",
+      "b",
+    ])
+    expect(result.current.hasNextPage).toBe(false)
+    // 先頭ページはcursorを送らない。空文字や既定値が漏れると契約検証で落ちる。
+    const listCalls = calls.filter((call) => call.url === "/v1/me/articles")
+    expect(listCalls.map((call) => call.search.get("cursor"))).toEqual([
+      null,
+      "cursor-2",
+    ])
+  })
+
+  it("settles a save from the response alone, without refetching the list", async () => {
+    const { result, calls } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
+      {
+        method: "PATCH",
+        path: "/v1/me/articles/a",
+        body: { ...items[0], saved: true },
+      },
+    ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+    const before = calls.filter((call) => call.method === "GET").length
+
+    await act(async () => result.current.toggleSaved(items[0]!))
+
+    await waitFor(() =>
+      expect(
+        result.current.articles.find((article) => article.id === "a")?.saved
+      ).toBe(true)
+    )
+    expect(calls.filter((call) => call.method === "GET").length).toBe(before)
+    // facetsの保存件数は再取得ではなく差分で進む。
+    expect(result.current.facets?.states.saved).toBe(facets.states.saved + 1)
+  })
+
+  // 直列化そのものは shared/lib/action-queue.test.ts で検証している。
+  // ここでは連打が「投入順のまま、1クリック1リクエスト」で流れることを見る。
+  it("sends one request per rapid toggle, in submission order", async () => {
+    const { result, calls } = renderList([
+      { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
+      { path: "/v1/me/articles/facets", body: facets },
+      {
+        method: "PATCH",
+        path: "/v1/me/articles/a",
+        body: { ...items[0], saved: true },
+      },
+    ])
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+
+    await act(async () => {
+      result.current.toggleSaved(items[0]!)
+      result.current.toggleSaved({ ...items[0]!, saved: true })
+      result.current.toggleSaved(items[0]!)
+    })
+
+    await waitFor(() =>
+      expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(3)
+    )
+    expect(
+      calls.filter((call) => call.method === "PATCH").map((call) => call.body)
+    ).toEqual([{ saved: true }, { saved: false }, { saved: true }])
   })
 
   it("applies a bulk read across the current filter and reports how many changed", async () => {

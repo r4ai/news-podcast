@@ -91,6 +91,23 @@ for (const theme of ["light", "dark"] as const) {
         ).toBeVisible()
         await expectStablePage(page, `${appPage.snapshot}-${suffix}`)
       }
+
+      // 記事ページはdesktopでページ見出しを持たない (docs/design.md §7.1) ので、
+      // 一覧の行が出たことをもって安定とみなし、閲覧中の状態まで確認する。
+      await page.goto("/articles")
+      const firstArticle = page
+        .getByRole("button", { name: /Durable Objects/ })
+        .first()
+      await expect(firstArticle).toBeVisible()
+      await expectStablePage(page, `articles-${suffix}`)
+
+      await firstArticle.click()
+      await expect(
+        page.getByRole("heading", {
+          name: "Durable Objectsが東京リージョンに対応",
+        })
+      ).toBeVisible()
+      await expectStablePage(page, `articles-reader-${suffix}`)
     })
   }
 }

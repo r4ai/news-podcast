@@ -5,6 +5,7 @@ import {
   parseArticleListQuery,
   parseArticleStatePatch,
   readOwnerArticleMarkdown,
+  type ArticleListPage,
 } from "../application/article-library.js"
 import {
   ArchiveCaptureSchema,
@@ -14,6 +15,7 @@ import {
   createArticleArchived,
   createArticleSnapshot,
 } from "../domain/article.js"
+import { encodeArticleCursor } from "../domain/article-library.js"
 import {
   CreatedAtSchema,
   FeedIdSchema,
@@ -166,7 +168,7 @@ const setup = async () => {
   return { articles, catalog, snapshot }
 }
 
-const query = () =>
+const query = (overrides: Record<string, unknown> = {}) =>
   Effect.runPromise(
     parseArticleListQuery({
       limit: 50,
@@ -174,6 +176,7 @@ const query = () =>
       includeHidden: false,
       feedIds: [],
       order: "Newest",
+      ...overrides,
     })
   )
 const capturedAt = (value: string) => decode(CapturedAtSchema, value)
@@ -185,20 +188,23 @@ describe("SQLite article library", () => {
       articles.list(ids.ownerA, await query())
     )
 
-    expect(found).toEqual([
-      expect.objectContaining({
-        articleId: ids.articleA,
-        archiveStatus: "Succeeded",
-        snapshotId: snapshot.snapshotId,
-        state: {
-          read: false,
-          saved: false,
-          readLater: false,
-          hidden: false,
-          hiddenAt: null,
-        },
-      }),
-    ])
+    expect(found).toEqual({
+      items: [
+        expect.objectContaining({
+          articleId: ids.articleA,
+          archiveStatus: "Succeeded",
+          snapshotId: snapshot.snapshotId,
+          state: {
+            read: false,
+            saved: false,
+            readLater: false,
+            hidden: false,
+            hiddenAt: null,
+          },
+        }),
+      ],
+      nextCursor: null,
+    })
     expect(
       await Effect.runPromise(articles.find(ids.ownerB, ids.articleA))
     ).toEqual({ _tag: "NotFound" })
@@ -259,7 +265,7 @@ describe("SQLite article library", () => {
     })
     expect(
       await Effect.runPromise(articles.list(ids.ownerA, await query()))
-    ).toEqual([])
+    ).toEqual({ items: [], nextCursor: null })
     expect(
       await Effect.runPromise(catalog.findAutomatic(ids.ownerA, 20))
     ).toEqual([])
@@ -350,6 +356,106 @@ describe("SQLite article library", () => {
     ).toEqual({
       states: { all: 0, unread: 0, saved: 0, later: 0 },
       feeds: [],
+    })
+  })
+})
+
+/** 同一sortKeyを含む並びを跨いでも、重複・欠落なく全件を走査できることを確かめる。 */
+describe("SQLite article library keyset pagination", () => {
+  const paged = async (
+    articles: Awaited<ReturnType<typeof setup>>["articles"],
+    order: "Newest" | "Oldest"
+  ) => {
+    const seen: string[] = []
+    const pages: number[] = []
+    let cursor: string | null = null
+    for (let guard = 0; guard < 20; guard += 1) {
+      const page: ArticleListPage = await Effect.runPromise(
+        articles.list(
+          ids.ownerA,
+          await query({
+            limit: 2,
+            order,
+            ...(cursor === null ? {} : { cursor }),
+          })
+        )
+      )
+      pages.push(page.items.length)
+      seen.push(...page.items.map((item) => item.articleId as string))
+      if (page.nextCursor === null) return { seen, pages }
+      cursor = page.nextCursor
+    }
+    throw new Error("cursor did not terminate")
+  }
+
+  it("walks every article exactly once and stops without an extra empty page", async () => {
+    const { articles, catalog } = await setup()
+    // articleA は 2026-08-13T00:00:00.000Z 公開。以降は同一公開時刻を2件含める。
+    const extras = [
+      {
+        id: "1e2b1d0f-2b2a-4a1a-9f0a-000000000001",
+        publishedAt: "2026-08-12T00:00:00.000Z",
+      },
+      {
+        id: "1e2b1d0f-2b2a-4a1a-9f0a-000000000002",
+        publishedAt: "2026-08-12T00:00:00.000Z",
+      },
+      {
+        id: "1e2b1d0f-2b2a-4a1a-9f0a-000000000003",
+        publishedAt: "2026-08-11T00:00:00.000Z",
+      },
+    ] as const
+    for (const [index, extra] of extras.entries()) {
+      await Effect.runPromise(
+        catalog.upsert({
+          articleId: extra.id as never,
+          feedId: ids.feedA,
+          externalId: `extra-${index}`,
+          sourceUrl: `https://news.example.com/extra-${index}` as never,
+          title: `Extra ${index}` as never,
+          publishedAt: extra.publishedAt,
+          discoveredAt: "2026-08-13T01:01:00.000Z",
+        })
+      )
+    }
+
+    const newest = await paged(articles, "Newest")
+    expect(newest.pages).toEqual([2, 2])
+    expect(newest.seen).toHaveLength(4)
+    expect(new Set(newest.seen).size).toBe(4)
+    expect(newest.seen[0]).toBe(ids.articleA)
+    expect(newest.seen.at(-1)).toBe(extras[2].id)
+
+    const oldest = await paged(articles, "Oldest")
+    expect(oldest.seen).toEqual([...newest.seen].reverse())
+  })
+
+  it("reports no further page when the result exactly fills the limit", async () => {
+    const { articles } = await setup()
+    const page = await Effect.runPromise(
+      articles.list(ids.ownerA, await query({ limit: 1 }))
+    )
+    expect(page.items).toHaveLength(1)
+    expect(page.nextCursor).toBeNull()
+  })
+
+  it("resolves a cursor against the caller's own rows, never the issuer's", async () => {
+    const { articles } = await setup()
+    // ownerAの記事Aの位置。ownerBが提示しても、返るのはownerB自身の記事だけ。
+    const cursor = encodeArticleCursor({
+      sortKey: "2026-08-13T00:00:00.000Z" as never,
+      articleId: ids.articleA,
+    })
+    expect(
+      await Effect.runPromise(
+        articles.list(
+          ids.ownerB,
+          await query({ limit: 10, order: "Oldest", cursor })
+        )
+      )
+    ).toEqual({
+      items: [expect.objectContaining({ articleId: ids.articleB })],
+      nextCursor: null,
     })
   })
 })

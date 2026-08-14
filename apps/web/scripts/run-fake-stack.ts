@@ -22,6 +22,19 @@ type Job = {
   episodeId: string
 }
 
+type FeedSyncJob = {
+  jobId: string
+  feedId: string
+  feedUrl: string
+  status: "queued"
+  attempt: number
+  maxAttempts: 4
+  discovered: number
+  archived: number
+  failed: number
+  createdAt: string
+}
+
 const articles = [
   "Durable Objectsが東京リージョンに対応",
   "TypeScript 6.0のリリース候補が公開",
@@ -44,6 +57,14 @@ const articles = [
   markdownUrl: `/v1/me/articles/00000000-0000-4000-8000-00000000001${index}/markdown`,
 }))
 
+/**
+ * リーダーの見た目を固定するための本文。
+ * 保存側の正規化どおり、最も浅い見出しをlevel 1として作る。先頭の題名再掲は
+ * 表示側が落とし、残りの見出しは押し下げられる — その両方を絵で確認する。
+ */
+const articleBody = (title: string) =>
+  `# ${title}\n\nこの記事は視覚回帰テスト用の固定本文です。段落と箇条書きだけを含みます。\n\n## 確認したいこと\n\n- 一覧と本文は独立したスクロール領域になる\n- 既読は記事を離れた時点で反映される\n`
+
 const state = {
   subscription: { id: subscriptionId, feedId, enabled: true, createdAt },
   settings: {
@@ -55,6 +76,7 @@ const state = {
     interestProfile: { include: "", exclude: "" },
   },
   jobs: [] as Job[],
+  syncJob: undefined as FeedSyncJob | undefined,
   episodes: [] as Array<Record<string, unknown>>,
 }
 
@@ -114,7 +136,28 @@ async function fakeApi(request: Request): Promise<Response> {
     return json({ items: [state.subscription], page: { hasMore: false } })
   }
   if (path === "/v1/me/feed-sync-jobs" && request.method === "GET") {
-    return json({ items: [], page: { hasMore: false } })
+    return json({
+      items: state.syncJob === undefined ? [] : [state.syncJob],
+      page: { hasMore: false },
+    })
+  }
+  if (
+    path === `/v1/me/feed-subscriptions/${subscriptionId}/sync` &&
+    request.method === "POST"
+  ) {
+    state.syncJob = {
+      jobId: randomUUID(),
+      feedId,
+      feedUrl: "https://zenn.dev/feed",
+      status: "queued",
+      attempt: 0,
+      maxAttempts: 4,
+      discovered: 0,
+      archived: 0,
+      failed: 0,
+      createdAt: new Date().toISOString(),
+    }
+    return json(state.syncJob, 202)
   }
   if (path === `/v1/me/feed-subscriptions/${subscriptionId}`) {
     if (request.method === "PATCH") {
@@ -140,6 +183,21 @@ async function fakeApi(request: Request): Promise<Response> {
       feeds: [{ feedId, name: "Zenn", count: 3 }],
       aiPending: 0,
     })
+  }
+  const articleMatch = /^\/v1\/me\/articles\/([^/]+)(\/markdown)?$/.exec(path)
+  if (articleMatch) {
+    const article = articles.find((item) => item.id === articleMatch[1])
+    if (!article) return json({ error: "not found" }, 404)
+    if (articleMatch[2] === "/markdown") {
+      return new Response(articleBody(article.title), {
+        headers: { "Content-Type": "text/markdown; charset=utf-8" },
+      })
+    }
+    if (request.method === "PATCH") {
+      const patch = (await request.json()) as Record<string, boolean>
+      Object.assign(article, patch)
+    }
+    return json(article)
   }
   if (path === "/v1/episode-jobs" && request.method === "GET") {
     return json({ items: state.jobs, page: { hasMore: false } })

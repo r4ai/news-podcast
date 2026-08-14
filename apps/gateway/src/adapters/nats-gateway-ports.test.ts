@@ -136,12 +136,20 @@ describe("NATS GatewayPorts adapter", () => {
         return userSessionReply(request)
       requests.push(request)
       const payload = request.envelope.payload as Record<string, unknown>
+      const listQuery = payload.query as
+        | { readonly cursor?: string }
+        | undefined
       expect(request.subject).toBe(subjects.content.articleLibrary)
       expect(request.envelope.actor).toEqual({ _tag: "User", userId })
       expect(payload).not.toHaveProperty("ownerId")
       const reply =
         payload.operation === "List"
-          ? { _tag: "Listed", articles: [article] }
+          ? {
+              _tag: "Listed",
+              articles: [article],
+              // カーソル未指定の1ページ目には続きがある、という応答。
+              nextCursor: listQuery?.cursor === undefined ? "bmV4dA" : null,
+            }
           : payload.operation === "Markdown"
             ? { _tag: "Markdown", markdown: "# Article" }
             : payload.operation === "BulkPatch"
@@ -195,6 +203,7 @@ describe("NATS GatewayPorts adapter", () => {
       id: article.articleId,
       saved: true,
     })
+    expect(listed.page).toEqual({ hasMore: true, nextCursor: "bmV4dA" })
     expect(found.id).toBe(article.articleId)
     expect(markdown.markdown).toBe("# Article")
     expect(patched.saved).toBe(true)
@@ -202,6 +211,19 @@ describe("NATS GatewayPorts adapter", () => {
     expect(facets.states.all).toBe(1)
     expect(archived.status).toBe("already_archived")
     expect(requests).toHaveLength(7)
+
+    // 受け取ったカーソルをそのまま返すと、上流へ透過し、最終ページで畳まれる。
+    const continued = await Effect.runPromise(
+      ports.listArticles({
+        headers: sessionHeaders,
+        query: { cursor: listed.page.nextCursor! },
+      })
+    )
+    expect(continued.page).toEqual({ hasMore: false })
+    expect(
+      (requests.at(-1)!.envelope.payload as { query: { cursor?: string } })
+        .query.cursor
+    ).toBe("bmV4dA")
   })
 
   it("maps feed catalog registration and pause through actor-owned RPCs", async () => {

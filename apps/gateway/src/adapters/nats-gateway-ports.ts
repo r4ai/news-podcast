@@ -10,6 +10,7 @@ import {
   type AddFeedSubscriptionReply,
   CorrelationIdSchema,
   type DeleteFeedSubscriptionReply,
+  type ContentFeedSyncJob,
   type ListFeedSyncJobsReply,
   type ListFeedSubscriptionsReply,
   type CreateAudioAccessReply,
@@ -23,8 +24,10 @@ import {
   parseListEpisodesReply,
   parseListFeedSubscriptionsReply,
   parseListFeedSyncJobsReply,
+  parseSyncFeedSubscriptionReply,
   parseListFeedCatalogReply,
   parseUpdateFeedSubscriptionReply,
+  type SyncFeedSubscriptionReply,
   parseIdentitySettingsReply,
   parseContentPersonalizationReply,
   parseReadingDictionaryReply,
@@ -50,6 +53,7 @@ import {
   FeedSubscriptionPageSchema,
   FeedSubscriptionSchema,
   FeedSyncJobPageSchema,
+  FeedSyncJobSchema,
   FeedPageSchema,
   RegisteredFeedSchema,
   UpdatedFeedSubscriptionSchema,
@@ -250,6 +254,7 @@ const toAudioAccess = (
 
 type FeedSubscription = TypeOf<typeof FeedSubscriptionSchema>
 type FeedSubscriptionPage = TypeOf<typeof FeedSubscriptionPageSchema>
+type FeedSyncJob = TypeOf<typeof FeedSyncJobSchema>
 type FeedSyncJobPage = TypeOf<typeof FeedSyncJobPageSchema>
 type AddSubscriptionFailure =
   | ReturnType<typeof unauthorized>
@@ -259,6 +264,11 @@ type ListSubscriptionsFailure =
   | ReturnType<typeof unauthorized>
   | ReturnType<typeof unavailable>
 type ListSyncJobsFailure = ListSubscriptionsFailure
+type SyncSubscriptionFailure =
+  | ReturnType<typeof badRequest>
+  | ReturnType<typeof unauthorized>
+  | ReturnType<typeof subscriptionNotFound>
+  | ReturnType<typeof unavailable>
 type DeleteSubscriptionFailure =
   | ReturnType<typeof badRequest>
   | ReturnType<typeof unauthorized>
@@ -305,6 +315,25 @@ const toSyncJobStatus = {
   Failed: "failed",
 } as const
 
+const toSyncJob = (
+  job: ContentFeedSyncJob
+): Effect.Effect<FeedSyncJob, ListSyncJobsFailure> =>
+  parse(FeedSyncJobSchema)({
+    jobId: job.jobId,
+    feedId: job.feedId,
+    feedUrl: job.feedUrl,
+    status: toSyncJobStatus[job.status],
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    discovered: job.discovered,
+    archived: job.archived,
+    failed: job.failed,
+    createdAt: job.createdAt,
+    ...(job.startedAt === undefined ? {} : { startedAt: job.startedAt }),
+    ...(job.completedAt === undefined ? {} : { completedAt: job.completedAt }),
+    ...(job.error === undefined ? {} : { error: job.error }),
+  }).pipe(Effect.mapError(unavailable))
+
 const toSyncJobPage = (
   reply: ListFeedSyncJobsReply
 ): Effect.Effect<FeedSyncJobPage, ListSyncJobsFailure> => {
@@ -334,6 +363,17 @@ const toSyncJobPage = (
     })),
     page: { hasMore: false },
   }).pipe(Effect.mapError(unavailable))
+}
+
+const toSyncedJob = (
+  reply: SyncFeedSubscriptionReply
+): Effect.Effect<FeedSyncJob, SyncSubscriptionFailure> => {
+  if (reply._tag === "Synced") return toSyncJob(reply.job)
+  if (reply._tag === "NotFound") return Effect.fail(subscriptionNotFound())
+  if (reply.code === "UNAUTHENTICATED") return Effect.fail(unauthorized())
+  if (reply.code === "INVALID_REQUEST") return Effect.fail(badRequest())
+  if (reply.code === "NOT_FOUND") return Effect.fail(subscriptionNotFound())
+  return Effect.fail(unavailable())
 }
 
 const toDeleted = (
@@ -938,6 +978,14 @@ const makeAdapter = (
         {},
         parseListFeedSyncJobsReply
       ).pipe(Effect.flatMap(toSyncJobPage)),
+    syncFeedSubscription: ({ headers, subscriptionId }) =>
+      ownerRpc(
+        headers,
+        subjects.content.syncSubscription,
+        "content-knowledge",
+        { subscriptionId },
+        parseSyncFeedSubscriptionReply
+      ).pipe(Effect.flatMap(toSyncedJob)),
     deleteFeedSubscription: ({ headers, subscriptionId }) =>
       authenticated(headers).pipe(
         Effect.flatMap(({ actor, lineage: parent }) => {
@@ -1094,6 +1142,7 @@ const makeAdapter = (
               feedIds: query.feedIds ?? [],
               ...(query.q === undefined ? {} : { q: query.q }),
               order: query.sort === "oldest" ? "Oldest" : "Newest",
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
             },
           },
           parseArticleLibraryReply
@@ -1104,7 +1153,10 @@ const makeAdapter = (
                   Effect.flatMap((items) =>
                     parse(ArticlePageSchema)({
                       items,
-                      page: { hasMore: false },
+                      page:
+                        reply.nextCursor === null
+                          ? { hasMore: false }
+                          : { hasMore: true, nextCursor: reply.nextCursor },
                     }).pipe(Effect.mapError(unavailable))
                   )
                 )

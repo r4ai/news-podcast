@@ -210,6 +210,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/feed-subscriptions/{subscriptionId}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start an immediate RSS feed synchronization */
+        post: operations["syncFeedSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/feed-subscriptions/{subscriptionId}": {
         parameters: {
             query?: never;
@@ -818,6 +835,23 @@ export interface components {
                 hasMore: false;
             };
         };
+        AcceptedFeedSyncJob: {
+            jobId: string & unknown;
+            feedId: string & unknown;
+            feedUrl: string & unknown;
+            /** @enum {string} */
+            status: "queued" | "processing" | "succeeded" | "failed";
+            attempt: number & unknown;
+            /** @enum {number} */
+            maxAttempts: 4;
+            discovered: number & unknown;
+            archived: number & unknown;
+            failed: number & unknown;
+            createdAt: string;
+            startedAt?: string | null;
+            completedAt?: string | null;
+            error?: (string & (unknown & unknown & unknown)) | null;
+        };
         UpdatedFeedSubscription: {
             id: string & unknown;
             feedId: string & unknown;
@@ -867,8 +901,8 @@ export interface components {
         ArticlePage: {
             items: components["schemas"]["Article"][];
             page: {
-                /** @enum {boolean} */
-                hasMore: false;
+                hasMore: boolean;
+                nextCursor?: (string & (unknown & unknown & unknown)) | null;
             };
         };
         ArticleFacets: {
@@ -1771,6 +1805,68 @@ export interface operations {
             };
         };
     };
+    syncFeedSubscription: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                cookie?: string | null;
+                traceparent?: (string & unknown) | null;
+            };
+            path: {
+                subscriptionId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AcceptedFeedSyncJob */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptedFeedSyncJob"];
+                };
+            };
+            /** @description BadRequestProblem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BadRequestProblem"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
     deleteFeedSubscription: {
         parameters: {
             query?: never;
@@ -1998,6 +2094,7 @@ export interface operations {
                 feedIds?: (string & unknown)[] | null;
                 q?: (string & (unknown & unknown & unknown)) | null;
                 sort?: ("newest" | "oldest") | null;
+                cursor?: (string & (unknown & unknown & unknown)) | null;
             };
             header?: {
                 authorization?: string | null;

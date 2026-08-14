@@ -64,7 +64,8 @@ const toReply = (operation: string, value: any): ArticleLibraryReply => {
   if (operation === "List")
     return deepFreeze({
       _tag: "Listed",
-      articles: value,
+      articles: value.items,
+      nextCursor: value.nextCursor,
     }) as ArticleLibraryReply
   if (operation === "Find")
     return value._tag === "Found"

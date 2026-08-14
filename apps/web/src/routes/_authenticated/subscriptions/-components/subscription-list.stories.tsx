@@ -23,6 +23,7 @@ const meta = {
     pending: false,
     onToggle: fn(),
     onRemove: fn(),
+    onSync: fn(),
   },
   decorators: [
     (Story) => (

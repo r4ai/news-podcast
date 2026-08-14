@@ -27,6 +27,42 @@ describe("article library RPC", () => {
     expect(list).not.toHaveProperty("ownerId")
   })
 
+  it("carries an opaque continuation cursor and bounds its shape", async () => {
+    const cursor = "cG9zaXRpb24"
+    const listed = await Effect.runPromise(
+      parseArticleLibraryRequest({
+        operation: "List",
+        query: {
+          limit: 50,
+          state: "All",
+          includeHidden: false,
+          feedIds: [],
+          order: "Newest",
+          cursor,
+        },
+      })
+    )
+    expect(listed).toMatchObject({ query: { cursor } })
+
+    for (const invalid of ["", "not base64url!", "a".repeat(600)]) {
+      await expect(
+        Effect.runPromise(
+          parseArticleLibraryRequest({
+            operation: "List",
+            query: {
+              limit: 50,
+              state: "All",
+              includeHidden: false,
+              feedIds: [],
+              order: "Newest",
+              cursor: invalid,
+            },
+          })
+        )
+      ).rejects.toBeDefined()
+    }
+  })
+
   it("rejects empty patches, duplicate feed filters, and forged owners", async () => {
     for (const request of [
       { operation: "Patch", articleId, patch: {} },
@@ -71,10 +107,30 @@ describe("article library RPC", () => {
             },
           },
         ],
+        nextCursor: null,
       })
     )
     expect(reply._tag).toBe("Listed")
-    if (reply._tag === "Listed")
+    if (reply._tag === "Listed") {
       expect(Object.isFrozen(reply.articles)).toBe(true)
+      expect(reply.nextCursor).toBeNull()
+    }
+  })
+
+  it("requires the listed reply to state whether a further page exists", async () => {
+    await expect(
+      Effect.runPromise(
+        parseArticleLibraryReply({ _tag: "Listed", articles: [] })
+      )
+    ).rejects.toBeDefined()
+    expect(
+      await Effect.runPromise(
+        parseArticleLibraryReply({
+          _tag: "Listed",
+          articles: [],
+          nextCursor: "cG9zaXRpb24",
+        })
+      )
+    ).toMatchObject({ _tag: "Listed" })
   })
 })

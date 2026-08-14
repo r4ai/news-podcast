@@ -404,9 +404,22 @@ export const ArticleSchema = Schema.Struct({
   ),
   relevanceReason: Schema.optional(Schema.String),
 }).annotate({ identifier: "Article" })
+/**
+ * 一覧の継続位置。中身は非公開で、clientはそのまま返すことだけを期待される
+ * (docs/design.md §5「一覧はopaque cursor」)。
+ */
+const ArticleCursorSchema = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(512),
+  Schema.isPattern(/^[A-Za-z0-9_-]+$/)
+)
 export const ArticlePageSchema = Schema.Struct({
   items: Schema.Array(ArticleSchema),
-  page: Schema.Struct({ hasMore: Schema.Literal(false) }),
+  page: Schema.Struct({
+    hasMore: Schema.Boolean,
+    /** `hasMore`が真の時だけ現れる。次ページ要求の`cursor`へそのまま渡す。 */
+    nextCursor: Schema.optional(ArticleCursorSchema),
+  }),
 }).annotate({ identifier: "ArticlePage" })
 export const ArticleFacetsSchema = Schema.Struct({
   states: Schema.Struct({
@@ -896,6 +909,29 @@ export const listFeedSyncJobsEndpoint = HttpApiEndpoint.get(
   })
 )
 
+export const syncFeedSubscriptionEndpoint = HttpApiEndpoint.post(
+  "syncFeedSubscription",
+  "/v1/me/feed-subscriptions/:subscriptionId/sync",
+  {
+    params: { subscriptionId: SubscriptionIdSchema },
+    headers: SessionHeadersSchema,
+    success: FeedSyncJobSchema.pipe(HttpApiSchema.status(202)).annotate({
+      identifier: "AcceptedFeedSyncJob",
+    }),
+    error: [
+      BadRequestProblemSchema,
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "syncFeedSubscription",
+    summary: "Start an immediate RSS feed synchronization",
+  })
+)
+
 export const deleteFeedSubscriptionEndpoint = HttpApiEndpoint.delete(
   "deleteFeedSubscription",
   "/v1/me/feed-subscriptions/:subscriptionId",
@@ -960,6 +996,8 @@ const ArticleListFilterSchema = Schema.Struct({
   feedIds: Schema.optional(Schema.Array(FeedIdSchema)),
   q: Schema.optional(boundedText(200)),
   sort: Schema.optional(Schema.Literals(["newest", "oldest"])),
+  /** 直前ページの`page.nextCursor`。絞り込みを変えたら破棄する。 */
+  cursor: Schema.optional(ArticleCursorSchema),
 })
 const ArticleFacetsQuerySchema = Schema.Struct({
   includeHidden: Schema.optional(Schema.Boolean),
@@ -1456,6 +1494,7 @@ const feedSubscriptionsGroup = HttpApiGroup.make("feedSubscriptions")
     addFeedSubscriptionEndpoint,
     listFeedSubscriptionsEndpoint,
     listFeedSyncJobsEndpoint,
+    syncFeedSubscriptionEndpoint,
     deleteFeedSubscriptionEndpoint,
     updateFeedSubscriptionEndpoint
   )

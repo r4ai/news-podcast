@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Content Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: [ADR-0012](adr/0012-rss-reader-web-archive.md)、[ADR-0002](adr/0002-openapi-async-jobs.md)、`GET /v1/me/feed-sync-jobs`
+- Related: [ADR-0012](adr/0012-rss-reader-web-archive.md)、[ADR-0002](adr/0002-openapi-async-jobs.md)、`GET /v1/me/feed-sync-jobs`、`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`
 
 ## Context and change trigger
 
@@ -22,6 +22,9 @@ flowchart LR
   Web["購読画面"] -->|POST subscription| Gateway
   Gateway -->|NATS addSubscription| Content["Content Knowledge"]
   Content -->|enqueue| Queue[("feed_sync_jobs")]
+  Web -->|POST subscription/:id/sync| Gateway
+  Gateway -->|NATS syncSubscription| Content
+  Content -->|re-enqueue| Queue
   Content -->|notify| Wake["poller wakeup"]
   Wake --> Worker["RSS sync worker"]
   Scheduler["5分scheduler"] --> Worker
@@ -33,11 +36,12 @@ flowchart LR
   Content -->|status/counts| Web
 ```
 
-公開APIはowner-scopedな`GET /v1/me/feed-sync-jobs`とし、`queued / processing / succeeded / failed`、試行回数、発見・保存・失敗件数、境界化したエラーを返す。Webはqueued/processing中だけ短い間隔で状態と記事一覧を再取得し、状態を購読画面と記事一覧へ表示する。
+公開APIはowner-scopedな`GET /v1/me/feed-sync-jobs`と、ownerが有効な購読を明示的に同じキューへ再投入する`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`（202）とする。手動同期は登録時と同じfeed単位のjobを再利用し、queued / processing中のjobは重複投入せず、完了・失敗済みjobは再試行可能なqueuedへ戻す。Webはqueued/processing中だけ短い間隔で状態と記事一覧を再取得し、状態を購読画面と記事一覧へ表示する。
 
 ## Decision drivers
 
 - 5分pollの待機を理由に、登録直後のユーザーへ空の記事一覧を見せ続けない。
+- 失敗した同期やRSS更新を、5分cycleを待たず利用者が再試行できる。
 - RSS取得・archiveの遅延や失敗をHTTP応答から分離し、再起動後も処理対象を失わない。
 - owner境界をNATS payloadではなくContent側のsession actor由来のqueryで守る。
 - 既存のSSRF検査済みRSS readerとarchive処理をworkerから再利用する。
@@ -71,12 +75,12 @@ flowchart LR
 | --- | --- | --- | --- |
 | Design documents | queue、wake、UI表示、5分定期cycleを記載 | Done | `docs/design.md`、`docs/architecture.md` |
 | Domain and use cases | queue job/status/outcomeを追加 | Done | `services/content-knowledge/src/domain/feed-sync.ts` |
-| OpenAPI and external contracts | owner-scoped status endpointを追加 | Done | `apps/gateway/src/contract.ts`、`packages/contracts/openapi/openapi.json` |
+| OpenAPI and external contracts | owner-scoped status・手動再投入endpointを追加 | Done | `apps/gateway/src/contract.ts`、`packages/contracts/openapi/openapi.json` |
 | Application code and ports | enqueue/claim/completeとworkerを追加 | Done | `services/content-knowledge/src/application/feed-sync-worker.ts` |
 | Data and storage | `feed_sync_jobs` SQLite tableを追加 | Done | `services/content-knowledge/src/adapters/sqlite-feed-sync-queue.ts` |
 | Runtime and deployment | poller wakeupをRPCとschedulerへ接続 | Done | `services/content-knowledge/src/runtime/node.ts` |
 | Authentication and security | owner query、既存safe RSS readerを維持 | Done | content RPC、feed sync tests |
-| Frontend and quality assurance | status card、article refresh、sync noticeを追加 | Done | `apps/web/src/routes/_authenticated/subscriptions` |
+| Frontend and quality assurance | status card、手動同期ボタン、article refresh、sync noticeを追加 | Done | `apps/web/src/routes/_authenticated/subscriptions` |
 | Tests and operations | unit/integration/contract/UI/E2E validation | Done | `pnpm typecheck`、`pnpm lint`、content/gateway/web tests、feed sync E2E |
 
 ## Reconsideration conditions
@@ -94,4 +98,5 @@ flowchart LR
 
 - Red: 購読登録後にqueue/statusが存在せず、既存pollerの5分待機中は即時同期されない再現テスト。
 - Green: content/gateway/webの型検査・単体/結合テスト、契約生成、登録直後のwakeテスト。
+- 手動同期: 所有者の購読IDをContent側で検証し、永続キューへ再投入して、UIの「待機中」表示までE2Eで確認。
 - `pnpm typecheck`、`pnpm lint`、content 147 tests、gateway 59 tests、web 143 tests、fake-stack E2E 14 tests（追加同期シナリオを含む）が成功した。同期シナリオでは「同期中」表示、記事一覧の同期通知、完了後の新着記事表示を確認した。

@@ -62,6 +62,50 @@ describe("useSubscriptions", () => {
     expect(patch?.body).toEqual({ enabled: false })
   })
 
+  it("starts a manual sync and refreshes the shared sync status", async () => {
+    const { result, calls, queryClient } = await renderList([
+      { path: "/v1/me/feed-subscriptions", body: { items } },
+      {
+        method: "POST",
+        path: "/v1/me/feed-subscriptions/sub-1/sync",
+        status: 202,
+        body: {
+          jobId: "job-1",
+          feedId: "feed-1",
+          feedUrl: "https://feeds.example.com/news.xml",
+          status: "queued",
+          attempt: 0,
+          maxAttempts: 4,
+          discovered: 0,
+          archived: 0,
+          failed: 0,
+          createdAt: "2026-08-13T00:00:00.000Z",
+        },
+      },
+    ])
+    queryClient.setQueryDefaults(feedSyncJobsQueryOptions.queryKey, {
+      gcTime: 60_000,
+    })
+    queryClient.setQueryData(feedSyncJobsQueryOptions.queryKey, {
+      items: [],
+      page: { hasMore: false },
+    })
+
+    await act(async () => result.current.syncItem(items[0]!))
+
+    await waitFor(() =>
+      expect(calls.find((call) => call.method === "POST")?.url).toBe(
+        "/v1/me/feed-subscriptions/sub-1/sync"
+      )
+    )
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(feedSyncJobsQueryOptions.queryKey)
+          ?.isInvalidated
+      ).toBe(true)
+    )
+  })
+
   it.each(["toggle", "remove"] as const)(
     "invalidates feed sync jobs after a subscription %s",
     async (action) => {
