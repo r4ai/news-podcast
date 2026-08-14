@@ -233,4 +233,5 @@ docker compose logs gateway identity-access content-knowledge episode-production
 - [関数型DDD移行ガイド](functional-ddd-migration.md)
 - [Service state backup / restore](operations/service-state-recovery.md)
 - [品質ベースライン](quality-baseline.md)
+- [負荷テストとProvider Chaos](operations/load-testing.md)
 - [Architecture Decision Records](adr/)

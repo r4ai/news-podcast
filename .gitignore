@@ -58,3 +58,6 @@ infra/observability/backup/data/
 
 # test
 coverage
+
+# Load-test output contains staging cookies and runtime metrics.
+artifacts/loadtest/

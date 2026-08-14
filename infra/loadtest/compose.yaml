@@ -1,0 +1,79 @@
+services:
+  fake-openai:
+    build:
+      context: .
+      dockerfile: infra/loadtest/provider-fakes/Dockerfile
+    environment:
+      PROVIDER_KIND: openai
+      PORT: "8080"
+      FAULT_PROFILE: ${LOADTEST_FAULT_PROFILE:-normal}
+      FAULT_RATE: ${LOADTEST_FAULT_RATE:-0.1}
+      FAULT_SEED: ${LOADTEST_FAULT_SEED:-1}
+      FAULT_DELAY_MS: ${LOADTEST_FAULT_DELAY_MS:-750}
+      FAULT_TIMEOUT_MS: ${LOADTEST_FAULT_TIMEOUT_MS:-4000}
+      LOADTEST_FAKE_CONTROL_TOKEN: ${LOADTEST_FAKE_CONTROL_TOKEN:-}
+    ports:
+      - "127.0.0.1:18080:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  fake-voicevox:
+    build:
+      context: .
+      dockerfile: infra/loadtest/provider-fakes/Dockerfile
+    environment:
+      PROVIDER_KIND: voicevox
+      PORT: "8081"
+      FAULT_PROFILE: ${LOADTEST_FAULT_PROFILE:-normal}
+      FAULT_RATE: ${LOADTEST_FAULT_RATE:-0.1}
+      FAULT_SEED: ${LOADTEST_FAULT_SEED:-1}
+      FAULT_DELAY_MS: ${LOADTEST_FAULT_DELAY_MS:-750}
+      FAULT_TIMEOUT_MS: ${LOADTEST_FAULT_TIMEOUT_MS:-4000}
+      LOADTEST_FAKE_CONTROL_TOKEN: ${LOADTEST_FAKE_CONTROL_TOKEN:-}
+    ports:
+      - "127.0.0.1:18081:8081"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8081/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  episode-production:
+    environment:
+      PROVIDER_MODE: live
+      OPENAI_API_KEY: loadtest-fake-key
+      OPENAI_RESPONSES_URL: http://fake-openai:8080/v1/responses
+      OPENAI_REQUEST_TIMEOUT_MS: ${LOADTEST_OPENAI_TIMEOUT_MS:-2000}
+      VOICEVOX_BASE_URL: http://fake-voicevox:8081
+      VOICEVOX_REQUEST_TIMEOUT_MS: ${LOADTEST_VOICEVOX_TIMEOUT_MS:-2000}
+      VOICEVOX_MAXIMUM_AUDIO_BYTES: "1048576"
+      PROVIDER_BASE_DELAY_MS: ${LOADTEST_PROVIDER_BASE_DELAY_MS:-100}
+      PROVIDER_MAXIMUM_DELAY_MS: ${LOADTEST_PROVIDER_MAXIMUM_DELAY_MS:-1000}
+    depends_on:
+      fake-openai:
+        condition: service_healthy
+      fake-voicevox:
+        condition: service_healthy
+
+  content-knowledge:
+    environment:
+      # Content enrichment is outside this load-test scope. An explicit empty
+      # key prevents inherited .env credentials from reaching OpenAI.
+      OPENAI_API_KEY: ""
+      OPENAI_RESPONSES_URL: ""
+      OPENAI_MODEL: ""

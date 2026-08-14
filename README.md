@@ -33,3 +33,7 @@ pnpm observability:smoke
 ```
 
 Grafanaは <http://localhost:3100>。Dashboardは[運用手順](infra/observability/README.md)にある8つを自動provisionし、`Alert → Service Drilldown → Tempo → Loki → Prometheus exemplar`の順で原因を追えます。
+
+## 負荷テスト
+
+ステージング相当のAPI・非同期生成負荷と、Fake OpenAI/VOICEVOXによるProvider Chaosは[負荷テスト運用手順](docs/operations/load-testing.md)を参照してください。

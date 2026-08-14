@@ -29,7 +29,16 @@
     "observability:infra:up": "bash scripts/observability-up.sh",
     "observability:infra:down": "docker compose -f infra/observability/compose.yaml down",
     "observability:smoke": "bash scripts/observability-smoke.sh",
-    "observability:validate": "bash scripts/validate-observability.sh"
+    "observability:validate": "bash scripts/validate-observability.sh",
+    "loadtest:up": "docker compose --project-name news-podcast-loadtest -f compose.yaml -f infra/loadtest/compose.yaml up --detach --build --wait",
+    "loadtest:down": "docker compose --project-name news-podcast-loadtest -f compose.yaml -f infra/loadtest/compose.yaml down --remove-orphans",
+    "loadtest:seed": "node scripts/loadtest-seed.mjs",
+    "loadtest:smoke": "node scripts/loadtest-run.mjs --mode smoke",
+    "loadtest:capacity": "node scripts/loadtest-run.mjs --mode capacity",
+    "loadtest:soak": "node scripts/loadtest-run.mjs --mode soak",
+    "loadtest:spike": "node scripts/loadtest-run.mjs --mode spike",
+    "loadtest:chaos": "node scripts/loadtest-run.mjs --mode chaos",
+    "loadtest:test": "node --test scripts/loadtest-run.test.mjs scripts/loadtest-seed.test.mjs infra/loadtest/provider-fakes/server.test.mjs"
   },
   "devDependencies": {
     "oxfmt": "0.62.0",
