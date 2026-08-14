@@ -180,6 +180,8 @@ flowchart LR
 | AgentAudit | owner/job/attempt lineage、memory lifecycle | AgentAuditRepository |
 | EpisodeProduction | 有界生成、draft検証、出典、TTS、完成処理 | ScriptGenerator、SpeechSynthesizer、EpisodeRepository |
 
+構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後にFeedItemへ正規化し、記事HTMLは`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。XML/HTML/Markdownのタグ境界を正規表現で解釈しない。対象境界のimportと正規表現構文は`pnpm parser:check`で検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)）。
+
 ### 8.2 保存規則
 
 ```text
@@ -289,3 +291,4 @@ flowchart TD
 - [ADR-0038 保存済み出典による有界な構造化生成](adr/0038-bounded-structured-production-generation.md)
 - [ADR-0039 Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)
 - [ADR-0041 RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
+- [ADR-0042 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)

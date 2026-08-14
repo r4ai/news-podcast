@@ -5,6 +5,11 @@ import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ArticleUrlSchema } from "../../domain/article.js"
+import {
+  MAXIMUM_ARTICLE_AST_NODES,
+  MAXIMUM_ARTICLE_AST_DEPTH,
+  MAXIMUM_ARTICLE_PARSER_INPUT_BYTES,
+} from "./article-markdown-parser.js"
 import { openHttpS3ArticleCaptureUnsafe } from "./http-s3-article-capture.js"
 
 const servers: Array<ReturnType<typeof createServer>> = []
@@ -33,7 +38,7 @@ describe("HTTP to S3 article capture", () => {
     const server = createServer((_request, response) => {
       response.setHeader("content-type", "text/html; charset=utf-8")
       response.end(
-        "<!doctype html><title>Secret</title><script>alert(1)</script><article>Hello world</article>"
+        '<!doctype html><title>Secret</title><script>alert(1)</script><article><h1>Hello world</h1><p>Read <strong>important</strong> <a href="/docs">guide</a> and <img src="/images/cover.png" alt="cover" />.</p><p><a href="javascript:alert(2)">unsafe</a></p><pre><code>const answer = 42</code></pre></article>'
       )
     })
     servers.push(server)
@@ -71,6 +76,17 @@ describe("HTTP to S3 article capture", () => {
     ])
     expect(capture.markdown.sha256).toHaveLength(64)
     expect(capture.markdown.byteLength).toBeGreaterThan(0)
+    const markdown = new TextDecoder().decode(objects[2]!.input.Body)
+    expect(markdown).toContain("# Hello world")
+    expect(markdown).toContain("**important**")
+    expect(markdown).toContain(`[guide](${new URL("/docs", sourceUrl).href})`)
+    expect(markdown).toContain(
+      `![cover](${new URL("/images/cover.png", sourceUrl).href})`
+    )
+    expect(markdown).toContain("[unsafe]()")
+    expect(markdown).not.toContain(`[unsafe](${sourceUrl})`)
+    expect(markdown).toContain("const answer = 42")
+    expect(markdown).not.toContain("alert(1)")
     const replay = new TextDecoder().decode(objects[1]!.input.Body)
     expect(replay).toContain("Content-Security-Policy")
     expect(replay).not.toContain("<script>")
@@ -121,6 +137,105 @@ describe("HTTP to S3 article capture", () => {
       expect(JSON.stringify(error)).not.toContain("secret")
     }
   )
+
+  it("rejects HTML over the parser input budget before storing artifacts", async () => {
+    const send = vi.fn()
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      {
+        ...config,
+        maximumHtmlBytes: MAXIMUM_ARTICLE_PARSER_INPUT_BYTES + 1,
+      },
+      {
+        createS3: () => ({ client: { send } as never, close: vi.fn() }),
+        createSafeFetch: () => ({
+          fetch: vi.fn(
+            async () =>
+              new Response("x".repeat(MAXIMUM_ARTICLE_PARSER_INPUT_BYTES + 1), {
+                headers: { "content-type": "text/html" },
+              })
+          ) as never,
+          close: vi.fn(async () => undefined),
+        }),
+      }
+    )
+
+    expect(
+      await Effect.runPromise(
+        Effect.flip(
+          resource.capture({
+            sourceUrl:
+              "https://news.example.com/oversized-parser-input" as never,
+          })
+        )
+      )
+    ).toEqual({ _tag: "CaptureFailed", reason: "ResourceLimit" })
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("rejects excessive AST nodes before storing artifacts", async () => {
+    const send = vi.fn()
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      { ...config, maximumHtmlBytes: MAXIMUM_ARTICLE_PARSER_INPUT_BYTES },
+      {
+        createS3: () => ({ client: { send } as never, close: vi.fn() }),
+        createSafeFetch: () => ({
+          fetch: vi.fn(
+            async () =>
+              new Response("<p>x</p>".repeat(MAXIMUM_ARTICLE_AST_NODES + 1), {
+                headers: { "content-type": "text/html" },
+              })
+          ) as never,
+          close: vi.fn(async () => undefined),
+        }),
+      }
+    )
+
+    expect(
+      await Effect.runPromise(
+        Effect.flip(
+          resource.capture({
+            sourceUrl: "https://news.example.com/too-many-nodes" as never,
+          })
+        )
+      )
+    ).toEqual({ _tag: "CaptureFailed", reason: "ResourceLimit" })
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("rejects excessive HTML nesting before Markdown conversion", async () => {
+    const send = vi.fn()
+    const html =
+      "<div>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1) +
+      "x" +
+      "</div>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1)
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      {
+        ...config,
+        maximumHtmlBytes: new TextEncoder().encode(html).byteLength,
+      },
+      {
+        createS3: () => ({ client: { send } as never, close: vi.fn() }),
+        createSafeFetch: () => ({
+          fetch: vi.fn(
+            async () =>
+              new Response(html, { headers: { "content-type": "text/html" } })
+          ) as never,
+          close: vi.fn(async () => undefined),
+        }),
+      }
+    )
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          resource.capture({
+            sourceUrl: "https://news.example.com/too-deep" as never,
+          })
+        )
+      )
+    ).resolves.toEqual({ _tag: "CaptureFailed", reason: "ResourceLimit" })
+    expect(send).not.toHaveBeenCalled()
+  })
 
   it("classifies the safe-fetch SSRF denial without leaking its target", async () => {
     const resource = openHttpS3ArticleCaptureUnsafe(config, {

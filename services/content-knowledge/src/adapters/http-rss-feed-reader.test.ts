@@ -54,6 +54,135 @@ describe("HTTP RSS feed reader", () => {
     ])
   })
 
+  it("preserves RSS item values wrapped in CDATA", async () => {
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/rss+xml")
+      response.end(`<?xml version="1.0"?><rss><channel><item>
+        <guid><![CDATA[https://example.com/articles/1]]></guid>
+        <title><![CDATA[CDATA title]]></title>
+        <link><![CDATA[https://example.com/articles/1]]></link>
+      </item></channel></rss>`)
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const items = await Effect.runPromise(reader.read(url))
+
+    expect(items).toEqual([
+      {
+        externalId: "https://example.com/articles/1",
+        title: "CDATA title",
+        url: "https://example.com/articles/1",
+      },
+    ])
+  })
+
+  it("supports RSS 1.0 RDF feeds and numeric XML entities", async () => {
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/rdf+xml")
+      response.end(`<?xml version="1.0"?>
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+          xmlns="http://purl.org/rss/1.0/">
+          <channel><title>News</title></channel>
+          <item rdf:about="https://example.com/articles/1">
+            <title>One &#x26; Two</title>
+            <link>https://example.com/articles/1</link>
+          </item>
+        </rdf:RDF>`)
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const items = await Effect.runPromise(reader.read(url))
+
+    expect(items).toEqual([
+      {
+        externalId: "https://example.com/articles/1",
+        title: "One & Two",
+        url: "https://example.com/articles/1",
+      },
+    ])
+  })
+
+  it("does not terminate an item on an item-like closing tag inside CDATA", async () => {
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/rss+xml")
+      response.end(`<rss><channel><item>
+        <guid>entry-1</guid>
+        <title>Stable</title>
+        <description><![CDATA[example text </item> remains data]]></description>
+        <link>https://example.com/articles/1</link>
+      </item></channel></rss>`)
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const items = await Effect.runPromise(reader.read(url))
+
+    expect(items).toEqual([
+      {
+        externalId: "entry-1",
+        title: "Stable",
+        url: "https://example.com/articles/1",
+      },
+    ])
+  })
+
+  it("supports namespaced Atom entries and chooses the alternate link", async () => {
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/atom+xml")
+      response.end(`<?xml version="1.0"?>
+        <atom:feed xmlns:atom="http://www.w3.org/2005/Atom">
+          <atom:entry>
+            <atom:id>tag:example.com,2026:1</atom:id>
+            <atom:title>Atom item</atom:title>
+            <atom:link rel="self" href="https://example.com/feed.xml"/>
+            <atom:link rel="alternate" type="text/html" href="/articles/1"/>
+            <atom:updated>2026-08-13T01:00:00Z</atom:updated>
+          </atom:entry>
+        </atom:feed>`)
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const items = await Effect.runPromise(reader.read(url))
+
+    expect(items).toEqual([
+      {
+        externalId: "tag:example.com,2026:1",
+        title: "Atom item",
+        url: new URL("/articles/1", url).href,
+        publishedAt: "2026-08-13T01:00:00.000Z",
+      },
+    ])
+  })
+
+  it("rejects an XML document with a feed-looking but malformed structure", async () => {
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/rss+xml")
+      response.end("<rss><channel><item><title>Broken</channel></rss>")
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const error = await Effect.runPromise(Effect.flip(reader.read(url)))
+
+    expect(error).toEqual({
+      _tag: "FeedFetchFailed",
+      reason: "MalformedResponse",
+    })
+  })
+
   it("returns redacted typed failures for status, size, timeout, and malformed XML", async () => {
     const cases = [
       {

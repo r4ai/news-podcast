@@ -140,7 +140,7 @@ pnpm contract:lint
 | コマンド | 検証内容 |
 | --- | --- |
 | `pnpm format:check` | oxfmt差分 |
-| `pnpm lint` | oxlint、Spectral、architecture gate |
+| `pnpm lint` | oxlint、Spectral、architecture gate、structured parser gate |
 | `pnpm typecheck` | workspace型検査 |
 | `pnpm test` | unit/integration tests |
 | `pnpm test:coverage:functional` | 8 functional packagesのlines 75% / branches 60% |
@@ -151,6 +151,25 @@ pnpm contract:lint
 | `pnpm observability:smoke` | 起動後のGrafana API、datasource、Collector、Browser OTLP、依存endpoint |
 
 bug修正は再現testを先に追加する。LLM接続ではsuccessだけでなく、timeout、429/5xx、invalid schema、response上限、non-retryable failureをprovider境界で確認する。
+
+### 構造化入力のparser方針
+
+RSS/Atom、HTML、Markdownの文書構造は正規表現で解釈しない。専用parserでASTまたは構造化データへ変換し、sanitize・正規化・serializeを別段階に分ける。
+
+```mermaid
+flowchart LR
+  Input["untrusted XML / HTML / Markdown"] --> Limit["byte / timeout / resource limit"]
+  Limit --> Parser["named parser / AST"]
+  Parser --> Transform["sanitize + domain normalization"]
+  Transform --> Output["typed data / Markdown / replay"]
+  Gate["pnpm parser:check"] -.-> Parser
+```
+
+現在のContent境界は、RSS/Atomに`fast-xml-parser`、記事HTML→Markdownに`rehype-parse` + `rehype-remark` + `remark-stringify`を使う。記事変換には専用の入力1 MiB、ASTノード5万、深さ128、Markdown出力1 MiBの上限を設け、上限超過は`ResourceLimit`として保存前に拒否する。正規表現はURL・固定語彙などの字句検証に限定し、構造解釈へ戻さない。詳細は[ADR-0042](adr/0042-structured-input-parser-boundaries.md)を参照する。
+
+```bash
+pnpm parser:check
+```
 
 ## State backupと復旧
 

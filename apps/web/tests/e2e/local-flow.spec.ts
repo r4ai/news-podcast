@@ -217,6 +217,48 @@ test("subscription changes confirm destructive actions and roll back failed opti
   await expect(zenn).toBeChecked()
 })
 
+test("refreshes RSS sync status after a subscription is deleted", async ({
+  page,
+}) => {
+  let syncJobs: readonly Record<string, unknown>[] = [
+    {
+      jobId: "00000000-0000-4000-8000-000000000097",
+      feedId: "00000000-0000-4000-8000-000000000001",
+      feedUrl: "https://zenn.dev/feed",
+      status: "succeeded",
+      attempt: 1,
+      maxAttempts: 4,
+      discovered: 3,
+      archived: 3,
+      failed: 0,
+      createdAt: "2026-08-13T00:00:00.000Z",
+      completedAt: "2026-08-13T00:00:02.000Z",
+    },
+  ]
+  await page.route("**/v1/me/feed-sync-jobs", (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        items: syncJobs,
+        page: { hasMore: false },
+      }),
+      contentType: "application/json",
+    })
+  )
+
+  await page.goto("/subscriptions")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  await expect(page.getByText("完了", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "削除", exact: true }).click()
+  await page.getByRole("button", { name: "削除する" }).click()
+  syncJobs = []
+
+  await expect(
+    page.getByText("現在処理中の同期はありません。", { exact: true })
+  ).toBeVisible()
+})
+
 test("shows RSS sync progress and refreshes the article list after completion", async ({
   page,
 }) => {

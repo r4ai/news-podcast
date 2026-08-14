@@ -3,6 +3,7 @@ import { useOptimistic, useTransition } from "react"
 import { toast } from "@workspace/ui/components/sonner"
 
 import {
+  feedSyncJobsQueryOptions,
   subscriptionsQueryOptions,
   type Subscription,
 } from "@/features/subscriptions"
@@ -56,9 +57,14 @@ export function useSubscriptions() {
       try {
         await request()
         // 確定値はserver responseなので、再取得を待ってTransitionを閉じる。
-        await queryClient.invalidateQueries({
-          queryKey: subscriptionsQueryOptions.queryKey,
-        })
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: subscriptionsQueryOptions.queryKey,
+          }),
+          queryClient.invalidateQueries({
+            queryKey: feedSyncJobsQueryOptions.queryKey,
+          }),
+        ])
         recordBrowserEvent("subscription.changed", { result: "succeeded" })
         toast.success(successMessage)
       } catch {

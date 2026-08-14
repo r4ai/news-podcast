@@ -9,6 +9,7 @@ import type {
   CaptureError,
 } from "../../application/ports.js"
 import { ArchiveCaptureSchema } from "../../domain/article.js"
+import { createArticleArchiveArtifacts } from "./article-markdown-parser.js"
 import { createNodeSafeFetcher } from "./safe-fetch.js"
 
 export type HttpS3ArticleCaptureConfig = DeepReadonly<{
@@ -93,48 +94,8 @@ const readBounded = async (
   return body
 }
 
-const entity = (value: string): string =>
-  value
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-
-const plainText = (html: string): string =>
-  entity(
-    html
-      .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
-      .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-  )
-    .replace(/\s+/g, " ")
-    .trim()
-
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-
 const captureArtifacts = (raw: Uint8Array, sourceUrl: string) => {
-  let html: string
-  try {
-    html = new TextDecoder("utf-8", { fatal: true }).decode(raw)
-  } catch {
-    throw failure("MalformedResponse")
-  }
-  const text = plainText(html)
-  if (text === "") throw failure("MalformedResponse")
-  const markdown = new TextEncoder().encode(`${text}\n\nSource: ${sourceUrl}\n`)
-  // Raw markup is escaped, scriptless, and locked down before it can be served as replay.
-  const replay = new TextEncoder().encode(
-    `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>Archived article</title><pre>${escapeHtml(text)}</pre>`
-  )
-  return { markdown, replay }
+  return createArticleArchiveArtifacts(raw, sourceUrl)
 }
 
 const isCaptureError = (error: unknown): error is CaptureError =>
@@ -145,7 +106,9 @@ const isCaptureError = (error: unknown): error is CaptureError =>
 
 const blockedFetchFailure = (error: unknown): boolean =>
   error instanceof Error &&
-  /private|reserved|allowed|credentials|redirect/i.test(error.message)
+  ["private", "reserved", "allowed", "credentials", "redirect"].some((term) =>
+    error.message.toLowerCase().includes(term)
+  )
 
 /** Owns the Node DNS-pinned fetcher and S3 client used by RSS and article capture. */
 export const openHttpS3ArticleCaptureUnsafe = (

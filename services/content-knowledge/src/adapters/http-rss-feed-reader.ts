@@ -1,12 +1,11 @@
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
-import type { FeedUrl } from "../domain/subscription.js"
 import type {
   FeedFetchError,
-  FeedItem,
   RssFeedReader,
 } from "../application/article-catalog-ports.js"
+import { parseRssFeed } from "./rss-feed-parser.js"
 
 export type {
   FeedFetchError,
@@ -21,77 +20,6 @@ export type HttpRssFeedReaderConfig = DeepReadonly<{
 
 const failed = (reason: FeedFetchError["reason"]): FeedFetchError =>
   deepFreeze({ _tag: "FeedFetchFailed" as const, reason })
-
-const decodeXml = (value: string): string =>
-  value
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&amp;/g, "&")
-
-const tag = (block: string, name: string): string | undefined => {
-  const match = new RegExp(
-    `<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`,
-    "i"
-  ).exec(block)
-  return match?.[1] === undefined
-    ? undefined
-    : decodeXml(match[1].replace(/<[^>]+>/g, " ")).trim() || undefined
-}
-
-const itemLink = (block: string): string | undefined => {
-  const atom = /<link\b[^>]*\bhref=["']([^"']+)["'][^>]*>/i.exec(block)?.[1]
-  return atom === undefined ? tag(block, "link") : decodeXml(atom).trim()
-}
-
-const parseFeed = (body: string, feedUrl: FeedUrl): readonly FeedItem[] => {
-  const isRss = /<rss\b/i.test(body) || /<channel\b/i.test(body)
-  const isAtom = /<feed\b/i.test(body)
-  if (!isRss && !isAtom) throw failed("MalformedResponse")
-  const blocks = [
-    ...body.matchAll(
-      isAtom
-        ? /<entry\b[^>]*>([\s\S]*?)<\/entry>/gi
-        : /<item\b[^>]*>([\s\S]*?)<\/item>/gi
-    ),
-  ]
-  return deepFreeze(
-    blocks.flatMap((match) => {
-      const block = match[1] ?? ""
-      const title = tag(block, "title")
-      const rawLink = itemLink(block)
-      if (title === undefined || title.length > 500 || rawLink === undefined)
-        return []
-      try {
-        const url = new URL(rawLink, feedUrl)
-        if (url.protocol !== "http:" && url.protocol !== "https:") return []
-        url.hash = ""
-        const externalId = tag(block, "guid") ?? tag(block, "id") ?? url.href
-        const rawPublished =
-          tag(block, "pubDate") ??
-          tag(block, "published") ??
-          tag(block, "updated")
-        const publishedAt =
-          rawPublished === undefined ? undefined : new Date(rawPublished)
-        return [
-          deepFreeze({
-            externalId: externalId.slice(0, 2_048),
-            title,
-            url: url.href,
-            ...(publishedAt !== undefined &&
-            Number.isFinite(publishedAt.getTime())
-              ? { publishedAt: publishedAt.toISOString() }
-              : {}),
-          }),
-        ]
-      } catch {
-        return []
-      }
-    })
-  )
-}
 
 const readBoundedText = async (
   response: Response,
@@ -146,7 +74,7 @@ export const createHttpRssFeedReader = (
               signal: AbortSignal.any([effectSignal, timeout.signal]),
             })
             if (!response.ok) throw failed("HttpStatus")
-            return parseFeed(
+            return parseRssFeed(
               await readBoundedText(response, config.maximumBytes),
               url
             )

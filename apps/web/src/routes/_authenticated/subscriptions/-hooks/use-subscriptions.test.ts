@@ -1,7 +1,10 @@
 import { act, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-import { subscriptionsQueryOptions } from "@/features/subscriptions"
+import {
+  feedSyncJobsQueryOptions,
+  subscriptionsQueryOptions,
+} from "@/features/subscriptions"
 import type { Subscription } from "@/features/subscriptions"
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
 import { applyDraft, useSubscriptions } from "./use-subscriptions"
@@ -58,6 +61,41 @@ describe("useSubscriptions", () => {
     expect(patch?.url).toBe("/v1/me/feed-subscriptions/sub-1")
     expect(patch?.body).toEqual({ enabled: false })
   })
+
+  it.each(["toggle", "remove"] as const)(
+    "invalidates feed sync jobs after a subscription %s",
+    async (action) => {
+      const { result, queryClient } = await renderList([
+        { path: "/v1/me/feed-subscriptions", body: { items } },
+        {
+          method: action === "toggle" ? "PATCH" : "DELETE",
+          path:
+            action === "toggle"
+              ? "/v1/me/feed-subscriptions/sub-1"
+              : "/v1/me/feed-subscriptions/sub-2",
+          body: action === "toggle" ? { ...items[0], enabled: false } : {},
+        },
+      ])
+      queryClient.setQueryDefaults(feedSyncJobsQueryOptions.queryKey, {
+        gcTime: 60_000,
+      })
+      queryClient.setQueryData(feedSyncJobsQueryOptions.queryKey, {
+        items: [{ jobId: "job-1" }],
+        page: { hasMore: false },
+      })
+
+      await act(async () =>
+        action === "toggle"
+          ? result.current.toggle(items[0]!)
+          : result.current.removeItem(items[1]!)
+      )
+
+      expect(
+        queryClient.getQueryState(feedSyncJobsQueryOptions.queryKey)
+          ?.isInvalidated
+      ).toBe(true)
+    }
+  )
 
   it("rolls back to the server state when the update fails", async () => {
     const { result } = await renderList([

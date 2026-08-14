@@ -314,6 +314,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0032: Grafana相関監視基盤](adr/0032-grafana-correlated-observability.md)
 - [ADR-0040: 全経路Observabilityと再起動検証](adr/0040-full-path-observability-validation.md)
 - [ADR-0041: RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
+- [ADR-0042: 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
