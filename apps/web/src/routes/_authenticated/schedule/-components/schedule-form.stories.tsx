@@ -33,7 +33,9 @@ type Story = StoryObj<typeof meta>
 export const Idle: Story = {}
 
 export const Disabled: Story = {
-  args: { draft: { enabled: false, localTime: "07:30", timeZone: "Asia/Tokyo" } },
+  args: {
+    draft: { enabled: false, localTime: "07:30", timeZone: "Asia/Tokyo" },
+  },
 }
 
 export const Saving: Story = {

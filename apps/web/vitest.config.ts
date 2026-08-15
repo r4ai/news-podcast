@@ -2,10 +2,13 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
+import { reactCompiler } from "./react-compiler"
+
 // Storybookのaddon-vitestとは別に、hookと純関数だけをjsdomで実行する。
 // route treeを再生成しないよう vite.config.ts は共有しない。
 export default defineConfig({
-  plugins: [react()],
+  // テストもCompiler適用後のコードを検証する。
+  plugins: [react(), reactCompiler()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

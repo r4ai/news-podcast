@@ -1,9 +1,13 @@
-import { act, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
+import {
+  createTestQueryClient,
+  stubFetch,
+  TestProviders,
+} from "@/shared/test/render"
 import { MARKDOWN_FALLBACK_MIN_LENGTH, type Article } from "../-model"
-import { useArticleReader } from "./use-article-reader"
+import { useArticleReader, type ArticleReaderState } from "./use-article-reader"
 
 vi.mock("@workspace/ui/components/sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -30,54 +34,96 @@ function makeArticle(overrides: Partial<Article>): Article {
 const longMarkdown = "# 本文\n\n" + "a".repeat(MARKDOWN_FALLBACK_MIN_LENGTH)
 const shortMarkdown = "短い"
 
-function render(routes: Parameters<typeof stubFetch>[0]) {
+/**
+ * 本番と同じく`key={articleId}`でマウントする。記事の切り替えは
+ * 「別インスタンスへの差し替え」であって、propsの更新ではない。
+ */
+function renderReader(routes: Parameters<typeof stubFetch>[0]) {
   const stub = stubFetch(routes)
-  const rendered = renderHookWithProviders(
-    ({ articleId }: { articleId: string | undefined }) =>
-      useArticleReader({ articleId }),
-    { initialProps: { articleId: "a" } }
-  )
-  return { ...rendered, ...stub }
+  const queryClient = createTestQueryClient()
+  const state: { current?: ArticleReaderState } = {}
+
+  function Reader({ articleId }: { readonly articleId: string }) {
+    state.current = useArticleReader({ articleId })
+    // commitされたことをDOMで観測できるようにする。render中の代入だけを見ると、
+    // Effect (既読フラッシュの登録) が走る前にテストが進んでしまう。
+    return <p data-testid="reader">{state.current.article.title}</p>
+  }
+
+  function Harness({ articleId }: { readonly articleId: string }) {
+    return (
+      <TestProviders queryClient={queryClient}>
+        <Reader articleId={articleId} key={articleId} />
+      </TestProviders>
+    )
+  }
+
+  const utils = render(<Harness articleId="a" />)
+  return {
+    ...utils,
+    ...stub,
+    state,
+    selectArticle: (articleId: string) =>
+      utils.rerender(<Harness articleId={articleId} />),
+  }
+}
+
+/** Suspenseが解けてcommitされるまで待つ。Effectの登録もここで完了する。 */
+async function readerReady() {
+  await screen.findByTestId("reader")
 }
 
 describe("useArticleReader", () => {
   it("keeps markdown as the source when the archived body is long enough", async () => {
-    const { result } = render([
+    const { state } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
     ])
 
-    await waitFor(() => expect(result.current.article).toBeDefined())
-    await waitFor(() => expect(result.current.source).toBe("markdown"))
-    expect(result.current.didAutoFallback).toBe(false)
+    await readerReady()
+    await waitFor(() => expect(state.current?.source).toBe("markdown"))
+    expect(state.current?.didAutoFallback).toBe(false)
   })
 
   it("marks raw archive content unavailable when markdown is too short", async () => {
-    const { result } = render([
+    const { state } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
       { path: "/v1/me/articles/a/markdown", raw: shortMarkdown },
     ])
 
-    await waitFor(() => expect(result.current.source).toBe("archive"))
-    expect(result.current.didAutoFallback).toBe(true)
-    expect(result.current.archiveHtml).toBeUndefined()
-    expect(result.current.archiveUnavailable).toBe(true)
+    await waitFor(() => expect(state.current?.source).toBe("archive"))
+    expect(state.current?.didAutoFallback).toBe(true)
+    expect(state.current?.archiveHtml).toBeUndefined()
+    expect(state.current?.archiveUnavailable).toBe(true)
+  })
+
+  it("keeps the reader usable when the body fails to load", async () => {
+    const { state } = renderReader([
+      { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
+      { path: "/v1/me/articles/a/markdown", status: 500, body: {} },
+    ])
+
+    // 本文の取得失敗はアーカイブ表示への分岐であって、境界へ投げる欠陥ではない。
+    await waitFor(() => expect(state.current?.source).toBe("archive"))
+    expect(state.current?.article).toBeDefined()
   })
 
   it("does not mark an unread article as read while it is open", async () => {
-    const { result, calls } = render([
+    const { calls } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
     ])
 
-    await waitFor(() => expect(result.current.article).toBeDefined())
+    await readerReady()
     expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(0)
   })
 
   it("marks an unread article as read when switching to another article", async () => {
-    const rendered = render([
+    const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/b", body: makeArticle({ id: "b" }) },
+      { path: "/v1/me/articles/b/markdown", raw: longMarkdown },
       {
         method: "PATCH",
         path: "/v1/me/articles/a",
@@ -85,9 +131,8 @@ describe("useArticleReader", () => {
       },
     ])
 
-    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
-
-    await act(async () => rendered.rerender({ articleId: "b" }))
+    await readerReady()
+    await act(async () => rendered.selectArticle("b"))
 
     await waitFor(() =>
       expect(rendered.calls.some((call) => call.method === "PATCH")).toBe(true)
@@ -98,7 +143,7 @@ describe("useArticleReader", () => {
   })
 
   it("marks pending unread articles as read when the reader unmounts", async () => {
-    const rendered = render([
+    const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
       {
@@ -108,19 +153,19 @@ describe("useArticleReader", () => {
       },
     ])
 
-    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
-
+    await readerReady()
     await act(async () => rendered.unmount())
 
     await waitFor(() =>
       expect(rendered.calls.some((call) => call.method === "PATCH")).toBe(true)
     )
-    const patch = rendered.calls.find((call) => call.method === "PATCH")
-    expect(patch?.body).toEqual({ read: true })
+    expect(
+      rendered.calls.find((call) => call.method === "PATCH")?.body
+    ).toEqual({ read: true })
   })
 
   it("marks pending unread articles as read on pagehide", async () => {
-    const rendered = render([
+    const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
       {
@@ -130,8 +175,7 @@ describe("useArticleReader", () => {
       },
     ])
 
-    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
-
+    await readerReady()
     await act(async () => {
       window.dispatchEvent(new Event("pagehide"))
     })
@@ -139,12 +183,13 @@ describe("useArticleReader", () => {
     await waitFor(() =>
       expect(rendered.calls.some((call) => call.method === "PATCH")).toBe(true)
     )
-    const patch = rendered.calls.find((call) => call.method === "PATCH")
-    expect(patch?.body).toEqual({ read: true })
+    expect(
+      rendered.calls.find((call) => call.method === "PATCH")?.body
+    ).toEqual({ read: true })
   })
 
   it("sends only the toggled flag when saving", async () => {
-    const { result, calls } = render([
+    const { state, calls } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
       {
@@ -153,16 +198,17 @@ describe("useArticleReader", () => {
         body: makeArticle({ read: true, saved: true }),
       },
     ])
-    await waitFor(() => expect(result.current.article).toBeDefined())
+    await readerReady()
 
-    await act(async () => result.current.toggleSaved())
+    await act(async () => state.current?.toggleSaved())
 
-    const patch = calls.find((call) => call.method === "PATCH")
-    expect(patch?.body).toEqual({ saved: true })
+    expect(calls.find((call) => call.method === "PATCH")?.body).toEqual({
+      saved: true,
+    })
   })
 
   it("keeps an article unread when the user marks it unread and leaves", async () => {
-    const rendered = render([
+    const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
       { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
       {
@@ -171,9 +217,9 @@ describe("useArticleReader", () => {
         body: makeArticle({ read: false }),
       },
     ])
-    await waitFor(() => expect(rendered.result.current.article).toBeDefined())
+    await readerReady()
 
-    await act(async () => rendered.result.current.markUnread())
+    await act(async () => rendered.state.current?.markUnread())
     await act(async () => rendered.unmount())
 
     await waitFor(() =>

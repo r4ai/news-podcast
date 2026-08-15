@@ -1,3 +1,4 @@
+import { useQueryErrorResetBoundary } from "@tanstack/react-query"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { recordBrowserEvent } from "@/shared/observability/events"
@@ -12,6 +13,8 @@ import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 
 export function RouteError({ error, reset }: ErrorComponentProps) {
+  // Reactの境界だけを開き直してもqueryはerrorのままなので、対でresetする。
+  const { reset: resetQueries } = useQueryErrorResetBoundary()
   const errorType = error instanceof Error ? error.name : "UnknownError"
   useEffect(() => {
     recordBrowserEvent("route.error", { "error.type": errorType })
@@ -30,7 +33,13 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
             </AlertTitle>
             <AlertDescription>{message}</AlertDescription>
           </Alert>
-          <Button onClick={reset} variant="outline">
+          <Button
+            onClick={() => {
+              resetQueries()
+              reset()
+            }}
+            variant="outline"
+          >
             再試行
           </Button>
         </CardContent>

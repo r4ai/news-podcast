@@ -1,4 +1,3 @@
-import type { ErrorComponentProps } from "@tanstack/react-router"
 import { AlertTriangle } from "lucide-react"
 
 import {
@@ -12,7 +11,13 @@ import { Button } from "@workspace/ui/components/button"
  * パネル内に収まるエラー表示。`route-error.tsx` の全画面版と対になる。
  * 画面全体は落とさず、このパネルだけを再試行させる。
  */
-export function PanelError({ error, reset }: ErrorComponentProps) {
+export type PanelErrorProps = {
+  readonly error: unknown
+  /** Reactの境界とQueryのerror stateを対でリセットする。 */
+  readonly reset: () => void
+}
+
+export function PanelError({ error, reset }: PanelErrorProps) {
   const message =
     error instanceof Error ? error.message : "データを取得できませんでした"
 

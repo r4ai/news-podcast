@@ -19,6 +19,7 @@ function Harness({ handlers }: { readonly handlers: ArticleShortcutHandlers }) {
 
 function makeHandlers(): ArticleShortcutHandlers {
   return {
+    focusSearchOnSlash: true,
     onNext: vi.fn(),
     onPrev: vi.fn(),
     onOpenOriginal: vi.fn(),

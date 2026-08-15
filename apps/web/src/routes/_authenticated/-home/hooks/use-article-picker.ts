@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, useInfiniteQuery } from "@tanstack/react-query"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import type { paths } from "@news-podcast/contracts/openapi"
 
@@ -66,54 +66,56 @@ export function useArticlePicker(
     enabled,
   })
 
-  const articles = useMemo(
-    () =>
-      (listQuery.data?.pages ?? [])
-        .flatMap((page) => page.items)
-        .filter((article) => article.archiveStatus === "succeeded"),
-    [listQuery.data]
-  )
+  const articles = (listQuery.data?.pages ?? [])
+    .flatMap((page) => page.items)
+    .filter((article) => article.archiveStatus === "succeeded")
 
-  const selected = useMemo(() => new Set(selectedIds), [selectedIds])
+  const selected = new Set(selectedIds)
   const atLimit = selectedIds.length >= MAX_SELECTED_ARTICLES
 
-  // 候補一覧を読み切った時点で、どのページにも現れなかった選択IDを外す。
-  // 購読停止やアーカイブ失敗で選べなくなった記事を再生成対象に送る事故を防ぐ。
-  const loadedIds = useMemo(
-    () => new Set(articles.map((article) => article.id)),
-    [articles]
-  )
+  // 候補一覧を読み切った時点で、候補に出ていない選択IDを外す。購読停止で
+  // 消えた記事だけでなく、記事は残っていてもアーカイブがpending/failedで
+  // 選べない記事も落とす。見えないIDを送ると同じ失敗を繰り返す。
+  // 判定に使う集合はEffectの中で組み立てる。毎render新しいSetを依存に置くと、
+  // 中身が同じでも実行され続ける。
+  const pages = listQuery.data?.pages
   useEffect(() => {
     if (!enabled) return
     if (listQuery.isLoading) return
     if (listQuery.hasNextPage !== false) return
+    // 画面に出ている候補と同じ条件で絞る (`articles`と同一の判定)。
+    const loadedIds = new Set(
+      (pages ?? [])
+        .flatMap((page) => page.items)
+        .filter((article) => article.archiveStatus === "succeeded")
+        .map((article) => article.id)
+    )
     setSelectedIds((current) => {
       const filtered = current.filter((id) => loadedIds.has(id))
       return filtered.length !== current.length ? filtered : current
     })
-  }, [enabled, loadedIds, listQuery.isLoading, listQuery.hasNextPage])
+  }, [enabled, pages, listQuery.isLoading, listQuery.hasNextPage])
 
-  const toggle = useCallback(
-    (articleId: string) => {
-      setSelectedIds((current) =>
-        current.includes(articleId)
-          ? current.filter((id) => id !== articleId)
-          : current.length >= MAX_SELECTED_ARTICLES
-            ? current
-            : [...current, articleId]
-      )
-    },
-    [setSelectedIds]
-  )
+  function toggle(articleId: string) {
+    setSelectedIds((current) =>
+      current.includes(articleId)
+        ? current.filter((id) => id !== articleId)
+        : current.length >= MAX_SELECTED_ARTICLES
+          ? current
+          : [...current, articleId]
+    )
+  }
 
-  const clear = useCallback(() => setSelectedIds([]), [])
+  function clear() {
+    setSelectedIds([])
+  }
 
   /** 読み込み済みの候補を上限まで選ぶ。上限を超える分は切り捨てる。 */
-  const selectTop = useCallback(() => {
+  function selectTop() {
     setSelectedIds(
       articles.slice(0, MAX_SELECTED_ARTICLES).map((article) => article.id)
     )
-  }, [articles])
+  }
 
   return {
     articles,

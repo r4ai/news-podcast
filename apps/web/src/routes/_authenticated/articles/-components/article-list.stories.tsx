@@ -2,7 +2,11 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { expect, fn, within } from "storybook/test"
 
 import { defaultArticlesSearch, type Article } from "../-model"
-import { ArticleListView, type ArticleListViewProps } from "./article-list"
+import {
+  ArticleListSkeleton,
+  ArticleListView,
+  type ArticleListViewProps,
+} from "./article-list"
 
 function article(overrides: Partial<Article>): Article {
   return {
@@ -54,13 +58,9 @@ const baseArgs = {
   aiPending: 0,
   search: defaultArticlesSearch,
   q: "",
-  isLoading: false,
-  isError: false,
   isSyncing: false,
   hasNextPage: false,
   isFetchingNextPage: false,
-  nextPageFailed: false,
-  refetch: fn(),
   fetchNextPage: fn(),
   setQ: fn(),
   setState: fn(),
@@ -166,8 +166,9 @@ export const WithArchiveFailures: Story = {
   },
 }
 
+/** 読み込み中はPanelのfallbackが出る。一覧本体は描画されない。 */
 export const Loading: Story = {
-  args: { isLoading: true, articles: [], groups: [] },
+  render: () => <ArticleListSkeleton />,
 }
 
 export const LongTitle: Story = {

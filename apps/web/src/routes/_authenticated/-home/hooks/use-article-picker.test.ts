@@ -131,6 +131,30 @@ describe("useArticlePicker", () => {
     expect(result.current.selectedIds).toEqual(["a1"])
   })
 
+  it("drops initial selection IDs whose archive is no longer usable", async () => {
+    // 記事自体は残っていても、アーカイブがpending/failedなら候補に出ない。
+    // 見えないIDを選択に残すと、再生成でも同じ失敗を繰り返す。
+    stubFetch([
+      {
+        path: "/v1/me/articles",
+        body: {
+          items: [
+            { ...article("ready"), archiveStatus: "succeeded" },
+            { ...article("pending"), archiveStatus: "pending" },
+            { ...article("failed"), archiveStatus: "failed" },
+          ],
+          page: { hasMore: false },
+        },
+      },
+    ])
+    const { result } = renderHookWithProviders(() =>
+      useArticlePicker(true, ["ready", "pending", "failed"])
+    )
+
+    await waitFor(() => expect(result.current.articles).toHaveLength(1))
+    expect(result.current.selectedIds).toEqual(["ready"])
+  })
+
   it("keeps initial selection that matches loaded candidates", async () => {
     // 実在する候補だけを残し、一覧が読み切られるまで再生成時に
     // 有効な事前選択を誤って落とさないこと。

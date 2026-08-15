@@ -102,9 +102,6 @@ function readerArgs(
   return {
     articleId: baseArticle.id,
     article: baseArticle,
-    isLoading: false,
-    isError: false,
-    refetch: fn(),
     source: "markdown",
     setSource: fn(),
     didAutoFallback: false,

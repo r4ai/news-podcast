@@ -45,7 +45,11 @@ describe("useScheduleForm", () => {
 
   it("saves the toggle immediately, without waiting for it to settle", async () => {
     const updated = {
-      generationSchedule: { enabled: false, localTime: "07:30", timeZone: "Asia/Tokyo" },
+      generationSchedule: {
+        enabled: false,
+        localTime: "07:30",
+        timeZone: "Asia/Tokyo",
+      },
     }
     const { result, calls, queryClient } = await renderForm([
       { path: "/v1/me/settings", body: savedSettings },
@@ -69,7 +73,11 @@ describe("useScheduleForm", () => {
 
   it("waits for a real quiet period before saving time/timezone edits", async () => {
     const updated = {
-      generationSchedule: { enabled: true, localTime: "08:00", timeZone: "UTC" },
+      generationSchedule: {
+        enabled: true,
+        localTime: "08:00",
+        timeZone: "UTC",
+      },
     }
     const { result, calls } = await renderForm([
       { path: "/v1/me/settings", body: savedSettings },
@@ -87,9 +95,7 @@ describe("useScheduleForm", () => {
 
     await waitFor(
       () =>
-        expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(
-          1
-        ),
+        expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(1),
       { timeout: 2000 }
     )
     const patch = calls.find((call) => call.method === "PATCH")
@@ -112,7 +118,7 @@ describe("useScheduleForm", () => {
     expect(result.current.saveState).toBe("error")
   })
 
-  it("ignores a stale response when a newer save overtakes it", async () => {
+  it("never lets a stale response overwrite a newer save", async () => {
     const { result, queryClient } = await renderForm([
       { path: "/v1/me/settings", body: savedSettings },
     ])
@@ -146,30 +152,41 @@ describe("useScheduleForm", () => {
 
     // まだ古い保存が完了していない間に、新しい保存 (enabled: true) を発行する。
     act(() => result.current.saveNow({ enabled: true }))
-    await waitFor(() => expect(pendingPatches).toHaveLength(2))
 
-    // 新しい方を先に解決し、古い方を後から解決する (順序が入れ替わるケース)。
-    pendingPatches[1]?.resolve()
-    await waitFor(() =>
-      expect(
-        (queryClient.getQueryData(settingsQueryOptions.queryKey) as typeof savedSettings)
-          .generationSchedule.enabled
-      ).toBe(true)
-    )
+    // Actionはキューイングされるので、2本目は1本目が終わるまで発行されない。
+    // 応答の追い越し自体が起こらないため、捨てる仕組みが要らない。
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(pendingPatches).toHaveLength(1)
+    expect(pendingPatches[0]?.body).toEqual({
+      generationSchedule: {
+        ...savedSettings.generationSchedule,
+        enabled: false,
+      },
+    })
 
     pendingPatches[0]?.resolve()
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await waitFor(() => expect(pendingPatches).toHaveLength(2))
+    pendingPatches[1]?.resolve()
 
-    // 古い応答が後から届いても、新しい保存結果を上書きしてはいけない。
-    expect(
-      (queryClient.getQueryData(settingsQueryOptions.queryKey) as typeof savedSettings)
-        .generationSchedule.enabled
-    ).toBe(true)
+    // 最後に投入した値がcacheの確定値になる。
+    await waitFor(() =>
+      expect(
+        (
+          queryClient.getQueryData(
+            settingsQueryOptions.queryKey
+          ) as typeof savedSettings
+        ).generationSchedule.enabled
+      ).toBe(true)
+    )
   })
 
   it("does not lose a pending edit when the form unmounts right after it", async () => {
     const updated = {
-      generationSchedule: { enabled: true, localTime: "09:15", timeZone: "Asia/Tokyo" },
+      generationSchedule: {
+        enabled: true,
+        localTime: "09:15",
+        timeZone: "Asia/Tokyo",
+      },
     }
     const { result, calls, unmount } = await renderForm([
       { path: "/v1/me/settings", body: savedSettings },

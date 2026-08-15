@@ -6,14 +6,15 @@ import {
   articleFacetsQueryOptions,
   articlesInfiniteQueryOptions,
 } from "./-queries"
-import { ArticleList } from "./-components/article-list"
-import { ArticleReaderView } from "./-components/article-reader"
+import { ArticleList, ArticleListSkeleton } from "./-components/article-list"
+import {
+  ArticleReader,
+  EmptySelection,
+  ReaderSkeleton,
+} from "./-components/article-reader"
 import { EnrichQueueDialog } from "./-components/enrich-queue-dialog"
-import { useArticleKeyboardShortcuts } from "./-hooks/use-article-keyboard-shortcuts"
-import { useArticleList } from "./-hooks/use-article-list"
-import { useArticleReader } from "./-hooks/use-article-reader"
 import { useEnrichQueueDialog } from "./-hooks/use-enrich-queue"
-import { siblingArticleId, validateArticlesSearch } from "./-model"
+import { validateArticlesSearch } from "./-model"
 
 export const Route = createFileRoute("/_authenticated/articles/")({
   validateSearch: validateArticlesSearch,
@@ -46,31 +47,11 @@ function ArticlesRoute() {
     })
   }
 
-  const list = useArticleList({ search, onSearchChange })
-  const reader = useArticleReader({
-    articleId: search.article,
-    includeHidden: search.includeHidden,
-  })
   const enrichQueue = useEnrichQueueDialog()
 
   function selectArticle(id: string | undefined) {
     onSearchChange({ article: id })
   }
-
-  useArticleKeyboardShortcuts({
-    onNext: () =>
-      selectArticle(siblingArticleId(list.articles, search.article, 1)),
-    onPrev: () =>
-      selectArticle(siblingArticleId(list.articles, search.article, -1)),
-    onOpenOriginal: () => {
-      if (reader.article) {
-        window.open(reader.article.url, "_blank", "noopener,noreferrer")
-      }
-    },
-    onToggleSaved: reader.toggleSaved,
-    onToggleReadLater: reader.toggleReadLater,
-    onMarkUnread: reader.markUnread,
-  })
 
   const hasSelection = search.article !== undefined
 
@@ -91,11 +72,12 @@ function ArticlesRoute() {
           hasSelection && "hidden lg:block"
         )}
       >
-        <Panel name="article-list">
+        <Panel fallback={<ArticleListSkeleton />} name="article-list">
           <ArticleList
-            list={list}
-            onSelect={(article) => selectArticle(article.id)}
+            onSearchChange={onSearchChange}
+            onSelect={selectArticle}
             onShowEnrichQueue={() => enrichQueue.onOpenChange(true)}
+            search={search}
             selectedArticleId={search.article}
           />
         </Panel>
@@ -106,11 +88,19 @@ function ArticlesRoute() {
           !hasSelection && "hidden lg:flex"
         )}
       >
-        <Panel name="article-reader">
-          <ArticleReaderView
-            {...reader}
-            onBack={() => selectArticle(undefined)}
-          />
+        <Panel fallback={<ReaderSkeleton />} name="article-reader">
+          {search.article === undefined ? (
+            <EmptySelection />
+          ) : (
+            // 別の記事は別のインスタンス。切り替えはnavigate (=Transition) の
+            // 中で起きるので、新しい記事が揃うまで前の記事が表示され続ける。
+            <ArticleReader
+              articleId={search.article}
+              includeHidden={search.includeHidden}
+              key={search.article}
+              onBack={() => selectArticle(undefined)}
+            />
+          )}
         </Panel>
       </div>
 

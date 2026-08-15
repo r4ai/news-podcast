@@ -63,12 +63,8 @@ export function ScheduleFormView({
 }: ScheduleFormViewProps) {
   return (
     <Card>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          saveNow()
-        }}
-      >
+      {/* Enterでの確定はAction経由。preventDefaultも送信ボタンも要らない。 */}
+      <form action={() => saveNow()}>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -164,30 +160,38 @@ export function ScheduleFormView({
   )
 }
 
+/**
+ * 自動保存の進行を1つのlive regionで伝える。要素を出し入れせず中身だけ
+ * 差し替えるので、読み上げが「消えた/現れた」ではなく状態の変化として届く。
+ */
 function SaveIndicator({ state }: { readonly state: SaveState }) {
-  if (state === "saving") {
-    return (
-      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Spinner className="size-3.5" />
-        保存中…
-      </span>
-    )
-  }
-  if (state === "saved") {
-    return (
-      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Check aria-hidden="true" className="size-3.5 text-primary" />
-        保存済み
-      </span>
-    )
-  }
-  if (state === "error") {
-    return (
-      <span className="flex items-center gap-1.5 text-sm text-destructive">
-        <TriangleAlert aria-hidden="true" className="size-3.5" />
-        保存できませんでした
-      </span>
-    )
-  }
-  return null
+  return (
+    <span
+      aria-live="polite"
+      className={cn(
+        "flex items-center gap-1.5 text-sm",
+        state === "error" ? "text-destructive" : "text-muted-foreground"
+      )}
+      role="status"
+    >
+      {state === "saving" && (
+        <>
+          <Spinner className="size-3.5" />
+          保存中…
+        </>
+      )}
+      {state === "saved" && (
+        <>
+          <Check aria-hidden="true" className="size-3.5 text-primary" />
+          保存済み
+        </>
+      )}
+      {state === "error" && (
+        <>
+          <TriangleAlert aria-hidden="true" className="size-3.5" />
+          保存できませんでした
+        </>
+      )}
+    </span>
+  )
 }

@@ -1,9 +1,10 @@
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useActionState, useState } from "react"
 import { toast } from "@workspace/ui/components/sonner"
 
 import { settingsQueryOptions } from "@/features/settings"
 import { api } from "@/shared/api"
+import { useDebouncedCallback } from "@/shared/lib/use-debounced-callback"
 import { recordBrowserEvent } from "@/shared/observability/events"
 import {
   isSubmittable,
@@ -15,15 +16,14 @@ import {
 
 /** 入力が落ち着いてから保存するまでの待ち時間。 */
 const AUTOSAVE_DELAY_MS = 700
-/** 保存済み表示を静かに消すまでの時間。 */
-const SAVED_INDICATOR_MS = 2000
 
 export type SaveState = "idle" | "saving" | "saved" | "error"
 
-type PendingAutosave = {
-  readonly timer: ReturnType<typeof setTimeout>
-  readonly next: ScheduleDraft
-}
+type SaveResult =
+  | { readonly status: "idle" | "saved" }
+  | { readonly status: "error"; readonly message: string }
+
+const IDLE: SaveResult = { status: "idle" }
 
 export function useScheduleForm() {
   const queryClient = useQueryClient()
@@ -31,96 +31,71 @@ export function useScheduleForm() {
   const save = api.useMutation("patch", "/v1/me/settings")
   const initial = settings.generationSchedule
   const [draft, setDraft] = useState<ScheduleDraft>(() => toDraft(initial))
-  const [error, setError] = useState<string>()
-  const [saveState, setSaveState] = useState<SaveState>("idle")
-  const zones = useMemo(
-    () => supportedTimeZones(initial.timeZone),
-    [initial.timeZone]
-  )
-  const timeZones = useMemo(() => timeZoneOptions(zones), [zones])
+  const zones = supportedTimeZones(initial.timeZone)
+  const timeZones = timeZoneOptions(zones)
 
-  const savedIndicatorRef = useRef<ReturnType<typeof setTimeout>>()
-  const pendingAutosaveRef = useRef<PendingAutosave>()
-  // 発行中の保存。新しい保存を始めるときに前回分をabortすることで、
-  // 追い越された古い応答が後から届いても結果を上書きしないようにする。
-  const abortRef = useRef<AbortController>()
-
-  function persist(next: ScheduleDraft) {
-    if (!isSubmittable(next)) return
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-
-    setError(undefined)
-    setSaveState("saving")
-    save
-      .mutateAsync({
-        body: { generationSchedule: next },
-        signal: controller.signal,
-      })
-      .then((updated) => {
-        if (controller.signal.aborted) return // 追い越されたので結果は捨てる
-        queryClient.setQueryData(settingsQueryOptions.queryKey, updated)
-        recordBrowserEvent("schedule.changed", { result: "succeeded" })
-        setSaveState("saved")
-        clearTimeout(savedIndicatorRef.current)
-        savedIndicatorRef.current = setTimeout(
-          () => setSaveState("idle"),
-          SAVED_INDICATOR_MS
-        )
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return
-        recordBrowserEvent("schedule.changed", { result: "failed" })
-        toast.error("生成時刻を保存できませんでした")
-        setError("時刻とタイムゾーンを確認してください。")
-        setSaveState("error")
-      })
-  }
-
-  function flushPendingAutosave() {
-    const pending = pendingAutosaveRef.current
-    if (!pending) return
-    clearTimeout(pending.timer)
-    pendingAutosaveRef.current = undefined
-    persist(pending.next)
-  }
-
-  useEffect(() => {
-    // unmount時、まだデバウンス待ちの編集が残っていれば即座に保存する。
-    return () => {
-      clearTimeout(savedIndicatorRef.current)
-      flushPendingAutosave()
+  /**
+   * 保存の実体。Reactのlifecycleに依存しないので、unmount後の駆け込み保存にも
+   * そのまま使える。
+   */
+  async function persist(next: ScheduleDraft): Promise<SaveResult> {
+    if (!isSubmittable(next)) {
+      return {
+        status: "error",
+        message: "時刻とタイムゾーンを確認してください。",
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    try {
+      const updated = await save.mutateAsync({
+        body: { generationSchedule: next },
+      })
+      queryClient.setQueryData(settingsQueryOptions.queryKey, updated)
+      recordBrowserEvent("schedule.changed", { result: "succeeded" })
+      return { status: "saved" }
+    } catch {
+      recordBrowserEvent("schedule.changed", { result: "failed" })
+      toast.error("生成時刻を保存できませんでした")
+      return {
+        status: "error",
+        message: "時刻とタイムゾーンを確認してください。",
+      }
+    }
+  }
+
+  /**
+   * Actionはキューイングされ、最後の結果だけがstateになる。追い越された古い
+   * 応答を自前でabortして捨てる必要がない。
+   */
+  const [result, submit, isSaving] = useActionState<SaveResult, ScheduleDraft>(
+    (_previous, next) => persist(next),
+    IDLE
+  )
+
+  // 待機中の編集を抱えたまま画面を離れたら、保存してから閉じる。
+  const submitLater = useDebouncedCallback(submit, AUTOSAVE_DELAY_MS, {
+    flushOnUnmount: true,
+  })
 
   /** 時刻・タイムゾーンなど、入力が落ち着いてから保存したい操作。 */
   function update(patch: Partial<ScheduleDraft>) {
     const next = { ...draft, ...patch }
     setDraft(next)
-    clearTimeout(pendingAutosaveRef.current?.timer)
-    pendingAutosaveRef.current = {
-      next,
-      timer: setTimeout(() => {
-        pendingAutosaveRef.current = undefined
-        persist(next)
-      }, AUTOSAVE_DELAY_MS),
-    }
+    submitLater(next)
   }
 
   /** トグルやEnterキーなど、デバウンスを待たずに今すぐ確定させたい操作。 */
   function saveNow(patch: Partial<ScheduleDraft> = {}) {
     const next = { ...draft, ...patch }
     setDraft(next)
-    clearTimeout(pendingAutosaveRef.current?.timer)
-    pendingAutosaveRef.current = undefined
-    persist(next)
+    submitLater.cancel()
+    submit(next)
   }
+
+  const saveState: SaveState = isSaving ? "saving" : result.status
 
   return {
     draft,
-    error,
+    error: result.status === "error" ? result.message : undefined,
     saveState,
     timeZones,
     update,

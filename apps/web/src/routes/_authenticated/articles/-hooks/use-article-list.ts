@@ -1,12 +1,10 @@
 import {
-  useInfiniteQuery,
   useQuery,
   useQueryClient,
+  useSuspenseInfiniteQuery,
 } from "@tanstack/react-query"
 import {
-  useCallback,
   useEffect,
-  useMemo,
   useOptimistic,
   useRef,
   useState,
@@ -16,8 +14,9 @@ import { toast } from "@workspace/ui/components/sonner"
 
 import { api } from "@/shared/api"
 import { isFeedSyncActive } from "@/features/subscriptions"
-import { createActionQueue } from "@/shared/lib/action-queue"
+import { useDebouncedCallback } from "@/shared/lib/use-debounced-callback"
 import {
+  ARTICLE_STATE_MUTATION_SCOPE,
   articleFacetsQueryOptions,
   articlesInfiniteQueryOptions,
   refetchArticleCollections,
@@ -68,8 +67,6 @@ export function useArticleList({
 }: UseArticleListParams) {
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
-  // 連打を投入順へ直列化する。hookの生存期間で1本だけ持つ。
-  const enqueueRef = useRef(createActionQueue())
 
   const syncJobsQuery = api.useQuery(
     "get",
@@ -83,7 +80,8 @@ export function useArticleList({
   const syncActive = syncJobsQuery.data?.items.some(isFeedSyncActive) ?? false
   const wasSyncActive = useRef(false)
 
-  const listQuery = useInfiniteQuery({
+  // 初回の読み込みと失敗はPanelのSuspense/CatchBoundaryが引き受ける。
+  const listQuery = useSuspenseInfiniteQuery({
     ...articlesInfiniteQueryOptions(search),
     // 続きを読み込んだ後は再取得が全ページに及ぶので、先頭ページの間だけ追う。
     refetchInterval: (query) =>
@@ -97,19 +95,25 @@ export function useArticleList({
     staleTime: 30_000,
   })
 
-  const patchMutation = api.useMutation("patch", "/v1/me/articles/{articleId}")
-  const bulkMutation = api.useMutation("post", "/v1/me/articles/bulk-state")
-
-  const serverItems = useMemo(
-    () =>
-      (listQuery.data?.pages ?? []).flatMap(
-        (page: ArticlePage) => page.items
-      ) as Article[],
-    [listQuery.data]
+  const patchMutation = api.useMutation(
+    "patch",
+    "/v1/me/articles/{articleId}",
+    {
+      scope: ARTICLE_STATE_MUTATION_SCOPE,
+    }
   )
-  const [articles, addDraft] = useOptimistic(serverItems, applyDraft)
-  const groups = useMemo(() => groupArticlesByDate(articles), [articles])
+  const bulkMutation = api.useMutation("post", "/v1/me/articles/bulk-state", {
+    scope: ARTICLE_STATE_MUTATION_SCOPE,
+  })
 
+  const serverItems = listQuery.data.pages.flatMap(
+    (page: ArticlePage) => page.items
+  ) as Article[]
+  const [articles, addDraft] = useOptimistic(serverItems, applyDraft)
+  const groups = groupArticlesByDate(articles)
+
+  // 外部のフィード同期ジョブが終わった瞬間に、取り込まれた記事を取り直す。
+  // stateのミラーではなく「外部システムの完了への反応」なのでEffectで扱う。
   useEffect(() => {
     const wasActive = wasSyncActive.current
     wasSyncActive.current = syncActive
@@ -117,39 +121,32 @@ export function useArticleList({
     void refetchArticleCollections(queryClient)
   }, [queryClient, syncActive])
 
-  const update = useCallback(
-    (article: Article, next: ArticlePatch) => {
-      startTransition(async () => {
-        addDraft({ id: article.id, patch: next })
-        try {
-          const updated = await enqueueRef.current(() =>
-            patchMutation.mutateAsync({
-              params: { path: { articleId: article.id } },
-              body: next,
-            })
-          )
-          // 応答は更新後の記事そのもの。該当行とfacetsだけ書き戻し、再取得しない。
-          writeArticleToCaches(queryClient, {
-            article: updated as Article,
-            before: article,
-            includeHidden: search.includeHidden,
-          })
-        } catch {
-          toast.error("記事の状態を更新できませんでした")
-        }
-      })
-    },
-    [addDraft, patchMutation, queryClient, search.includeHidden]
-  )
+  function update(article: Article, next: ArticlePatch) {
+    startTransition(async () => {
+      addDraft({ id: article.id, patch: next })
+      try {
+        const updated = await patchMutation.mutateAsync({
+          params: { path: { articleId: article.id } },
+          body: next,
+        })
+        // 応答は更新後の記事そのもの。該当行とfacetsだけ書き戻し、再取得しない。
+        writeArticleToCaches(queryClient, {
+          article: updated as Article,
+          before: article,
+          includeHidden: search.includeHidden,
+        })
+      } catch {
+        toast.error("記事の状態を更新できませんでした")
+      }
+    })
+  }
 
   function markAllRead() {
     startTransition(async () => {
       try {
-        const result = await enqueueRef.current(() =>
-          bulkMutation.mutateAsync({
-            body: { ...toBulkFilter(search), read: true },
-          })
-        )
+        const result = await bulkMutation.mutateAsync({
+          body: { ...toBulkFilter(search), read: true },
+        })
         // 一括更新は差分を数え切れないので、ここだけは取り直す。
         await refetchArticleCollections(queryClient)
         toast.success(`${result.updated}件を既読にしました`)
@@ -161,16 +158,21 @@ export function useArticleList({
 
   // 検索欄はデバウンスしてからURLへ反映し、それ以外の絞り込みは即時にURLへ載せる。
   const [qDraft, setQDraft] = useState(search.q)
-  const qTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => setQDraft(search.q), [search.q])
-  useEffect(() => () => clearTimeout(qTimeoutRef.current), [])
+  const [lastSyncedQ, setLastSyncedQ] = useState(search.q)
+  // 戻る/進むやフィルタリセットでURLのqが外から変わったら入力欄へ取り込む。
+  // Effectで同期するとデバウンス中の打鍵と競合するので、render中に解決する。
+  if (lastSyncedQ !== search.q) {
+    setLastSyncedQ(search.q)
+    setQDraft(search.q)
+  }
+  const pushQ = useDebouncedCallback(
+    (value: string) => onSearchChange({ q: value }, { replace: true }),
+    SEARCH_DEBOUNCE_MS
+  )
 
   function setQ(value: string) {
     setQDraft(value)
-    clearTimeout(qTimeoutRef.current)
-    qTimeoutRef.current = setTimeout(() => {
-      onSearchChange({ q: value }, { replace: true })
-    }, SEARCH_DEBOUNCE_MS)
+    pushQ(value)
   }
 
   return {
@@ -178,14 +180,10 @@ export function useArticleList({
     groups,
     facets: facetsQuery.data,
     aiPending: facetsQuery.data?.aiPending,
-    isLoading: listQuery.isPending,
-    isError: listQuery.isError,
     isSyncing: syncActive,
     hasNextPage: listQuery.hasNextPage,
     isFetchingNextPage: listQuery.isFetchingNextPage,
-    nextPageFailed: Boolean(listQuery.data) && listQuery.isError,
     fetchNextPage: () => void listQuery.fetchNextPage(),
-    refetch: () => void listQuery.refetch(),
     search,
     q: qDraft,
     setQ,

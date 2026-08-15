@@ -4,6 +4,8 @@ import react from "@vitejs/plugin-react"
 import { tanstackRouter } from "@tanstack/router-plugin/vite"
 import { defineConfig } from "vite"
 
+import { reactCompiler } from "./react-compiler"
+
 const apiTarget = process.env.VITE_API_PROXY_TARGET ?? "http://localhost:4000"
 
 // https://vite.dev/config/
@@ -11,6 +13,7 @@ export default defineConfig({
   plugins: [
     tanstackRouter({ autoCodeSplitting: true }),
     react(),
+    reactCompiler(),
     tailwindcss(),
   ],
   server: {

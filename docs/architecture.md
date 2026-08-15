@@ -335,7 +335,8 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0005: Better AuthとGoogle OIDC](adr/0005-authentication.md)
 - [ADR-0007: 事実ベース台本と出典追跡](adr/0007-factual-provenance.md)
 - [ADR-0008: Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)
-- [ADR-0009: TanStack Router/Query](adr/0009-async-react-tanstack.md)
+- [ADR-0009: TanStack Router/Query](adr/0009-async-react-tanstack.md)（ADR-0047が置き換え）
+- [ADR-0047: Async UIの責務を宣言的な仕組みへ固定する](adr/0047-declarative-async-ui-responsibilities.md)
 - [ADR-0032: Grafana相関監視基盤](adr/0032-grafana-correlated-observability.md)
 - [ADR-0040: 全経路Observabilityと再起動検証](adr/0040-full-path-observability-validation.md)
 - [ADR-0041: RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)

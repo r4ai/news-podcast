@@ -1,10 +1,10 @@
 # ADR-0009: TanStack Router/QueryとAsync Reactを採用する
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-08-09
 - Decision owners: Product owner / Web
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0047
 - Related: ADR-0018、`apps/web/src/routes`, `apps/web/src/features`
 
 ## コンテキストと変更契機

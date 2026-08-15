@@ -45,12 +45,18 @@ describe("AddFeedCardView", () => {
 
     render(
       <AddFeedCardView
-        catalog={catalogState({ selectedFeedId: "feed-1", canAdd: true, addSelected })}
+        catalog={catalogState({
+          selectedFeedId: "feed-1",
+          canAdd: true,
+          addSelected,
+        })}
         registration={registrationState()}
       />
     )
 
-    await user.click(screen.getByRole("button", { name: "選択したフィードを追加" }))
+    await user.click(
+      screen.getByRole("button", { name: "選択したフィードを追加" })
+    )
     expect(addSelected).toHaveBeenCalledOnce()
   })
 

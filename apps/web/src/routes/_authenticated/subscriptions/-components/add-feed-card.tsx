@@ -18,7 +18,11 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@workspace/ui/components/combobox"
-import { Field, FieldDescription, FieldLabel } from "@workspace/ui/components/field"
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@workspace/ui/components/field"
 import {
   InputGroup,
   InputGroupInput,
@@ -153,7 +157,11 @@ export function AddFeedCardView({
                   size="icon"
                   type="submit"
                 >
-                  {registration.pending ? <Spinner /> : <Plus aria-hidden="true" />}
+                  {registration.pending ? (
+                    <Spinner />
+                  ) : (
+                    <Plus aria-hidden="true" />
+                  )}
                 </Button>
               </div>
               <FieldDescription>

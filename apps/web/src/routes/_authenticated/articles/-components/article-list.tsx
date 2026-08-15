@@ -12,28 +12,46 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 
+import { useArticleKeyboardShortcuts } from "../-hooks/use-article-keyboard-shortcuts"
 import { useArticleList } from "../-hooks/use-article-list"
-import { type Article, type ArticlesSearch } from "../-model"
+import { siblingArticleId, type Article, type ArticlesSearch } from "../-model"
 import { ArticleDateGroup } from "./article-date-group"
 import { ARTICLE_HEADER_HEIGHT, ArticleListHeader } from "./article-list-header"
 
 export type ArticleListProps = {
-  readonly list: ReturnType<typeof useArticleList>
+  readonly search: ArticlesSearch
+  readonly onSearchChange: (
+    patch: Partial<ArticlesSearch>,
+    options?: { readonly replace?: boolean }
+  ) => void
   readonly selectedArticleId: string | undefined
-  readonly onSelect: (article: Article) => void
+  readonly onSelect: (articleId: string | undefined) => void
   readonly onShowEnrichQueue: () => void
 }
 
 /**
- * 一覧パネル全体。ツールバーと行を1つの枠の中へ収め、
- * 枠線が行だけを囲って浮く状態を無くす。
+ * 一覧パネル全体。データ接続もここで行い、Panelの表示境界の内側で
+ * suspendする。ツールバーと行を1つの枠の中へ収め、枠線が行だけを囲って
+ * 浮く状態を無くす。
  */
 export function ArticleList({
-  list,
+  search,
+  onSearchChange,
   selectedArticleId,
   onSelect,
   onShowEnrichQueue,
 }: ArticleListProps) {
+  const list = useArticleList({ search, onSearchChange })
+
+  // j/kの送りと`/`の検索は一覧の操作なので、一覧と寿命を揃える。
+  useArticleKeyboardShortcuts({
+    focusSearchOnSlash: true,
+    onNext: () =>
+      onSelect(siblingArticleId(list.articles, selectedArticleId, 1)),
+    onPrev: () =>
+      onSelect(siblingArticleId(list.articles, selectedArticleId, -1)),
+  })
+
   return (
     <section
       aria-labelledby="article-list-heading"
@@ -62,7 +80,7 @@ export function ArticleList({
       {list.isSyncing ? <SyncBanner /> : null}
       <ArticleListView
         {...list}
-        onSelect={onSelect}
+        onSelect={(article: Article) => onSelect(article.id)}
         selectedArticleId={selectedArticleId}
       />
     </section>
@@ -109,7 +127,8 @@ function emptyStateCopy(search: ArticlesSearch) {
       }
 }
 
-function LoadingSkeleton() {
+/** Panelのfallbackとして使う。行の形に合わせ、切り替わりで高さが飛ばないようにする。 */
+export function ArticleListSkeleton() {
   return (
     <div aria-label="記事を読み込み中" className="flex flex-col" role="status">
       {Array.from({ length: 8 }, (_, index) => (
@@ -171,9 +190,6 @@ export function ArticleListView({
   articles,
   groups,
   search,
-  isLoading,
-  isError,
-  refetch,
   hasNextPage,
   isFetchingNextPage,
   fetchNextPage,
@@ -181,27 +197,8 @@ export function ArticleListView({
   onSelect,
   selectedArticleId,
 }: ArticleListViewProps) {
-  if (isLoading) return <LoadingSkeleton />
-
-  if (isError && articles.length === 0) {
-    return (
-      <Empty className="flex-1">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <SearchX aria-hidden="true" />
-          </EmptyMedia>
-          <EmptyTitle>記事を取得できませんでした</EmptyTitle>
-          <EmptyDescription>
-            通信状況を確認してから、もう一度お試しください。
-          </EmptyDescription>
-        </EmptyHeader>
-        <Button onClick={refetch} size="sm" variant="outline">
-          再読み込み
-        </Button>
-      </Empty>
-    )
-  }
-
+  // 初回の読み込みと取得失敗はPanel (Suspense + CatchBoundary) が扱う。
+  // ここは「取れたが0件」だけを描き分ける。
   if (articles.length === 0) {
     const empty = emptyStateCopy(search)
     const Icon = empty.icon

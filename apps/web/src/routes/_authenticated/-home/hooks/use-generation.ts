@@ -35,7 +35,10 @@ export function useGeneration() {
     readonly string[]
   >([])
   const [submitError, setSubmitError] = useState<string>()
-  const [streamConnected, setStreamConnected] = useState(false)
+  // SSEの購読は最新ジョブのIDに依存するので、このqueryより後でしか呼べない。
+  // `refetchInterval`はQueryがcommit後とtickごとに評価するcallbackなので、
+  // このrenderのbindingを後から埋めれば足りる。stateへミラーする必要はない。
+  let streamConnected = false
   const jobs = api.useSuspenseQuery("get", "/v1/episode-jobs", undefined, {
     // 進行中のジョブがある間だけ追従し、静止したら止める。SSEが生きている
     // 間はそちらが最新なので、ポーリングはフォールバックとして眠らせる。
@@ -61,10 +64,7 @@ export function useGeneration() {
   // サーバは履歴を全部リプレイして閉じるので、完成後もエージェントが何を
   // したかが残る。進行中だけを購読すると、完了と同時に作業ログが消える。
   const stream = useGenerationStream(latestJob?.id)
-
-  useEffect(() => {
-    setStreamConnected(stream.connected)
-  }, [stream.connected])
+  streamConnected = stream.connected
 
   // ストリームが終端に達したら、ジョブとエピソードの両方を取り直す。
   // ポーリング中は latestJob.status の変化が同じ役割を果たす。

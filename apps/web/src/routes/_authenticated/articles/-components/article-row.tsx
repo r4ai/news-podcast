@@ -1,5 +1,5 @@
 import { Bookmark, BookmarkCheck } from "lucide-react"
-import { memo, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -25,7 +25,7 @@ export type ArticleRowProps = {
  * 子孫を持てない)。素の`ul/li`で組み、選択は本文ボタンの`aria-current`で表す。
  * j/kで選択が動いた行は自分でスクロール位置へ入る。
  */
-export const ArticleRow = memo(function ArticleRow({
+export function ArticleRow({
   article,
   isSelected,
   onSelect,
@@ -139,7 +139,7 @@ export const ArticleRow = memo(function ArticleRow({
       </Button>
     </li>
   )
-})
+}
 
 function compactArticleTimestamp(value: string): string {
   const date = new Date(value)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useEffectEvent, useState } from "react"
 
 import {
   COLOR_SCHEME_QUERY,
@@ -63,28 +63,24 @@ export function useThemeController({
     return isTheme(stored) ? stored : defaultTheme
   })
 
-  const setTheme = useCallback(
-    (next: Theme) => {
-      localStorage.setItem(storageKey, next)
-      setThemeState(next)
-    },
-    [storageKey]
-  )
+  function setTheme(next: Theme) {
+    localStorage.setItem(storageKey, next)
+    setThemeState(next)
+  }
 
-  const applyTheme = useCallback(
-    (next: Theme) => {
-      const root = document.documentElement
-      const resolved = resolveTheme(next, systemTheme())
-      const restore = disableTransitionOnChange ? suspendTransitions() : null
+  // DOMという外部システムへの書き込み。Effectから呼ぶが、これ自体の同一性で
+  // Effectを張り直したくないので非リアクティブに保つ。
+  const applyTheme = useEffectEvent((next: Theme) => {
+    const root = document.documentElement
+    const resolved = resolveTheme(next, systemTheme())
+    const restore = disableTransitionOnChange ? suspendTransitions() : null
 
-      root.classList.remove("light", "dark")
-      root.classList.add(resolved)
-      root.style.colorScheme = resolved
+    root.classList.remove("light", "dark")
+    root.classList.add(resolved)
+    root.style.colorScheme = resolved
 
-      restore?.()
-    },
-    [disableTransitionOnChange]
-  )
+    restore?.()
+  })
 
   useEffect(() => {
     applyTheme(theme)
@@ -94,7 +90,7 @@ export function useThemeController({
     const handleChange = () => applyTheme("system")
     mediaQuery.addEventListener("change", handleChange)
     return () => mediaQuery.removeEventListener("change", handleChange)
-  }, [theme, applyTheme])
+  }, [theme])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -119,5 +115,5 @@ export function useThemeController({
     return () => window.removeEventListener("storage", handleStorageChange)
   }, [defaultTheme, storageKey])
 
-  return useMemo(() => ({ theme, setTheme }), [theme, setTheme])
+  return { theme, setTheme }
 }

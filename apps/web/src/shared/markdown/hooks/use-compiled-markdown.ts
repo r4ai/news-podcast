@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 
 import {
   createMarkdownProcessor,
@@ -26,18 +26,15 @@ export function useCompiledMarkdown(
   const [state, setState] = useState<MarkdownCompileState>({
     status: "loading",
   })
-  // optionsはpropsから毎render新しい物体で渡るので、値で固定してから依存にする。
+  // optionsはpropsから毎render新しい物体で渡る。物体の同一性ではなく、
+  // 中身の値そのものを依存にすることで、無意味な再コンパイルを避ける。
   const { baseUrl, headingBaseLevel, omitLeadingTitle } = options
-  const settings = useMemo(
-    () => ({ baseUrl, headingBaseLevel, omitLeadingTitle }),
-    [baseUrl, headingBaseLevel, omitLeadingTitle]
-  )
 
   useEffect(() => {
     let cancelled = false
     setState({ status: "loading" })
 
-    createMarkdownProcessor(settings)
+    createMarkdownProcessor({ baseUrl, headingBaseLevel, omitLeadingTitle })
       .process(markdown)
       .then((file: { result: unknown }) => {
         if (!cancelled) {
@@ -53,7 +50,7 @@ export function useCompiledMarkdown(
     return () => {
       cancelled = true
     }
-  }, [markdown, settings])
+  }, [markdown, baseUrl, headingBaseLevel, omitLeadingTitle])
 
   return state
 }

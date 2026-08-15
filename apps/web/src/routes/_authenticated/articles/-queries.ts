@@ -102,6 +102,17 @@ export function articleMarkdownQueryOptions(articleId: string) {
 }
 
 /**
+ * 記事状態の更新を投入順へ直列化するmutation scope。
+ *
+ * 楽観的UIでは、同じ対象への連打が並行すると「最後に投げた要求」と
+ * 「最後に返った応答」が一致せず、サーバ応答でUIが巻き戻る。同じscopeを
+ * 持つmutationはTanStack Queryが直列に実行するので、最終状態は常に
+ * 最後の操作と一致する。一覧と本文で同じscopeを共有し、両方から同じ記事を
+ * 操作した場合も直列になるようにする。
+ */
+export const ARTICLE_STATE_MUTATION_SCOPE = { id: "article-state" } as const
+
+/**
  * 1件更新の結果をキャッシュへ直接畳み込む。
  *
  * 状態トグルのたびに一覧とfacetsを`invalidateQueries`すると、ブックマーク

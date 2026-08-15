@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, SearchX } from "lucide-react"
+import { ArrowLeft, BookOpen } from "lucide-react"
 import { useEffect, useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
@@ -11,6 +11,7 @@ import {
 } from "@workspace/ui/components/empty"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 
+import { useArticleKeyboardShortcuts } from "../-hooks/use-article-keyboard-shortcuts"
 import { useArticleReader } from "../-hooks/use-article-reader"
 import { ArticleActions } from "./article-actions"
 import { ArticleAiBlock } from "./article-ai-block"
@@ -23,7 +24,36 @@ export type ArticleReaderViewProps = ReturnType<typeof useArticleReader> & {
   readonly onBack: () => void
 }
 
-function ReaderSkeleton() {
+/**
+ * データ接続。`key={articleId}`でマウントされる前提なので、記事が変わると
+ * このインスタンスごと入れ替わる。ソース選択などのローカルstateは自然に初期化
+ * され、開いていた未読記事のフラッシュもunmountのcleanupで完結する。
+ */
+export function ArticleReader({
+  articleId,
+  includeHidden,
+  onBack,
+}: {
+  readonly articleId: string
+  readonly includeHidden: boolean
+  readonly onBack: () => void
+}) {
+  const reader = useArticleReader({ articleId, includeHidden })
+
+  // 記事を開いている時だけ有効なショートカット。リーダーと寿命を揃える。
+  useArticleKeyboardShortcuts({
+    onOpenOriginal: () =>
+      window.open(reader.article.url, "_blank", "noopener,noreferrer"),
+    onToggleSaved: reader.toggleSaved,
+    onToggleReadLater: reader.toggleReadLater,
+    onMarkUnread: reader.markUnread,
+  })
+
+  return <ArticleReaderView {...reader} onBack={onBack} />
+}
+
+/** Panelのfallback。読み込み中も本文の骨格を保ち、切り替えで高さが飛ばない。 */
+export function ReaderSkeleton() {
   return (
     <div
       aria-label="記事を読み込み中"
@@ -38,7 +68,7 @@ function ReaderSkeleton() {
   )
 }
 
-function EmptySelection() {
+export function EmptySelection() {
   return (
     <Empty className="h-full w-full rounded-xl border border-dashed">
       <EmptyHeader>
@@ -50,25 +80,6 @@ function EmptySelection() {
           j / k で記事を送り、o で元記事を開けます。
         </EmptyDescription>
       </EmptyHeader>
-    </Empty>
-  )
-}
-
-function LoadFailure({ onRetry }: { readonly onRetry: () => void }) {
-  return (
-    <Empty className="h-full w-full rounded-xl border border-dashed">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <SearchX aria-hidden="true" />
-        </EmptyMedia>
-        <EmptyTitle>記事を取得できませんでした</EmptyTitle>
-        <EmptyDescription>
-          通信状況を確認してから、もう一度お試しください。
-        </EmptyDescription>
-      </EmptyHeader>
-      <Button onClick={onRetry} size="sm" variant="outline">
-        再読み込み
-      </Button>
     </Empty>
   )
 }
@@ -94,8 +105,6 @@ function useSingleColumnReaderFocus(articleId: string | undefined) {
 export function ArticleReaderView({
   articleId,
   article,
-  isLoading,
-  isError,
   source,
   setSource,
   didAutoFallback,
@@ -107,16 +116,11 @@ export function ArticleReaderView({
   toggleSaved,
   toggleReadLater,
   toggleHidden,
-  refetch,
   recalculateAi,
   isRecalculating,
   onBack,
 }: ArticleReaderViewProps) {
   const focusRef = useSingleColumnReaderFocus(articleId)
-
-  if (!articleId) return <EmptySelection />
-  if (isLoading) return <ReaderSkeleton />
-  if (isError || !article) return <LoadFailure onRetry={refetch} />
 
   return (
     // 下端の固定操作列と下部ナビはどちらもmdで消えるので、余白もmdで戻す。

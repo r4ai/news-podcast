@@ -88,6 +88,7 @@ describe("useArticleList", () => {
       { path: "/v1/me/articles/facets", body: facets },
     ])
 
+    await vi.waitFor(() => expect(result.current).not.toBeNull())
     act(() => result.current.setQ("otel"))
     expect(onSearchChange).not.toHaveBeenCalled()
 
@@ -250,8 +251,7 @@ describe("useArticleList", () => {
     expect(result.current.facets?.states.saved).toBe(facets.states.saved + 1)
   })
 
-  // 直列化そのものは shared/lib/action-queue.test.ts で検証している。
-  // ここでは連打が「投入順のまま、1クリック1リクエスト」で流れることを見る。
+  // 連打は mutation の scope で直列化される。投入順のまま、1クリック1リクエスト。
   it("sends one request per rapid toggle, in submission order", async () => {
     const { result, calls } = renderList([
       { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
@@ -276,6 +276,104 @@ describe("useArticleList", () => {
     expect(
       calls.filter((call) => call.method === "PATCH").map((call) => call.body)
     ).toEqual([{ saved: true }, { saved: false }, { saved: true }])
+  })
+
+  it("keeps draining the queue after one update fails", async () => {
+    let patchCount = 0
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const url = new URL(request.url, "http://localhost")
+        if (request.method !== "PATCH") {
+          const body =
+            url.pathname === "/v1/me/articles/facets"
+              ? facets
+              : { items, page: { hasMore: false } }
+          return new Response(JSON.stringify(body), {
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        patchCount += 1
+        // 1本目だけ失敗させる。直列化の鎖が切れると2本目が永久に流れない。
+        if (patchCount === 1) {
+          return new Response(JSON.stringify({ message: "boom" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        return new Response(JSON.stringify({ ...items[0], saved: true }), {
+          headers: { "Content-Type": "application/json" },
+        })
+      })
+    )
+
+    const onSearchChange = vi.fn()
+    const { result } = renderHookWithProviders(() =>
+      useArticleList({ search: defaultArticlesSearch, onSearchChange })
+    )
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+
+    await act(async () => {
+      result.current.toggleSaved(items[0]!)
+      result.current.toggleSaved(items[1]!)
+    })
+
+    await waitFor(() => expect(patchCount).toBe(2))
+  })
+
+  it("never has two state updates in flight, so a slow response cannot roll the UI back", async () => {
+    // 1本目だけ遅く返す。並行に流れると、遅い1本目の応答が後着して
+    // 最後のクリック結果 (saved: false) を saved: true へ巻き戻す。
+    let patchCount = 0
+    let inFlight = 0
+    let maxInFlight = 0
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const url = new URL(request.url, "http://localhost")
+        if (request.method !== "PATCH") {
+          const body =
+            url.pathname === "/v1/me/articles/facets"
+              ? facets
+              : { items, page: { hasMore: false } }
+          return new Response(JSON.stringify(body), {
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        inFlight += 1
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        const saved = (await request.clone().json()).saved as boolean
+        patchCount += 1
+        if (patchCount === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 30))
+        }
+        inFlight -= 1
+        return new Response(JSON.stringify({ ...items[0], saved }), {
+          headers: { "Content-Type": "application/json" },
+        })
+      })
+    )
+
+    const onSearchChange = vi.fn()
+    const { result } = renderHookWithProviders(() =>
+      useArticleList({ search: defaultArticlesSearch, onSearchChange })
+    )
+    await waitFor(() => expect(result.current.articles).toHaveLength(2))
+
+    await act(async () => {
+      result.current.toggleSaved(items[0]!)
+      result.current.toggleSaved({ ...items[0]!, saved: true })
+    })
+
+    await waitFor(() => expect(patchCount).toBe(2))
+    expect(maxInFlight).toBe(1)
+    await waitFor(() =>
+      expect(
+        result.current.articles.find((article) => article.id === "a")?.saved
+      ).toBe(false)
+    )
   })
 
   it("applies a bulk read across the current filter and reports how many changed", async () => {

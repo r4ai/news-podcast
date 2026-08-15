@@ -1,6 +1,9 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  useCallback,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query"
+import {
   useEffect,
   useOptimistic,
   useRef,
@@ -10,8 +13,8 @@ import {
 import { toast } from "@workspace/ui/components/sonner"
 
 import { api } from "@/shared/api"
-import { createActionQueue } from "@/shared/lib/action-queue"
 import {
+  ARTICLE_STATE_MUTATION_SCOPE,
   articleMarkdownQueryOptions,
   articleQueryOptions,
   refetchArticleCollections,
@@ -30,22 +33,23 @@ type ArticlePatch = {
   readonly hidden?: boolean
 }
 
-function applyPatch(
-  article: Article | undefined,
-  patch: ArticlePatch
-): Article | undefined {
-  return article ? { ...article, ...patch } : article
+function applyPatch(article: Article, patch: ArticlePatch): Article {
+  return { ...article, ...patch }
 }
 
 export type UseArticleReaderParams = {
-  readonly articleId: string | undefined
+  readonly articleId: string
   /** 一覧の`includeHidden`。非表示にした記事を一覧から外すかの判断に使う。 */
   readonly includeHidden?: boolean
 }
 
 /**
- * 選択中の記事の詳細取得・本文/アーカイブ取得・状態更新をまとめるhook。
+ * 選択中の記事の詳細取得・本文取得・状態更新をまとめるhook。
  * viewはpropsだけを受け取る (ADR-0018)。
+ *
+ * 「別の記事」は別のコンポーネントインスタンスなので、呼び出し側が
+ * `key={articleId}` でマウントし直す。記事が変わるたびにEffectで
+ * ローカルstateを消して回る必要はなく、unmount時のcleanupも1本で足りる。
  */
 export function useArticleReader({
   articleId,
@@ -53,26 +57,20 @@ export function useArticleReader({
 }: UseArticleReaderParams) {
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
-  const enqueueRef = useRef(createActionQueue())
 
-  const articleQuery = useQuery({
-    ...articleQueryOptions(articleId ?? ""),
-    enabled: articleId !== undefined,
-  })
-
-  const markdownQuery = useQuery({
-    ...articleMarkdownQueryOptions(articleId ?? ""),
-    enabled: articleId !== undefined,
-  })
+  const { data: serverArticle } = useSuspenseQuery(
+    articleQueryOptions(articleId)
+  )
+  // 本文はSuspenseに載せない。取得失敗は「アーカイブ表示へ落とす」という
+  // 正常な分岐であって、リーダーごと落とすべき欠陥ではない。
+  const markdownQuery = useQuery(articleMarkdownQueryOptions(articleId))
 
   const [userSource, setUserSource] = useState<ArticleSource | undefined>(
     undefined
   )
-  useEffect(() => setUserSource(undefined), [articleId])
 
-  const markdownReady = !markdownQuery.isLoading
   const autoFallback =
-    markdownReady &&
+    !markdownQuery.isLoading &&
     shouldFallbackToArchive({
       markdown: markdownQuery.data,
       isError: markdownQuery.isError,
@@ -81,108 +79,84 @@ export function useArticleReader({
     userSource ?? (autoFallback ? "archive" : "markdown")
   const didAutoFallback = userSource === undefined && autoFallback
 
-  const [article, addDraft] = useOptimistic(articleQuery.data, applyPatch)
+  const [article, addDraft] = useOptimistic(serverArticle, applyPatch)
 
-  const patchMutation = api.useMutation("patch", "/v1/me/articles/{articleId}")
+  const patchMutation = api.useMutation(
+    "patch",
+    "/v1/me/articles/{articleId}",
+    {
+      scope: ARTICLE_STATE_MUTATION_SCOPE,
+    }
+  )
   const enrichMutation = api.useMutation(
     "post",
     "/v1/me/articles/{articleId}/enrich"
   )
 
-  const settle = useCallback(
-    (before: Article, updated: Article) =>
-      writeArticleToCaches(queryClient, {
-        article: updated,
-        before,
-        includeHidden,
-      }),
-    [queryClient, includeHidden]
-  )
+  function settle(before: Article, updated: Article) {
+    writeArticleToCaches(queryClient, {
+      article: updated,
+      before,
+      includeHidden,
+    })
+  }
 
-  const update = useCallback(
-    (patch: ArticlePatch, errorMessage: string) => {
-      const target = article
-      if (!target) return
-      startTransition(async () => {
-        addDraft(patch)
-        try {
-          const updated = await enqueueRef.current(() =>
-            patchMutation.mutateAsync({
-              params: { path: { articleId: target.id } },
-              body: patch,
-            })
-          )
-          settle(target, updated as Article)
-        } catch {
-          toast.error(errorMessage)
-        }
-      })
-    },
-    [article, addDraft, patchMutation, settle]
-  )
+  function update(patch: ArticlePatch, errorMessage: string) {
+    const target = article
+    startTransition(async () => {
+      addDraft(patch)
+      try {
+        const updated = await patchMutation.mutateAsync({
+          params: { path: { articleId: target.id } },
+          body: patch,
+        })
+        settle(target, updated as Article)
+      } catch {
+        toast.error(errorMessage)
+      }
+    })
+  }
 
-  const pendingReadRef = useRef<ReadonlyMap<string, Article>>(new Map())
-  // ユーザーが明示的に「未読へ戻した」記事は、離脱時の自動既読化から除外する。
-  const userUnreadRef = useRef<ReadonlySet<string>>(new Set())
+  // 開いた未読記事は、離脱する瞬間に既読へ送る。読み終える前に閉じた場合も
+  // 既読にしたいので、記録は開いた時点で行い、送信はcleanupで行う。
+  const [userUnread, setUserUnread] = useState(false)
 
-  // flushはref経由で最新を参照する。依存にpatchMutationを入れると毎renderで
-  // callbackが作り直され、flush effectが不要な再実行を起こすため。
-  const flushPendingReadsRef = useRef<() => void>(() => {})
-  flushPendingReadsRef.current = useCallback(() => {
-    const pending = pendingReadRef.current
-    if (pending.size === 0) return
-    pendingReadRef.current = new Map()
-    void Promise.allSettled(
-      [...pending.values()].map((target) =>
-        enqueueRef
-          .current(() =>
-            patchMutation.mutateAsync({
-              params: { path: { articleId: target.id } },
-              body: { read: true },
-            })
-          )
-          .then((updated) => settle(target, updated as Article))
-          .catch(() => toast.error("既読にできませんでした"))
-      )
-    )
-  }, [patchMutation, settle])
-
-  // 記事を離れる瞬間 (切り替え・一覧へ戻る・unmount) に、開いていた未読記事を既読へフラッシュする。
+  // 送信内容は「離脱した時点の最新」を見たいが、Effectの再実行は起こしたく
+  // ない。renderではなくcommitごとにrefを差し替えることで、cleanupから最新の
+  // 記事状態を読めるようにする (useEffectEventはcleanupから呼べない)。
+  const flushReadRef = useRef<() => void>(() => {})
   useEffect(() => {
-    return () => flushPendingReadsRef.current()
-  }, [articleId])
+    flushReadRef.current = () => {
+      if (article.read || userUnread) return
+      patchMutation
+        .mutateAsync({
+          params: { path: { articleId: article.id } },
+          body: { read: true },
+        })
+        .then((updated) => settle(article, updated as Article))
+        .catch(() => toast.error("既読にできませんでした"))
+    }
+  })
 
-  // 開いた未読記事をpendingへ記録する。読み込みが終わるまでフラッシュしない。
-  useEffect(() => {
-    if (!article || article.read) return
-    if (userUnreadRef.current.has(article.id)) return
-    pendingReadRef.current = new Map(pendingReadRef.current).set(
-      article.id,
-      article
-    )
-  }, [article])
+  // 記事を離れる瞬間 (切り替え・一覧へ戻る・unmount) にフラッシュする。
+  useEffect(() => () => flushReadRef.current(), [])
 
-  // タブを閉じる・別ページへ移動する場合も、既読へフラッシュする。
+  // タブを閉じる・別ページへ移動する場合も同じく既読へ送る。
   useEffect(() => {
     function onPageHide() {
-      flushPendingReadsRef.current()
+      flushReadRef.current()
     }
     window.addEventListener("pagehide", onPageHide)
     return () => window.removeEventListener("pagehide", onPageHide)
   }, [])
 
   const markUnread = () => {
-    if (!article) return
-    userUnreadRef.current = new Set(userUnreadRef.current).add(article.id)
-    const next = new Map(pendingReadRef.current)
-    next.delete(article.id)
-    pendingReadRef.current = next
+    setUserUnread(true)
     update({ read: false }, "未読に戻せませんでした")
   }
 
-  const recalculateAi = useCallback(async () => {
+  async function recalculateAi() {
     const target = article
-    if (!target) return
     try {
       await enrichMutation.mutateAsync({
         params: { path: { articleId: target.id } },
@@ -198,14 +172,11 @@ export function useArticleReader({
     } catch {
       toast.error("AIの再計算に失敗しました")
     }
-  }, [article, enrichMutation, queryClient])
+  }
 
   return {
     articleId,
     article,
-    isLoading: articleQuery.isLoading,
-    isError: articleQuery.isError,
-    refetch: () => void articleQuery.refetch(),
     source,
     setSource: setUserSource,
     didAutoFallback,
@@ -217,16 +188,13 @@ export function useArticleReader({
     isArchiveLoading: false,
     archiveUnavailable: source === "archive",
     toggleSaved: () =>
-      article &&
       update({ saved: !article.saved }, "保存状態を更新できませんでした"),
     toggleReadLater: () =>
-      article &&
       update(
         { readLater: !article.readLater },
         "あとで読むを更新できませんでした"
       ),
     toggleHidden: () =>
-      article &&
       update({ hidden: !article.hidden }, "非表示を更新できませんでした"),
     markUnread,
     recalculateAi,

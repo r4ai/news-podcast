@@ -43,7 +43,9 @@ describe("SubscriptionItem", () => {
     )
 
     await user.click(screen.getByRole("button", { name: "Zennの操作" }))
-    await user.click(await screen.findByRole("menuitem", { name: "今すぐ同期" }))
+    await user.click(
+      await screen.findByRole("menuitem", { name: "今すぐ同期" })
+    )
 
     expect(onSync).toHaveBeenCalledOnce()
   })
