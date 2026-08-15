@@ -1,0 +1,4 @@
+interface:
+  display_name: "Async React UX"
+  short_description: "Build Async React UX with Suspense and TanStack Query"
+  default_prompt: "Use $async-react-ux to implement this React interaction with Actions, Suspense, TanStack Query, optimistic feedback, and recoverable errors."
