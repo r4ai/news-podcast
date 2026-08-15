@@ -96,7 +96,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          scan_directory="$RUNNER_TEMP/security-input"
+          scan_directory="$GITHUB_WORKSPACE/.security-input"
           rm -rf "$scan_directory"
           mkdir -p "$scan_directory"
 
@@ -127,6 +127,8 @@ jobs:
             done <"$manifest"
             tar --extract --file "$archive" --directory "$scan_directory" --no-same-owner --no-same-permissions
             scan_root="$(find "$scan_directory" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+            scan_root_relative="${scan_root#"$GITHUB_WORKSPACE/"}"
+            zizmor_inputs="$scan_root_relative/.github/workflows"
             for required_workflow in ci.yml security.yml; do
               if [[ ! -f "$scan_root/.github/workflows/$required_workflow" ]]; then
                 echo "Required workflow is missing from the pull request: $required_workflow" >&2
@@ -135,9 +137,11 @@ jobs:
             done
           else
             scan_root="$GITHUB_WORKSPACE"
+            zizmor_inputs=".github/workflows"
           fi
 
           printf 'scan_root=%s\n' "$scan_root" >> "$GITHUB_OUTPUT"
+          printf 'zizmor_inputs=%s\n' "$zizmor_inputs" >> "$GITHUB_OUTPUT"
 
       - name: Check pinned GitHub Actions with pinact
         env:
@@ -170,14 +174,14 @@ jobs:
       - name: Audit GitHub Actions with zizmor
         uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
         with:
-          inputs: ${{ steps.prepare.outputs.scan_root }}/.github/workflows
+          inputs: ${{ steps.prepare.outputs.zizmor_inputs }}
           collect: workflows
           version: v1.29.0
           online-audits: false
           advanced-security: false
           annotations: false
           persona: auditor
-          config: ${{ github.workspace }}/.zizmor.yml
+          config: /workspace/.zizmor.yml
 
       - name: Install PR dependency graph without lifecycle scripts
         if: github.event_name == 'pull_request_target'
