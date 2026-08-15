@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: `packages/adapters/src/voicevox-speech-synthesizer.ts`
+- Related: `services/episode-production/src/adapters/voicevox-speech-synthesizer.ts`（合成点）と`services/episode-production/src/adapters/voicevox/`（HTTP境界・API・WAV結合）
 
 ## コンテキストと変更契機
 

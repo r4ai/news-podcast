@@ -179,4 +179,117 @@ describe("SQLite enrichment queue", () => {
       await Effect.runPromise(queue.status(ownerB, 200, "2026-08-13"))
     ).toMatchObject({ failed: { count: 0 }, pending: { count: 0 } })
   })
+  it("lists every subscribing owner once, in a stable order", async () => {
+    const { queue } = await setup()
+
+    expect(await Effect.runPromise(queue.listOwners())).toEqual([
+      ownerA,
+      ownerB,
+    ])
+  })
+
+  it("claims nothing when the requested batch is empty", async () => {
+    const { database, queue } = await setup()
+    await Effect.runPromise(queue.reconcile(now))
+
+    expect(
+      await Effect.runPromise(
+        queue.claim(ownerA, 0, now, expires, "lease-token-0000")
+      )
+    ).toEqual([])
+    // 予約されないので、キューは Queued のまま残る。
+    expect(
+      database.get(
+        "SELECT status FROM content_enrichment_queue WHERE owner_id = ?",
+        [ownerA]
+      )
+    ).toMatchObject({ status: "Queued" })
+  })
+
+  it("enqueues a single owned article as a reprocess and refuses while it is processing", async () => {
+    const { queue } = await setup()
+
+    expect(
+      await Effect.runPromise(queue.enqueueOne(ownerA, articleId, now))
+    ).toEqual({ _tag: "Enqueued" })
+    const queued = await Effect.runPromise(
+      queue.status(ownerA, 200, "2026-08-13")
+    )
+    expect(queued.pending).toMatchObject({
+      count: 1,
+      items: [{ reason: "Reprocess", status: "Queued", attempt: 0 }],
+    })
+
+    await Effect.runPromise(
+      queue.claim(ownerA, 1, now, expires, "lease-token-0001")
+    )
+    expect(
+      await Effect.runPromise(queue.enqueueOne(ownerA, articleId, later))
+    ).toEqual({ _tag: "Processing" })
+  })
+
+  it("reports and resets the daily budget for the named local date only", async () => {
+    const { queue } = await setup()
+    await Effect.runPromise(queue.reconcile(now))
+    const [claim] = await Effect.runPromise(
+      queue.claim(ownerA, 1, now, expires, "lease-token-0001")
+    )
+    await Effect.runPromise(
+      queue.completeSuccess(ownerA, claim!, output, now, "2026-08-13")
+    )
+
+    expect(await Effect.runPromise(queue.budgetUsed("2026-08-13"))).toBe(1)
+    expect(await Effect.runPromise(queue.budgetUsed("2026-08-14"))).toBe(0)
+
+    await Effect.runPromise(queue.resetDaily("2026-08-14"))
+    expect(await Effect.runPromise(queue.budgetUsed("2026-08-13"))).toBe(1)
+    await Effect.runPromise(queue.resetDaily("2026-08-13"))
+    expect(await Effect.runPromise(queue.budgetUsed("2026-08-13"))).toBe(0)
+  })
+
+  it("replaces AI tags with known vocabulary and records unknown names as suggestions", async () => {
+    const { database, queue } = await setup()
+    database.run(
+      "INSERT INTO content_tags(tag_id, owner_id, name, created_at) VALUES (?, ?, ?, ?)",
+      ["tag-known", ownerA, "ai", now]
+    )
+    database.run(
+      `INSERT INTO content_article_tags
+        (owner_id, article_id, tag_id, source, confidence, created_at)
+       VALUES (?, ?, ?, 'Ai', 1, ?)`,
+      [ownerA, articleId, "tag-known", now]
+    )
+    await Effect.runPromise(queue.reconcile(now))
+    const [claim] = await Effect.runPromise(
+      queue.claim(ownerA, 1, now, expires, "lease-token-0001")
+    )
+
+    await Effect.runPromise(
+      queue.completeSuccess(
+        ownerA,
+        claim!,
+        {
+          ...output,
+          tags: ["ai", "unknown-tag"],
+          // 同じ未知の名前を重ねても、候補は1件としてだけ数える。
+          suggestedTags: ["ai", "fresh", "fresh"],
+        } as never,
+        now,
+        "2026-08-13"
+      )
+    )
+
+    expect(
+      database.all(
+        "SELECT tag_id AS tagId FROM content_article_tags WHERE owner_id = ? AND source = 'Ai'",
+        [ownerA]
+      )
+    ).toEqual([{ tagId: "tag-known" }])
+    expect(
+      database.all(
+        "SELECT name, occurrences FROM content_tag_suggestions WHERE owner_id = ?",
+        [ownerA]
+      )
+    ).toEqual([{ name: "fresh", occurrences: 1 }])
+  })
 })
