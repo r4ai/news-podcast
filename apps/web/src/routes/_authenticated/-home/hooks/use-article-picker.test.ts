@@ -45,13 +45,30 @@ describe("useArticlePicker", () => {
     expect(calls).toHaveLength(0)
   })
 
-  it("requests only archived articles in recommended order", async () => {
-    const { calls } = stubArticles(3)
+  it("filters archived articles from the recommended list", async () => {
+    const { calls } = stubFetch([
+      {
+        path: "/v1/me/articles",
+        query: { limit: "30", sort: "newest", state: "all" },
+        body: {
+          items: [
+            { ...article("pending"), archiveStatus: "pending" },
+            { ...article("ready"), archiveStatus: "succeeded" },
+          ],
+          page: { hasMore: false },
+        },
+      },
+    ])
     const { result } = renderHookWithProviders(() => useArticlePicker(true))
 
-    await waitFor(() => expect(result.current.articles).toHaveLength(3))
-    // エージェントが読めるのはアーカイブ済みだけなので、そこに絞って取る。
+    await waitFor(() => expect(result.current.articles).toHaveLength(1))
+    // エージェントが読めるのはアーカイブ済みだけなので、候補側で除外する。
+    expect(result.current.articles[0]?.id).toBe("ready")
     expect(calls[0]?.url).toBe("/v1/me/articles")
+    expect(calls[0]?.search.get("limit")).toBe("30")
+    expect(calls[0]?.search.get("state")).toBe("all")
+    expect(calls[0]?.search.get("sort")).toBe("newest")
+    expect(calls[0]?.search.has("archiveStatus")).toBe(false)
   })
 
   it("toggles a selection on and off", async () => {

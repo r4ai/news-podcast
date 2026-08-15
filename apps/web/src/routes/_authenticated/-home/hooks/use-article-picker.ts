@@ -1,19 +1,30 @@
+import { infiniteQueryOptions, useInfiniteQuery } from "@tanstack/react-query"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { type Article } from "@/features/articles"
-import { api } from "@/shared/api"
+import type { paths } from "@news-podcast/contracts/openapi"
+
+import { fetchClient } from "@/shared/api"
 
 import { MAX_SELECTED_ARTICLES } from "../model"
 
 const PAGE_SIZE = 30
 const EMPTY_SELECTION: readonly string[] = []
+type ArticleListQuery = NonNullable<
+  paths["/v1/me/articles"]["get"]["parameters"]["query"]
+>
+
+const ARTICLE_PICKER_QUERY = {
+  state: "all",
+  sort: "newest",
+  limit: String(PAGE_SIZE),
+} satisfies ArticleListQuery
 
 /**
  * 生成ダイアログの候補一覧と選択状態。
  *
- * 候補は既存の `/v1/me/articles` をそのまま使う。アーカイブ済みだけが
- * エージェントの読める記事なので `archiveStatus` で絞り、おすすめ順で
- * 上から選べるようにする。
+ * 候補は既存の `/v1/me/articles` を使う。記事一覧APIにはアーカイブ状態の
+ * 絞り込みがないため、一覧を新しい順で取得して、エージェントが読める
+ * アーカイブ済みの記事だけを候補に残す。
  */
 export function useArticlePicker(
   enabled: boolean,
@@ -32,30 +43,34 @@ export function useArticlePicker(
     setSelectedIds([...initialSelectedIds])
   }, [enabled, initialSelectedIds])
 
-  const listQuery = api.useInfiniteQuery(
-    "get",
-    "/v1/me/articles",
-    {
-      params: {
-        query: {
-          archiveStatus: ["succeeded"],
-          sort: "newest",
-          limit: String(PAGE_SIZE),
-        },
+  const listQuery = useInfiniteQuery({
+    ...infiniteQueryOptions({
+      queryKey: ["article-picker", ARTICLE_PICKER_QUERY] as const,
+      queryFn: async ({ pageParam, signal }) => {
+        const { data, error } = await fetchClient.GET("/v1/me/articles", {
+          signal,
+          params: {
+            query: {
+              ...ARTICLE_PICKER_QUERY,
+              ...(pageParam === undefined ? {} : { cursor: pageParam }),
+            },
+          },
+        })
+        if (error) throw error
+        return data
       },
-    },
-    {
-      enabled,
       initialPageParam: undefined as string | undefined,
-      getNextPageParam: () => undefined,
-    }
-  )
+      getNextPageParam: (last) =>
+        last.page.hasMore ? last.page.nextCursor : undefined,
+    }),
+    enabled,
+  })
 
   const articles = useMemo(
     () =>
-      (listQuery.data?.pages ?? []).flatMap(
-        (page) => page.items as readonly Article[]
-      ),
+      (listQuery.data?.pages ?? [])
+        .flatMap((page) => page.items)
+        .filter((article) => article.archiveStatus === "succeeded"),
     [listQuery.data]
   )
 
