@@ -114,6 +114,8 @@ pnpm dev:up # telemetryなし
 pnpm dev:up:observed # 同じlive providerをGrafanaで観測
 ```
 
+VOICEVOXへの長文入力は、音声推論のpeak memoryを抑えるため既定で200文字ごとに逐次合成する。`VOICEVOX_MAXIMUM_TEXT_CHARACTERS`を増やす場合は、実際の台本長でVOICEVOXコンテナのpeak memoryを確認すること。VOICEVOXは一時的なprocess停止やOOM後にComposeが再起動し、Episode Productionの有界retryが回復後の処理を引き継ぐ。
+
 本番生成はownerが選択しContentが版固定した記事だけを入力にする。Episode ProductionはOpenAI Responses APIへstrict JSON schema、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0038](adr/0038-bounded-structured-production-generation.md)）。
 
 ## OpenAPI契約

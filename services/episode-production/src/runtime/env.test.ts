@@ -30,6 +30,7 @@ describe("Episode Production environment configuration", () => {
     expect(config.providerMode).toBe("fake")
     expect(config.openAi).toMatchObject({ model: "gpt-test" })
     expect(config.voicevox.baseUrl).toBe("http://voicevox:50021")
+    expect(config.voicevox.maximumTextCharactersPerRequest).toBe(200)
     expect(config.completionRelay.batchSize).toBe(50)
     expect(config.worker.heartbeatMillis).toBe(60_000)
     expect(Object.isFrozen(config.s3)).toBe(true)

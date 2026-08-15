@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: ADR-0046、`services/episode-production/src/adapters/providers/voicevox/`
+- Related: ADR-0046、ADR-0048、`services/episode-production/src/adapters/providers/voicevox/`
 
 ## コンテキストと変更契機
 

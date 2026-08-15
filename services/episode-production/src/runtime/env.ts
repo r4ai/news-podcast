@@ -92,7 +92,7 @@ export const readEpisodeProductionServiceConfig = (
           ),
           maximumTextCharactersPerRequest: integer(
             env.VOICEVOX_MAXIMUM_TEXT_CHARACTERS,
-            1_000
+            200
           ),
           retryPolicy: {
             maximumAttempts: integer(env.PROVIDER_MAXIMUM_ATTEMPTS, 3),
