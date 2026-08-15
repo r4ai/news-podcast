@@ -2,6 +2,7 @@ import { Check, Clock, TriangleAlert } from "lucide-react"
 
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -9,9 +10,9 @@ import {
 } from "@workspace/ui/components/card"
 import {
   Combobox,
+  ComboboxCollection,
   ComboboxContent,
   ComboboxEmpty,
-  ComboboxGroup,
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
@@ -26,11 +27,7 @@ import {
   FieldSeparator,
   FieldTitle,
 } from "@workspace/ui/components/field"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@workspace/ui/components/input-group"
+import { Input } from "@workspace/ui/components/input"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { Switch } from "@workspace/ui/components/switch"
 import { cn } from "@workspace/ui/lib/utils"
@@ -61,27 +58,33 @@ export function ScheduleFormView({
   update,
   saveNow,
 }: ScheduleFormViewProps) {
+  // Comboboxの選択値は候補と同じオブジェクトで持つ。文字列を渡すと候補と
+  // 照合できず、入力欄に選択中のラベルが出ない。
+  const selectedZone =
+    timeZones.find((zone) => zone.value === draft.timeZone) ?? null
+  // 自動生成がoffなら、時刻もタイムゾーンも効果を持たない。両方まとめて閉じる。
+  const locked = !draft.enabled
+
   return (
-    <Card>
-      {/* Enterでの確定はAction経由。preventDefaultも送信ボタンも要らない。 */}
-      <form action={() => saveNow()}>
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Clock aria-hidden="true" className="size-5" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <CardTitle>
-                <h2>自動生成</h2>
-              </CardTitle>
-              <CardDescription>
-                Worker再起動時も、当日未生成であれば一度だけ補完します。
-              </CardDescription>
-            </div>
-          </div>
-          <div className="shrink-0 pt-0.5">
+    // formはCardの外側。内側に挟むとCard自身のflex gapが1要素にしか効かず、
+    // headerとcontentが密着する。
+    // Enterでの確定はAction経由。preventDefaultも送信ボタンも要らない。
+    <form action={() => saveNow()}>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock
+              aria-hidden="true"
+              className="size-4 text-muted-foreground"
+            />
+            <h2>自動生成</h2>
+          </CardTitle>
+          <CardDescription>
+            Worker再起動時も、当日未生成であれば一度だけ補完します。
+          </CardDescription>
+          <CardAction>
             <SaveIndicator state={saveState} />
-          </div>
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -101,75 +104,85 @@ export function ScheduleFormView({
 
             <FieldSeparator />
 
-            <Field>
+            <Field data-disabled={locked}>
               <FieldLabel htmlFor="generation-time">時刻</FieldLabel>
-              <InputGroup className={cn(!draft.enabled && "opacity-50")}>
-                <InputGroupAddon>
-                  <Clock aria-hidden="true" />
-                </InputGroupAddon>
-                <InputGroupInput
-                  className="h-11 text-2xl font-medium tabular-nums"
-                  disabled={!draft.enabled}
-                  id="generation-time"
-                  onChange={(event) =>
-                    update({ localTime: event.target.value })
-                  }
-                  required
-                  type="time"
-                  value={draft.localTime}
-                />
-              </InputGroup>
+              <Input
+                disabled={locked}
+                id="generation-time"
+                onChange={(event) => update({ localTime: event.target.value })}
+                required
+                type="time"
+                value={draft.localTime}
+              />
+              <FieldDescription>
+                下のタイムゾーンでの時刻として扱います。
+              </FieldDescription>
             </Field>
 
-            <Field data-invalid={Boolean(error)}>
+            <Field data-disabled={locked} data-invalid={Boolean(error)}>
               <FieldLabel htmlFor="generation-time-zone">
                 タイムゾーン
               </FieldLabel>
+              {/*
+                `items`を渡して初めてBase UIが入力に応じた絞り込みをする。
+                渡さないと候補が常に空扱いになり、検索も効かず空メッセージが出続ける。
+              */}
               <Combobox
-                disabled={!draft.enabled}
-                onValueChange={(value) => update({ timeZone: value ?? "" })}
-                value={draft.timeZone}
+                disabled={locked}
+                isItemEqualToValue={(item, value) => item.value === value.value}
+                items={timeZones}
+                onValueChange={(zone) =>
+                  update({ timeZone: zone?.value ?? "" })
+                }
+                value={selectedZone}
               >
                 <ComboboxInput
                   aria-invalid={Boolean(error)}
+                  disabled={locked}
                   id="generation-time-zone"
-                  placeholder="タイムゾーンを検索"
+                  // 入力欄には選択中のゾーンが入っている。全選択しておかないと
+                  // 打った文字がその後ろに足され、何も一致しなくなる。
+                  onFocus={(event) => event.currentTarget.select()}
+                  placeholder="地域名や都市名で検索"
                 />
                 <ComboboxContent>
                   <ComboboxEmpty>
                     一致するタイムゾーンがありません。
                   </ComboboxEmpty>
                   <ComboboxList>
-                    <ComboboxGroup>
-                      {timeZones.map((zone) => (
-                        <ComboboxItem key={zone.value} value={zone.value}>
+                    <ComboboxCollection>
+                      {(zone: TimeZoneOption) => (
+                        <ComboboxItem key={zone.value} value={zone}>
                           {zone.label}
                         </ComboboxItem>
-                      ))}
-                    </ComboboxGroup>
+                      )}
+                    </ComboboxCollection>
                   </ComboboxList>
                 </ComboboxContent>
               </Combobox>
-              <FieldDescription>IANA形式で選択してください。</FieldDescription>
               <FieldError>{error}</FieldError>
             </Field>
           </FieldGroup>
         </CardContent>
-      </form>
-    </Card>
+      </Card>
+    </form>
   )
 }
 
 /**
  * 自動保存の進行を1つのlive regionで伝える。要素を出し入れせず中身だけ
  * 差し替えるので、読み上げが「消えた/現れた」ではなく状態の変化として届く。
+ *
+ * 幅も先に確保しておく。文言ごとに幅が変わると、入力のたびにheaderが
+ * 動いてちらついて見える。
  */
 function SaveIndicator({ state }: { readonly state: SaveState }) {
   return (
     <span
+      aria-label="保存状態"
       aria-live="polite"
       className={cn(
-        "flex items-center gap-1.5 text-sm",
+        "flex h-5 min-w-28 items-center justify-end gap-1.5 text-sm",
         state === "error" ? "text-destructive" : "text-muted-foreground"
       )}
       role="status"

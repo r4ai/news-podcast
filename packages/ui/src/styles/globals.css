@@ -129,4 +129,25 @@
     min-width: 320px;
     margin: 0;
   }
+
+  /*
+   * date/time入力のpickerアイコンはUAが描くので、Inputのclassでは届かない。
+   * Comboboxのchevronなど他のtrailing iconと同じ「普段は控えめ、触ると立つ」
+   * 挙動に揃える。該当しない型ではこの擬似要素が存在せず無害。
+   *
+   * 色は触らない。`color-scheme`が効いていて、UAがtheme側に追従している。
+   * 中身のセグメント配色はauthor styleから変更できない (Chromiumは
+   * `::-webkit-datetime-edit-*-field:focus` を解決しない)。
+   */
+  [data-slot="input"]::-webkit-calendar-picker-indicator {
+    @apply size-4 cursor-pointer rounded-sm opacity-50 transition-opacity;
+  }
+  [data-slot="input"]:hover::-webkit-calendar-picker-indicator,
+  [data-slot="input"]:focus::-webkit-calendar-picker-indicator {
+    @apply opacity-100;
+  }
+  /* 全体の`disabled:opacity-50`が既に効くので、ここは操作性だけ揃える。 */
+  [data-slot="input"]:disabled::-webkit-calendar-picker-indicator {
+    @apply cursor-not-allowed;
+  }
 }

@@ -1,5 +1,5 @@
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
-import { useActionState, useState } from "react"
+import { startTransition, useActionState, useState } from "react"
 import { toast } from "@workspace/ui/components/sonner"
 
 import { settingsQueryOptions } from "@/features/settings"
@@ -71,8 +71,16 @@ export function useScheduleForm() {
     IDLE
   )
 
+  /**
+   * Actionをtransitionの外から呼ぶと、Reactはpendingを追跡できず`isSaving`が
+   * 立たない。form経由以外の発火は必ずここを通す。
+   */
+  function startSave(next: ScheduleDraft) {
+    startTransition(() => submit(next))
+  }
+
   // 待機中の編集を抱えたまま画面を離れたら、保存してから閉じる。
-  const submitLater = useDebouncedCallback(submit, AUTOSAVE_DELAY_MS, {
+  const submitLater = useDebouncedCallback(startSave, AUTOSAVE_DELAY_MS, {
     flushOnUnmount: true,
   })
 
@@ -88,7 +96,7 @@ export function useScheduleForm() {
     const next = { ...draft, ...patch }
     setDraft(next)
     submitLater.cancel()
-    submit(next)
+    startSave(next)
   }
 
   const saveState: SaveState = isSaving ? "saving" : result.status

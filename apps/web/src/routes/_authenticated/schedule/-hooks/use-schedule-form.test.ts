@@ -118,6 +118,40 @@ describe("useScheduleForm", () => {
     expect(result.current.saveState).toBe("error")
   })
 
+  it("reports 'saving' for the whole time a save is in flight", async () => {
+    const { result } = await renderForm([
+      { path: "/v1/me/settings", body: savedSettings },
+    ])
+
+    let release: (() => void) | undefined
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        if (request.method !== "PATCH") {
+          return new Response(JSON.stringify(savedSettings), {
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        const body = await request.clone().json()
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return new Response(JSON.stringify(body), {
+          headers: { "Content-Type": "application/json" },
+        })
+      })
+    )
+
+    act(() => result.current.saveNow({ enabled: false }))
+
+    // Actionをtransitionの外から呼ぶと、isPendingが立たないまま応答を待つ。
+    await waitFor(() => expect(result.current.saveState).toBe("saving"))
+
+    act(() => release?.())
+    await waitFor(() => expect(result.current.saveState).toBe("saved"))
+  })
+
   it("never lets a stale response overwrite a newer save", async () => {
     const { result, queryClient } = await renderForm([
       { path: "/v1/me/settings", body: savedSettings },
