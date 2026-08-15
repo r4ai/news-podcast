@@ -183,7 +183,7 @@ export function useArticleList({
     isSyncing: syncActive,
     hasNextPage: listQuery.hasNextPage,
     isFetchingNextPage: listQuery.isFetchingNextPage,
-    fetchNextPage: () => void listQuery.fetchNextPage(),
+    fetchNextPage: () => listQuery.fetchNextPage(),
     search,
     q: qDraft,
     setQ,

@@ -111,6 +111,7 @@ const startScriptedServer = async (script: readonly ScriptedResponse[]) => {
 const makeGenerator = (
   endpoint: URL,
   input: {
+    readonly fetcher?: typeof fetch
     readonly requestTimeoutMillis?: number
     readonly runtime?: OpenAiScriptGeneratorDependencies["retryRuntime"]
   } = {}
@@ -124,6 +125,7 @@ const makeGenerator = (
       retryPolicy: policy,
     },
     {
+      ...(input.fetcher ? { fetcher: input.fetcher } : {}),
       ...(input.runtime ? { retryRuntime: input.runtime } : {}),
     }
   )
@@ -420,14 +422,28 @@ describe("OpenAI ScriptGenerator HTTP boundary", () => {
   })
 
   it("classifies a request deadline and stops after the timeout retry budget", async () => {
-    const fake = await startScriptedServer([{ hang: true }])
-    const generator = makeGenerator(fake.endpoint, {
-      requestTimeoutMillis: 20,
-      runtime: {
-        nowMillis: () => Effect.succeed(0),
-        sleep: () => Effect.void,
-      },
-    })
+    let requests = 0
+    const fetcher: typeof fetch = async (_input, init) => {
+      requests += 1
+      const signal = init?.signal
+      if (!signal) throw new Error("request signal missing")
+      return new Promise<Response>((_resolve, reject) => {
+        const abort = () => reject(new DOMException("aborted", "AbortError"))
+        if (signal.aborted) abort()
+        else signal.addEventListener("abort", abort, { once: true })
+      })
+    }
+    const generator = makeGenerator(
+      new URL("http://provider.invalid/v1/responses"),
+      {
+        requestTimeoutMillis: 20,
+        fetcher,
+        runtime: {
+          nowMillis: () => Effect.succeed(0),
+          sleep: () => Effect.void,
+        },
+      }
+    )
 
     const failure = await Effect.runPromise(Effect.flip(generate(generator)))
 
@@ -437,6 +453,6 @@ describe("OpenAI ScriptGenerator HTTP boundary", () => {
       reason: "AttemptLimit",
       lastFailure: { _tag: "Timeout" },
     })
-    expect(fake.requestCount()).toBe(2)
+    expect(requests).toBe(2)
   })
 })

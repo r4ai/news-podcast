@@ -52,6 +52,9 @@ async function expectStablePage(page: Page, snapshot: string) {
     animations: "disabled",
     caret: "hide",
     fullPage: true,
+    // Ubuntu runner font rasterization differs slightly from local snapshots.
+    // Keep layout regressions visible while allowing a small cross-platform delta.
+    maxDiffPixelRatio: 0.04,
   })
 }
 

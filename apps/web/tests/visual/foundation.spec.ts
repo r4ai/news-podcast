@@ -11,7 +11,9 @@ test("desktop dashboard remains dense and readable", async ({ page }) => {
     page.getByRole("heading", { name: "今日のニュース番組" })
   ).toBeVisible()
   await expect(page.getByText("購読フィード", { exact: true })).toBeVisible()
-  await expect(page).toHaveScreenshot("podcast-dashboard-desktop.png")
+  await expect(page).toHaveScreenshot("podcast-dashboard-desktop.png", {
+    maxDiffPixelRatio: 0.04,
+  })
 })
 
 test("mobile dashboard stacks summaries without horizontal overflow", async ({
@@ -27,7 +29,9 @@ test("mobile dashboard stacks summaries without horizontal overflow", async ({
     "scrollWidth",
     await page.locator("body").evaluate((element) => element.clientWidth)
   )
-  await expect(page).toHaveScreenshot("podcast-dashboard-mobile.png")
+  await expect(page).toHaveScreenshot("podcast-dashboard-mobile.png", {
+    maxDiffPixelRatio: 0.04,
+  })
 })
 
 test("generation and completed states expose their semantics", async ({

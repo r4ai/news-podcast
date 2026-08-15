@@ -71,4 +71,17 @@ describe("observability privacy boundary", () => {
       "provider.outcome": "timeout",
     })
   })
+
+  it("preserves bounded retry metadata under the observability contract", () => {
+    expect(
+      sanitizeAttributes({
+        "error.retryable": true,
+        "job.next_retry_at": "2026-08-15T09:20:00.000Z",
+        retryable: true,
+      })
+    ).toEqual({
+      "error.retryable": true,
+      "job.next_retry_at": "2026-08-15T09:20:00.000Z",
+    })
+  })
 })

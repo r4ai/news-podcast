@@ -87,6 +87,7 @@ const provider = (
   endpoint: URL,
   options: {
     readonly timeout?: number
+    readonly fetcher?: typeof fetch
     readonly sleep?: (milliseconds: number) => Effect.Effect<void>
   } = {}
 ) =>
@@ -100,7 +101,10 @@ const provider = (
       baseDelayMillis: 25,
       maximumDelayMillis: 2_000,
     },
-    { ...(options.sleep ? { sleep: options.sleep } : {}) }
+    {
+      ...(options.fetcher ? { fetcher: options.fetcher } : {}),
+      ...(options.sleep ? { sleep: options.sleep } : {}),
+    }
   )
 
 describe("OpenAI enrichment provider HTTP boundary", () => {
@@ -284,12 +288,23 @@ describe("OpenAI enrichment provider HTTP boundary", () => {
   })
 
   it("retries a request timeout only within the attempt budget", async () => {
-    const fake = await startServer([{ hang: true }])
+    let requests = 0
+    const fetcher: typeof fetch = async (_input, init) => {
+      requests += 1
+      const signal = init?.signal
+      if (!signal) throw new Error("request signal missing")
+      return new Promise<Response>((_resolve, reject) => {
+        const abort = () => reject(new DOMException("aborted", "AbortError"))
+        if (signal.aborted) abort()
+        else signal.addEventListener("abort", abort, { once: true })
+      })
+    }
 
     const failure = await Effect.runPromise(
       Effect.flip(
-        provider(fake.endpoint, {
+        provider(new URL("http://provider.invalid/v1/responses"), {
           timeout: 20,
+          fetcher,
           sleep: () => Effect.void,
         }).enrich(input)
       )
@@ -300,6 +315,6 @@ describe("OpenAI enrichment provider HTTP boundary", () => {
       reason: "Retryable",
       message: "enrichment provider request timed out",
     })
-    expect(fake.count()).toBe(2)
+    expect(requests).toBe(2)
   })
 })

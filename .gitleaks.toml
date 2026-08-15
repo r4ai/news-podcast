@@ -1,0 +1,4 @@
+title = "news-podcast secret scanning"
+
+[extend]
+useDefault = true

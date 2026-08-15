@@ -1,0 +1,8 @@
+# Keep the security workflow fail-closed: every finding is actionable by default.
+# This is the one deliberate exception: security.yml uses pull_request_target
+# only to run this base-branch workflow while treating the PR as data. It never
+# checks out or executes the PR tree, and the invariant is covered by review.
+rules:
+  dangerous-triggers:
+    ignore:
+      - security.yml:3

@@ -9,6 +9,7 @@ import {
   failRunningJob,
   retryRunningJob,
   type RunningJob,
+  type UtcTimestamp,
 } from "../domain/episode-job.js"
 import { classifyProviderFailure } from "../domain/provider-reliability.js"
 import type { ScriptGenerationFailure } from "./ports/script-generator.js"
@@ -24,8 +25,12 @@ import type {
 export type EpisodeExecutionOutcome =
   | Readonly<{ _tag: "Succeeded" }>
   | Readonly<{ _tag: "Duplicate" }>
-  | Readonly<{ _tag: "Retrying" }>
-  | Readonly<{ _tag: "Failed" }>
+  | Readonly<{
+      _tag: "Retrying"
+      failureCode: string
+      retryAt: UtcTimestamp
+    }>
+  | Readonly<{ _tag: "Failed"; failureCode: string }>
   | Readonly<{ _tag: "Canceled" }>
   | Readonly<{ _tag: "StaleLease" }>
 
@@ -145,6 +150,7 @@ const transitionFailure = (
       )
   }
   if (classified._tag === "Retryable" && job.attempt < 4) {
+    const retryAt = ports.nextRetryAt()
     const retryable = Schema.decodeUnknownSync(RetryableFailureSchema)({
       code: classified.code,
       retryable: true,
@@ -154,7 +160,7 @@ const transitionFailure = (
         jobId: job.jobId,
         leaseToken: job.lease.token,
         state: retryRunningJob(job as never, {
-          retryAt: ports.nextRetryAt(),
+          retryAt,
           failure: retryable,
         }),
       })
@@ -162,7 +168,11 @@ const transitionFailure = (
         Effect.map((result) =>
           result === "StaleLease"
             ? deepFreeze({ _tag: "StaleLease" as const })
-            : deepFreeze({ _tag: "Retrying" as const })
+            : deepFreeze({
+                _tag: "Retrying" as const,
+                failureCode: classified.code,
+                retryAt,
+              })
         )
       )
   }
@@ -180,7 +190,10 @@ const transitionFailure = (
       Effect.map((result) =>
         result === "StaleLease"
           ? deepFreeze({ _tag: "StaleLease" as const })
-          : deepFreeze({ _tag: "Failed" as const })
+          : deepFreeze({
+              _tag: "Failed" as const,
+              failureCode: classified.code,
+            })
       )
     )
 }

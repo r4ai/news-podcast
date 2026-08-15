@@ -25,6 +25,7 @@ const allowedAttributes = new Set([
   "job.id",
   "job.attempt",
   "job.max_attempts",
+  "job.next_retry_at",
   "job.status",
   "checkpoint.result",
   "cleanup.result",

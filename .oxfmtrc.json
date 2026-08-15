@@ -13,6 +13,8 @@
     "**/coverage/**",
     "**/storybook-static/**",
     "**/test-results/**",
+    "services/content-knowledge/fixtures/**",
+    ".agents/**",
     ".claude/worktrees/**",
     ".codex/**",
     "docs/**",

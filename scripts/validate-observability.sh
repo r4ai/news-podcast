@@ -7,6 +7,20 @@ VALIDATION_STORAGE="$(mktemp -d)"
 trap 'rm -rf "$VALIDATION_STORAGE"' EXIT
 chmod 0777 "$VALIDATION_STORAGE"
 
+# GitHub-hosted runners provide GNU grep, but do not guarantee ripgrep.
+# Keep the checks portable while retaining multiline regular-expression support.
+search_regex() {
+  grep -Pzo "$1" "${@:2}" >/dev/null
+}
+
+search_regex_tree() {
+  grep -Pzro "$1" "${@:2}" >/dev/null
+}
+
+search_fixed() {
+  grep -Fz "$1" "${@:2}" >/dev/null
+}
+
 docker run --rm \
   --user 0:0 \
   -v "$VALIDATION_STORAGE:/var/lib/otelcol/storage" \
@@ -19,7 +33,7 @@ docker run --rm --user 0:0 --entrypoint promtool \
   prom/prometheus:v3.13.1 \
   check config /etc/prometheus/prometheus.yaml
 
-rg -U 'out_of_order_time_window:[[:space:]]+2h' \
+search_regex 'out_of_order_time_window:[[:space:]]+2h' \
   "$OBSERVABILITY_DIR/prometheus/prometheus.yaml" >/dev/null
 
 docker run --rm \
@@ -38,8 +52,8 @@ docker run --rm \
   >"$tempo_validation_log" 2>&1 || tempo_validation_status=$?
 cat "$tempo_validation_log"
 if [[ "$tempo_validation_status" -ne 0 ]]; then
-  if ! rg -q 'c\.Frontend\.MCPServer\.Enabled is enabled\.' "$tempo_validation_log" \
-    || rg -qi 'error|failed|invalid' "$tempo_validation_log"; then
+  if ! grep -q 'c\.Frontend\.MCPServer\.Enabled is enabled\.' "$tempo_validation_log" \
+    || grep -Eqi 'error|failed|invalid' "$tempo_validation_log"; then
     exit "$tempo_validation_status"
   fi
 fi
@@ -73,8 +87,8 @@ for uid in "${expected_dashboard_uids[@]}"; do
   jq -e --arg uid "$uid" '.uid == $uid' "$dashboard" >/dev/null
 done
 
-if rg -n 'http_server_error_total|provider_request_duration_bucket|episode_stage_oldest_age|episode_checkpoint_total|episode_lease_(lost|recovered|expired)_total|system_filesystem_utilization' \
-  "$OBSERVABILITY_DIR/grafana" >/dev/null; then
+if search_regex_tree 'http_server_error_total|provider_request_duration_bucket|episode_stage_oldest_age|episode_checkpoint_total|episode_lease_(lost|recovered|expired)_total|system_filesystem_utilization' \
+  "$OBSERVABILITY_DIR/grafana"; then
   echo "Dashboard or alert references an unverified metric." >&2
   exit 1
 fi
@@ -109,8 +123,8 @@ jq -e '
   .services.grafana.volumes
     | any(.target == "/etc/grafana/provisioning" and .type == "volume" and .read_only == true)
 ' <<<"$base_compose_json" >/dev/null
-if rg -n 'hostmetrics|root_path:[[:space:]]*/hostfs' \
-  "$OBSERVABILITY_DIR/collector.yaml" >/dev/null; then
+if search_regex 'hostmetrics|root_path:[[:space:]]*/hostfs' \
+  "$OBSERVABILITY_DIR/collector.yaml"; then
   echo "Host metrics must run outside the public OTLP Collector." >&2
   exit 1
 fi
@@ -147,17 +161,17 @@ jq -e '
 ' <<<"$gateway_compose_json" >/dev/null
 
 for exporter in otlp/tempo otlphttp/loki; do
-  rg -U "${exporter}:[\\s\\S]*?storage: file_storage/queue" \
-    "$OBSERVABILITY_DIR/collector.yaml" >/dev/null
+  search_regex "${exporter}:[\\s\\S]*?storage: file_storage/queue" \
+    "$OBSERVABILITY_DIR/collector.yaml"
 done
-rg -U 'prometheusremotewrite:[\s\S]*?wal:[\s\S]*?directory: /var/lib/otelcol/storage/' \
-  "$OBSERVABILITY_DIR/collector.yaml" >/dev/null
-if rg -n -U 'resource_to_telemetry_conversion:[[:space:]]*\n[[:space:]]+enabled: true' \
-  "$OBSERVABILITY_DIR/collector.yaml" >/dev/null; then
+search_regex 'prometheusremotewrite:[\s\S]*?wal:[\s\S]*?directory: /var/lib/otelcol/storage/' \
+  "$OBSERVABILITY_DIR/collector.yaml"
+if search_regex 'resource_to_telemetry_conversion:[[:space:]]*\n[[:space:]]+enabled: true' \
+  "$OBSERVABILITY_DIR/collector.yaml"; then
   echo "All resource attributes must not be converted to metric labels." >&2
   exit 1
 fi
-rg -F 'keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name", "telemetry.schema.version", "telemetry.backend"])' \
-  "$OBSERVABILITY_DIR/collector.yaml" >/dev/null
+search_fixed 'keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name", "telemetry.schema.version", "telemetry.backend"])' \
+  "$OBSERVABILITY_DIR/collector.yaml"
 
 echo "Observability configuration is valid."

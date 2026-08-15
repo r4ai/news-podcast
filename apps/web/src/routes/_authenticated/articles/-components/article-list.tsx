@@ -1,5 +1,5 @@
 import { LoaderCircle, Newspaper, SearchX } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -154,6 +154,20 @@ function LoadMoreSentinel({
   "hasNextPage" | "isFetchingNextPage" | "fetchNextPage"
 >) {
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const pendingFetchRef = useRef<Promise<unknown> | null>(null)
+
+  const loadMore = useCallback(() => {
+    // IntersectionObserver may notify again before React reflects the pending
+    // state. Keep one in-flight request across rerenders to avoid requesting
+    // the same cursor twice.
+    if (pendingFetchRef.current) return
+    const request = Promise.resolve().then(() => fetchNextPage())
+    pendingFetchRef.current = request
+    const release = () => {
+      if (pendingFetchRef.current === request) pendingFetchRef.current = null
+    }
+    void request.then(release, release)
+  }, [fetchNextPage])
 
   useEffect(() => {
     const node = sentinelRef.current
@@ -162,14 +176,14 @@ function LoadMoreSentinel({
     }
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) fetchNextPage()
+        if (entries.some((entry) => entry.isIntersecting)) loadMore()
       },
       // 末尾に届く手前で読み始め、スクロールが止まる時間を減らす。
       { rootMargin: "400px" }
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [hasNextPage, fetchNextPage])
+  }, [hasNextPage, loadMore])
 
   if (!hasNextPage) return null
 
@@ -178,7 +192,7 @@ function LoadMoreSentinel({
       {isFetchingNextPage ? (
         <Spinner aria-label="続きを読み込み中" />
       ) : (
-        <Button onClick={fetchNextPage} size="sm" variant="outline">
+        <Button onClick={loadMore} size="sm" variant="outline">
           もっと読み込む
         </Button>
       )}

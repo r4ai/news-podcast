@@ -28,7 +28,8 @@ export type EpisodeWorkerEvent =
   | Readonly<{
       _tag: "JobFinished"
       jobId: string
-      outcome: EpisodeExecutionOutcome["_tag"]
+      attempt: number
+      outcome: EpisodeExecutionOutcome
     }>
   | Readonly<{
       _tag: "WorkerFailed"
@@ -176,7 +177,8 @@ export const runEpisodeWorkerLoop = (
         deepFreeze({
           _tag: "JobFinished",
           jobId: leased.job.jobId,
-          outcome: outcome._tag,
+          attempt: leased.job.attempt,
+          outcome,
         })
       )
     }

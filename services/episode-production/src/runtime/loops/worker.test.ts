@@ -71,7 +71,12 @@ describe("episode worker loop", () => {
         attempt: 1,
         recovered: true,
       },
-      { _tag: "JobFinished", jobId: job.jobId, outcome: "Succeeded" },
+      {
+        _tag: "JobFinished",
+        jobId: job.jobId,
+        attempt: 1,
+        outcome: { _tag: "Succeeded" },
+      },
       { _tag: "WorkerIdle", consecutiveIdle: 1, waitMillis: 100 },
       { _tag: "WorkerStopped" },
     ])
@@ -203,7 +208,8 @@ describe("episode worker loop", () => {
     expect(events.at(-2)).toEqual({
       _tag: "JobFinished",
       jobId: job.jobId,
-      outcome: "StaleLease",
+      attempt: 1,
+      outcome: { _tag: "StaleLease" },
     })
     expect(events.at(-1)).toEqual({ _tag: "WorkerStopped" })
   })

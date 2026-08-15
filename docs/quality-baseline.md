@@ -20,3 +20,17 @@
 | service state復旧 | `pnpm test:sqlite-state` | Fulfilled |
 
 functional coverageの最低値はlines 75%、branches 60%とする。live OpenAI + VOICEVOX smokeはAPI keyと外部runtimeを要する受け入れ確認として分離し、fake provider、schema拒否、timeout、retry上限をCIで常時検証する。
+
+## GitHub Actionsへの対応
+
+| Check | 証拠 |
+| --- | --- |
+| `CI / static` | `format:check`、`lint`、`typecheck`、`build`、契約、Compose、Storybook |
+| `CI / unit` | `test`、`test:coverage:functional` |
+| `CI / web-e2e` | `test:e2e` |
+| `CI / visual` | `test:visual` |
+| `CI / functional-e2e` | `test:e2e:functional` |
+| `CI / observability` | `observability:validate`、fake observed stack、`observability:smoke` |
+| `CI / security` | pinact、actionlint、zizmor、Gitleaks、`pnpm audit --audit-level=high` |
+
+通常CIは資格情報なしのfake providerだけを使う。PRのセキュリティ検査はbase workflowからPRツリーを静的解析し、PR由来のコードを実行しない。詳細は[CIとサプライチェーン防御](ci.md)を参照する。

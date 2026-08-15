@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  pull_request_target:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: 11.16.0
+  PINACT_VERSION: 4.1.1
+  ACTIONLINT_VERSION: 1.7.12
+  GITLEAKS_VERSION: 8.30.1
+
+jobs:
+  security:
+    name: security
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read # Required only to read PR metadata; no write access.
+    steps:
+      # This is deliberately the base/default branch checkout. Never replace
+      # it with the PR head: the PR is only handled as static input below.
+      - name: Check out trusted security workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install pinned security tools
+        env:
+          PINACT_SHA256: d1cffebe5704b74e2e5f8a864efb9f7e54768972dc686188c008033fb1797841
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          tool_directory="$RUNNER_TEMP/security-tools"
+          mkdir -p "$tool_directory"
+
+          download_and_verify() {
+            local url="$1"
+            local expected_sha256="$2"
+            local output="$3"
+            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --output "$output" "$url"
+            printf '%s  %s\n' "$expected_sha256" "$output" | sha256sum --check --strict
+          }
+
+          pinact_archive="$tool_directory/pinact.tar.gz"
+          download_and_verify \
+            "https://github.com/suzuki-shunsuke/pinact/releases/download/v${PINACT_VERSION}/pinact_linux_amd64.tar.gz" \
+            "$PINACT_SHA256" "$pinact_archive"
+          tar --extract --file "$pinact_archive" --directory "$tool_directory" --no-same-owner --no-same-permissions
+
+          actionlint_archive="$tool_directory/actionlint.tar.gz"
+          download_and_verify \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            "$ACTIONLINT_SHA256" "$actionlint_archive"
+          gh attestation verify "$actionlint_archive" --repo rhysd/actionlint
+          tar --extract --file "$actionlint_archive" --directory "$tool_directory" --no-same-owner --no-same-permissions
+
+          gitleaks_archive="$tool_directory/gitleaks.tar.gz"
+          download_and_verify \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            "$GITLEAKS_SHA256" "$gitleaks_archive"
+          tar --extract --file "$gitleaks_archive" --directory "$tool_directory" --no-same-owner --no-same-permissions
+
+      - name: Prepare static scan input
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          scan_directory="$RUNNER_TEMP/security-input"
+          rm -rf "$scan_directory"
+          mkdir -p "$scan_directory"
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request_target" ]]; then
+            head_repo="$(jq -r '.pull_request.head.repo.full_name // empty' "$GITHUB_EVENT_PATH")"
+            head_sha="$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH")"
+            if [[ ! "$head_repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+              echo "The pull request head repository is invalid" >&2
+              exit 1
+            fi
+            if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "The pull request head SHA is invalid" >&2
+              exit 1
+            fi
+
+            archive="$RUNNER_TEMP/pull-request.tar.gz"
+            gh api \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/$head_repo/tarball/$head_sha" >"$archive"
+            manifest="$RUNNER_TEMP/pull-request.manifest"
+            tar --list --file "$archive" >"$manifest"
+            while IFS= read -r path; do
+              if [[ "$path" == /* || "$path" == ../* || "$path" == */../* ]]; then
+                echo "Unsafe archive path: $path" >&2
+                exit 1
+              fi
+            done <"$manifest"
+            tar --extract --file "$archive" --directory "$scan_directory" --no-same-owner --no-same-permissions
+            scan_root="$(find "$scan_directory" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+            for required_workflow in ci.yml security.yml; do
+              if [[ ! -f "$scan_root/.github/workflows/$required_workflow" ]]; then
+                echo "Required workflow is missing from the pull request: $required_workflow" >&2
+                exit 1
+              fi
+            done
+          else
+            scan_root="$GITHUB_WORKSPACE"
+          fi
+
+          printf 'scan_root=%s\n' "$scan_root" >> "$GITHUB_OUTPUT"
+
+      - name: Check pinned GitHub Actions with pinact
+        env:
+          SCAN_ROOT: ${{ steps.prepare.outputs.scan_root }}
+        run: |
+          set -euo pipefail
+          mapfile -d '' workflow_files < <(
+            find "$SCAN_ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print0
+          )
+          ((${#workflow_files[@]} > 0))
+          "$RUNNER_TEMP/security-tools/pinact" run \
+            --check \
+            --verify-comment \
+            --verify-min-age \
+            --min-age 7 \
+            --config "$GITHUB_WORKSPACE/.pinact.yaml" \
+            "${workflow_files[@]}"
+
+      - name: Lint GitHub Actions workflows with actionlint
+        env:
+          SCAN_ROOT: ${{ steps.prepare.outputs.scan_root }}
+        run: |
+          set -euo pipefail
+          command -v shellcheck >/dev/null
+          mapfile -d '' workflow_files < <(
+            find "$SCAN_ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print0
+          )
+          "$RUNNER_TEMP/security-tools/actionlint" "${workflow_files[@]}"
+
+      - name: Audit GitHub Actions with zizmor
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          inputs: ${{ steps.prepare.outputs.scan_root }}/.github/workflows
+          collect: workflows
+          version: v1.29.0
+          online-audits: false
+          advanced-security: false
+          annotations: false
+          persona: auditor
+          config: ${{ github.workspace }}/.zizmor.yml
+
+      - name: Install PR dependency graph without lifecycle scripts
+        if: github.event_name == 'pull_request_target'
+        working-directory: ${{ steps.prepare.outputs.scan_root }}
+        run: pnpm install --ignore-pnpmfile --ignore-scripts --frozen-lockfile
+
+      - name: Audit JavaScript dependencies
+        working-directory: ${{ steps.prepare.outputs.scan_root }}
+        run: pnpm audit --audit-level=high
+
+      - name: Scan the PR tree or complete repository history for secrets
+        env:
+          SCAN_ROOT: ${{ steps.prepare.outputs.scan_root }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request_target" ]]; then
+            "$RUNNER_TEMP/security-tools/gitleaks" dir \
+              --config "$GITHUB_WORKSPACE/.gitleaks.toml" \
+              --redact \
+              --no-banner \
+              "$SCAN_ROOT"
+          else
+            "$RUNNER_TEMP/security-tools/gitleaks" git \
+              --config "$GITHUB_WORKSPACE/.gitleaks.toml" \
+              --redact \
+              --no-banner \
+              --log-opts='--all'
+          fi

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { pathToFileURL } from "node:url"
+
 const grafana = process.env.GRAFANA_URL ?? "http://127.0.0.1:3100"
 const prometheus = process.env.PROMETHEUS_URL ?? "http://127.0.0.1:9090"
 const gateway = process.env.GATEWAY_URL ?? "http://127.0.0.1:4001"
@@ -75,6 +77,27 @@ const queryPrometheusExemplars = async (query, start, end) => {
   return result.data
 }
 
+const sleep = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds))
+
+export const waitForPrometheusResult = async (
+  query,
+  { intervalMillis = 2_000, timeoutMillis = 45_000 } = {}
+) => {
+  const deadline = Date.now() + timeoutMillis
+  while (true) {
+    const result = await query()
+    if (result.length > 0) return result
+
+    const remainingMillis = deadline - Date.now()
+    if (remainingMillis <= 0) break
+    await sleep(Math.min(intervalMillis, remainingMillis))
+  }
+  throw new Error(
+    `Prometheus series did not become available within ${timeoutMillis}ms`
+  )
+}
+
 const main = async () => {
   const health = await grafanaRequest("/api/health")
   assert(health.database === "ok", "Grafana database is not healthy")
@@ -112,8 +135,12 @@ const main = async () => {
   const failedExports = await queryPrometheus(
     "sum(otelcol_exporter_send_failed_spans_total)"
   )
-  const serviceGraphEdges = await queryPrometheus(
-    'traces_service_graph_request_total{client=~".+",server=~".+"}'
+  const serviceGraphEdges = await waitForPrometheusResult(
+    () =>
+      queryPrometheus(
+        'traces_service_graph_request_total{client="ci.synthetic.client",server="ci.synthetic.server"}'
+      ),
+    { timeoutMillis: 90_000, intervalMillis: 2_000 }
   )
   assert(acceptedSpans.length > 0, "Collector has not accepted any spans")
   assert(serviceGraphEdges.length > 0, "Service graph has no edges")
@@ -193,7 +220,12 @@ const main = async () => {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error)
-  process.exitCode = 1
-})
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exitCode = 1
+  })
+}

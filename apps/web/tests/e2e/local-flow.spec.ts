@@ -157,24 +157,28 @@ test("generation schedule form is keyboard accessible and saves without a page r
   const automaticGeneration = page.getByRole("switch", {
     name: "毎日自動生成する",
   })
-  let finishSave = () => {}
-  const saveBlocked = new Promise<void>((resolve) => {
-    finishSave = resolve
-  })
-  await page.route("**/v1/me/settings", async (route) => {
-    if (route.request().method() === "PATCH") await saveBlocked
-    await route.continue()
-  })
   await automaticGeneration.click()
+  const saveRequest = page.waitForRequest((request) => {
+    if (
+      request.method() !== "PATCH" ||
+      !request.url().endsWith("/v1/me/settings")
+    ) {
+      return false
+    }
+    const body = request.postDataJSON() as {
+      generationSchedule?: { localTime?: string; timeZone?: string }
+    }
+    return (
+      body.generationSchedule?.localTime === "08:15" &&
+      body.generationSchedule?.timeZone === "UTC"
+    )
+  })
   await page.getByLabel("時刻").fill("08:15")
   await page.getByLabel("タイムゾーン").fill("UTC")
-  await page.getByRole("option", { name: "UTC", exact: true }).click()
-  const saveButton = page.getByRole("button", { name: "設定を保存" })
-  await saveButton.click()
-  await expect(page.getByRole("button", { name: "保存中…" })).toBeDisabled()
-  finishSave()
+  await page.getByRole("option", { name: "UTC (UTC+0)", exact: true }).click()
+  await saveRequest
 
-  await expect(page.getByText("生成時刻を保存しました")).toBeVisible()
+  await expect(page.getByText("保存済み", { exact: true })).toBeVisible()
   await expect(page).toHaveURL(/\/schedule$/)
   await expect(page.getByLabel("時刻")).toHaveValue("08:15")
 })
@@ -186,7 +190,8 @@ test("subscription changes confirm destructive actions and roll back failed opti
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  await page.getByRole("button", { name: "削除", exact: true }).first().click()
+  await page.getByRole("button", { name: "Zennの操作", exact: true }).click()
+  await page.getByRole("menuitem", { name: "削除", exact: true }).click()
   await expect(
     page.getByRole("heading", { name: "購読を削除しますか？" })
   ).toBeVisible()
@@ -249,13 +254,14 @@ test("refreshes RSS sync status after a subscription is deleted", async ({
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  await expect(page.getByText("完了", { exact: true })).toBeVisible()
-  await page.getByRole("button", { name: "削除", exact: true }).click()
+  await expect(page.getByText("生成対象", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Zennの操作", exact: true }).click()
+  await page.getByRole("menuitem", { name: "削除", exact: true }).click()
   await page.getByRole("button", { name: "削除する" }).click()
   syncJobs = []
 
   await expect(
-    page.getByText("現在処理中の同期はありません。", { exact: true })
+    page.getByText("購読中のフィードはありません", { exact: true })
   ).toBeVisible()
 })
 
@@ -266,14 +272,11 @@ test("manually queues an RSS sync and shows it in the sync status", async ({
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  const syncButton = page.getByRole("button", {
-    name: "Zennを今すぐ同期",
-  })
-  await syncButton.click()
+  await page.getByRole("button", { name: "Zennの操作", exact: true }).click()
+  await page.getByRole("menuitem", { name: "今すぐ同期", exact: true }).click()
 
   await expect(page.getByText("同期を開始しました")).toBeVisible()
-  await expect(page.getByText("待機中", { exact: true })).toBeVisible()
-  await expect(page.getByText(/RSSの取得待ちです/)).toBeVisible()
+  await expect(page.getByText("同期中…", { exact: true })).toBeVisible()
 })
 
 test("shows RSS sync progress and refreshes the article list after completion", async ({
@@ -338,7 +341,7 @@ test("shows RSS sync progress and refreshes the article list after completion", 
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  await expect(page.getByText("同期中", { exact: true })).toBeVisible()
+  await expect(page.getByText("同期中…", { exact: true })).toBeVisible()
   await page.goto("/articles")
   await expect(page.getByText(/RSSを同期中です/)).toBeVisible()
 

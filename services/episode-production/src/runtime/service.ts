@@ -41,6 +41,7 @@ import {
   runEpisodeWorkerLoop,
   type EpisodeWorkerEvent,
 } from "./loops/worker.js"
+import { recordEpisodeWorkerEvent } from "./worker-observability.js"
 
 const positive = (maximum: number) =>
   Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(maximum))
@@ -245,43 +246,7 @@ export const runNodeEpisodeProductionService = (
           const observeWorkerEvent = (event: EpisodeWorkerEvent) =>
             Effect.gen(function* () {
               yield* Effect.sync(() => {
-                switch (event._tag) {
-                  case "JobLeased":
-                    observability.count("episode.started", 1, {
-                      "job.attempt": event.attempt,
-                    })
-                    if (event.recovered)
-                      observability.count("episode.lease.recovered")
-                    break
-                  case "JobFinished":
-                    if (event.outcome === "Succeeded")
-                      observability.count("episode.succeeded")
-                    if (event.outcome === "Retrying")
-                      observability.count("episode.retry")
-                    if (event.outcome === "Failed")
-                      observability.count("episode.failed")
-                    if (event.outcome === "Canceled")
-                      observability.count("episode.canceled")
-                    if (event.outcome === "StaleLease")
-                      observability.count("episode.lease.lost")
-                    break
-                  case "WorkerFailed":
-                    const [failureStage, ...failureReasonParts] =
-                      event.code.split("_")
-                    observability.count("process.error", 1, {
-                      "failure.code": event.code,
-                      "failure.stage":
-                        failureStage === "script" || failureStage === "speech"
-                          ? failureStage
-                          : event.stage,
-                      "failure.reason":
-                        failureStage === "script" || failureStage === "speech"
-                          ? failureReasonParts.join("_")
-                          : event.code,
-                      "operation.stage": event.stage,
-                    })
-                    break
-                }
+                recordEpisodeWorkerEvent(observability, event)
               })
               const snapshot = yield* jobs.statusSnapshot().pipe(
                 Effect.matchEffect({

@@ -6,6 +6,7 @@ import { StorageType, jetstream } from "@nats-io/jetstream"
 import { connect } from "@nats-io/transport-node"
 import { Effect, Schema } from "effect"
 
+import { readFirstSseEvent } from "./read-first-sse-event.mjs"
 import {
   acquireNatsGatewayPorts,
   makeGatewayWebHandler,
@@ -274,7 +275,7 @@ const main = Effect.scoped(
         { headers: { ...headers, "last-event-id": "0" } }
       )
       assert(eventsResponse.status === 200, "job events were not replayed")
-      const eventStream = await eventsResponse.text()
+      const eventStream = await readFirstSseEvent(eventsResponse)
       assert(
         eventStream.includes("STATE_SNAPSHOT") && eventStream.includes(jobId),
         "job event replay omitted the state snapshot"

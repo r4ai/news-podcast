@@ -145,6 +145,22 @@ pnpm contract:lint
 
 ## 品質gate
 
+GitHub Actionsではローカルの品質gateを`CI / static`、`CI / unit`、`CI / web-e2e`、`CI / visual`、`CI / functional-e2e`、`CI / observability`へ分割して実行する。PRを作成する前に少なくとも次を実行する。
+
+```bash
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:e2e
+pnpm test:e2e:functional
+pnpm test:visual
+pnpm observability:validate
+pnpm audit --audit-level=high
+```
+
+`CI / security`は別workflowで、ActionのSHA固定、workflow lint、zizmor、Gitleaks、依存脆弱性を検査する。PRコードを実行しないため、ローカルのセキュリティ検査結果と通常CIの結果を混同しない。運用、pinactの更新、GitHub settingsは[CIとサプライチェーン防御](ci.md)を参照する。
+
 | コマンド | 検証内容 |
 | --- | --- |
 | `pnpm format:check` | oxfmt差分 |
@@ -192,6 +208,14 @@ online backup、別pathへの検証restore、offline cutover、rollbackは[Servi
 ```bash
 pnpm dev:up:observed
 pnpm observability:validate
+pnpm observability:smoke
+```
+
+observed構成のserviceを再build・再起動するときも、必ずbaseとobservabilityの両Compose fileを指定する。baseだけで`--force-recreate`するとserviceがobservability networkから外れ、`OTEL_ENABLED=true`でもtelemetryが到達しない。
+
+```bash
+docker compose -f compose.yaml -f compose.observability.yaml \
+  up -d --build --force-recreate episode-production
 pnpm observability:smoke
 ```
 

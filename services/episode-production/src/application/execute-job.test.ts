@@ -299,7 +299,10 @@ describe("executeEpisodeJob", () => {
       executeEpisodeJob(ports)({ job: running })
     )
 
-    expect(outcome).toEqual({ _tag: "Failed" })
+    expect(outcome).toEqual({
+      _tag: "Failed",
+      failureCode: "invalid_script_sources",
+    })
     expect(ports.speech.synthesize).not.toHaveBeenCalled()
     expect(ports.audio.put).not.toHaveBeenCalled()
   })
@@ -332,6 +335,7 @@ describe("executeEpisodeJob", () => {
         executeEpisodeJob(ports)({ job: running })
       )
       expect(outcome._tag).toBe(expected)
+      expect(outcome).toMatchObject({ failureCode: code })
       expect(
         vi.mocked(ports.persistence.transition).mock.calls[0]![0]
       ).toMatchObject({

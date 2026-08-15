@@ -72,7 +72,7 @@ export function ArticleRow({
           className={cn(
             "line-clamp-2 text-sm leading-5",
             article.read
-              ? "font-normal text-muted-foreground"
+              ? "font-normal text-foreground/70"
               : "font-medium text-foreground"
           )}
         >
