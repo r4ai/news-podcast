@@ -1,13 +1,8 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
-import {
-  ArticleArchivedV1Schema,
-  subjects,
-  type MessageId,
-} from "@news-podcast/protocols"
 import { eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
-import { articleSnapshots, contentOutbox } from "../../../../drizzle/schema.js"
+import { articleSnapshots } from "../../../../drizzle/schema.js"
 import type {
   ArchiveArticlePorts,
   ArchiveCommit,
@@ -19,23 +14,10 @@ import type {
   ContentKnowledgeDatabase,
   QueryRunner,
 } from "../../../infrastructure/unsafe/drizzle/open.js"
-import type {
-  ArticleArchivedWireEnvelope,
-  OutboxStore,
-} from "../../messaging/outbox.js"
 import type { JsonInterop } from "../json-interop.js"
-import { makeOutboxStore } from "./outbox.js"
 
 const SnapshotRowSchema = Schema.Struct({ snapshotJson: Schema.String })
 const parseSnapshotRow = parse(SnapshotRowSchema)
-
-const decodeArticleArchived = Schema.decodeUnknownSync(
-  ArticleArchivedV1Schema,
-  {
-    errors: "all",
-    onExcessProperty: "error",
-  }
-)
 
 const archiveStoreError = (
   operation: ArchiveStoreError["operation"],
@@ -63,12 +45,10 @@ const parseSnapshotJson = (
     Effect.mapError(() => archiveStoreError(operation))
   )
 
-export type ArchiveStore = Pick<ArchiveArticlePorts, "lookup" | "commit"> &
-  OutboxStore
+export type ArchiveStore = Pick<ArchiveArticlePorts, "lookup" | "commit">
 
 export const createArchiveStore = (
   database: ContentKnowledgeDatabase,
-  newMessageId: () => MessageId,
   jsonInterop: JsonInterop
 ): Effect.Effect<ArchiveStore, ArchiveStoreError> =>
   Effect.sync(() => {
@@ -100,7 +80,6 @@ export const createArchiveStore = (
         )
       )
 
-    /** スナップショットとアウトボックスの記録は、ひとつのトランザクションに収める。 */
     const commit: ArchiveArticlePorts["commit"] = (input) =>
       Effect.try({
         try: () =>
@@ -112,41 +91,15 @@ export const createArchiveStore = (
             if (existing !== undefined) {
               return deepFreeze({ _tag: "Existing" as const, row: existing })
             }
-
-            const messageId = newMessageId()
-            const wireEvent = decodeArticleArchived(input.event)
-            const envelope: ArticleArchivedWireEnvelope = deepFreeze({
-              messageId,
-              correlationId: input.context.correlationId,
-              causationId: input.context.messageId,
-              occurredAt: input.snapshot.capturedAt,
-              producer: "content-knowledge",
-              traceparent: input.context.traceparent,
-              actor: input.context.actor,
-              payload: wireEvent,
-            })
-
             tx.insert(articleSnapshots)
               .values({
                 archiveRequestId: input.snapshot.archiveRequestId,
                 snapshotId: input.snapshot.snapshotId,
-                // 記事一覧の結合キー。以前はJSONから式で取り出していた。
                 articleId: input.snapshot.articleId,
                 snapshotJson: jsonInterop.stringify(input.snapshot),
                 capturedAt: input.snapshot.capturedAt,
               })
               .run()
-
-            tx.insert(contentOutbox)
-              .values({
-                messageId,
-                archiveRequestId: input.snapshot.archiveRequestId,
-                subject: subjects.content.articleArchived,
-                envelopeJson: jsonInterop.stringify(envelope),
-                createdAt: input.snapshot.capturedAt,
-              })
-              .run()
-
             return deepFreeze({ _tag: "Inserted" as const })
           }),
         catch: (error) => archiveStoreError("Commit", error),
@@ -170,9 +123,5 @@ export const createArchiveStore = (
         )
       )
 
-    return deepFreeze({
-      lookup,
-      commit,
-      ...makeOutboxStore(database, jsonInterop),
-    })
+    return deepFreeze({ lookup, commit })
   })

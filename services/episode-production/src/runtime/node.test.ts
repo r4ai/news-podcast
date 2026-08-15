@@ -46,7 +46,7 @@ describe("episode-production Node RPC runtime", () => {
       drain,
     }
 
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNodeCreateJobRpc(config, {
         connectNats: vi.fn(async () => server),
         newJobId: () => "10e2d4e1-c127-479f-a124-2ea037bd9319" as never,
@@ -63,6 +63,7 @@ describe("episode-production Node RPC runtime", () => {
       payload: { _tag: "Accepted" },
     })
     expect(drain).toHaveBeenCalledOnce()
+    expect(exit._tag).toBe("Failure")
   })
 
   it("rejects invalid configuration before connecting", async () => {
@@ -116,14 +117,19 @@ describe("episode-production Node RPC runtime", () => {
   it("acquires and drains every versioned job-control subject", async () => {
     const connected: string[] = []
     const drained: string[] = []
+    let connectionCount = 0
 
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNodeProductionRpc(config, {
         connectNats: async (_servers, subject) => {
-          connected.push(subject)
+          connectionCount += 1
+          connected.push(...(typeof subject === "string" ? [subject] : subject))
           return {
             receive: async () => undefined,
-            drain: async () => void drained.push(subject),
+            drain: async () =>
+              void drained.push(
+                ...(typeof subject === "string" ? [subject] : subject)
+              ),
           }
         },
         newJobId: () => "10e2d4e1-c127-479f-a124-2ea037bd9319" as never,
@@ -146,6 +152,8 @@ describe("episode-production Node RPC runtime", () => {
     ]
     expect(connected.sort()).toEqual([...expected].sort())
     expect(drained.sort()).toEqual([...expected].sort())
+    expect(connectionCount).toBe(1)
+    expect(exit._tag).toBe("Failure")
   })
 })
 import { mkdtempSync, rmSync } from "node:fs"

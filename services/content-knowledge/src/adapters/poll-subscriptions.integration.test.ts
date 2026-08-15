@@ -23,7 +23,6 @@ import {
   SubscriptionIdSchema,
 } from "../domain/subscription.js"
 import { createHttpRssFeedReader } from "./providers/rss/http-feed-reader.js"
-import { parseOutboxLimit } from "./messaging/outbox.js"
 import { createArchiveStore } from "./persistence/archive/repository.js"
 import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
 import { openTestDatabase } from "./persistence/testing.js"
@@ -69,11 +68,10 @@ describe("pollSubscriptions integration", () => {
         createSubscriptionRepository(database.db)
       )
       const archiveStore = await Effect.runPromise(
-        createArchiveStore(
-          database.db,
-          () => decode(MessageIdSchema, "8fb12955-2175-4675-be63-e42227d5ed19"),
-          { parse: parseJsonUnsafe, stringify: stringifyJsonUnsafe }
-        )
+        createArchiveStore(database.db, {
+          parse: parseJsonUnsafe,
+          stringify: stringifyJsonUnsafe,
+        })
       )
       await Effect.runPromise(
         subscriptions.add({
@@ -167,10 +165,9 @@ describe("pollSubscriptions integration", () => {
         failed: 0,
       })
       expect(captureArticle).toHaveBeenCalledOnce()
-      const pending = await Effect.runPromise(
-        archiveStore.listPending(await Effect.runPromise(parseOutboxLimit(10)))
-      )
-      expect(pending).toHaveLength(1)
+      expect(
+        database.getSql("SELECT COUNT(*) AS count FROM article_snapshots")
+      ).toEqual({ count: 1 })
     } finally {
       database.close()
     }

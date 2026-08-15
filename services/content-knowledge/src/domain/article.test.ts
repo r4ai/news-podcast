@@ -10,7 +10,6 @@ import {
   ArticleUrlSchema,
   CapturedAtSchema,
   SnapshotIdSchema,
-  createArticleArchived,
   createArticleSnapshot,
 } from "./article.js"
 
@@ -63,7 +62,7 @@ const capture = decode(ArchiveCaptureSchema, {
 })
 
 describe("article archive domain", () => {
-  it("constructs a complete immutable snapshot and its immutable domain event", () => {
+  it("constructs a complete immutable snapshot", () => {
     const snapshot = createArticleSnapshot({
       command,
       snapshotId: decode(
@@ -73,11 +72,8 @@ describe("article archive domain", () => {
       capturedAt: decode(CapturedAtSchema, "2026-08-12T00:00:00.000Z"),
       capture,
     })
-    const event = createArticleArchived(snapshot)
-
     expect(snapshot.capture.markdown._tag).toBe("Markdown")
-    expect(event).toMatchObject({
-      _tag: "ArticleArchived",
+    expect(snapshot).toMatchObject({
       articleId: command.articleId,
       snapshotId: snapshot.snapshotId,
       sourceUrl: command.sourceUrl,
@@ -85,7 +81,5 @@ describe("article archive domain", () => {
     expect(Object.isFrozen(snapshot)).toBe(true)
     expect(Object.isFrozen(snapshot.capture)).toBe(true)
     expect(Object.isFrozen(snapshot.capture.assets)).toBe(true)
-    expect(Object.isFrozen(event)).toBe(true)
-    expect(Object.isFrozen(event.markdown)).toBe(true)
   })
 })

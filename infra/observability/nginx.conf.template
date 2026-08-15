@@ -12,6 +12,8 @@ server {
   ssl_certificate_key /etc/letsencrypt/live/${OTLP_DOMAIN}/privkey.pem;
   client_max_body_size 256k;
 
+  location = /health/live { return 200 "ok\n"; }
+
   location ~ ^/v1/(traces|logs|metrics)$ {
     if ($otel_authorized = 0) { return 401; }
     limit_req zone=otlp burst=20 nodelay;

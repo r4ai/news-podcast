@@ -46,6 +46,10 @@ function findLiveDeprecatedReferences(root) {
 
 export function validateMcpConfiguration(root = repositoryRoot) {
   const mcpConfig = readRequiredFile(resolve(root, ".codex/config.toml"))
+  const wrapper = readRequiredFile(resolve(root, "scripts/run-grafana-mcp.sh"))
+  const tokenProvisioner = readRequiredFile(
+    resolve(root, "scripts/ensure-grafana-mcp-token.mjs")
+  )
   const tempoConfig = readRequiredFile(
     resolve(root, "infra/observability/tempo/config.yaml")
   )
@@ -66,16 +70,17 @@ export function validateMcpConfiguration(root = repositoryRoot) {
     ["grafana"],
     "Project config must define only the Grafana MCP server"
   )
-  assert.match(mcpConfig, /command = "docker"/)
-  assert.match(mcpConfig, new RegExp(`"${escapeRegExp(MCP_IMAGE)}"`))
-  assert.match(mcpConfig, /"--network", "news-podcast-observability"/)
-  assert.match(mcpConfig, /"-t", "stdio"/)
-  assert.match(mcpConfig, /"--disable-write"/)
+  assert.match(mcpConfig, /command = "bash"/)
+  assert.match(mcpConfig, /args = \["scripts\/run-grafana-mcp\.sh"\]/)
+  assert.match(wrapper, new RegExp(escapeRegExp(MCP_IMAGE)))
+  assert.match(wrapper, /--network news-podcast-observability/)
+  assert.match(wrapper, /-t stdio/)
+  assert.match(wrapper, /--disable-write/)
   assert.match(
-    mcpConfig,
-    new RegExp(`"--enabled-tools", "${escapeRegExp(ENABLED_TOOLS)}"`)
+    wrapper,
+    new RegExp(`--enabled-tools ${escapeRegExp(ENABLED_TOOLS)}`)
   )
-  assert.match(mcpConfig, /"--max-loki-log-limit", "200"/)
+  assert.match(wrapper, /--max-loki-log-limit 200/)
   assert.match(mcpConfig, /GRAFANA_URL = "http:\/\/grafana:3000"/)
   assert.match(mcpConfig, /env_vars = \["GRAFANA_SERVICE_ACCOUNT_TOKEN"\]/)
   assert.match(mcpConfig, /startup_timeout_sec = 20/)
@@ -87,6 +92,11 @@ export function validateMcpConfiguration(root = repositoryRoot) {
     mcpConfig,
     /GRAFANA_SERVICE_ACCOUNT_TOKEN\s*=\s*["'][^"']+["']/
   )
+  assert.match(tokenProvisioner, /role: "Viewer"/)
+  assert.match(tokenProvisioner, /mode: 0o600/)
+  assert.match(wrapper, /GRAFANA_SERVICE_ACCOUNT_TOKEN:-/)
+  assert.match(wrapper, /\.codex\/state\/grafana-viewer-token/)
+  assert.doesNotMatch(wrapper, /GRAFANA_SERVICE_ACCOUNT_TOKEN=["'][^$]/)
 
   assert.match(
     tempoConfig,

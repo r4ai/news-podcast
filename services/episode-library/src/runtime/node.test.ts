@@ -141,7 +141,7 @@ describe("episode-library Node RPC runtime", () => {
       drain: async () => void events.push("rpc.drain"),
     }
 
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNodeEpisodeLibraryService(
         {
           ...serviceConfig,
@@ -187,6 +187,7 @@ describe("episode-library Node RPC runtime", () => {
       "rpc.drain",
       "signer.close",
     ])
+    expect(exit._tag).toBe("Failure")
   })
 
   it("uses SQLite, handles both subjects sequentially, and drains NATS", async () => {
@@ -271,7 +272,7 @@ describe("episode-library Node RPC runtime", () => {
       "10c9628f-6bd9-4f87-93cb-7332e2038a55",
     ]
 
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNodeEpisodeLibraryRpc({ ...config, sqlitePath }, signer, {
         connectNats,
         newMessageId: () => replyIds.shift()!,
@@ -311,6 +312,7 @@ describe("episode-library Node RPC runtime", () => {
     ).toMatchObject({ _tag: "Found" })
     expect(signer.issue).toHaveBeenCalledOnce()
     expect(drain).toHaveBeenCalledOnce()
+    expect(exit._tag).toBe("Failure")
   })
 
   it("rejects invalid config before connecting", async () => {

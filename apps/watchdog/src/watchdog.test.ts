@@ -80,6 +80,44 @@ describe("independent watchdog", () => {
     expect(result.notification?.kind).toBe("firing")
   })
 
+  it("reports a partial recovery while the remaining target stays firing", async () => {
+    const previous = await checkWatchdog({
+      state: { failures: {} },
+      targets: [
+        { name: "api", url: "http://api/health" },
+        { name: "storage", url: "http://storage/health" },
+      ],
+      now: new Date("2026-08-10T00:00:00Z"),
+      fetcher: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response("down", { status: 503 })),
+    })
+    const partial = await checkWatchdog({
+      state: previous.state,
+      targets: [
+        { name: "api", url: "http://api/health" },
+        { name: "storage", url: "http://storage/health" },
+      ],
+      now: new Date("2026-08-10T00:01:00Z"),
+      fetcher: vi.fn<typeof fetch>().mockImplementation((url) =>
+        Promise.resolve(
+          new Response(String(url).includes("api") ? "ok" : "down", {
+            status: String(url).includes("api") ? 200 : 503,
+          })
+        )
+      ),
+    })
+
+    expect(partial.notification).toMatchObject({ kind: "firing" })
+    expect(partial.notification?.text).toContain(
+      "Recovered in the same check: api"
+    )
+    expect(partial.state.targets).toMatchObject({
+      api: { up: true, consecutiveFailures: 0 },
+      storage: { up: false, consecutiveFailures: 2 },
+    })
+  })
+
   it("treats a reset exporter counter as fresh collector progress", async () => {
     const result = await checkWatchdog({
       state: {
@@ -106,31 +144,39 @@ describe("independent watchdog", () => {
     expect(watchdogTargets({})).toEqual([
       {
         name: "gateway",
-        url: "http://127.0.0.1:4101/health/ready",
+        url: "http://gateway:4101/health/ready",
       },
       {
         name: "identity-access",
-        url: "http://127.0.0.1:4102/health/ready",
+        url: "http://identity-access:4102/health/ready",
       },
       {
         name: "content-knowledge",
-        url: "http://127.0.0.1:4103/health/ready",
+        url: "http://content-knowledge:4103/health/ready",
       },
       {
         name: "episode-production",
-        url: "http://127.0.0.1:4104/health/ready",
+        url: "http://episode-production:4104/health/ready",
       },
       {
         name: "episode-library",
-        url: "http://127.0.0.1:4105/health/ready",
+        url: "http://episode-library:4105/health/ready",
+      },
+      {
+        name: "web",
+        url: "http://web:4173/",
+      },
+      {
+        name: "nats-jetstream",
+        url: "http://nats:8222/healthz?js-enabled-only=true",
+      },
+      {
+        name: "seaweedfs",
+        url: "http://seaweedfs:9333/cluster/status",
       },
       {
         name: "voicevox",
-        url: "http://127.0.0.1:50021/version",
-      },
-      {
-        name: "grafana",
-        url: "http://127.0.0.1:3100/api/health",
+        url: "http://voicevox:50021/version",
       },
     ])
   })

@@ -12,7 +12,6 @@ import {
   ArchiveCommandSchema,
   CapturedAtSchema,
   SnapshotIdSchema,
-  createArticleArchived,
   createArticleSnapshot,
 } from "../domain/article.js"
 import { encodeArticleCursor } from "../domain/article-library.js"
@@ -59,7 +58,7 @@ const setup = async () => {
     createArticleCatalog(database.db, { parse: parseJsonUnsafe })
   )
   const archiveStore = await Effect.runPromise(
-    createArchiveStore(database.db, () => crypto.randomUUID() as never, {
+    createArchiveStore(database.db, {
       parse: parseJsonUnsafe,
       stringify: stringifyJsonUnsafe,
     })
@@ -154,14 +153,6 @@ const setup = async () => {
   await Effect.runPromise(
     archiveStore.commit({
       snapshot,
-      event: createArticleArchived(snapshot),
-      context: {
-        messageId: crypto.randomUUID() as never,
-        correlationId: crypto.randomUUID() as never,
-        traceparent:
-          "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" as never,
-        actor: { _tag: "Service", service: "content-knowledge" as never },
-      },
     })
   )
   const articles = await Effect.runPromise(createArticleLibrary(database.db))

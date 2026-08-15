@@ -2,7 +2,6 @@ import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
-  parseArticleArchived,
   parseCreateEpisodeJobRequest,
   parseEpisodeCompleted,
   parseEpisodeCompletedV2,
@@ -77,7 +76,7 @@ describe("integration contracts", () => {
   })
 
   it("parses the cross-context happy paths into immutable values", async () => {
-    const [session, request, article, episode] = await Effect.runPromise(
+    const [session, request, episode] = await Effect.runPromise(
       Effect.all([
         parseResolveSessionResponse({
           actor: {
@@ -89,22 +88,6 @@ describe("integration contracts", () => {
           idempotencyKey: "daily-2026-08-12",
           trigger: "manual",
           articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
-        }),
-        parseArticleArchived({
-          _tag: "ArticleArchived",
-          archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
-          articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
-          snapshotId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
-          sourceUrl: "https://example.com/news/1",
-          title: "News 1",
-          archivedAt: "2026-08-12T00:00:00.000Z",
-          markdown: {
-            _tag: "Markdown",
-            key: "articles/snapshot/markdown/article.md",
-            sha256: "3".repeat(64),
-            mediaType: "text/markdown",
-            byteLength: 80,
-          },
         }),
         parseEpisodeCompleted({
           episodeId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
@@ -123,8 +106,6 @@ describe("integration contracts", () => {
 
     expect(session.actor._tag).toBe("User")
     expect(request.trigger).toBe("manual")
-    expect(article.sourceUrl).toBe("https://example.com/news/1")
-    expect(Object.isFrozen(article.markdown)).toBe(true)
     expect(Object.isFrozen(episode.sources[0])).toBe(true)
   })
 
@@ -191,26 +172,6 @@ describe("integration contracts", () => {
             (_, index) =>
               `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`
           ),
-        }),
-    ],
-    [
-      "archive with non-http URL",
-      () =>
-        parseArticleArchived({
-          _tag: "ArticleArchived",
-          archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
-          articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
-          snapshotId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
-          sourceUrl: "file:///etc/passwd",
-          title: "News 1",
-          archivedAt: "2026-08-12T00:00:00.000Z",
-          markdown: {
-            _tag: "Markdown",
-            key: "articles/snapshot/markdown/article.md",
-            sha256: "3".repeat(64),
-            mediaType: "text/markdown",
-            byteLength: 80,
-          },
         }),
     ],
     [

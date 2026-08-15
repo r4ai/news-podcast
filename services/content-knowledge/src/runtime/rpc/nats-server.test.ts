@@ -10,7 +10,7 @@ describe("Content Knowledge NATS RPC runtime", () => {
       receive: vi.fn(async () => undefined),
       drain,
     }))
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNatsContentKnowledgeRpc(
         { natsServers: ["nats://127.0.0.1:4222"], queueGroup: "content-rpc" },
         {
@@ -44,5 +44,6 @@ describe("Content Knowledge NATS RPC runtime", () => {
       "content-rpc"
     )
     expect(drain).toHaveBeenCalledOnce()
+    expect(exit._tag).toBe("Failure")
   })
 })

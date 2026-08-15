@@ -1,4 +1,8 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
+import {
+  logRpcDeliveryFailure,
+  runSequentialRpcLoop,
+} from "@news-podcast/nats-runtime"
 import { subjects } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 
@@ -182,35 +186,34 @@ const runRpcLoop = (
   dependencies: NodeEpisodeLibraryRpcDependencies
 ): Effect.Effect<void, NodeEpisodeLibraryRpcError> => {
   const handler = makeEpisodeLibraryRpcHandler(repository, signer, dependencies)
-  const loop = (): Effect.Effect<void, NodeEpisodeLibraryRpcError> =>
-    Effect.tryPromise({
+  return runSequentialRpcLoop({
+    receive: Effect.tryPromise({
       try: () => server.receive(),
       catch: () => runtimeError("Nats"),
-    }).pipe(
-      Effect.flatMap((delivery) => {
-        if (delivery === undefined) return Effect.void
-        return handler({
-          subject: delivery.subject,
-          payload: delivery.payload,
-          reply: (payload) =>
-            Effect.tryPromise({
-              try: () => delivery.reply(payload),
-              catch: () => runtimeError("Reply"),
-            }),
-        }).pipe(
-          Effect.mapError((failure) =>
-            typeof failure === "object" &&
-            failure !== null &&
-            "_tag" in failure &&
-            failure._tag === "NodeEpisodeLibraryRpcFailed"
-              ? (failure as NodeEpisodeLibraryRpcError)
-              : runtimeError("Handler")
-          ),
-          Effect.andThen(loop())
+    }),
+    sourceClosed: () => runtimeError("Nats"),
+    handle: (delivery) =>
+      handler({
+        subject: delivery.subject,
+        payload: delivery.payload,
+        reply: (payload) =>
+          Effect.tryPromise({
+            try: () => delivery.reply(payload),
+            catch: () => runtimeError("Reply"),
+          }),
+      }).pipe(
+        Effect.mapError((failure) =>
+          typeof failure === "object" &&
+          failure !== null &&
+          "_tag" in failure &&
+          failure._tag === "NodeEpisodeLibraryRpcFailed"
+            ? (failure as NodeEpisodeLibraryRpcError)
+            : runtimeError("Handler")
         )
-      })
-    )
-  return loop()
+      ),
+    onDeliveryFailure: (cause) =>
+      logRpcDeliveryFailure("episode-library", "rpc", cause),
+  })
 }
 
 export const runNodeEpisodeLibraryRpc = (

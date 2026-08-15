@@ -189,17 +189,6 @@ export const ArticleSnapshotSchema = Schema.Struct({
 })
 export type ArticleSnapshot = Schema.Schema.Type<typeof ArticleSnapshotSchema>
 
-export const ArticleArchivedSchema = Schema.TaggedStruct("ArticleArchived", {
-  archiveRequestId: ArchiveRequestIdSchema,
-  articleId: ArticleIdSchema,
-  snapshotId: SnapshotIdSchema,
-  sourceUrl: ArticleUrlSchema,
-  title: ArticleTitleSchema,
-  archivedAt: CapturedAtSchema,
-  markdown: MarkdownObjectSchema,
-})
-export type ArticleArchived = Schema.Schema.Type<typeof ArticleArchivedSchema>
-
 export const createArticleSnapshot = (input: {
   readonly command: ArchiveCommand
   readonly snapshotId: SnapshotId
@@ -214,18 +203,4 @@ export const createArticleSnapshot = (input: {
     title: input.command.title,
     capturedAt: input.capturedAt,
     capture: input.capture,
-  })
-
-export const createArticleArchived = (
-  snapshot: ArticleSnapshot
-): DeepReadonly<ArticleArchived> =>
-  deepFreeze({
-    _tag: "ArticleArchived" as const,
-    archiveRequestId: snapshot.archiveRequestId,
-    articleId: snapshot.articleId,
-    snapshotId: snapshot.snapshotId,
-    sourceUrl: snapshot.sourceUrl,
-    title: snapshot.title,
-    archivedAt: snapshot.capturedAt,
-    markdown: snapshot.capture.markdown,
   })

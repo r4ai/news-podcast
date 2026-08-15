@@ -26,6 +26,7 @@
     "@nats-io/jetstream": "3.4.0",
     "@nats-io/transport-node": "3.4.0",
     "@news-podcast/kernel": "workspace:*",
+    "@news-podcast/nats-runtime": "workspace:*",
     "@news-podcast/observability": "workspace:*",
     "@news-podcast/persistence": "workspace:*",
     "@news-podcast/protocols": "workspace:*",

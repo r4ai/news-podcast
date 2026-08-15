@@ -13,7 +13,6 @@ import {
   ArchiveCommandSchema,
   CapturedAtSchema,
   SnapshotIdSchema,
-  createArticleArchived,
   createArticleSnapshot,
 } from "../domain/article.js"
 import { archiveArticle } from "./archive-article.js"
@@ -94,7 +93,7 @@ const makePorts = (): ArchiveArticlePorts => {
 }
 
 describe("archiveArticle", () => {
-  it("captures, constructs and atomically commits a snapshot with its event", async () => {
+  it("captures, constructs and commits an immutable snapshot", async () => {
     const ports = makePorts()
     const result = await Effect.runPromise(archiveArticle(ports)(invocation))
 
@@ -112,19 +111,9 @@ describe("archiveArticle", () => {
         capturedAt,
         capture,
       }),
-      event: createArticleArchived(
-        createArticleSnapshot({
-          command,
-          snapshotId,
-          capturedAt,
-          capture,
-        })
-      ),
-      context,
     })
     expect(Object.isFrozen(result)).toBe(true)
     expect(commitCall && Object.isFrozen(commitCall)).toBe(true)
-    expect(commitCall && Object.isFrozen(commitCall.event)).toBe(true)
   })
 
   it("returns the existing immutable snapshot without recapturing on retry", async () => {

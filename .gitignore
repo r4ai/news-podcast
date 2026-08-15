@@ -25,6 +25,9 @@ outputs/
 news-podcast-app/
 .claude/worktrees/
 
+# Local generated credentials (never commit)
+.codex/state/
+
 # turbo
 .turbo
 

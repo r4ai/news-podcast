@@ -64,18 +64,20 @@ export type NodeCreateJobRpcError = DeepReadonly<{
 export type NodeCreateJobRpcDependencies = DeepReadonly<{
   readonly connectNats: (
     servers: readonly string[],
-    subject: string,
+    subject: string | readonly string[],
     queueGroup: string
   ) => Promise<UnsafeNatsRpcServer>
   readonly newJobId: () => JobId
   readonly now: () => UtcTimestamp
+  readonly onReady?: () => void
 }>
 
-const defaultDependencies: NodeCreateJobRpcDependencies = deepFreeze({
-  connectNats: connectNatsRpcUnsafe,
-  newJobId: randomJobIdUnsafe,
-  now: currentUtcTimestampUnsafe,
-})
+export const defaultNodeCreateJobRpcDependencies: NodeCreateJobRpcDependencies =
+  deepFreeze({
+    connectNats: connectNatsRpcUnsafe,
+    newJobId: randomJobIdUnsafe,
+    now: currentUtcTimestampUnsafe,
+  })
 
 const runtimeError = (
   component: NodeCreateJobRpcError["component"]
@@ -85,7 +87,7 @@ const runtimeError = (
 /** Complete scoped runtime: SQLite and NATS are released on every exit path. */
 export const runNodeCreateJobRpc = (
   input: unknown,
-  dependencies: NodeCreateJobRpcDependencies = defaultDependencies
+  dependencies: NodeCreateJobRpcDependencies = defaultNodeCreateJobRpcDependencies
 ): Effect.Effect<void, NodeCreateJobRpcError> =>
   parseNodeCreateJobRpcConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
@@ -121,6 +123,7 @@ export const runNodeCreateJobRpc = (
             now: Effect.sync(dependencies.now),
             saveIdempotently: repository.saveIdempotently,
           })
+          dependencies.onReady?.()
 
           return yield* runSingleWriterLoop(
             {
@@ -137,7 +140,9 @@ export const runNodeCreateJobRpc = (
                     try: () => delivery.reply(payload),
                     catch: () => runtimeError("Reply"),
                   }),
-              })
+              }),
+            () => runtimeError("Nats"),
+            subjects.production.createJob
           )
         })
       )
@@ -154,7 +159,7 @@ type RpcHandler = (
 /** Runs the complete versioned Episode Production command/query RPC surface. */
 export const runNodeProductionRpc = (
   input: unknown,
-  dependencies: NodeCreateJobRpcDependencies = defaultDependencies
+  dependencies: NodeCreateJobRpcDependencies = defaultNodeCreateJobRpcDependencies
 ): Effect.Effect<void, NodeCreateJobRpcError> =>
   parseNodeCreateJobRpcConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
@@ -268,53 +273,56 @@ export const runNodeProductionRpc = (
             ],
           ]
 
-          yield* Effect.all(
-            handlers.map(([subject, handler]) =>
-              Effect.gen(function* () {
-                const server = yield* Effect.acquireRelease(
+          const handlerBySubject = new Map(handlers)
+          const server = yield* Effect.acquireRelease(
+            Effect.tryPromise({
+              try: () =>
+                dependencies.connectNats(
+                  config.natsServers,
+                  handlers.map(([subject]) => subject),
+                  config.queueGroup
+                ),
+              catch: () => runtimeError("Nats"),
+            }),
+            (resource) =>
+              Effect.tryPromise(() => resource.drain()).pipe(Effect.ignore)
+          )
+          dependencies.onReady?.()
+          yield* runSingleWriterLoop(
+            {
+              receive: Effect.tryPromise({
+                try: () => server.receive(),
+                catch: () => runtimeError("Nats"),
+              }),
+            },
+            (delivery) => {
+              const handler =
+                delivery.subject === undefined
+                  ? undefined
+                  : handlerBySubject.get(delivery.subject)
+              if (handler === undefined) {
+                return Effect.fail(runtimeError("Handler"))
+              }
+              return handler({
+                payload: delivery.payload,
+                reply: (payload) =>
                   Effect.tryPromise({
-                    try: () =>
-                      dependencies.connectNats(
-                        config.natsServers,
-                        subject,
-                        config.queueGroup
-                      ),
-                    catch: () => runtimeError("Nats"),
+                    try: () => delivery.reply(payload),
+                    catch: () => runtimeError("Reply"),
                   }),
-                  (resource) =>
-                    Effect.tryPromise(() => resource.drain()).pipe(
-                      Effect.ignore
-                    )
+              }).pipe(
+                Effect.mapError((failure) =>
+                  typeof failure === "object" &&
+                  failure !== null &&
+                  "_tag" in failure &&
+                  failure._tag === "NodeCreateJobRpcFailed"
+                    ? (failure as NodeCreateJobRpcError)
+                    : runtimeError("Handler")
                 )
-                yield* runSingleWriterLoop(
-                  {
-                    receive: Effect.tryPromise({
-                      try: () => server.receive(),
-                      catch: () => runtimeError("Nats"),
-                    }),
-                  },
-                  (delivery) =>
-                    handler({
-                      payload: delivery.payload,
-                      reply: (payload) =>
-                        Effect.tryPromise({
-                          try: () => delivery.reply(payload),
-                          catch: () => runtimeError("Reply"),
-                        }),
-                    }).pipe(
-                      Effect.mapError((failure) =>
-                        typeof failure === "object" &&
-                        failure !== null &&
-                        "_tag" in failure &&
-                        failure._tag === "NodeCreateJobRpcFailed"
-                          ? (failure as NodeCreateJobRpcError)
-                          : runtimeError("Handler")
-                      )
-                    )
-                )
-              })
-            ),
-            { concurrency: "unbounded", discard: true }
+              )
+            },
+            () => runtimeError("Nats"),
+            "rpc"
           )
         })
       )

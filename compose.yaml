@@ -1,5 +1,7 @@
 services:
   gateway:
+    restart: unless-stopped
+    stop_grace_period: 30s
     build:
       context: .
       dockerfile: infra/Dockerfile.node
@@ -38,8 +40,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 5s
 
   identity-access:
+    restart: unless-stopped
+    stop_grace_period: 30s
     build:
       context: .
       dockerfile: infra/Dockerfile.node
@@ -65,6 +70,8 @@ services:
     healthcheck: *context-health
 
   content-knowledge:
+    restart: unless-stopped
+    stop_grace_period: 30s
     build:
       context: .
       dockerfile: infra/Dockerfile.node
@@ -79,10 +86,6 @@ services:
       CONTENT_HEALTH_PORT: "4103"
       HEALTH_PORT: "4103"
       NATS_SERVERS: nats://nats:4222
-      CONTENT_OUTBOX_BATCH_SIZE: "50"
-      CONTENT_OUTBOX_INTERVAL_MS: "1000"
-      CONTENT_OUTBOX_INITIAL_BACKOFF_MS: "1000"
-      CONTENT_OUTBOX_MAX_BACKOFF_MS: "30000"
       CONTENT_ENRICH_DAILY_LIMIT: "200"
       CONTENT_ENRICH_INTERVAL_MS: "60000"
       CONTENT_ENRICH_INITIAL_BACKOFF_MS: "1000"
@@ -95,10 +98,12 @@ services:
       nats:
         condition: service_healthy
       seaweedfs:
-        condition: service_started
+        condition: service_healthy
     healthcheck: *context-health
 
   episode-production:
+    restart: unless-stopped
+    stop_grace_period: 30s
     build:
       context: .
       dockerfile: infra/Dockerfile.node
@@ -123,10 +128,12 @@ services:
       voicevox:
         condition: service_healthy
       seaweedfs:
-        condition: service_started
+        condition: service_healthy
     healthcheck: *context-health
 
   episode-library:
+    restart: unless-stopped
+    stop_grace_period: 30s
     build:
       context: .
       dockerfile: infra/Dockerfile.node
@@ -155,7 +162,7 @@ services:
       nats-provision:
         condition: service_completed_successfully
       seaweedfs:
-        condition: service_started
+        condition: service_healthy
     healthcheck: *context-health
 
   nats-provision:
@@ -172,6 +179,8 @@ services:
     restart: "no"
 
   web:
+    restart: unless-stopped
+    stop_grace_period: 15s
     build:
       context: .
       dockerfile: infra/Dockerfile.node
@@ -184,8 +193,22 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4173/').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   nats:
+    restart: unless-stopped
+    stop_grace_period: 30s
     image: nats:2.12.1-alpine
     command:
       [
@@ -215,6 +238,8 @@ services:
       start_period: 5s
 
   seaweedfs:
+    restart: unless-stopped
+    stop_grace_period: 30s
     image: chrislusf/seaweedfs@sha256:e0b528145ea514040ab00d03ff0833f56acb1f0e07aeab232e20485af9278fd8
     command: ["mini", "-dir=/data", "-s3.port=8333"]
     environment:
@@ -226,10 +251,25 @@ services:
       - "127.0.0.1:9333:9333"
     volumes:
       - object-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:9333/cluster/status",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   voicevox:
     image: voicevox/voicevox_engine@sha256:eb8c7f46a7d01217d1ff2b6f018261faedeceded3cc756b4fbbf371791ad6c90
     restart: unless-stopped
+    stop_grace_period: 30s
     ports:
       - "127.0.0.1:50021:50021"
     healthcheck:
@@ -237,6 +277,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+      start_period: 10s
+
+  watchdog:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+      network: host
+    command: ["pnpm", "--filter", "@news-podcast/watchdog", "start"]
+    restart: unless-stopped
+    stop_grace_period: 15s
+    environment:
+      WATCHDOG_PORT: "4199"
+      WATCHDOG_INTERVAL_MS: ${WATCHDOG_INTERVAL_MS:-60000}
+      WATCHDOG_STATE_PATH: /var/lib/news-podcast-watchdog/state.json
+      WATCHDOG_SMTP_HOST: ${WATCHDOG_SMTP_HOST:-}
+      WATCHDOG_SMTP_PORT: ${WATCHDOG_SMTP_PORT:-587}
+      WATCHDOG_SMTP_SECURE: ${WATCHDOG_SMTP_SECURE:-false}
+      WATCHDOG_SMTP_USERNAME: ${WATCHDOG_SMTP_USERNAME:-}
+      WATCHDOG_SMTP_PASSWORD: ${WATCHDOG_SMTP_PASSWORD:-}
+      WATCHDOG_SMTP_FROM: ${WATCHDOG_SMTP_FROM:-}
+      WATCHDOG_SMTP_TO: ${WATCHDOG_SMTP_TO:-}
+    ports:
+      - "127.0.0.1:4199:4199"
+    volumes:
+      - watchdog-data:/var/lib/news-podcast-watchdog
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4199/health/live').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
 
 volumes:
   identity-data:
@@ -245,3 +322,4 @@ volumes:
   library-data:
   nats-data:
   object-data:
+  watchdog-data:

@@ -21,13 +21,13 @@ const effectTelemetry = makeEffectOtlpLayerFromEnvironment(
   process.env,
   "content-knowledge"
 )
-const health = createHealthState()
+const health = createHealthState(["rpc"])
 const core = readContentKnowledgeConfig(process.env)
   .pipe(
     Effect.flatMap((config) =>
       runNodeService(config, {
         ...defaultNodeServiceDependencies,
-        onReady: health.ready,
+        onReady: () => health.ready("rpc"),
       })
     )
   )
@@ -36,13 +36,16 @@ const program = Effect.scoped(
   healthServerScoped(
     Number(process.env.CONTENT_HEALTH_PORT ?? "4103"),
     health
-  ).pipe(Effect.andThen(core), Effect.ensuring(Effect.sync(health.notReady)))
+  ).pipe(
+    Effect.andThen(core),
+    Effect.ensuring(Effect.sync(() => health.notReady("rpc")))
+  )
 )
 
 startContentKnowledgeProcess(program, {
   onceSignal: (signal, listener) => process.once(signal, listener),
+  onceFatal: (event, listener) => process.once(event, listener),
   shutdownTelemetry: () => observability.shutdown(),
   exit: (code) => process.exit(code),
-  reportFailure: (failure) =>
-    console.error("Content Knowledge exited", failure),
+  reportFailure: (failure) => console.error(JSON.stringify(failure)),
 })

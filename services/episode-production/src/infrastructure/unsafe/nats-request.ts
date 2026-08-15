@@ -1,6 +1,7 @@
 import { connect } from "@nats-io/transport-node"
 
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
+import { drainNatsConnection } from "@news-podcast/nats-runtime"
 
 export type UnsafeNatsRequestClient = DeepReadonly<{
   request: (
@@ -38,6 +39,6 @@ export const connectNatsRequestUnsafe = async (
         : await request
       return new Uint8Array(message.data)
     },
-    close: () => connection.drain(),
+    close: () => drainNatsConnection(connection),
   })
 }

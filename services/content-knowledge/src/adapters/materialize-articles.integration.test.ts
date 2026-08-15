@@ -47,11 +47,10 @@ describe("article materialization", () => {
         })
       )
       const archiveStore = await Effect.runPromise(
-        createArchiveStore(
-          database.db,
-          () => "8fb12955-2175-4675-be63-e42227d5ed19" as never,
-          { parse: parseJsonUnsafe, stringify: stringifyJsonUnsafe }
-        )
+        createArchiveStore(database.db, {
+          parse: parseJsonUnsafe,
+          stringify: stringifyJsonUnsafe,
+        })
       )
       await Effect.runPromise(
         subscriptions.add({
@@ -117,23 +116,6 @@ describe("article materialization", () => {
       await Effect.runPromise(
         archiveStore.commit({
           snapshot,
-          event: {
-            _tag: "ArticleArchived",
-            archiveRequestId: snapshot.archiveRequestId,
-            articleId: snapshot.articleId,
-            snapshotId: snapshot.snapshotId,
-            sourceUrl: snapshot.sourceUrl,
-            title: snapshot.title,
-            archivedAt: snapshot.capturedAt,
-            markdown: snapshot.capture.markdown,
-          },
-          context: {
-            messageId: "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4" as never,
-            correlationId: "ea122752-73d0-4851-9664-7d3e63e76859" as never,
-            traceparent:
-              "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" as never,
-            actor: { _tag: "Service", service: "content-knowledge" as never },
-          },
         })
       )
       const read = vi.fn(() => Effect.succeed("# Stable\n\nArchived body"))

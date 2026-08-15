@@ -12,9 +12,15 @@ services:
       - otel-collector-storage:/storage
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.135.0
+    image: news-podcast-observability-otel-collector
+    build:
+      context: ../..
+      dockerfile: infra/observability/Dockerfile.healthcheck
+      args:
+        RUNTIME_IMAGE: otel/opentelemetry-collector-contrib:0.135.0
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     restart: unless-stopped
+    stop_grace_period: 30s
     read_only: true
     volumes:
       - ./collector.yaml:/etc/otelcol-contrib/config.yaml:ro
@@ -27,11 +33,16 @@ services:
       otel-storage-init:
         condition: service_completed_successfully
       prometheus:
-        condition: service_started
+        condition: service_healthy
       loki:
-        condition: service_started
+        condition: service_healthy
       tempo:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "-q", "--spider", "http://127.0.0.1:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [observability]
 
   grafana-dashboard-init:
@@ -81,6 +92,7 @@ services:
       - --web.enable-remote-write-receiver
       - --enable-feature=exemplar-storage
     restart: unless-stopped
+    stop_grace_period: 30s
     read_only: true
     volumes:
       - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
@@ -95,29 +107,52 @@ services:
     networks: [observability]
 
   loki:
-    image: grafana/loki:3.7.2
+    image: news-podcast-observability-loki
+    build:
+      context: ../..
+      dockerfile: infra/observability/Dockerfile.healthcheck
+      args:
+        RUNTIME_IMAGE: grafana/loki:3.7.2
     command: ["-config.file=/etc/loki/config.yaml"]
     restart: unless-stopped
+    stop_grace_period: 30s
     read_only: true
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
       - loki-data:/loki
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "-q", "--spider", "http://127.0.0.1:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [observability]
 
   tempo:
-    image: grafana/tempo:2.10.7
+    image: news-podcast-observability-tempo
+    build:
+      context: ../..
+      dockerfile: infra/observability/Dockerfile.healthcheck
+      args:
+        RUNTIME_IMAGE: grafana/tempo:2.10.7
     command: ["-config.file=/etc/tempo/config.yaml"]
     restart: unless-stopped
+    stop_grace_period: 30s
     user: "10001:10001"
     read_only: true
     volumes:
       - ./tempo/config.yaml:/etc/tempo/config.yaml:ro
       - tempo-data:/var/tempo
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "-q", "--spider", "http://127.0.0.1:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [observability]
 
   grafana:
     image: grafana/grafana:13.1.0
     restart: unless-stopped
+    stop_grace_period: 30s
     read_only: true
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -148,9 +183,9 @@ services:
       prometheus:
         condition: service_healthy
       loki:
-        condition: service_started
+        condition: service_healthy
       tempo:
-        condition: service_started
+        condition: service_healthy
       grafana-dashboard-init:
         condition: service_completed_successfully
       grafana-provisioning-init:

@@ -67,36 +67,6 @@ export type CreateEpisodeJobRequest = Schema.Schema.Type<
 >
 export const parseCreateEpisodeJobRequest = parse(CreateEpisodeJobRequestSchema)
 
-export const ArticleArchivedV1Schema = Schema.Struct({
-  _tag: Schema.Literal("ArticleArchived"),
-  archiveRequestId: uuid("ArchiveRequestId"),
-  articleId: uuid("ArticleId"),
-  snapshotId: uuid("ArticleSnapshotId"),
-  sourceUrl: HttpUrlSchema,
-  title: Schema.NonEmptyString.check(Schema.isMaxLength(500)),
-  archivedAt: UtcInstantSchema,
-  markdown: Schema.Struct({
-    _tag: Schema.Literal("Markdown"),
-    key: ObjectKeySchema,
-    sha256: Schema.String.check(Schema.isPattern(/^[\da-f]{64}$/)).pipe(
-      Schema.brand("Sha256")
-    ),
-    mediaType: Schema.Literals([
-      "text/markdown",
-      "text/markdown; charset=utf-8",
-    ]),
-    byteLength: Schema.Int.check(Schema.isGreaterThan(0)),
-  }),
-})
-export type ArticleArchivedV1 = Schema.Schema.Type<
-  typeof ArticleArchivedV1Schema
->
-
-/** Compatibility name; the wire version is fixed by the v1 subject. */
-export const ArticleArchivedSchema = ArticleArchivedV1Schema
-export type ArticleArchived = Schema.Schema.Type<typeof ArticleArchivedSchema>
-export const parseArticleArchived = parse(ArticleArchivedSchema)
-
 const EpisodeSourceSchema = Schema.Struct({
   url: HttpUrlSchema,
   title: Schema.NonEmptyString,

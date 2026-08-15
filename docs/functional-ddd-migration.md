@@ -15,7 +15,6 @@ flowchart LR
   Gateway <-->|"versioned NATS RPC"| Content["Content Knowledge"]
   Gateway <-->|"versioned NATS RPC"| Production["Episode Production"]
   Gateway <-->|"versioned NATS RPC"| Library["Episode Library"]
-  Content -->|"JetStream event"| Production
   Production -->|"durable completion"| Library
 ```
 
@@ -26,7 +25,7 @@ flowchart LR
 | immutable kernel / protocol | strict parse、deep freeze、version付きsubject、相関envelope | `packages/kernel`、`packages/protocols` |
 | 4 Context services | service内domain/application/adapters/runtime、専用SQLite | `services/*` |
 | Gateway / Web | Effect HttpApi、認証proxy、生成OpenAPI client | `apps/gateway`、`apps/web`、`packages/contracts` |
-| 非同期実行 | NATS/JetStream、outbox/inbox、fenced lease、scheduler | Production/Library integration tests |
+| 非同期実行 | Production→Library JetStream、outbox/inbox、fenced lease、scheduler | Production/Library integration tests |
 | provider境界 | 安全なRSS取得、strict OpenAI応答、VOICEVOX、S3 | adapter tests、functional E2E |
 | 可観測性 | OTLP、Grafana、Prometheus、Loki、Tempo | `packages/observability`、`infra/observability` |
 | 復旧 | service別backup、profile検証、別path restore | `pnpm test:sqlite-state`、運用runbook |

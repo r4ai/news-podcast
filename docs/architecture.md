@@ -1,12 +1,12 @@
 # システムアーキテクチャ
 
-- 更新日: 2026-08-13
+- 更新日: 2026-08-15
 - 対象: 関数型マイクロサービス（旧実装削除済み）
 - 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
 ## 1. 全体像
 
-本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、ownerが選択した版固定済み記事から出典付きPodcastを制作する**関数型マイクロサービス**である。4 Bounded Contextを独立サービスとし、Gatewayとサービス間はNATS RPC、状態伝播はJetStream eventを使う。本文・asset・音声はSeaweedFSへ保存する。
+本システムは、任意RSSを購読して新着記事を静的Webアーカイブへ保存し、ownerが選択した版固定済み記事から出典付きPodcastを制作する**関数型マイクロサービス**である。4 Bounded Contextを独立サービスとし、Gatewayとサービス間はNATS RPC、ProductionからLibraryへの完成通知だけをJetStream eventで伝える。本文・asset・音声はSeaweedFSへ保存する。
 
 設計の軸は次の4点である。
 
@@ -68,7 +68,7 @@ flowchart LR
 | パス | レイヤー | 現在の責務 |
 | --- | --- | --- |
 | `apps/gateway` | Presentation / Integration | Effect HttpApi、認証proxy、NATS RPC adapter、OpenAPI正本 |
-| `apps/watchdog` | Operations | Grafana非依存health/freshness監視、SMTP通知state |
+| `apps/watchdog` | Operations | 全service health/freshness監視、Prometheus metrics、SMTP/構造化log通知state |
 | `apps/web` | Presentation | React、TanStack Router/Query、生成OpenAPI client |
 | `services/*` | Bounded Context | service内のdomain、application、adapter、runtime |
 | `packages/kernel` | Shared Kernel | Context非依存のimmutable primitive |
@@ -76,6 +76,8 @@ flowchart LR
 | `packages/contracts` | Published Contract | Gateway HttpApiから生成したOpenAPI JSONとTypeScript型 |
 | `packages/ui` | Presentation Shared | shadcn/Base UIベースの共通UI部品とtoken |
 | `packages/observability` | Cross-cutting Adapter | OpenTelemetry契約、Node adapter、privacy filter |
+| `packages/service-runtime` | Cross-cutting Runtime | named health、signal/fatal error、期限付きgraceful shutdown |
+| `packages/nats-runtime` | Integration Runtime | 共通NATS RPC transport、逐次delivery隔離、terminal通知 |
 | `infra` | Deployment / Operations | Node image、Collector、Grafana/Prometheus/Loki/Tempo設定・dashboard・alert |
 
 ### 3.2 package依存関係
@@ -90,7 +92,7 @@ flowchart LR
   Services["services/*"] --> Protocols
   Services --> Kernel["packages/kernel"]
   Services --> Observability
-  Watchdog["apps/watchdog"] --> SMTP["SMTP"]
+  Watchdog["apps/watchdog"] --> Notify["SMTP / structured stderr"]
 ```
 
 HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Gatewayは生成契約とScalar API Referenceを読み取り専用で配信する。Webはservice実装やdomain型ではなく、公開契約だけに依存する。
@@ -113,6 +115,8 @@ packages/
   protocols/                # NATS RPC/event Schema
   contracts/                # Gateway HttpApi/OpenAPI生成物
   observability/            # OTel contractとEffect Layer
+  service-runtime/          # process supervisorとnamed health
+  nats-runtime/             # NATS transportとdelivery隔離
   kernel/                   # Context非依存の最小primitive
 ```
 
@@ -122,11 +126,10 @@ flowchart LR
   Gateway <-->|"NATS RPC"| Content["Content Knowledge"]
   Gateway <-->|"NATS RPC"| Production["Episode Production"]
   Gateway <-->|"NATS RPC"| Library["Episode Library"]
-  Content -->|"JetStream events"| Production
   Production -->|"JetStream events"| Library
 ```
 
-各service内の依存は`runtime/adapters → application → domain`のみとし、package export、lint、architecture testで逆向きimportとContext横断importを拒否する。詳細は[ADR-0033](adr/0033-colocate-bounded-context-with-service.md)を正本とする。
+各service内の依存は`runtime/adapters → application → domain`のみとし、package export、lint、architecture testで逆向きimportとContext横断importを拒否する。各RPC serviceは全subjectを1本のNATS接続とcapacity 1の逐次loopへ束ねる。delivery失敗は共通loop内で隔離し、購読終了などのruntime terminalだけを共通Supervisorへ伝える。terminal時のdrainは期限付きで、失敗またはtimeout時は強制closeしてCompose再起動を妨げない。詳細は[ADR-0033](adr/0033-colocate-bounded-context-with-service.md)と[ADR-0052](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)を正本とする。
 
 ### 3.4 型と副作用の境界
 
@@ -150,7 +153,7 @@ NATS RPCは共有payload schemaを`messageEnvelope`で包む。受信時にprodu
 | --- | --- | --- |
 | immutable kernel / protocol | Done | strict parse、deep freeze、correlation envelope、version付きsubject |
 | 4 Context services | Implemented | `services/*/src/{domain,application,adapters,runtime}`、service別所有state |
-| SQLite/NATS runtime | P0 done | service別single-writer、outbox/inbox、durable consumer、fenced heartbeat、Compose readiness |
+| SQLite/NATS runtime | P0 done | 共通single-writer隔離、Production outbox/Library inbox、durable consumer、named readiness、Compose self-healing |
 | Grafana相関監視 | P0 done | 8 dashboard、Gateway Browser OTLP proxy、Episode state metrics、LGTM provisioning、smoke script |
 | Effect HttpApi Gateway | Done | 公開API parity、認証proxy、Gateway OpenAPI、functional E2E |
 | Web生成client | Done | Gateway生成型とproxyへ切替、Web E2E 13/13 |
@@ -339,6 +342,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0047: Async UIの責務を宣言的な仕組みへ固定する](adr/0047-declarative-async-ui-responsibilities.md)
 - [ADR-0032: Grafana相関監視基盤](adr/0032-grafana-correlated-observability.md)
 - [ADR-0048: Grafana LGTM向けプロジェクト単位MCP](adr/0048-grafana-mcp-observability.md)
+- [ADR-0052: RPC障害隔離と自己回復可能なサービスランタイム](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)
 - [ADR-0040: 全経路Observabilityと再起動検証](adr/0040-full-path-observability-validation.md)
 - [ADR-0041: RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
 - [ADR-0042: 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)

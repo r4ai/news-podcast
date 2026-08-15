@@ -2,10 +2,7 @@ import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
 import type { ArchiveCommand, ArticleSnapshot } from "../domain/article.js"
-import {
-  createArticleArchived,
-  createArticleSnapshot,
-} from "../domain/article.js"
+import { createArticleSnapshot } from "../domain/article.js"
 import type {
   ArchiveArticlePorts,
   ArchiveMessageContext,
@@ -63,8 +60,6 @@ export const archiveArticle =
               })
               const commitInput = deepFreeze({
                 snapshot,
-                event: createArticleArchived(snapshot),
-                context: invocation.context,
               })
 
               return ports.commit(commitInput).pipe(

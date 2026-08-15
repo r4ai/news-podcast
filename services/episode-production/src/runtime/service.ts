@@ -36,7 +36,11 @@ import {
   randomLeaseTokenUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import { runCompletionRelayLoop } from "./loops/completion-relay.js"
-import { NodeCreateJobRpcConfigSchema, runNodeProductionRpc } from "./node.js"
+import {
+  defaultNodeCreateJobRpcDependencies,
+  NodeCreateJobRpcConfigSchema,
+  runNodeProductionRpc,
+} from "./node.js"
 import {
   runEpisodeWorkerLoop,
   type EpisodeWorkerEvent,
@@ -141,6 +145,7 @@ export type NodeEpisodeProductionServiceError = DeepReadonly<{
 
 export type EpisodeProductionServiceDependencies = Readonly<{
   readonly observability?: Observability
+  readonly onCompletionRelayHealth?: (healthy: boolean) => void
 }>
 
 const runtimeError = (
@@ -311,6 +316,7 @@ export const runNodeEpisodeProductionService = (
                 Effect.logInfo("completion relay state", {
                   event_name: event._tag,
                 }),
+              setHealthy: dependencies.onCompletionRelayHealth,
             },
             config.completionRelay
           )
@@ -374,11 +380,10 @@ export const runNodeEpisodeProductionService = (
             config.scheduler,
             controller.signal
           )
-          const rpc = runNodeProductionRpc(config.rpc).pipe(
-            Effect.mapError(() => runtimeError("Execution"))
-          )
-
-          onReady()
+          const rpc = runNodeProductionRpc(config.rpc, {
+            ...defaultNodeCreateJobRpcDependencies,
+            onReady,
+          }).pipe(Effect.mapError(() => runtimeError("Execution")))
 
           yield* Effect.all([rpc, worker, relay, scheduler], {
             concurrency: "unbounded",

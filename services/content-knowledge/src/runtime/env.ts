@@ -42,14 +42,6 @@ export const readContentKnowledgeConfig = (
   return parseNodeServiceConfig({
     sqlitePath,
     natsServers,
-    relay: {
-      batchSize: decimalInteger(env.CONTENT_OUTBOX_BATCH_SIZE),
-      intervalMillis: decimalInteger(env.CONTENT_OUTBOX_INTERVAL_MS),
-      initialBackoffMillis: decimalInteger(
-        env.CONTENT_OUTBOX_INITIAL_BACKOFF_MS
-      ),
-      maximumBackoffMillis: decimalInteger(env.CONTENT_OUTBOX_MAX_BACKOFF_MS),
-    },
     rpc: {
       queueGroup: env.CONTENT_RPC_QUEUE_GROUP?.trim() ?? "",
     },

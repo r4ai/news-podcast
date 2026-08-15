@@ -152,7 +152,10 @@ export const runNodeGateway = (
             (server) => Effect.promise(() => server.close()).pipe(Effect.ignore)
           )
           dependencies.onReady?.()
-          return yield* Effect.never
+          return yield* Effect.tryPromise({
+            try: ports.waitForTerminal,
+            catch: () => runtimeError("Nats"),
+          })
         })
       )
     )

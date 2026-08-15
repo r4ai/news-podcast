@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: N/A — 旧SigNoZ MCPは運用手順であり、独立したADRではない
 - Superseded by: N/A
-- Related: ADR-0032、ADR-0040、`infra/observability`、`.codex/config.toml`
+- Related: ADR-0032、ADR-0040、ADR-0052、`infra/observability`、`.codex/config.toml`
 
 ## コンテキストと変更契機
 
@@ -38,7 +38,8 @@ flowchart LR
 - `--disable-write`を必須とし、Codex側の承認モードは`writes`にする。write toolが
   将来追加されても、MCP server側で拒否し、Codex側でも承認を要求する。
 - Grafana専用Service Accountから`GRAFANA_SERVICE_ACCOUNT_TOKEN`を環境変数として
-  注入する。token、Grafana admin password、API keyはリポジトリへ保存しない。
+  注入する。ローカルの冪等発行・検証・0600 token fileはADR-0052で補足する。token、Grafana
+  admin password、API keyはリポジトリへ保存しない。
 - Service Accountには現行Prometheus・Loki・Tempo datasourceのquery/read、dashboardと
   folderのread、alert ruleとnotificationのreadだけを付与する。
 - Tempoの`query_frontend.mcp_server.enabled`を有効化し、Grafana datasource proxyから
@@ -76,7 +77,7 @@ flowchart LR
 ### 欠点とリスク
 
 - Codex起動時にobserved stackとGrafana networkが利用可能である必要がある。
-- Service Accountの作成・token rotationは配備先の運用作業になる。
+- 本番のService Account作成・token rotationは配備先の運用作業になる。
 - Tempo MCPは実験的機能であり、trace内容がLLMへ送信される可能性がある。
 - 公式image更新時はdigest、tool一覧、read-only動作の再検証が必要になる。
 
@@ -103,7 +104,8 @@ flowchart LR
 
 ## 受け入れゲートと未決事項
 
-- Grafana Service Account tokenは配備先secretとして別途作成する。
+- 本番のGrafana Service Account tokenは配備先secretとして別途作成する。ローカルはADR-0052の
+  Viewer token provisionerを使う。
 - `pnpm mcp:check`、既存observability validation、MCP tool一覧確認、read-only拒否確認を完了する。
 - None
 

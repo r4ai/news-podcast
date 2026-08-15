@@ -127,9 +127,7 @@ describe("provider-consumer RPC contracts", () => {
   it("keeps a complete unique registry of the 26 request/reply subjects", () => {
     const rpcSubjects = [
       ...Object.values(subjects.identity),
-      ...Object.values(subjects.content).filter(
-        (subject) => subject !== subjects.content.articleArchived
-      ),
+      ...Object.values(subjects.content),
       ...Object.values(subjects.production).filter(
         (subject) =>
           subject !== subjects.production.jobCompleted &&

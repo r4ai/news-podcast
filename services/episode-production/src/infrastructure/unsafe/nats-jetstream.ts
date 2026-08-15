@@ -2,6 +2,7 @@ import { jetstream } from "@nats-io/jetstream"
 import { connect } from "@nats-io/transport-node"
 
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
+import { drainNatsConnection } from "@news-podcast/nats-runtime"
 
 export type UnsafeProductionJetStream = DeepReadonly<{
   publish: (
@@ -28,6 +29,6 @@ export const connectProductionJetStreamUnsafe = async (
       )
       return deepFreeze({ duplicate: acknowledgement.duplicate })
     },
-    close: () => connection.drain(),
+    close: () => drainNatsConnection(connection),
   })
 }

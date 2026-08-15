@@ -1,16 +1,6 @@
 [mcp_servers.grafana]
-command = "docker"
-args = [
-  "run", "--rm", "-i",
-  "--network", "news-podcast-observability",
-  "--env", "GRAFANA_URL",
-  "--env", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
-  "grafana/mcp-grafana:1.0.0@sha256:5efeafd01cd7e1aea9c4b0f03305951f2944db8f43e5ae290cce9578c977f241",
-  "-t", "stdio",
-  "--disable-write",
-  "--enabled-tools", "search,datasource,prometheus,loki,alerting,dashboard,navigation,proxied",
-  "--max-loki-log-limit", "200",
-]
+command = "bash"
+args = ["scripts/run-grafana-mcp.sh"]
 env = { GRAFANA_URL = "http://grafana:3000" }
 env_vars = ["GRAFANA_SERVICE_ACCOUNT_TOKEN"]
 startup_timeout_sec = 20

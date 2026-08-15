@@ -1,4 +1,8 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
+import {
+  logRpcDeliveryFailure,
+  runSequentialRpcLoop,
+} from "@news-podcast/nats-runtime"
 import { subjects } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 
@@ -49,7 +53,7 @@ export type NodeResolveSessionRpcError = DeepReadonly<{
 export type NodeResolveSessionRpcDependencies = DeepReadonly<{
   readonly connectNats: (
     servers: readonly string[],
-    subject: string,
+    subject: string | readonly string[],
     queueGroup: string
   ) => Promise<UnsafeNatsRpcServer>
   readonly newMessageId: () => string
@@ -107,26 +111,32 @@ export const runNodeResolveSessionRpc = (
           )
           dependencies.onReady?.()
 
-          while (true) {
-            const delivery = yield* Effect.tryPromise({
+          return yield* runSequentialRpcLoop({
+            receive: Effect.tryPromise({
               try: () => server.receive(),
               catch: () => runtimeError("Nats"),
-            })
-            if (delivery === undefined) return
-
-            yield* handler({
-              payload: delivery.payload,
-              reply: (payload) =>
-                Effect.tryPromise({
-                  try: () => delivery.reply(payload),
-                  catch: () => runtimeError("Reply"),
-                }),
-            }).pipe(
-              Effect.mapError((failure) =>
-                isRuntimeError(failure) ? failure : runtimeError("Handler")
-              )
-            )
-          }
+            }),
+            sourceClosed: () => runtimeError("Nats"),
+            handle: (delivery) =>
+              handler({
+                payload: delivery.payload,
+                reply: (payload) =>
+                  Effect.tryPromise({
+                    try: () => delivery.reply(payload),
+                    catch: () => runtimeError("Reply"),
+                  }),
+              }).pipe(
+                Effect.mapError((failure) =>
+                  isRuntimeError(failure) ? failure : runtimeError("Handler")
+                )
+              ),
+            onDeliveryFailure: (cause) =>
+              logRpcDeliveryFailure(
+                "identity-access",
+                subjects.identity.resolveSession,
+                cause
+              ),
+          })
         })
       )
     )
@@ -136,21 +146,41 @@ type SettingsHandler = (
   delivery: IdentitySettingsRpcDelivery<NodeResolveSessionRpcError>
 ) => Effect.Effect<void, unknown, never>
 
-const runNodeSettingsRpc = (
+/** Runs session resolution and both owner-scoped settings subjects together. */
+export const runNodeIdentityRpc = (
   input: unknown,
+  api: BetterAuthSessionApi,
   settings: IdentitySettingsRpcOperations & ScheduledGenerationRpcOperations,
-  dependencies: NodeResolveSessionRpcDependencies
+  dependencies: NodeResolveSessionRpcDependencies = defaultNodeResolveSessionRpcDependencies
 ): Effect.Effect<void, NodeResolveSessionRpcError> =>
   parseNodeResolveSessionRpcConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
     Effect.flatMap((config) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const handlers: readonly (readonly [string, SettingsHandler])[] = [
+          const handlerEntries: readonly (readonly [
+            string,
+            SettingsHandler,
+          ])[] = [
+            [
+              subjects.identity.resolveSession,
+              makeResolveSessionRpcHandler(
+                makeBetterAuthSessionReader(api),
+                dependencies
+              ),
+            ],
             [
               subjects.identity.getGenerationSettings,
               makeIdentitySettingsRpcHandler(
                 subjects.identity.getGenerationSettings,
+                settings,
+                dependencies
+              ),
+            ],
+            [
+              subjects.identity.updateGenerationSettings,
+              makeIdentitySettingsRpcHandler(
+                subjects.identity.updateGenerationSettings,
                 settings,
                 dependencies
               ),
@@ -171,91 +201,54 @@ const runNodeSettingsRpc = (
                 dependencies
               ),
             ],
-            [
-              subjects.identity.updateGenerationSettings,
-              makeIdentitySettingsRpcHandler(
-                subjects.identity.updateGenerationSettings,
-                settings,
-                dependencies
-              ),
-            ],
           ]
-
-          yield* Effect.all(
-            handlers.map(([subject, handler]) =>
-              Effect.gen(function* () {
-                const server = yield* Effect.acquireRelease(
-                  Effect.tryPromise({
-                    try: () =>
-                      dependencies.connectNats(
-                        config.natsServers,
-                        subject,
-                        config.queueGroup
-                      ),
-                    catch: () => runtimeError("Nats"),
-                  }),
-                  (resource) =>
-                    Effect.tryPromise(() => resource.drain()).pipe(
-                      Effect.ignore
-                    )
-                )
-                while (true) {
-                  const delivery = yield* Effect.tryPromise({
-                    try: () => server.receive(),
-                    catch: () => runtimeError("Nats"),
-                  })
-                  if (delivery === undefined) return
-                  yield* handler({
-                    payload: delivery.payload,
-                    reply: (payload) =>
-                      Effect.tryPromise({
-                        try: () => delivery.reply(payload),
-                        catch: () => runtimeError("Reply"),
-                      }),
-                  }).pipe(
-                    Effect.mapError((failure) =>
-                      isRuntimeError(failure)
-                        ? failure
-                        : runtimeError("Handler")
-                    )
-                  )
-                }
-              })
-            ),
-            { concurrency: "unbounded", discard: true }
+          const handlers = new Map(handlerEntries)
+          const server = yield* Effect.acquireRelease(
+            Effect.tryPromise({
+              try: () =>
+                dependencies.connectNats(
+                  config.natsServers,
+                  handlerEntries.map(([subject]) => subject),
+                  config.queueGroup
+                ),
+              catch: () => runtimeError("Nats"),
+            }),
+            (resource) =>
+              Effect.tryPromise(() => resource.drain()).pipe(Effect.ignore)
           )
+          dependencies.onReady?.()
+
+          return yield* runSequentialRpcLoop({
+            receive: Effect.tryPromise({
+              try: () => server.receive(),
+              catch: () => runtimeError("Nats"),
+            }),
+            sourceClosed: () => runtimeError("Nats"),
+            handle: (delivery) => {
+              const handler =
+                delivery.subject === undefined
+                  ? undefined
+                  : handlers.get(delivery.subject)
+              if (handler === undefined) {
+                return Effect.fail(runtimeError("Handler"))
+              }
+              return handler({
+                payload: delivery.payload,
+                reply: (payload) =>
+                  Effect.tryPromise({
+                    try: () => delivery.reply(payload),
+                    catch: () => runtimeError("Reply"),
+                  }),
+              }).pipe(
+                Effect.mapError((failure) =>
+                  isRuntimeError(failure) ? failure : runtimeError("Handler")
+                )
+              )
+            },
+            onDeliveryFailure: (cause) =>
+              logRpcDeliveryFailure("identity-access", "rpc", cause),
+          })
         })
       )
     )
   )
-
-/** Runs session resolution and both owner-scoped settings subjects together. */
-export const runNodeIdentityRpc = (
-  input: unknown,
-  api: BetterAuthSessionApi,
-  settings: IdentitySettingsRpcOperations & ScheduledGenerationRpcOperations,
-  dependencies: NodeResolveSessionRpcDependencies = defaultNodeResolveSessionRpcDependencies
-): Effect.Effect<void, NodeResolveSessionRpcError> => {
-  let connected = 0
-  let ready = false
-  const { onReady: _onReady, ...runtimeDependencies } = dependencies
-  const coordinated: NodeResolveSessionRpcDependencies = {
-    ...runtimeDependencies,
-    connectNats: async (...args) => {
-      const server = await dependencies.connectNats(...args)
-      connected += 1
-      if (!ready && connected === 5) {
-        ready = true
-        dependencies.onReady?.()
-      }
-      return server
-    },
-  }
-  return Effect.all(
-    [
-      runNodeResolveSessionRpc(input, api, coordinated),
-      runNodeSettingsRpc(input, settings, coordinated),
-    ],
-    { concurrency: "unbounded", discard: true }
-  )
-}

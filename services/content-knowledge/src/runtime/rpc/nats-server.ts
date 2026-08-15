@@ -1,4 +1,8 @@
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
+import {
+  logRpcDeliveryFailure,
+  runSequentialRpcLoop,
+} from "@news-podcast/nats-runtime"
 import { subjects } from "@news-podcast/protocols"
 import { Effect } from "effect"
 
@@ -23,6 +27,7 @@ import type { FeedPollWakeup } from "../loops/feed-poll.js"
 export type ContentKnowledgeRpcServerConfig = DeepReadonly<{
   readonly natsServers: readonly string[]
   readonly queueGroup: string
+  readonly onReady?: () => void
 }>
 
 export type ContentKnowledgeRpcServerDependencies = Readonly<{
@@ -100,36 +105,35 @@ export const runNatsContentKnowledgeRpc = (
           personalization === undefined
             ? undefined
             : makePersonalizationRpcHandler(personalization, dependencies)
-        const loop = (): Effect.Effect<void, NodeRuntimeError> =>
-          Effect.tryPromise({
+        config.onReady?.()
+        return runSequentialRpcLoop({
+          receive: Effect.tryPromise({
             try: () => server.receive(),
             catch: runtimeFailure,
-          }).pipe(
-            Effect.flatMap((delivery) => {
-              if (delivery === undefined) return Effect.void
-              const selected =
-                delivery.subject === subjects.content.articleLibrary &&
-                libraryHandler !== undefined
-                  ? libraryHandler
-                  : delivery.subject === subjects.content.personalization &&
-                      personalizationHandler !== undefined
-                    ? personalizationHandler
-                    : handler
-              return selected({
-                subject: delivery.subject,
-                payload: delivery.payload,
-                reply: (payload) =>
-                  Effect.tryPromise({
-                    try: () => delivery.reply(payload),
-                    catch: runtimeFailure,
-                  }),
-              }).pipe(
-                Effect.mapError(() => runtimeFailure()),
-                Effect.andThen(loop())
-              )
-            })
-          )
-        return loop()
+          }),
+          sourceClosed: runtimeFailure,
+          handle: (delivery) => {
+            const selected =
+              delivery.subject === subjects.content.articleLibrary &&
+              libraryHandler !== undefined
+                ? libraryHandler
+                : delivery.subject === subjects.content.personalization &&
+                    personalizationHandler !== undefined
+                  ? personalizationHandler
+                  : handler
+            return selected({
+              subject: delivery.subject,
+              payload: delivery.payload,
+              reply: (payload) =>
+                Effect.tryPromise({
+                  try: () => delivery.reply(payload),
+                  catch: runtimeFailure,
+                }),
+            }).pipe(Effect.mapError(() => runtimeFailure()))
+          },
+          onDeliveryFailure: (cause) =>
+            logRpcDeliveryFailure("content-knowledge", "rpc", cause),
+        })
       })
     )
   )

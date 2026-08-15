@@ -1,8 +1,15 @@
 export interface WatchdogState {
   readonly failures: Readonly<Record<string, string>>
+  readonly targets?: Readonly<Record<string, TargetState>>
   readonly lastNotificationAt?: string
   readonly telemetryValue?: number
   readonly telemetryChangedAt?: string
+}
+
+export interface TargetState {
+  readonly up: boolean
+  readonly consecutiveFailures: number
+  readonly lastSuccessAt?: string
 }
 
 export interface CheckTarget {
@@ -25,7 +32,7 @@ const FRESHNESS_MS = 2 * 60_000
 export async function checkWatchdog(input: {
   readonly state: WatchdogState
   readonly targets: readonly CheckTarget[]
-  readonly collectorMetricsUrl: string
+  readonly collectorMetricsUrl?: string
   readonly now: Date
   readonly fetcher?: typeof fetch
 }): Promise<WatchdogResult> {
@@ -44,27 +51,49 @@ export async function checkWatchdog(input: {
     })
   )
 
+  const targets = Object.fromEntries(
+    input.targets.map((target) => {
+      const previous = input.state.targets?.[target.name]
+      const failed = failures[target.name] !== undefined
+      return [
+        target.name,
+        {
+          up: !failed,
+          consecutiveFailures: failed
+            ? (previous?.consecutiveFailures ?? 0) + 1
+            : 0,
+          ...(!failed
+            ? { lastSuccessAt: input.now.toISOString() }
+            : previous?.lastSuccessAt
+              ? { lastSuccessAt: previous.lastSuccessAt }
+              : {}),
+        },
+      ]
+    })
+  )
+
   let telemetryValue = input.state.telemetryValue
   let telemetryChangedAt = input.state.telemetryChangedAt
-  try {
-    const response = await fetcher(input.collectorMetricsUrl, {
-      signal: AbortSignal.timeout(10_000),
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const current = exportedPoints(await response.text())
-    if (current === undefined) throw new Error("export counter missing")
-    if (telemetryValue === undefined || current !== telemetryValue) {
-      telemetryValue = current
-      telemetryChangedAt = input.now.toISOString()
-    } else if (
-      !telemetryChangedAt ||
-      input.now.getTime() - Date.parse(telemetryChangedAt) >= FRESHNESS_MS
-    ) {
-      failures.telemetry = "OTLP export has not advanced for two minutes"
+  if (input.collectorMetricsUrl !== undefined)
+    try {
+      const response = await fetcher(input.collectorMetricsUrl, {
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const current = exportedPoints(await response.text())
+      if (current === undefined) throw new Error("export counter missing")
+      if (telemetryValue === undefined || current !== telemetryValue) {
+        telemetryValue = current
+        telemetryChangedAt = input.now.toISOString()
+      } else if (
+        !telemetryChangedAt ||
+        input.now.getTime() - Date.parse(telemetryChangedAt) >= FRESHNESS_MS
+      ) {
+        failures.telemetry = "OTLP export has not advanced for two minutes"
+      }
+    } catch (error) {
+      failures.telemetry = safeError(error)
     }
-  } catch (error) {
-    failures.telemetry = safeError(error)
-  }
 
   const previousFailures = input.state.failures
   const newlyFailed = Object.keys(failures).some(
@@ -82,6 +111,7 @@ export async function checkWatchdog(input: {
   const shouldNotify = newlyFailed || recovered.length > 0 || shouldRenotify
   const next: WatchdogState = {
     failures,
+    targets,
     ...(telemetryValue === undefined ? {} : { telemetryValue }),
     ...(telemetryChangedAt ? { telemetryChangedAt } : {}),
     ...(shouldNotify

@@ -32,7 +32,7 @@ groups:
               expression: A
               refId: C
               type: threshold
-        noDataState: OK
+        noDataState: Alerting
         execErrState: Error
         for: 5m
         annotations:
@@ -66,7 +66,7 @@ groups:
               expression: A
               refId: C
               type: threshold
-        noDataState: OK
+        noDataState: Alerting
         execErrState: Error
         for: 10m
         annotations:
@@ -100,7 +100,7 @@ groups:
               expression: A
               refId: C
               type: threshold
-        noDataState: OK
+        noDataState: Alerting
         execErrState: Error
         for: 1m
         annotations:
@@ -139,7 +139,7 @@ groups:
               expression: A
               refId: C
               type: threshold
-        noDataState: OK
+        noDataState: Alerting
         execErrState: Error
         for: 1m
         annotations:
@@ -173,12 +173,85 @@ groups:
               expression: A
               refId: C
               type: threshold
-        noDataState: OK
+        noDataState: Alerting
         execErrState: Error
         for: 2m
         annotations:
           summary: Episode queue age exceeds 24 minutes
           description: Check worker health, active NATS/queue edges, provider latency, and stale lease traces.
+        labels: { severity: critical, team: platform }
+
+  - orgId: 1
+    name: watchdog
+    folder: News Podcast
+    interval: 1m
+    rules:
+      - uid: np-watchdog-target-down
+        title: Watchdog target is unavailable
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              editorMode: code
+              expr: 'min by (target) (news_podcast_watchdog_target_up)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [1], type: lt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: 'Watchdog target down: {{ $labels.target }}'
+          description: Inspect the target container, readiness checks, and first terminal runtime error before retrying traffic.
+        labels: { severity: critical, team: platform }
+
+      - uid: np-watchdog-missing
+        title: Watchdog is missing or its checks are failing
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              editorMode: code
+              expr: 'news_podcast_watchdog_last_check_success == 0 or absent(news_podcast_watchdog_last_check_success)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: Watchdog monitoring has disappeared
+          description: Restore Watchdog before treating silence from service alerts as healthy.
         labels: { severity: critical, team: platform }
 
   - orgId: 1
@@ -246,7 +319,7 @@ groups:
               expression: A
               refId: C
               type: threshold
-        noDataState: OK
+        noDataState: Alerting
         execErrState: Error
         for: 1m
         annotations:

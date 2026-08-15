@@ -84,3 +84,35 @@ readiness後にowner-scoped job GET/listと、外部副作用を起こさないr
 | restore | source SHA-256、復元先、`integrity_check`結果 |
 | smoke | readiness、owner-scoped read、件数/hash照合 |
 | rollback | 実施有無、quarantine path、原因trace ID |
+
+## Runtime障害の切り分け
+
+```mermaid
+flowchart LR
+  Error["RPC / process error"] --> Delivery{"delivery局所か"}
+  Delivery -->|"yes"| Continue["typed reply / redacted log<br/>Ready維持"]
+  Delivery -->|"no"| Terminal["Ready解除 / drain / exit 1"]
+  Terminal --> Restart["Compose自動再起動"] --> Verify["named Ready + 後続RPC"]
+```
+
+| 状態 | 確認 | 対応 |
+| --- | --- | --- |
+| 単発RPC失敗 | service/component/scope/error type、後続RPC、Ready 200 | payloadを採取せずcorrelation IDで追跡する |
+| Ready 503 | health JSONの失敗したnamed check | NATS、DB、completion relay等の必須resourceを確認する |
+| process再起動 | `docker compose ps`、structured Cause、restart count | 原因依存を復旧し、Ready復帰と後続RPCを確認する |
+| restart loop | initialization failureとDB `integrity_check` | 自動再起動を止める前にlog/DB backupを保全する |
+
+SIGINT/SIGTERMはresource drainとtelemetry flush後にexit 0、subscription/connection終了、初期化失敗、process fatalはexit 1である。NATS drainが1秒以内に終わらない場合はconnectionをcloseし、終了処理自体の停止を防ぐ。Docker healthは観測専用であり、回復不能状態はapplication自身が終了する。詳細は[ADR-0052](../adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)を参照する。
+
+## Content Outbox廃止migration記録
+
+2026-08-15に未使用のContent archive event/outboxを廃止した。migration前のonline backupと検証値は次の通り。
+
+| 項目 | 値 |
+| --- | --- |
+| backup | `/home/<operator>/backups/news-podcast/content-<timestamp>.sqlite` |
+| quick check | `ok` |
+| 未配信Outbox | <verified-count>件 |
+| SHA-256 | `<verified-sha256>` |
+
+`20260815135150_jittery_makkari`は`content_outbox`とそのindexだけを削除する。記事snapshot、購読、タグ候補の保持はmigration testで固定し、Content参照はNATS RPCを正本とする。

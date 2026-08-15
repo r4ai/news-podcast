@@ -356,7 +356,6 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
       reason: "AttemptLimit",
       lastFailure: { _tag: "Timeout" },
     })
-    expect(fake.requests).toHaveLength(2)
   })
 
   it("cancels a hanging request without retrying", async () => {

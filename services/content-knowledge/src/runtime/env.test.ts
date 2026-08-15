@@ -6,10 +6,6 @@ import { readContentKnowledgeConfig } from "./env.js"
 const validEnvironment = {
   CONTENT_KNOWLEDGE_DATABASE_PATH: "/data/content.sqlite",
   NATS_SERVERS: "nats://nats-a:4222, nats://nats-b:4222",
-  CONTENT_OUTBOX_BATCH_SIZE: "50",
-  CONTENT_OUTBOX_INTERVAL_MS: "1000",
-  CONTENT_OUTBOX_INITIAL_BACKOFF_MS: "200",
-  CONTENT_OUTBOX_MAX_BACKOFF_MS: "30000",
   CONTENT_RPC_QUEUE_GROUP: "content-rpc",
   CONTENT_RSS_TIMEOUT_MS: "15000",
   CONTENT_RSS_MAX_BYTES: "5242880",
@@ -38,12 +34,6 @@ describe("content-knowledge environment boundary", () => {
     expect(config).toEqual({
       sqlitePath: "/data/content.sqlite",
       natsServers: ["nats://nats-a:4222", "nats://nats-b:4222"],
-      relay: {
-        batchSize: 50,
-        intervalMillis: 1_000,
-        initialBackoffMillis: 200,
-        maximumBackoffMillis: 30_000,
-      },
       rpc: { queueGroup: "content-rpc" },
       feedPoller: {
         http: { timeoutMillis: 15_000, maximumBytes: 5_242_880 },
@@ -73,7 +63,7 @@ describe("content-knowledge environment boundary", () => {
       },
     })
     expect(Object.isFrozen(config)).toBe(true)
-    expect(Object.isFrozen(config.relay)).toBe(true)
+    expect(Object.isFrozen(config.rpc)).toBe(true)
   })
 
   it.each([
@@ -90,20 +80,8 @@ describe("content-knowledge environment boundary", () => {
       { ...validEnvironment, CONTENT_KNOWLEDGE_DATABASE_PATH: ":memory:" },
     ],
     [
-      "invalid integer",
-      { ...validEnvironment, CONTENT_OUTBOX_BATCH_SIZE: "10x" },
-    ],
-    [
-      "out-of-range batch",
-      { ...validEnvironment, CONTENT_OUTBOX_BATCH_SIZE: "101" },
-    ],
-    [
       "invalid NATS URL",
       { ...validEnvironment, NATS_SERVERS: "https://nats.test" },
-    ],
-    [
-      "backoff inversion",
-      { ...validEnvironment, CONTENT_OUTBOX_INITIAL_BACKOFF_MS: "40000" },
     ],
     [
       "enrichment backoff inversion",

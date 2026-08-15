@@ -5,20 +5,40 @@ import { Effect } from "effect"
 
 export type HealthState = Readonly<{
   isReady: () => boolean
-  ready: () => void
-  notReady: () => void
+  ready: (check?: string) => void
+  notReady: (check?: string) => void
+  snapshot: () => HealthSnapshot
 }>
 
-export const createHealthState = (): HealthState => {
-  let ready = false
+export type HealthSnapshot = Readonly<{
+  ready: boolean
+  checks: Readonly<Record<string, boolean>>
+}>
+
+const defaultCheck = "runtime"
+
+export const createHealthState = (
+  requiredChecks: readonly string[] = [defaultCheck]
+): HealthState => {
+  const checks = new Map<string, boolean>(
+    [...new Set(requiredChecks.length === 0 ? [defaultCheck] : requiredChecks)]
+      .sort()
+      .map((check) => [check, false] as const)
+  )
+  const isReady = () => [...checks.values()].every(Boolean)
   return deepFreeze({
-    isReady: () => ready,
-    ready: () => {
-      ready = true
+    isReady,
+    ready: (check = defaultCheck) => {
+      checks.set(check, true)
     },
-    notReady: () => {
-      ready = false
+    notReady: (check = defaultCheck) => {
+      checks.set(check, false)
     },
+    snapshot: () =>
+      deepFreeze({
+        ready: isReady(),
+        checks: Object.fromEntries([...checks.entries()].sort()),
+      }),
   })
 }
 
@@ -40,11 +60,13 @@ export const healthServerScoped = (port: number, state: HealthState) =>
               return
             }
             if (request.url === "/health/ready") {
-              response.statusCode = state.isReady() ? 200 : 503
+              const snapshot = state.snapshot()
+              response.statusCode = snapshot.ready ? 200 : 503
               response.end(
-                state.isReady()
-                  ? '{"status":"ready"}'
-                  : '{"status":"not_ready"}'
+                JSON.stringify({
+                  status: snapshot.ready ? "ready" : "not_ready",
+                  checks: snapshot.checks,
+                })
               )
               return
             }

@@ -126,29 +126,6 @@ export const articleSnapshots = sqliteTable(
   ]
 )
 
-export const contentOutbox = sqliteTable(
-  "content_outbox",
-  {
-    messageId: text("message_id").primaryKey(),
-    archiveRequestId: text("archive_request_id")
-      .notNull()
-      .unique()
-      .references(() => articleSnapshots.archiveRequestId, {
-        onDelete: "cascade",
-      }),
-    subject: text("subject").notNull(),
-    envelopeJson: text("envelope_json").notNull(),
-    createdAt: text("created_at").notNull(),
-    publishedAt: text("published_at"),
-  },
-  (table) => [
-    // 未送信分だけを走査する。部分インデックスなので送信済みの行は index に載らない。
-    index("content_outbox_pending")
-      .on(table.createdAt, table.messageId)
-      .where(sql`${table.publishedAt} IS NULL`),
-  ]
-)
-
 // ---------------------------------------------------------------------------
 // フィード同期キュー
 // ---------------------------------------------------------------------------

@@ -10,7 +10,6 @@ import type { Effect } from "effect"
 import type {
   ArchiveCapture,
   ArchiveRequestId,
-  ArticleArchived,
   ArticleSnapshot,
   ArticleUrl,
   CapturedAt,
@@ -63,10 +62,8 @@ export type ArchiveArticlePorts = DeepReadonly<{
   }) => Effect.Effect<ArchiveCapture, CaptureError>
   readonly newSnapshotId: () => SnapshotId
   readonly now: () => CapturedAt
-  /** Persists the snapshot and its pending event in one atomic transaction. */
+  /** Persists the immutable snapshot idempotently. */
   readonly commit: (input: {
     readonly snapshot: ArticleSnapshot
-    readonly event: ArticleArchived
-    readonly context: ArchiveMessageContext
   }) => Effect.Effect<ArchiveCommit, ArchiveStoreError>
 }>

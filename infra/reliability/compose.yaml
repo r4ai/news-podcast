@@ -1,0 +1,21 @@
+services:
+  gateway:
+    ports: !reset []
+  identity-access:
+    ports: !reset []
+  content-knowledge:
+    ports: !reset []
+  episode-production:
+    ports: !reset []
+  episode-library:
+    ports: !reset []
+  web:
+    ports: !reset []
+  nats:
+    ports: !reset []
+  seaweedfs:
+    ports: !reset []
+  voicevox:
+    ports: !reset []
+  watchdog:
+    ports: !reset []

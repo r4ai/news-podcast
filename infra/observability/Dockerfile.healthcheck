@@ -1,0 +1,5 @@
+# syntax=docker/dockerfile:1.7
+ARG RUNTIME_IMAGE
+FROM busybox:1.37.0-uclibc@sha256:8d7b1636e974e0adfd8d945955fca609304f0a56c18799dfd032d6e661382d84 AS healthcheck
+FROM ${RUNTIME_IMAGE}
+COPY --from=healthcheck /bin/busybox /bin/busybox

@@ -1,39 +1,59 @@
+import { createServer } from "node:http"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 
-import nodemailer from "nodemailer"
-
 import { watchdogTargets } from "./config.js"
+import { watchdogMetrics } from "./metrics.js"
+import { createWatchdogNotifier } from "./notifier.js"
 import { checkWatchdog, type WatchdogState } from "./watchdog.js"
 
 const statePath =
   process.env.WATCHDOG_STATE_PATH ?? "/var/lib/news-podcast-watchdog/state.json"
 const intervalMs = readPositiveNumber("WATCHDOG_INTERVAL_MS", 60_000)
+const port = readPositiveNumber("WATCHDOG_PORT", 4_199)
 const targets = watchdogTargets()
 const collectorMetricsUrl =
-  process.env.WATCHDOG_COLLECTOR_METRICS_URL ?? "http://127.0.0.1:8888/metrics"
-const transport = nodemailer.createTransport({
-  host: required("WATCHDOG_SMTP_HOST"),
-  port: readPositiveNumber("WATCHDOG_SMTP_PORT", 587),
-  secure: process.env.WATCHDOG_SMTP_SECURE === "true",
-  requireTLS: process.env.WATCHDOG_SMTP_SECURE !== "true",
-  auth: {
-    user: required("WATCHDOG_SMTP_USERNAME"),
-    pass: required("WATCHDOG_SMTP_PASSWORD"),
-  },
-})
-const from = required("WATCHDOG_SMTP_FROM")
-const to = required("WATCHDOG_SMTP_TO")
+  process.env.WATCHDOG_COLLECTOR_METRICS_URL?.trim() || undefined
+const notifier = createWatchdogNotifier(process.env)
 
+let state = await loadState()
 let stopping = false
 let timer: NodeJS.Timeout | undefined
 let active: Promise<void> = Promise.resolve()
+let lastCheckSucceeded = false
+let lastCheckAt: string | undefined
+
+const server = createServer((request, response) => {
+  response.setHeader("cache-control", "no-store")
+  if (request.url === "/health/live") {
+    response.setHeader("content-type", "application/json")
+    response.statusCode = 200
+    response.end('{"status":"live"}')
+    return
+  }
+  if (request.url === "/metrics") {
+    response.setHeader("content-type", "text/plain; version=0.0.4")
+    response.statusCode = 200
+    response.end(watchdogMetrics(state, lastCheckSucceeded, lastCheckAt))
+    return
+  }
+  response.statusCode = 404
+  response.end("not found")
+})
+await new Promise<void>((resolve, reject) => {
+  server.once("error", reject)
+  server.listen(port, "0.0.0.0", resolve)
+})
 
 function schedule(delay = 0): void {
   timer = setTimeout(() => {
     active = run()
       .catch((error) => {
-        process.stderr.write(`Watchdog check failed: ${safeError(error)}\n`)
+        lastCheckSucceeded = false
+        lastCheckAt = new Date().toISOString()
+        process.stderr.write(
+          `${JSON.stringify({ event: "watchdog.check_failed", error: safeError(error) })}\n`
+        )
       })
       .finally(() => {
         if (!stopping) schedule(intervalMs)
@@ -42,32 +62,34 @@ function schedule(delay = 0): void {
 }
 
 async function run(): Promise<void> {
-  const state = await loadState()
+  const now = new Date()
   const result = await checkWatchdog({
     state,
     targets,
-    collectorMetricsUrl,
-    now: new Date(),
+    ...(collectorMetricsUrl === undefined ? {} : { collectorMetricsUrl }),
+    now,
   })
-  if (result.notification) {
-    await transport.sendMail({
-      from,
-      to,
-      subject: result.notification.subject,
-      text: result.notification.text,
-    })
-  }
-  await saveState(result.state)
+  if (result.notification) await notifier.send(result.notification)
+  state = result.state
+  await saveState(state)
+  lastCheckSucceeded = true
+  lastCheckAt = now.toISOString()
 }
 
 schedule()
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
+  process.once(signal, () => {
     if (stopping) return
     stopping = true
     if (timer) clearTimeout(timer)
-    void active.finally(() => transport.close())
+    void Promise.all([
+      active,
+      new Promise<void>((resolve) => server.close(() => resolve())),
+    ]).finally(() => {
+      notifier.close()
+      process.exit(0)
+    })
   })
 }
 
@@ -81,17 +103,11 @@ async function loadState(): Promise<WatchdogState> {
   }
 }
 
-async function saveState(state: WatchdogState): Promise<void> {
+async function saveState(next: WatchdogState): Promise<void> {
   await mkdir(dirname(statePath), { recursive: true })
   const temporary = `${statePath}.tmp`
-  await writeFile(temporary, JSON.stringify(state), { mode: 0o600 })
+  await writeFile(temporary, JSON.stringify(next), { mode: 0o600 })
   await rename(temporary, statePath)
-}
-
-function required(key: string): string {
-  const value = process.env[key]?.trim()
-  if (!value) throw new Error(`Missing required configuration: ${key}`)
-  return value
 }
 
 function readPositiveNumber(key: string, fallback: number): number {

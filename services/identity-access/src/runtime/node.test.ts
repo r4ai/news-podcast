@@ -58,8 +58,9 @@ describe("identity-access Node RPC runtime", () => {
   it("runs session and both settings subjects in one scoped runtime", async () => {
     const connected: string[] = []
     const drained: string[] = []
+    let connectionCount = 0
     const onReady = vi.fn()
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNodeIdentityRpc(
         config,
         { getSession: () => Promise.resolve(null) },
@@ -81,10 +82,16 @@ describe("identity-access Node RPC runtime", () => {
         },
         {
           connectNats: async (_servers, subject) => {
-            connected.push(subject)
+            connectionCount += 1
+            connected.push(
+              ...(typeof subject === "string" ? [subject] : subject)
+            )
             return {
               receive: async () => undefined,
-              drain: async () => void drained.push(subject),
+              drain: async () =>
+                void drained.push(
+                  ...(typeof subject === "string" ? [subject] : subject)
+                ),
             }
           },
           newMessageId: () => "5af55f2e-ff0b-475c-866a-f2cff48c101d",
@@ -103,7 +110,9 @@ describe("identity-access Node RPC runtime", () => {
     ]
     expect(connected.sort()).toEqual([...expected].sort())
     expect(drained.sort()).toEqual([...expected].sort())
+    expect(connectionCount).toBe(1)
     expect(onReady).toHaveBeenCalledOnce()
+    expect(exit._tag).toBe("Failure")
   })
 
   it.each([
@@ -167,7 +176,7 @@ describe("identity-access Node RPC runtime", () => {
       },
     }
 
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNodeResolveSessionRpc(config, api, dependencies(server))
     )
 
@@ -183,6 +192,7 @@ describe("identity-access Node RPC runtime", () => {
     ])
     expect(drain).toHaveBeenCalledOnce()
     expect(replies).toHaveLength(2)
+    expect(exit._tag).toBe("Failure")
   })
 
   it("keeps consuming after a provider rejection", async () => {
@@ -207,7 +217,7 @@ describe("identity-access Node RPC runtime", () => {
           : Promise.resolve(null),
     }
 
-    await Effect.runPromise(
+    const exit = await Effect.runPromiseExit(
       runNodeResolveSessionRpc(config, api, dependencies(server))
     )
 
@@ -223,6 +233,7 @@ describe("identity-access Node RPC runtime", () => {
       { _tag: "Rejected", code: "SESSION_PROVIDER_FAILURE" },
       { actor: { _tag: "Anonymous" } },
     ])
+    expect(exit._tag).toBe("Failure")
   })
 
   it("drains NATS when replying fails", async () => {
@@ -287,7 +298,7 @@ describe("identity-access Node RPC runtime", () => {
 
     expect(exit._tag).toBe("Failure")
     if (exit._tag === "Failure") {
-      expect(String(exit.cause)).toContain("Handler")
+      expect(String(exit.cause)).toContain("Nats")
     }
     expect(drain).toHaveBeenCalledOnce()
   })

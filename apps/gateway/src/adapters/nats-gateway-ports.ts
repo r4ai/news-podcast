@@ -34,6 +34,11 @@ import {
 
 export type { AdapterOptions, Dependencies }
 
+type RuntimeGatewayPorts = GatewayPorts &
+  Readonly<{ waitForTerminal: () => Promise<void> }>
+
+const neverTerminal = () => new Promise<void>(() => undefined)
+
 const makeAdapter = (
   client: UnsafeNatsRequestClient,
   dependencies: Dependencies,
@@ -76,7 +81,7 @@ export const acquireNatsGatewayPorts = (
     nextMessageId: randomUuidUnsafe,
     now: currentUtcInstantUnsafe,
   }
-): Effect.Effect<GatewayPorts, unknown, Scope.Scope> =>
+): Effect.Effect<RuntimeGatewayPorts, unknown, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.tryPromise({
       try: () =>
@@ -86,4 +91,9 @@ export const acquireNatsGatewayPorts = (
       catch: unavailable,
     }),
     (client) => Effect.promise(() => client.drain()).pipe(Effect.ignore)
-  ).pipe(Effect.map((client) => makeAdapter(client, dependencies, config)))
+  ).pipe(
+    Effect.map((client) => ({
+      ...makeAdapter(client, dependencies, config),
+      waitForTerminal: client.closed ?? neverTerminal,
+    }))
+  )

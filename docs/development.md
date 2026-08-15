@@ -51,7 +51,6 @@ flowchart LR
   Gateway <-->|"versioned NATS RPC"| Content["Content Knowledge"]
   Gateway <-->|"versioned NATS RPC"| Production["Episode Production"]
   Gateway <-->|"versioned NATS RPC"| Library["Episode Library"]
-  Content -->|"JetStream event"| Production
   Production -->|"durable completion"| Library
   Content --> S3[("SeaweedFS S3")]
   Production --> S3
@@ -60,7 +59,7 @@ flowchart LR
   Production --> Voicevox["VOICEVOX"]
 ```
 
-各Contextは専用SQLiteを所有する。Context間でDBを共有せず、同期query/commandはNATS RPC、確実な状態伝播はJetStreamを使う。
+各Contextは専用SQLiteを所有する。Context間でDBを共有せず、同期query/commandはNATS RPC、確実な完成通知はProductionからLibraryへのJetStreamだけを使う。Contentの記事参照はRPCが正本で、未使用のContent Outbox/eventは持たない。
 
 | service | health port | state |
 | --- | ---: | --- |
@@ -168,6 +167,7 @@ pnpm audit --audit-level=high
 | `pnpm typecheck` | workspace型検査 |
 | `pnpm test` | unit/integration tests |
 | `pnpm test:coverage:functional` | 8 functional packagesのlines 75% / branches 60% |
+| `pnpm test:coverage:reliability` | 共通Supervisor/NATS loopのlines/branches 90%以上 |
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
 | `pnpm provider-contract:check` | 匿名化した外部契約fixtureのoffline検査 |
 | `pnpm test:e2e` | Web主要journey |
@@ -175,6 +175,7 @@ pnpm audit --audit-level=high
 | `pnpm db:generate` | drizzle schemaからmigration SQLを生成（要レビュー） |
 | `pnpm observability:validate` | LGTM構文、Dashboard UID、未確認metric参照 |
 | `pnpm observability:smoke` | 起動後のGrafana API、datasource、Collector、Browser OTLP、依存endpoint |
+| `pnpm reliability:chaos` | 隔離Composeで4 service/NATSを停止し、自動再起動・Ready・state整合性を検査 |
 
 bug修正は再現testを先に追加する。LLM接続ではsuccessだけでなく、timeout、429/5xx、invalid schema、response上限、non-retryable failureをprovider境界で確認する。
 
@@ -228,22 +229,22 @@ observed stackはprovider設定を変更せず、`.env`を通常stackと同じ�
 ### CodexからGrafana MCPを使う
 
 このリポジトリは、trusted project用の`.codex/config.toml`から公式の
-`grafana/mcp-grafana`をDockerのstdio transportで起動する。Grafana Composeと同じ
-Docker hostでobserved stackを起動してから、ホスト環境変数へ専用Service Account tokenを
-設定する。
+`grafana/mcp-grafana`をDockerのstdio transportで起動する。ローカルではobserved stack起動時に
+Viewer Service Account/tokenを冪等作成し、`.codex/state/grafana-viewer-token`へ`0600`で保存する。
+既存tokenは検証して再利用し、失効時だけ再発行する。
 
 ```bash
 pnpm dev:up:observed
-export GRAFANA_SERVICE_ACCOUNT_TOKEN='<Grafana read-only service-account-token>'
+pnpm mcp:check
 codex mcp list
 codex mcp get grafana
 ```
 
-Service Accountには、現在のPrometheus・Loki・Tempo datasourceに対する
-`datasources:read`／`datasources:query`、ダッシュボードとフォルダのread、alert ruleと
-notificationのreadだけを付与する。Grafana管理者password、API key、tokenの実値を
-リポジトリへ保存しない。MCP server側の`--disable-write`とCodexの承認設定により、
-dashboard、folder、alert、annotationなどの変更操作は許可しない。
+wrapperは`GRAFANA_SERVICE_ACCOUNT_TOKEN`をtoken fileより優先するため、本番では明示secretを
+注入する。tokenなし、Grafana未起動、401は原因別に停止する。Service AccountはViewerに限定し、
+Grafana管理者password、API key、tokenの実値をリポジトリへ保存しない。MCP server側の
+`--disable-write`とtool allowlistにより、dashboard、folder、alert、annotationなどの変更操作は
+許可しない。
 
 Tempo MCPはTempo configで有効化され、stdio起動時にGrafana datasource proxyから
 TraceQL検索・trace取得toolをdiscoverする。Tempoのtrace、Lokiのlog、Prometheusのmetric
@@ -305,6 +306,9 @@ docker compose logs gateway identity-access content-knowledge episode-production
 | --- | --- |
 | 開発ログイン失敗 | `DEV_AUTH_ENABLED`、password、Identity/Gateway log |
 | Gateway 503 | 対象service readiness、NATS、RPC timeout |
+| serviceが再起動する | `docker compose ps`のrestart count、terminal Cause、named readiness |
+| watchdog通知 | `/metrics`の対象別up/連続失敗/最終成功、SMTP設定の完全性 |
+| Grafana MCP停止 | Grafana起動、環境token、`.codex/state/grafana-viewer-token`、401 |
 | 生成が進まない | Production log、OpenAI/VOICEVOX、lease/scheduler設定 |
 | 番組がLibraryへ出ない | JetStream stream/consumer、Production outbox、Library inbox |
 | Webだけ接続失敗 | `VITE_API_PROXY_TARGET=http://localhost:4001` |

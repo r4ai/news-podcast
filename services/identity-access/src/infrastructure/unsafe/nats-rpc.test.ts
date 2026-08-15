@@ -5,23 +5,46 @@ import { connectNatsRpcUnsafe } from "./nats-rpc.js"
 
 vi.mock("@nats-io/transport-node", () => ({ connect: vi.fn() }))
 
+const pendingStatuses = () => ({
+  [Symbol.asyncIterator]: () => ({
+    next: () => new Promise<never>(() => undefined),
+  }),
+})
+
 describe("unsafe NATS RPC transport", () => {
   beforeEach(() => vi.clearAllMocks())
 
   it("subscribes with a queue, decodes deliveries, replies, and drains", async () => {
     const respond = vi.fn(() => true)
-    const messages = [
-      {
-        done: false as const,
-        value: { data: new TextEncoder().encode("request"), respond },
-      },
-      { done: true as const, value: undefined },
-    ]
     const drain = vi.fn(async () => undefined)
+    let finish: (() => void) | undefined
+    let delivered = false
     const subscribe = vi.fn(() => ({
-      [Symbol.asyncIterator]: () => ({ next: async () => messages.shift()! }),
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          if (!delivered) {
+            delivered = true
+            return Promise.resolve({
+              done: false as const,
+              value: {
+                subject: "identity.resolve-session.v1",
+                data: new TextEncoder().encode("request"),
+                respond,
+              },
+            })
+          }
+          return new Promise<{ done: true; value: undefined }>((resolve) => {
+            finish = () => resolve({ done: true, value: undefined })
+          })
+        },
+      }),
     }))
-    vi.mocked(connect).mockResolvedValue({ subscribe, drain } as never)
+    vi.mocked(connect).mockResolvedValue({
+      subscribe,
+      drain,
+      closed: () => new Promise(() => undefined),
+      status: pendingStatuses,
+    } as never)
 
     const server = await connectNatsRpcUnsafe(
       ["nats://one:4222"],
@@ -30,14 +53,18 @@ describe("unsafe NATS RPC transport", () => {
     )
     const delivery = await server.receive()
 
-    expect(connect).toHaveBeenCalledWith({ servers: ["nats://one:4222"] })
+    expect(connect).toHaveBeenCalledWith({
+      servers: ["nats://one:4222"],
+      reconnect: false,
+    })
     expect(subscribe).toHaveBeenCalledWith("identity.resolve-session.v1", {
       queue: "identity-access",
     })
     expect(delivery?.payload).toBe("request")
     await delivery?.reply("response")
     expect(respond).toHaveBeenCalledWith("response")
-    expect(await server.receive()).toBeUndefined()
+    finish?.()
+    await expect(server.receive()).rejects.toThrow("NATS subscription ended")
     await server.drain()
     expect(drain).toHaveBeenCalledOnce()
   })
@@ -56,6 +83,8 @@ describe("unsafe NATS RPC transport", () => {
         }),
       }),
       drain: async () => undefined,
+      closed: () => new Promise(() => undefined),
+      status: pendingStatuses,
     } as never)
     const server = await connectNatsRpcUnsafe(
       ["nats://one:4222"],
@@ -77,6 +106,8 @@ describe("unsafe NATS RPC transport", () => {
         throw new Error("subscription failed")
       },
       drain,
+      closed: () => new Promise(() => undefined),
+      status: pendingStatuses,
     } as never)
 
     await expect(

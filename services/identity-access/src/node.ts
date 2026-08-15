@@ -19,7 +19,7 @@ const effectTelemetry = makeEffectOtlpLayerFromEnvironment(
   process.env,
   "identity-access"
 )
-const health = createHealthState()
+const health = createHealthState(["rpc"])
 const core = readIdentityAccessConfig(process.env)
   .pipe(
     Effect.flatMap((config) =>
@@ -44,7 +44,7 @@ const core = readIdentityAccessConfig(process.env)
             { natsServers: config.natsServers, queueGroup: config.queueGroup },
             runtime.api,
             runtime.settings,
-            health.ready
+            () => health.ready("rpc")
           )
         })
       )
@@ -55,12 +55,16 @@ const program = Effect.scoped(
   healthServerScoped(
     Number(process.env.IDENTITY_HEALTH_PORT ?? "4102"),
     health
-  ).pipe(Effect.andThen(core), Effect.ensuring(Effect.sync(health.notReady)))
+  ).pipe(
+    Effect.andThen(core),
+    Effect.ensuring(Effect.sync(() => health.notReady("rpc")))
+  )
 )
 
 startIdentityAccessProcess(program, {
   onceSignal: (signal, listener) => process.once(signal, listener),
+  onceFatal: (event, listener) => process.once(event, listener),
   shutdownTelemetry: () => observability.shutdown(),
   exit: (code) => process.exit(code),
-  reportFailure: (failure) => console.error("Identity Access exited", failure),
+  reportFailure: (failure) => console.error(JSON.stringify(failure)),
 })

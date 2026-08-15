@@ -2,6 +2,8 @@
 
 import { pathToFileURL } from "node:url"
 
+import { sendSyntheticTrace } from "./observability-synthetic-flow.mjs"
+
 const grafana = process.env.GRAFANA_URL ?? "http://127.0.0.1:3100"
 const prometheus = process.env.PROMETHEUS_URL ?? "http://127.0.0.1:9090"
 const gateway = process.env.GATEWAY_URL ?? "http://127.0.0.1:4001"
@@ -23,6 +25,8 @@ const expectedAlertRules = [
   "np-api-5xx",
   "np-otel-export-failure",
   "np-uninstrumented-entry",
+  "np-watchdog-target-down",
+  "np-watchdog-missing",
 ]
 
 const auth = `Basic ${Buffer.from(
@@ -98,6 +102,19 @@ export const waitForPrometheusResult = async (
   )
 }
 
+export const waitForSyntheticServiceGraph = async ({
+  sendTrace = sendSyntheticTrace,
+  query = () =>
+    queryPrometheus(
+      'traces_service_graph_request_total{client="ci.synthetic.client",server="ci.synthetic.server"}'
+    ),
+  waitOptions = { timeoutMillis: 90_000, intervalMillis: 2_000 },
+} = {}) => {
+  const { traceId } = await sendTrace()
+  const edges = await waitForPrometheusResult(query, waitOptions)
+  return { edges, traceId }
+}
+
 const main = async () => {
   const health = await grafanaRequest("/api/health")
   assert(health.database === "ok", "Grafana database is not healthy")
@@ -135,19 +152,16 @@ const main = async () => {
   const failedExports = await queryPrometheus(
     "sum(otelcol_exporter_send_failed_spans_total)"
   )
-  const serviceGraphEdges = await waitForPrometheusResult(
-    () =>
-      queryPrometheus(
-        'traces_service_graph_request_total{client="ci.synthetic.client",server="ci.synthetic.server"}'
-      ),
-    { timeoutMillis: 90_000, intervalMillis: 2_000 }
-  )
+  const { edges: serviceGraphEdges, traceId: syntheticTraceId } =
+    await waitForSyntheticServiceGraph()
   assert(acceptedSpans.length > 0, "Collector has not accepted any spans")
   assert(serviceGraphEdges.length > 0, "Service graph has no edges")
   console.log(
     `collector accepted=${acceptedSpans[0].value[1]} refused=${refusedSpans[0]?.value[1] ?? "0"} export_failed=${failedExports[0]?.value[1] ?? "0"}`
   )
-  console.log(`service_graph_edges=${serviceGraphEdges.length}`)
+  console.log(
+    `service_graph_edges=${serviceGraphEdges.length} synthetic_trace_id=${syntheticTraceId}`
+  )
 
   await request(`${gateway}/v1/telemetry/traces`, {
     method: "POST",

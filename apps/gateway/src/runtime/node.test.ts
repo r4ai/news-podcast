@@ -104,4 +104,43 @@ describe("Gateway Node runtime", () => {
     })
     expect(drain).toHaveBeenCalledOnce()
   })
+
+  it("closes HTTP and drains NATS when the connection becomes terminal", async () => {
+    let disconnect!: (failure: Error) => void
+    const closed = new Promise<void>((_resolve, reject) => {
+      disconnect = reject
+    })
+    const drain = vi.fn(async () => undefined)
+    const close = vi.fn(async () => undefined)
+    let ready!: () => void
+    const listening = new Promise<void>((resolve) => {
+      ready = resolve
+    })
+    const fiber = Effect.runFork(
+      runNodeGateway(validConfig, {
+        connectNats: async () => ({
+          request: async () => new Uint8Array(),
+          closed: () => closed,
+          drain,
+        }),
+        listen: async () => {
+          ready()
+          return { close }
+        },
+        nextMessageId: () => "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+        now: () => "2026-08-13T00:00:00.000Z",
+      })
+    )
+    await listening
+
+    disconnect(new Error("NATS disconnected"))
+    const failure = await Effect.runPromise(Fiber.join(fiber).pipe(Effect.flip))
+
+    expect(failure).toEqual({
+      _tag: "GatewayRuntimeFailed",
+      component: "Nats",
+    })
+    expect(close).toHaveBeenCalledOnce()
+    expect(drain).toHaveBeenCalledOnce()
+  })
 })

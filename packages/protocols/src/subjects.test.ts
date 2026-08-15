@@ -14,7 +14,6 @@ describe("versioned NATS subjects", () => {
           "identity.complete-scheduled-generation.v1",
       },
       content: {
-        articleArchived: "content.article-archived.v1",
         articleLibrary: "content.article-library.v1",
         addSubscription: "content.add-subscription.v1",
         listSubscriptions: "content.list-subscriptions.v1",

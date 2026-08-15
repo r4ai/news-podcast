@@ -1,3 +1,7 @@
+import {
+  logRpcDeliveryFailure,
+  runSequentialRpcLoop,
+} from "@news-podcast/nats-runtime"
 import { Effect } from "effect"
 
 export type SingleWriterSource<Value, ReceiveError> = Readonly<{
@@ -9,15 +13,18 @@ export const runSingleWriterLoop = <
   Value,
   ReceiveError,
   HandleError,
+  SourceClosedError,
   Requirements,
 >(
   source: SingleWriterSource<Value, ReceiveError>,
-  handle: (value: Value) => Effect.Effect<void, HandleError, Requirements>
-): Effect.Effect<void, ReceiveError | HandleError, Requirements> =>
-  Effect.gen(function* () {
-    while (true) {
-      const value = yield* source.receive
-      if (value === undefined) return
-      yield* handle(value)
-    }
+  handle: (value: Value) => Effect.Effect<void, HandleError, Requirements>,
+  sourceClosed: () => SourceClosedError,
+  scope: string
+): Effect.Effect<never, ReceiveError | SourceClosedError, Requirements> =>
+  runSequentialRpcLoop({
+    receive: source.receive,
+    handle,
+    sourceClosed,
+    onDeliveryFailure: (cause) =>
+      logRpcDeliveryFailure("episode-production", scope, cause),
   })

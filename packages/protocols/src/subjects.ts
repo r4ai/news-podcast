@@ -7,7 +7,6 @@ export const subjects = {
     completeScheduledGeneration: "identity.complete-scheduled-generation.v1",
   },
   content: {
-    articleArchived: "content.article-archived.v1",
     addSubscription: "content.add-subscription.v1",
     listSubscriptions: "content.list-subscriptions.v1",
     deleteSubscription: "content.delete-subscription.v1",

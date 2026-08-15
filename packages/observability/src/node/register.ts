@@ -3,7 +3,6 @@ import {
   createNodeObservability,
   readNodeObservabilityConfig,
 } from "../node-adapter.js"
-import { installProcessErrorListeners } from "../node-process.js"
 import {
   isPropagationAllowed,
   readPropagationAllowlist,
@@ -37,9 +36,6 @@ export function getNodeObservability(
       : {}),
   }
   instance = createNodeObservability(effectiveConfig)
-  if (effectiveConfig.enabled) {
-    installProcessErrorListeners(instance)
-  }
   return instance
 }
 

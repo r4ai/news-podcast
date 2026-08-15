@@ -11,18 +11,22 @@ describe("single-writer RPC loop", () => {
     let maximumActive = 0
 
     await Effect.runPromise(
-      runSingleWriterLoop(
-        {
-          receive: Effect.sync(() => pending.shift()),
-        },
-        (value) =>
-          Effect.tryPromise(async () => {
-            active += 1
-            maximumActive = Math.max(maximumActive, active)
-            await Promise.resolve()
-            completed.push(value)
-            active -= 1
-          })
+      Effect.flip(
+        runSingleWriterLoop(
+          {
+            receive: Effect.sync(() => pending.shift()),
+          },
+          (value) =>
+            Effect.tryPromise(async () => {
+              active += 1
+              maximumActive = Math.max(maximumActive, active)
+              await Promise.resolve()
+              completed.push(value)
+              active -= 1
+            }),
+          () => ({ _tag: "SubscriptionClosed" as const }),
+          "test"
+        )
       )
     )
 
