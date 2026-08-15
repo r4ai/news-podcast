@@ -33,7 +33,7 @@
     "observability:infra:up": "bash scripts/observability-up.sh",
     "observability:infra:down": "docker compose -f infra/observability/compose.yaml down",
     "observability:smoke": "bash scripts/observability-smoke.sh",
-    "observability:validate": "bash scripts/validate-observability.sh",
+    "observability:validate": "node --test scripts/observed-provider-config.test.mjs && bash scripts/validate-observability.sh",
     "loadtest:up": "docker compose --project-name news-podcast-loadtest -f compose.yaml -f infra/loadtest/compose.yaml up --detach --build --wait",
     "loadtest:down": "docker compose --project-name news-podcast-loadtest -f compose.yaml -f infra/loadtest/compose.yaml down --remove-orphans",
     "loadtest:seed": "node scripts/loadtest-seed.mjs",

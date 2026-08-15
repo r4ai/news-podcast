@@ -4,8 +4,8 @@
 - Date: 2026-08-13
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
-- Superseded by: N/A
-- Related: ADR-0017、ADR-0025、ADR-0032、`infra/observability`、`scripts/observability-smoke.mjs`
+- Superseded by: ADR-0047（observed stackのprovider選択に限る）
+- Related: ADR-0017、ADR-0025、ADR-0032、ADR-0047、`infra/observability`、`scripts/observability-smoke.mjs`
 
 ## Context and change trigger
 

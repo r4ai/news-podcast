@@ -110,7 +110,8 @@ OPENAI_API_KEY=your-api-key
 ```
 
 ```bash
-pnpm dev:up
+pnpm dev:up # telemetryなし
+pnpm dev:up:observed # 同じlive providerをGrafanaで観測
 ```
 
 本番生成はownerが選択しContentが版固定した記事だけを入力にする。Episode ProductionはOpenAI Responses APIへstrict JSON schema、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0038](adr/0038-bounded-structured-production-generation.md)）。
@@ -191,7 +192,7 @@ Grafanaは<http://localhost:3100>。DashboardはOverview、Service Map、Service
 
 BrowserのOTLPはWebの相対URLからGatewayへ転送され、GatewayがCollectorの`/v1/traces`、`/v1/logs`、`/v1/metrics`へ固定マッピングする。Collector originをBrowserへ公開しない。Gatewayのproxyにはrequest/response byte上限とtimeoutを設定する。
 
-observed stackは課金APIへ接続しないため、`compose.observability.yaml`がEpisode Productionの`PROVIDER_MODE=fake`と空の`OPENAI_API_KEY`を強制する。初期paintのWeb Vitalを収集するため、Browser SDKはアプリ描画前に開始する。
+observed stackはprovider設定を変更せず、`.env`を通常stackと同じように継承する。`PROVIDER_MODE=live`ではOpenAI API利用料金が発生し、`fake`では外部OpenAI APIへ接続しない（[ADR-0047](adr/0047-observed-stack-inherits-provider-mode.md)）。初期paintのWeb Vitalを収集するため、Browser SDKはアプリ描画前に開始する。
 
 `pnpm dev:up:observed`をremote host上で実行している場合、以下のワンライナーで公開している全portをlocalへforwardできる。
 
