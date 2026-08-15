@@ -28,6 +28,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read # Required only to read PR metadata; no write access.
+      attestations: read # Required to verify the pinned action provenance.
     steps:
       # This is deliberately the base/default branch checkout. Never replace
       # it with the PR head: the PR is only handled as static input below.
@@ -52,6 +53,7 @@ jobs:
 
       - name: Install pinned security tools
         env:
+          GH_TOKEN: ${{ github.token }}
           PINACT_SHA256: d1cffebe5704b74e2e5f8a864efb9f7e54768972dc686188c008033fb1797841
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
           GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
