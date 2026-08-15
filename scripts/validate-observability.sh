@@ -83,6 +83,19 @@ jq -e '
   .services["otel-collector"].volumes
     | any(.target == "/var/lib/otelcol/storage" and .type == "volume")
 ' <<<"$base_compose_json" >/dev/null
+jq -e '
+  .services["grafana-provisioning-init"].command
+    | join(" ")
+    | contains("chmod 0444") and contains("chmod 0555")
+' <<<"$base_compose_json" >/dev/null
+jq -e '
+  .services.grafana.depends_on["grafana-provisioning-init"].condition
+    == "service_completed_successfully"
+' <<<"$base_compose_json" >/dev/null
+jq -e '
+  .services.grafana.volumes
+    | any(.target == "/etc/grafana/provisioning" and .type == "volume" and .read_only == true)
+' <<<"$base_compose_json" >/dev/null
 if rg -n 'hostmetrics|root_path:[[:space:]]*/hostfs' \
   "$OBSERVABILITY_DIR/collector.yaml" >/dev/null; then
   echo "Host metrics must run outside the public OTLP Collector." >&2

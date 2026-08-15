@@ -1,6 +1,7 @@
 import { deepFreeze } from "@news-podcast/kernel"
 import {
   MaterializeArticlesReplySchema,
+  messageEnvelope,
   subjects,
 } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
@@ -11,10 +12,13 @@ import type {
 } from "../application/execution-ports.js"
 import type { UnsafeNatsRequestClient } from "../infrastructure/unsafe/nats-request.js"
 
-const decodeReply = Schema.decodeUnknownEffect(MaterializeArticlesReplySchema, {
-  errors: "all",
-  onExcessProperty: "error",
-})
+const decodeReplyEnvelope = Schema.decodeUnknownEffect(
+  messageEnvelope(MaterializeArticlesReplySchema),
+  {
+    errors: "all",
+    onExcessProperty: "error",
+  }
+)
 
 const failure = (code: string, retryable: boolean): PipelineFailure =>
   deepFreeze({ _tag: "PipelineFailure" as const, code, retryable })
@@ -66,7 +70,17 @@ export const makeContentArticleMaterializer = (
             catch: () => failure("content_materialization_invalid", false),
           })
         ),
-        Effect.flatMap(decodeReply),
+        Effect.flatMap(decodeReplyEnvelope),
+        Effect.filterOrFail(
+          (reply) =>
+            reply.correlationId === messageId &&
+            reply.causationId === messageId &&
+            reply.producer === "content-knowledge" &&
+            reply.actor._tag === "Service" &&
+            reply.actor.service === "content-knowledge",
+          () => failure("content_materialization_invalid", false)
+        ),
+        Effect.map((reply) => reply.payload),
         Effect.mapError((error) =>
           "_tag" in error && error._tag === "PipelineFailure"
             ? error

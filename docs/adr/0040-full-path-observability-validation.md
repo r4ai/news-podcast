@@ -39,7 +39,7 @@ flowchart LR
   Tempo --> Grafana
 ```
 
-- Grafana provisioningはhostの700/600権限に依存しないよう、init containerがDashboard JSONをnamed volumeへ0444でコピーし、Grafanaはread-only mountする。Grafana/Prometheus/CollectorはCompose healthcheck、Loki/TempoはGrafana経由のreadinessとdatasource healthで検証する。
+- Grafana provisioningはhostの700/600権限に依存しないよう、init containerがDashboard JSONとprovisioning treeをnamed volumeへコピーし、ディレクトリを0555、ファイルを0444へ正規化する。Grafanaはread-only mountする。Grafana/Prometheus/CollectorはCompose healthcheck、Loki/TempoはGrafana経由のreadinessとdatasource healthで検証する。
 - GatewayはBrowserの相対OTLP endpointだけを受け、Collector originへ固定path mappingする。method、request/response byte、timeoutをGatewayで制限する。
 - Dashboard/AlertはPrometheus/Loki/Tempoで実測した系列だけを参照する。Episode ProductionはSQLiteの状態snapshotとworker outcomeから`episode.jobs`、queue age、started/succeeded/retry/failed/canceled/lease metricsを発行する。
 - service map、TraceQL、Tempo trace-to-logs、Loki logs-to-trace、Prometheus exemplar-to-traceをprovisioningで接続する。

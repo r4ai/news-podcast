@@ -37,6 +37,8 @@ pnpm observability:smoke
 
 `compose.observability.yaml`は課金経路を開かないよう、observed stackのEpisode Productionを`PROVIDER_MODE=fake`、`OPENAI_API_KEY=""`で固定する。BrowserのWeb Vitalは初期paintを取りこぼさないよう、SDKをアプリ描画前に開始する。
 
+GrafanaのDashboard JSONとprovisioning設定は、ホストcheckoutの`0600`/`0700`権限に依存しない。起動時にinit containerがnamed volumeへコピーし、ディレクトリを`0555`、ファイルを`0444`へ正規化する。Grafanaはそのvolumeをread-onlyでmountする。
+
 | 接続先 | URL |
 | --- | --- |
 | Grafana | <http://localhost:3100> |

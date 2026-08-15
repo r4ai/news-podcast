@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { expect, fn, userEvent, within } from "storybook/test"
 
-import type { Feed, Subscription } from "@/features/subscriptions"
+import type { Feed, FeedSyncJob, Subscription } from "@/features/subscriptions"
 import { SubscriptionListView } from "./subscription-list"
 
 const feeds = [
@@ -20,6 +20,7 @@ const meta = {
   args: {
     feeds,
     subscriptions,
+    jobs: [],
     pending: false,
     onToggle: fn(),
     onRemove: fn(),
@@ -61,4 +62,43 @@ export const Empty: Story = {
 
 export const Pending: Story = {
   args: { pending: true },
+}
+
+export const Syncing: Story = {
+  args: {
+    jobs: [
+      {
+        jobId: "job-1",
+        feedId: "feed-1",
+        feedUrl: "https://zenn.dev/feed",
+        status: "processing",
+        attempt: 1,
+        maxAttempts: 4,
+        discovered: 3,
+        archived: 1,
+        failed: 0,
+        createdAt: "2026-08-15T00:00:00.000Z",
+      },
+    ] as unknown as FeedSyncJob[],
+  },
+}
+
+export const SyncFailed: Story = {
+  args: {
+    jobs: [
+      {
+        jobId: "job-2",
+        feedId: "feed-2",
+        feedUrl: "https://news.ycombinator.com/rss",
+        status: "failed",
+        attempt: 4,
+        maxAttempts: 4,
+        discovered: 0,
+        archived: 0,
+        failed: 1,
+        createdAt: "2026-08-15T00:00:00.000Z",
+        error: "HttpStatus",
+      },
+    ] as unknown as FeedSyncJob[],
+  },
 }

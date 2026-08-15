@@ -52,6 +52,25 @@ services:
       - ./grafana/dashboards:/source:ro
       - grafana-dashboards:/dashboards
 
+  grafana-provisioning-init:
+    image: busybox:1.37.0
+    command:
+      - sh
+      - -c
+      - >-
+        set -eu;
+        rm -rf /provisioning/*;
+        cp -R /source/. /provisioning/;
+        find /provisioning -type d -exec chmod 0555 {} +;
+        find /provisioning -type f -exec chmod 0444 {} +
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    restart: "no"
+    volumes:
+      - ./grafana/provisioning:/source:ro
+      - grafana-provisioning:/provisioning
+
   prometheus:
     image: prom/prometheus:v3.13.1
     command:
@@ -121,10 +140,7 @@ services:
       - /tmp
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
-      - ./grafana/provisioning/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
-      - ./grafana/provisioning/alerting/contact-points.yaml:/etc/grafana/provisioning/alerting/contact-points.yaml:ro
-      - ./grafana/provisioning/alerting/rules.yaml:/etc/grafana/provisioning/alerting/rules.yaml:ro
+      - grafana-provisioning:/etc/grafana/provisioning:ro
       - grafana-dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "127.0.0.1:3100:3000"
@@ -136,6 +152,8 @@ services:
       tempo:
         condition: service_started
       grafana-dashboard-init:
+        condition: service_completed_successfully
+      grafana-provisioning-init:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
@@ -151,6 +169,7 @@ networks:
 volumes:
   grafana-data:
   grafana-dashboards:
+  grafana-provisioning:
   prometheus-data:
   loki-data:
   tempo-data:

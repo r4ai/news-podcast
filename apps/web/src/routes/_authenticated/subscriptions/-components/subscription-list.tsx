@@ -19,20 +19,38 @@ import {
   compareFeedNames,
   feedNameResolver,
   feedsQueryOptions,
+  feedSyncJobsQueryOptions,
   type Feed,
+  type FeedSyncJob,
   type Subscription,
 } from "@/features/subscriptions"
 import { useSubscriptions } from "../-hooks/use-subscriptions"
 import { SubscriptionItem } from "./subscription-item"
 
+/** feedIdごとに最新のjobだけを残す。 */
+function latestJobByFeedId(
+  jobs: readonly FeedSyncJob[]
+): ReadonlyMap<string, FeedSyncJob> {
+  const byFeedId = new Map<string, FeedSyncJob>()
+  for (const job of jobs) {
+    const current = byFeedId.get(job.feedId)
+    if (!current || job.createdAt > current.createdAt) {
+      byFeedId.set(job.feedId, job)
+    }
+  }
+  return byFeedId
+}
+
 /** データ接続: hookを呼び、viewへ渡すだけ。 */
 export function SubscriptionList() {
   const { items, pending, removeItem, syncItem, toggle } = useSubscriptions()
   const { data: feeds } = useSuspenseQuery(feedsQueryOptions)
+  const { data: jobs } = useSuspenseQuery(feedSyncJobsQueryOptions)
 
   return (
     <SubscriptionListView
       feeds={feeds.items as readonly Feed[]}
+      jobs={jobs.items as readonly FeedSyncJob[]}
       onRemove={removeItem}
       onSync={syncItem}
       onToggle={toggle}
@@ -45,6 +63,7 @@ export function SubscriptionList() {
 export type SubscriptionListViewProps = {
   readonly subscriptions: readonly Subscription[]
   readonly feeds: readonly Feed[]
+  readonly jobs?: readonly FeedSyncJob[]
   readonly pending: boolean
   readonly onToggle: (subscription: Subscription) => void
   readonly onRemove: (subscription: Subscription) => void
@@ -53,6 +72,7 @@ export type SubscriptionListViewProps = {
 
 export function SubscriptionListView({
   feeds,
+  jobs = [],
   onRemove,
   onSync,
   onToggle,
@@ -60,6 +80,7 @@ export function SubscriptionListView({
   subscriptions,
 }: SubscriptionListViewProps) {
   const feedName = feedNameResolver(feeds)
+  const jobByFeedId = latestJobByFeedId(jobs)
   const sortedSubscriptions = subscriptions.toSorted((left, right) =>
     compareFeedNames(feedName(left.feedId), feedName(right.feedId))
   )
@@ -81,6 +102,7 @@ export function SubscriptionListView({
               <SubscriptionItem
                 disabled={pending}
                 feedName={feedName(subscription.feedId)}
+                job={jobByFeedId.get(subscription.feedId)}
                 key={subscription.id}
                 onRemove={onRemove}
                 onSync={onSync}
