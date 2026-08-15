@@ -8,12 +8,13 @@ trap 'rm -rf "$VALIDATION_STORAGE"' EXIT
 chmod 0777 "$VALIDATION_STORAGE"
 
 docker run --rm \
+  --user 0:0 \
   -v "$VALIDATION_STORAGE:/var/lib/otelcol/storage" \
   -v "$OBSERVABILITY_DIR/collector.yaml:/etc/otelcol-contrib/config.yaml:ro" \
   otel/opentelemetry-collector-contrib:0.135.0 \
   validate --config=/etc/otelcol-contrib/config.yaml
 
-docker run --rm --entrypoint promtool \
+docker run --rm --user 0:0 --entrypoint promtool \
   -v "$OBSERVABILITY_DIR/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro" \
   prom/prometheus:v3.13.1 \
   check config /etc/prometheus/prometheus.yaml
@@ -22,14 +23,26 @@ rg -U 'out_of_order_time_window:[[:space:]]+2h' \
   "$OBSERVABILITY_DIR/prometheus/prometheus.yaml" >/dev/null
 
 docker run --rm \
+  --user 0:0 \
   -v "$OBSERVABILITY_DIR/loki/config.yaml:/etc/loki/config.yaml:ro" \
   grafana/loki:3.7.2 \
   -config.file=/etc/loki/config.yaml -verify-config=true
 
+tempo_validation_log="$VALIDATION_STORAGE/tempo-config.log"
+tempo_validation_status=0
 docker run --rm \
+  --user 0:0 \
   -v "$OBSERVABILITY_DIR/tempo/config.yaml:/etc/tempo/config.yaml:ro" \
   grafana/tempo:2.10.7 \
-  -config.file=/etc/tempo/config.yaml -config.verify=true
+  -config.file=/etc/tempo/config.yaml -config.verify=true \
+  >"$tempo_validation_log" 2>&1 || tempo_validation_status=$?
+cat "$tempo_validation_log"
+if [[ "$tempo_validation_status" -ne 0 ]]; then
+  if ! rg -q 'c\.Frontend\.MCPServer\.Enabled is enabled\.' "$tempo_validation_log" \
+    || rg -qi 'error|failed|invalid' "$tempo_validation_log"; then
+    exit "$tempo_validation_status"
+  fi
+fi
 
 for dashboard in "$OBSERVABILITY_DIR"/grafana/dashboards/*.json; do
   jq -e . "$dashboard" >/dev/null

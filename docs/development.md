@@ -201,6 +201,33 @@ BrowserのOTLPはWebの相対URLからGatewayへ転送され、GatewayがCollect
 
 observed stackはprovider設定を変更せず、`.env`を通常stackと同じように継承する。`PROVIDER_MODE=live`ではOpenAI API利用料金が発生し、`fake`では外部OpenAI APIへ接続しない（[ADR-0047](adr/0047-observed-stack-inherits-provider-mode.md)）。初期paintのWeb Vitalを収集するため、Browser SDKはアプリ描画前に開始する。
 
+### CodexからGrafana MCPを使う
+
+このリポジトリは、trusted project用の`.codex/config.toml`から公式の
+`grafana/mcp-grafana`をDockerのstdio transportで起動する。Grafana Composeと同じ
+Docker hostでobserved stackを起動してから、ホスト環境変数へ専用Service Account tokenを
+設定する。
+
+```bash
+pnpm dev:up:observed
+export GRAFANA_SERVICE_ACCOUNT_TOKEN='<Grafana read-only service-account-token>'
+codex mcp list
+codex mcp get grafana
+```
+
+Service Accountには、現在のPrometheus・Loki・Tempo datasourceに対する
+`datasources:read`／`datasources:query`、ダッシュボードとフォルダのread、alert ruleと
+notificationのreadだけを付与する。Grafana管理者password、API key、tokenの実値を
+リポジトリへ保存しない。MCP server側の`--disable-write`とCodexの承認設定により、
+dashboard、folder、alert、annotationなどの変更操作は許可しない。
+
+Tempo MCPはTempo configで有効化され、stdio起動時にGrafana datasource proxyから
+TraceQL検索・trace取得toolをdiscoverする。Tempoのtrace、Lokiのlog、Prometheusのmetric
+はCodexのモデルコンテキストへ渡り得るため、組織のprivacy方針に従い、機密情報をtrace
+属性やlogへ記録しない。TempoまたはMCP設定を変更した場合はobserved stackとCodexを
+再起動する。MCPはGrafanaへ設定を書き込まず、dashboard・datasource・alertの正本は
+`infra/observability`のprovisioning fileである（[ADR-0048](adr/0048-grafana-mcp-observability.md)）。
+
 `pnpm dev:up:observed`をremote host上で実行している場合、以下のワンライナーで公開している全portをlocalへforwardできる。
 
 ```bash

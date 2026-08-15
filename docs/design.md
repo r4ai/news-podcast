@@ -110,7 +110,7 @@ flowchart LR
 
 Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packages/observability`を使う。BrowserからGatewayまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Productionは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はProduction trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
-Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。OTLPはGatewayの相対proxyを通し、Collector originをBrowserへ公開しない。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningで8 dashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理し、watchdogはGrafana停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0040](adr/0040-full-path-observability-validation.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
+Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。OTLPはGatewayの相対proxyを通し、Collector originをBrowserへ公開しない。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningで8 dashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理し、watchdogはGrafana停止中もSMTPへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0040](adr/0040-full-path-observability-validation.md)、[ADR-0048](adr/0048-grafana-mcp-observability.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
 計装は呼び出しごとの手動spanではなく、**自動計装（`instrumentation-http` + `instrumentation-undici`）を正本**にする。Node processはbootstrapで`@news-podcast/observability/node/register`を初期化してからcomposition rootを動的importし、依存moduleの評価より先に`node:http`をpatchする。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）へspanを自動生成する。W3C trace headerの注入はallowlist（既定`api.openai.com`・`localhost`・`127.0.0.1`、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは注入しない（ADR-0017の「外部へ送らない」方針を部分改訂）。span自体は生成・記録され続け、受信は常にW3Cで継続する。schedulerやconsumerなど非HTTP入口は`withGuaranteedSpan`でroot spanを合成して`trace.entry.synthesized`を計数し、本番はmetric/ruleで、非本番は`assertActiveSpan`で計装欠落を検出する。エラー詳細はredact済み`error.message`・`error.type`をlogs/spansへ記録し、metric属性は低cardinalityに限定する（高cardinalityの`error.message`はmetricsへ入れない）。詳細は[ADR-0025](adr/0025-automatic-instrumentation-and-trace-guarantee.md)を正本とする。
 
@@ -293,7 +293,7 @@ flowchart TD
 - [ADR-0007 事実ベース台本と出典追跡](adr/0007-factual-provenance.md)
 - [ADR-0008 Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)
 - [ADR-0009 TanStack Router/QueryとAsync React](adr/0009-async-react-tanstack.md)
-- [ADR-0010 OpenTelemetryとSigNoz](adr/0010-opentelemetry-signoz.md)
+- [ADR-0032 OTelの後段をGrafana相関監視基盤へ移行する](adr/0032-grafana-correlated-observability.md)
 - [ADR-0011 SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
 - [ADR-0012 RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013 Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
@@ -306,3 +306,4 @@ flowchart TD
 - [ADR-0039 Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)
 - [ADR-0041 RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
 - [ADR-0042 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)
+- [ADR-0048 Grafana LGTM向けプロジェクト単位MCP](adr/0048-grafana-mcp-observability.md)

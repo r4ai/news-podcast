@@ -1,6 +1,10 @@
 server:
   http_listen_port: 3200
 
+query_frontend:
+  mcp_server:
+    enabled: true
+
 distributor:
   receivers:
     otlp:
@@ -27,4 +31,3 @@ storage:
 
 usage_report:
   reporting_enabled: false
-

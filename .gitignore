@@ -45,11 +45,6 @@ news-podcast-app/
 # rust
 /target/
 
-# SigNoz Foundry generated deployment and local backups
-infra/observability/pours/
-infra/observability/casting.yaml.lock
-infra/observability/backup/data/
-
 # Terraform local state and downloaded providers
 **/.terraform/*
 *.tfstate

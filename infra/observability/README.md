@@ -35,7 +35,7 @@ pnpm observability:validate
 pnpm observability:smoke
 ```
 
-`compose.observability.yaml`は課金経路を開かないよう、observed stackのEpisode Productionを`PROVIDER_MODE=fake`、`OPENAI_API_KEY=""`で固定する。BrowserのWeb Vitalは初期paintを取りこぼさないよう、SDKをアプリ描画前に開始する。
+`compose.observability.yaml`はtelemetry設定だけを追加し、provider modeと資格情報を`.env`から継承する。`PROVIDER_MODE=live`では外部OpenAI API利用料金が発生し、`fake`では外部APIへ接続しない。BrowserのWeb Vitalは初期paintを取りこぼさないよう、SDKをアプリ描画前に開始する。
 
 GrafanaのDashboard JSONとprovisioning設定は、ホストcheckoutの`0600`/`0700`権限に依存しない。起動時にinit containerがnamed volumeへコピーし、ディレクトリを`0555`、ファイルを`0444`へ正規化する。Grafanaはそのvolumeをread-onlyでmountする。
 
@@ -48,6 +48,31 @@ GrafanaのDashboard JSONとprovisioning設定は、ホストcheckoutの`0600`/`0
 | Collector metrics | <http://localhost:8888/metrics> |
 
 Grafanaの初期ユーザーは`GRAFANA_ADMIN_USER`、passwordは`GRAFANA_ADMIN_PASSWORD`で指定する。未指定時のpasswordはローカル専用の`local-only-change-me`であり、本番では必ずsecretへ置換する。匿名アクセスは無効で、全ポートはローカルloopbackへbindする。
+
+## CodexからGrafana MCPを使う
+
+リポジトリ直下の`.codex/config.toml`が、公式`grafana/mcp-grafana:1.0.0`をDocker
+の`stdio`として起動する。MCPコンテナは`news-podcast-observability` networkへ接続し、
+Grafanaの内部サービス名`http://grafana:3000`だけを利用するため、MCP用の外部portは
+追加しない。
+
+```bash
+pnpm dev:up:observed
+export GRAFANA_SERVICE_ACCOUNT_TOKEN='<Grafana read-only service-account-token>'
+codex mcp list
+codex mcp get grafana
+```
+
+Service Accountは専用に作成し、Prometheus・Loki・Tempo datasourceの
+`datasources:read`／`datasources:query`、dashboard/folderのread、alert rule/notification
+のreadだけを付与する。管理者password、API key、tokenの実値はリポジトリや`.env.example`
+へ保存しない。MCPは`--disable-write`でread-onlyに固定し、dashboard、alert、folder、
+annotationの作成・更新・削除を行わない。
+
+Tempo MCPは`tempo/config.yaml`で有効化し、GrafanaのTempo datasource proxy経由で
+TraceQL検索とtrace取得を提供する。traceとlogの内容はLLMへ渡る可能性があるため、
+機密情報をtelemetryへ記録しない。Tempo設定変更後はTempo/Grafanaを再起動し、stdio
+MCPを再起動してtool一覧を再取得する。
 
 ## 調査フロー
 

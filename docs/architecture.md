@@ -338,6 +338,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0009: TanStack Router/Query](adr/0009-async-react-tanstack.md)（ADR-0047が置き換え）
 - [ADR-0047: Async UIの責務を宣言的な仕組みへ固定する](adr/0047-declarative-async-ui-responsibilities.md)
 - [ADR-0032: Grafana相関監視基盤](adr/0032-grafana-correlated-observability.md)
+- [ADR-0048: Grafana LGTM向けプロジェクト単位MCP](adr/0048-grafana-mcp-observability.md)
 - [ADR-0040: 全経路Observabilityと再起動検証](adr/0040-full-path-observability-validation.md)
 - [ADR-0041: RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
 - [ADR-0042: 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)
