@@ -150,7 +150,13 @@ export const decideProviderRetry = (input: {
     input.policy.baseDelayMillis * 2 ** (input.completedAttempts - 1),
     input.policy.maximumDelayMillis
   )
-  const delayMillis = retryAfterMillis ?? exponentialDelay
+  // A missing Retry-After must not turn a rate limit into a tight retry loop.
+  // Use the configured ceiling as the conservative provider recovery window.
+  const delayMillis =
+    retryAfterMillis ??
+    (classification.reason === "RateLimited"
+      ? input.policy.maximumDelayMillis
+      : exponentialDelay)
   const elapsedMillis = Math.max(0, input.nowMillis - input.startedAtMillis)
   if (elapsedMillis + delayMillis >= input.policy.maximumElapsedMillis) {
     return Object.freeze({ _tag: "Stop", reason: "ElapsedTimeLimit" })

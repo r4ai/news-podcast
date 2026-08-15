@@ -20,6 +20,7 @@ const MAXIMUM_SCRIPT_CHARACTERS = 6_000
 const MAXIMUM_SOURCE_COUNT = 20
 const MAXIMUM_RESPONSE_BYTES = 1_048_576
 const MAXIMUM_OUTPUT_TOKENS = 4_096
+const MAXIMUM_SOURCE_MARKDOWN_CHARACTERS = 6_000
 
 const OutputTextSchema = Schema.Struct({
   type: Schema.Literal("output_text"),
@@ -90,7 +91,7 @@ const readRetryAfter = (response: Response): string | undefined => {
 const requestBody = (
   config: OpenAiScriptGeneratorConfig,
   request: ScriptGenerationRequest
-) => ({
+): UnknownRecord => ({
   model: config.model,
   max_output_tokens: MAXIMUM_OUTPUT_TOKENS,
   input: [
@@ -101,7 +102,14 @@ const requestBody = (
     },
     {
       role: "user",
-      content: JSON.stringify({ sources: request.sources }),
+      content: JSON.stringify({
+        sources: request.sources.map((source) => ({
+          ...source,
+          markdown: Array.from(source.markdown)
+            .slice(0, MAXIMUM_SOURCE_MARKDOWN_CHARACTERS)
+            .join(""),
+        })),
+      }),
     },
   ],
   text: {

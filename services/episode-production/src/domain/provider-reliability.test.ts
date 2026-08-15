@@ -116,6 +116,13 @@ describe("bounded provider retry decision", () => {
     ).toEqual({ _tag: "Retry", delayMillis: 7_000 })
   })
 
+  it("uses the maximum backoff when a rate limit omits Retry-After", () => {
+    expect(decide({ _tag: "HttpFailure", status: 429 })).toEqual({
+      _tag: "Retry",
+      delayMillis: 10_000,
+    })
+  })
+
   it.each([
     [{ _tag: "HttpFailure", status: 503 } as const, 4, now, "AttemptLimit"],
     [

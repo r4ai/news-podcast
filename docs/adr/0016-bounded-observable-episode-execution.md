@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: ADR-0002、ADR-0003、ADR-0010、ADR-0013、ADR-0015、ADR-0017
+- Related: ADR-0002、ADR-0003、ADR-0010、ADR-0013、ADR-0015、ADR-0017、ADR-0049
 
 ## コンテキストと変更契機
 

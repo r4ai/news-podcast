@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Architecture
 - Supersedes: ADR-0013、ADR-0015
 - Superseded by: N/A
-- Related: ADR-0007、ADR-0016、ADR-0026、`docs/functional-ddd-migration.md`
+- Related: ADR-0007、ADR-0016、ADR-0026、ADR-0050、`docs/functional-ddd-migration.md`
 
 ## コンテキストと変更契機
 

@@ -163,6 +163,38 @@ describe("OpenAI ScriptGenerator HTTP boundary", () => {
     expect(fake.requests[0]).not.toContain("test-only-key")
   })
 
+  it("bounds every article before building a scheduled 20-source request", async () => {
+    const fake = await startScriptedServer([
+      { body: JSON.stringify(completed(successPayload)) },
+    ])
+    const sources = Array.from({ length: 20 }, (_, index) => ({
+      title: `記事${index}`,
+      url: index === 0 ? source.url : `https://example.test/article-${index}`,
+      markdown: "長".repeat(6_001),
+    }))
+
+    await Effect.runPromise(makeGenerator(fake.endpoint).generate({ sources }))
+
+    const request = JSON.parse(fake.requests[0]!) as {
+      input: [{ content: string }, { content: string }]
+    }
+    const input = JSON.parse(request.input[1].content) as {
+      sources: Array<{ markdown: string }>
+    }
+    expect(input.sources).toHaveLength(20)
+    expect(
+      input.sources.every(
+        ({ markdown }) => Array.from(markdown).length <= 6_000
+      )
+    ).toBe(true)
+    expect(
+      input.sources.reduce(
+        (length, { markdown }) => length + Array.from(markdown).length,
+        0
+      )
+    ).toBeLessThanOrEqual(120_000)
+  })
+
   it.each([
     ["invalid JSON", "not-json"],
     ["invalid output JSON", JSON.stringify(completedText("not-json"))],
@@ -286,6 +318,7 @@ describe("OpenAI ScriptGenerator HTTP boundary", () => {
 
   it.each([
     [429, { "retry-after": "2" }, 2_000],
+    [429, {}, 2_000],
     [500, {}, 25],
   ] as const)(
     "retries HTTP %s once through the shared retry budget",
