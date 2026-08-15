@@ -86,13 +86,14 @@ flowchart LR
   Web --> UI["packages/ui"]
   Gateway["apps/gateway"] --> Protocols["packages/protocols"]
   Gateway --> Observability["packages/observability"]
+  Gateway --> Scalar["Scalar API Reference"]
   Services["services/*"] --> Protocols
   Services --> Kernel["packages/kernel"]
   Services --> Observability
   Watchdog["apps/watchdog"] --> SMTP["SMTP"]
 ```
 
-HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Webはservice実装やdomain型ではなく、公開契約だけに依存する。
+HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Gatewayは生成契約とScalar API Referenceを読み取り専用で配信する。Webはservice実装やdomain型ではなく、公開契約だけに依存する。
 
 ### 3.3 service構成
 

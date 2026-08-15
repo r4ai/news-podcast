@@ -82,6 +82,35 @@ const ports: GatewayPorts = {
 }
 
 describe("Gateway HTTP runtime", () => {
+  it("serves the generated OpenAPI document and Scalar reference", async () => {
+    const runtime = makeGatewayWebHandler(ports)
+
+    try {
+      const [document, reference] = await Promise.all([
+        runtime.handler(new Request("http://gateway.test/openapi.json")),
+        runtime.handler(new Request("http://gateway.test/docs")),
+      ])
+
+      expect(document.status).toBe(200)
+      expect(document.headers.get("content-type")).toContain("application/json")
+      expect(document.headers.get("cache-control")).toBe("no-store")
+      expect(await document.json()).toMatchObject({
+        openapi: "3.1.0",
+        info: { title: "RSS News Podcast API" },
+      })
+
+      expect(reference.status).toBe(200)
+      expect(reference.headers.get("content-type")).toContain("text/html")
+      expect(reference.headers.get("cache-control")).toBe("no-store")
+      const html = await reference.text()
+      expect(html).toContain("News Podcast API Reference")
+      expect(html).toContain("/openapi.json")
+      expect(html).toContain("@scalar/api-reference")
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
   it("serves feed catalog and owner article workflows", async () => {
     const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
       id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",

@@ -118,7 +118,7 @@ pnpm dev:up:observed # 同じlive providerをGrafanaで観測
 
 ## OpenAPI契約
 
-`apps/gateway/src/contract.ts`が外部HTTP契約の正本である。生成物は`packages/contracts/openapi/openapi.json`と`packages/contracts/src/generated/openapi.ts`へ保存し、Webが利用する。runtimeはOpenAPI文書をHTTP公開せず、repositoryのversion固定生成物を検査する。
+`apps/gateway/src/contract.ts`が外部HTTP契約の正本である。生成物は`packages/contracts/openapi/openapi.json`と`packages/contracts/src/generated/openapi.ts`へ保存し、Webが利用する。Gatewayは同じ契約から生成したOpenAPI文書を`/openapi.json`、Scalar API Referenceを`/docs`で公開する。
 
 ```mermaid
 flowchart LR
@@ -126,6 +126,7 @@ flowchart LR
   Generate --> Json["OpenAPI JSON"]
   Generate --> Types["TypeScript types"]
   Types --> Web["Web client"]
+  Json --> Scalar["Scalar /docs"]
 ```
 
 ```bash
@@ -133,6 +134,8 @@ pnpm contract:generate
 pnpm contract:check
 pnpm contract:lint
 ```
+
+`pnpm dev:up`または`pnpm dev:up:observed`の起動後、Scalarは <http://localhost:4001/docs>、OpenAPI JSONは <http://localhost:4001/openapi.json> で確認できる。Web開発サーバー経由では <http://localhost:4173/docs> も利用できる。
 
 契約変更では生成物を同じ変更に含め、`contract:check`で差分がないことを確認する。Better Authの`/api/auth/**`は認証provider側の契約で、アプリOpenAPIへ複製しない。
 

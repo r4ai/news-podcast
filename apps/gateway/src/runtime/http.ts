@@ -5,6 +5,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { gatewayApi } from "../contract.js"
 import { makeGatewayHandlerLayer } from "../application/handlers/index.js"
 import type { GatewayPorts } from "../application/ports.js"
+import { routeApiDocs } from "./api-docs.js"
 
 /** Builds the transport-neutral HTTP boundary; the OS server stays outside. */
 export const makeGatewayWebHandler = (
@@ -20,6 +21,9 @@ export const makeGatewayWebHandler = (
   const runtime = HttpRouter.toWebHandler(apiLayer, { disableLogger: true })
   return {
     ...runtime,
-    handler: (request: Request) => runtime.handler(request, undefined as never),
+    handler: (request: Request) =>
+      Promise.resolve(
+        routeApiDocs(request) ?? runtime.handler(request, undefined as never)
+      ),
   }
 }

@@ -20,6 +20,7 @@ export default defineConfig({
       "/api": apiTarget,
       "/health": apiTarget,
       "/v1": apiTarget,
+      "/docs": apiTarget,
       "/openapi.json": apiTarget,
     },
   },
