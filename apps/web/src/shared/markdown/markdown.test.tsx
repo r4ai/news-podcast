@@ -7,7 +7,9 @@ async function renderMarkdown(markdown: string) {
   const view = render(<Markdown markdown={markdown} />)
   await waitFor(() =>
     expect(
-      view.container.querySelector("h1, p, table, pre, figure, .katex")
+      view.container.querySelector(
+        "h1, p, table, pre, figure, iframe, a, .katex"
+      )
     ).not.toBeNull()
   )
   return view
@@ -47,6 +49,17 @@ describe("Markdown", () => {
     expect(note.textContent).toContain("気をつけて")
   })
 
+  it("renders an expanded foldable callout type and preserves its title", async () => {
+    const { container } = await renderMarkdown(
+      "> [!bug]- Parser incident\n> Stack trace details"
+    )
+
+    const callout = screen.getByRole("note")
+    expect(callout.textContent).toContain("Parser incident")
+    expect(callout.textContent).toContain("Stack trace details")
+    expect(container.querySelector("details:not([open])")).not.toBeNull()
+  })
+
   it("shows a filename header and always-present line numbers for fenced code", async () => {
     const { container } = await renderMarkdown(
       '```sql title="migrations/0006_fts.sql"\nSELECT 1;\nSELECT 2;\n```'
@@ -58,6 +71,42 @@ describe("Markdown", () => {
       container.querySelectorAll("pre code > span")
     ).map((line) => line.querySelector("span")?.textContent)
     expect(lineNumbers).toEqual(["1", "2"])
+  })
+
+  it("honors converted line-number visibility and starting line metadata", async () => {
+    const hidden = await renderMarkdown(
+      "```ts showLineNumbers=false startLine=10\nconst a = 1\nconst b = 2\n```"
+    )
+    expect(
+      hidden.container.querySelectorAll("[data-line-number]")
+    ).toHaveLength(0)
+    hidden.unmount()
+
+    const shown = await renderMarkdown(
+      "```ts showLineNumbers=true startLine=10\nconst a = 1\nconst b = 2\n```"
+    )
+    expect(
+      Array.from(shown.container.querySelectorAll("[data-line-number]")).map(
+        (node) => node.textContent
+      )
+    ).toEqual(["10", "11"])
+  })
+
+  it("loads allowlisted embeds in a sandbox and degrades unsafe providers", async () => {
+    const safe = await renderMarkdown(
+      '@[embed](https://www.youtube.com/embed/abc "https://youtu.be/abc")'
+    )
+    const frame = safe.container.querySelector("iframe")
+    expect(frame?.getAttribute("sandbox")).toBe("")
+    expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer")
+    safe.unmount()
+
+    await renderMarkdown(
+      '@[embed](https://tracker.example/embed/abc "https://example.com/watch")'
+    )
+    expect(screen.getByRole("link").getAttribute("href")).toBe(
+      "https://example.com/watch"
+    )
   })
 
   it("falls back to plain rendering for an unknown/absent language without throwing", async () => {

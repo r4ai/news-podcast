@@ -175,7 +175,9 @@ flowchart LR
   Gate["pnpm parser:check"] -.-> Parser
 ```
 
-現在のContent境界は、RSS/Atomに`fast-xml-parser`、記事HTML→Markdownに`rehype-parse` + `rehype-remark` + `remark-stringify`を使う。記事変換には専用の入力1 MiB、ASTノード5万、深さ128、Markdown出力1 MiBの上限を設け、上限超過は`ResourceLimit`として保存前に拒否する。正規表現はURL・固定語彙などの字句検証に限定し、構造解釈へ戻さない。詳細は[ADR-0042](adr/0042-structured-input-parser-boundaries.md)を参照する。
+現在のContent境界は、RSS/Atomに`fast-xml-parser`、記事HTML→Markdownにscript/resource無効の`jsdom`、Readability、rehype/remarkを使う。Site Profileはroot/selector/意味対応だけを宣言し、code/callout/embed/mathは共有Ruleで変換する。記事変換には入力1 MiB、ASTノード5万、深さ128、Markdown出力1 MiBの上限を設け、上限超過は`ResourceLimit`として保存前に拒否する。正規表現はURL・固定語彙などの字句検証に限定し、構造解釈へ戻さない。詳細は[ADR-0042](adr/0042-structured-input-parser-boundaries.md)と[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)を参照する。
+
+記事変換の固定corpusと100% scoped coverageは`pnpm --filter @news-podcast/content-knowledge test:article-markdown:coverage`、renderer純粋関数は`pnpm --filter web test:markdown:coverage`で検証する。実サイトの任意smokeは通常CIから分離し、`pnpm --filter @news-podcast/content-knowledge test:article-markdown:live`で実行する。
 
 ```bash
 pnpm parser:check

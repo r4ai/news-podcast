@@ -6,6 +6,7 @@ import { Callout } from "./callout"
 import { CodeBlock } from "./code-block/code-block"
 import { Code } from "./code"
 import { Details, Summary } from "./details"
+import { Embed, LinkCard } from "./embed"
 import { Image } from "./image"
 import { Input } from "./input"
 import { H1, H2, H3, H4, H5, H6 } from "./heading"
@@ -44,5 +45,8 @@ export const markdownComponents: Partial<Components> = {
   tr: TableRow,
   ul: UnorderedList,
   "markdown-callout": Callout,
+  "markdown-callout-foldable": Callout,
+  "markdown-embed": Embed,
+  "markdown-link-card": LinkCard,
   "markdown-mermaid": Mermaid,
 }

@@ -1,0 +1,73 @@
+{
+  "capturedAt": "2026-08-15",
+  "fixtures": [
+    {
+      "file": "zenn-guide.html",
+      "sourceUrl": "https://zenn.dev/zenn/articles/markdown-guide",
+      "sha256": "d6c2d0908b3fb77c8646602ac3dd12bbe4368139e2a92a6e76a5f2a3514605bc",
+      "includes": [
+        "Zenn Markdown guide",
+        "```ts title=\"src/index.ts\"",
+        "> [!note]",
+        "@[embed](https://www.youtube.com/embed/abc"
+      ],
+      "excludes": ["Zenn navigation"]
+    },
+    {
+      "file": "zenn-callout.html",
+      "sourceUrl": "https://zenn.dev/ricora/articles/5a170c17933c3f",
+      "sha256": "132cccfe380d18f06f13310c5659b1b94ca82f6827f2a3dca2908c3afa67bfd7",
+      "includes": ["Callout patterns", "> [!warning]", "> [!bug]- Parser bug"],
+      "excludes": ["Global header"]
+    },
+    {
+      "file": "qiita-guide.html",
+      "sourceUrl": "https://qiita.com/Qiita/items/c686397e4a0f4f11683d",
+      "sha256": "c4998c33ecf8996a9c26b402e66128c5d50e1816376725297e8af999eb641a95",
+      "includes": [
+        "Qiita Markdown guide",
+        "| Syntax",
+        "> [!info]",
+        "```ruby title=\"app.rb\""
+      ],
+      "excludes": ["Qiita search"]
+    },
+    {
+      "file": "github-docs.html",
+      "sourceUrl": "https://docs.github.com/en/get-started/writing-on-github",
+      "sha256": "966cf3e598525fecbaad5a5d38d31210166da8c332423c9044eb1006391bef1a",
+      "includes": ["Writing on GitHub", "> [!IMPORTANT]", "- Headings"],
+      "excludes": ["GitHub navigation"]
+    },
+    {
+      "file": "shiki-transformers.html",
+      "sourceUrl": "https://shiki.style/packages/transformers",
+      "sha256": "519c9cda7ed45cfba11a9637b07f0544585cb4dd21b32f91c3e508d5faca4ca0",
+      "includes": [
+        "Shiki transformers",
+        "```ts showLineNumbers=true",
+        "highlight=\"1\"",
+        "diffAdd=\"2\""
+      ],
+      "excludes": ["Shiki sidebar"]
+    },
+    {
+      "file": "mdn-closures.html",
+      "sourceUrl": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Closures",
+      "sha256": "c09d54a9e4b092761dd25fee7ed391a3d3e1f06f5606e64695a920466e3c947f",
+      "includes": ["Closures", "## Lexical scoping", "```js"],
+      "excludes": ["MDN global navigation"]
+    },
+    {
+      "file": "wordpress-blog.html",
+      "sourceUrl": "https://developer.wordpress.org/news/",
+      "sha256": "3d46f6bb512a3eacee08786a95514c8472b61d7e11737ab2727a2674c8cdd7c3",
+      "includes": [
+        "WordPress developer article",
+        "![Example]",
+        "@[card](https://developer.wordpress.org/news/)"
+      ],
+      "excludes": ["WordPress site header"]
+    }
+  ]
+}

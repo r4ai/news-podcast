@@ -48,11 +48,48 @@ const validFiles = {
       'import "remark-stringify"',
       'import "unified"',
     ].join("\n"),
+  "services/content-knowledge/src/infrastructure/unsafe/article-markdown/extract/dom.ts":
+    'import "jsdom"',
+  "services/content-knowledge/src/infrastructure/unsafe/article-markdown/extract/readability.ts":
+    'import "@mozilla/readability"',
+  "services/content-knowledge/src/infrastructure/unsafe/article-markdown/profiles/zenn.ts":
+    'import "../core/contracts.js"',
+  "services/content-knowledge/src/infrastructure/unsafe/article-markdown/profiles/qiita.ts":
+    'import "../core/contracts.js"',
 }
 
 describe("checkParserBoundaries", () => {
   test("accepts parser libraries at every structured input boundary", async () => {
     const rootDirectory = await createFixture(validFiles)
+
+    assert.deepEqual(await checkParserBoundaries({ rootDirectory }), [])
+  })
+
+  test("accepts the composable article-markdown parser implementation", async () => {
+    const modularFiles = Object.fromEntries(
+      Object.entries(validFiles).filter(
+        ([file]) =>
+          !file.endsWith(
+            "services/content-knowledge/src/infrastructure/unsafe/article-markdown-parser.ts"
+          )
+      )
+    )
+    modularFiles[
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/serialize/markdown.ts"
+    ] = [
+      'import "hast-util-to-html"',
+      'import "rehype-parse"',
+      'import "rehype-remark"',
+      'import "rehype-sanitize"',
+      'import "remark-gfm"',
+      'import "remark-stringify"',
+      'import "unified"',
+    ].join("\n")
+    modularFiles[
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/serialize/replay.ts"
+    ] = 'import "hast-util-to-html"\n'
+
+    const rootDirectory = await createFixture(modularFiles)
 
     assert.deepEqual(await checkParserBoundaries({ rootDirectory }), [])
   })
@@ -112,6 +149,29 @@ describe("checkParserBoundaries", () => {
           rule: "parser-boundary-missing-parser-import",
           file: "services/content-knowledge/src/infrastructure/unsafe/article-markdown-parser.ts",
           requiredImport: "remark-stringify",
+        },
+      ]
+    )
+  })
+
+  test("rejects a profile that bypasses the shared feature pipeline", async () => {
+    const rootDirectory = await createFixture({
+      ...validFiles,
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/profiles/zenn.ts":
+        'import "../core/contracts.js"\nimport "../serialize/markdown.js"',
+    })
+
+    const violations = await checkParserBoundaries({ rootDirectory })
+
+    assert.deepEqual(
+      violations.filter(
+        ({ rule }) => rule === "parser-profile-forbidden-import"
+      ),
+      [
+        {
+          rule: "parser-profile-forbidden-import",
+          file: "services/content-knowledge/src/infrastructure/unsafe/article-markdown/profiles/zenn.ts",
+          imported: "../serialize/markdown.js",
         },
       ]
     )

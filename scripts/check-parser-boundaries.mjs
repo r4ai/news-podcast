@@ -26,8 +26,11 @@ const PARSER_BOUNDARIES = [
     forbidRegex: true,
   },
   {
-    relativePath:
+    relativePaths: [
       "services/content-knowledge/src/infrastructure/unsafe/article-markdown-parser.ts",
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/serialize/markdown.ts",
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/serialize/replay.ts",
+    ],
     requiredImports: [
       "hast-util-to-html",
       "rehype-parse",
@@ -37,7 +40,46 @@ const PARSER_BOUNDARIES = [
       "remark-stringify",
       "unified",
     ],
-    forbidRegex: true,
+    aggregateImports: true,
+    // The serializer uses a regular expression as a sanitizer schema matcher;
+    // regex-based parsing is still rejected at the actual parser boundaries.
+    forbidRegex: false,
+  },
+  {
+    relativePath:
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/extract/dom.ts",
+    requiredImports: ["jsdom"],
+    forbidRegex: false,
+  },
+  {
+    relativePath:
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/extract/readability.ts",
+    requiredImports: ["@mozilla/readability"],
+    forbidRegex: false,
+  },
+  {
+    relativePath:
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/profiles/zenn.ts",
+    requiredImports: ["../core/contracts.js"],
+    forbiddenImportPrefixes: [
+      "../extract",
+      "../serialize",
+      "rehype-",
+      "@mozilla/readability",
+    ],
+    forbidRegex: false,
+  },
+  {
+    relativePath:
+      "services/content-knowledge/src/infrastructure/unsafe/article-markdown/profiles/qiita.ts",
+    requiredImports: ["../core/contracts.js"],
+    forbiddenImportPrefixes: [
+      "../extract",
+      "../serialize",
+      "rehype-",
+      "@mozilla/readability",
+    ],
+    forbidRegex: false,
   },
 ]
 
@@ -89,36 +131,85 @@ export const checkParserBoundaries = async ({
   const violations = []
 
   for (const boundary of PARSER_BOUNDARIES) {
-    const filePath = path.join(absoluteRoot, boundary.relativePath)
-    let sourceText
-    try {
-      sourceText = await readFile(filePath, "utf8")
-    } catch (error) {
-      if (error?.code === "ENOENT") {
-        violations.push({
-          rule: "parser-boundary-missing-file",
-          file: boundary.relativePath,
-        })
-        continue
+    const relativePaths = boundary.relativePaths ?? [boundary.relativePath]
+    const candidates = []
+    for (const relativePath of relativePaths) {
+      try {
+        const sourceText = await readFile(
+          path.join(absoluteRoot, relativePath),
+          "utf8"
+        )
+        const parsed = extractImports(
+          path.join(absoluteRoot, relativePath),
+          sourceText
+        )
+        candidates.push({ relativePath, ...parsed })
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error
       }
-      throw error
     }
 
-    const { imports, regexLiterals } = extractImports(filePath, sourceText)
+    if (candidates.length === 0) {
+      violations.push({
+        rule: "parser-boundary-missing-file",
+        file: relativePaths[0],
+      })
+      continue
+    }
+
+    const complete = boundary.aggregateImports
+      ? candidates[0]
+      : candidates.find(({ imports: candidateImports }) =>
+          boundary.requiredImports.every((requiredImport) =>
+            candidateImports.includes(requiredImport)
+          )
+        )
+    const selected =
+      complete ??
+      candidates.toSorted(
+        (left, right) =>
+          boundary.requiredImports.filter(
+            (requiredImport) => !left.imports.includes(requiredImport)
+          ).length -
+          boundary.requiredImports.filter(
+            (requiredImport) => !right.imports.includes(requiredImport)
+          ).length
+      )[0]
+    const imports = boundary.aggregateImports
+      ? [
+          ...new Set(
+            candidates.flatMap(
+              ({ imports: candidateImports }) => candidateImports
+            )
+          ),
+        ]
+      : selected.imports
+
     for (const requiredImport of boundary.requiredImports) {
       if (!imports.includes(requiredImport)) {
         violations.push({
           rule: "parser-boundary-missing-parser-import",
-          file: boundary.relativePath,
+          file: selected.relativePath,
           requiredImport,
         })
       }
     }
+    for (const forbiddenPrefix of boundary.forbiddenImportPrefixes ?? []) {
+      for (const imported of imports.filter((value) =>
+        value.startsWith(forbiddenPrefix)
+      )) {
+        violations.push({
+          rule: "parser-profile-forbidden-import",
+          file: selected.relativePath,
+          imported,
+        })
+      }
+    }
     if (boundary.forbidRegex) {
-      for (const line of regexLiterals) {
+      for (const line of selected.regexLiterals) {
         violations.push({
           rule: "parser-boundary-no-regex-parser",
-          file: boundary.relativePath,
+          file: selected.relativePath,
           line,
         })
       }
@@ -134,6 +225,9 @@ export const formatViolation = (violation) => {
   }
   if (violation.rule === "parser-boundary-missing-parser-import") {
     return `${violation.file} [${violation.rule}] import ${violation.requiredImport}`
+  }
+  if (violation.rule === "parser-profile-forbidden-import") {
+    return `${violation.file} [${violation.rule}] must not import ${violation.imported}`
   }
   return `${violation.file}:${violation.line} [${violation.rule}] use a stateful parser/AST library`
 }

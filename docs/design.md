@@ -190,7 +190,9 @@ flowchart LR
 | AgentAudit | owner/job/attempt lineage、memory lifecycle | AgentAuditRepository |
 | EpisodeProduction | 有界生成、draft検証、出典、TTS、完成処理 | ScriptGenerator、SpeechSynthesizer、EpisodeRepository |
 
-構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後にFeedItemへ正規化し、記事HTMLは`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。XML/HTML/Markdownのタグ境界を正規表現で解釈しない。対象境界のimportと正規表現構文は`pnpm parser:check`で検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)）。
+構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後にFeedItemへ正規化する。記事HTMLはscript/resource無効の`jsdom`でDOM化し、共有Feature Ruleでcode/callout/embed/mathを保持してから、Site Profileの明示root、semantic `article`、Readabilityの順で本文を抽出する。その後`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。Profileはselectorと意味対応だけを所有し、汎用抽出・serializeを複製しない。XML/HTML/Markdownのタグ境界を正規表現で解釈せず、`pnpm parser:check`で依存境界を検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)、[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)）。
+
+保存MarkdownはGFM、math、Mermaid、Obsidian/GitHub型callout、`@[card]`、`@[embed]`、code fence metadataを扱う。code言語は明示属性、filename、shebang/modeline、閾値付きoffline検出の順に決める。Webはcalloutを`@r4ai/remark-callout`で描画し、embedはHTTPS provider allowlist、sandbox、`no-referrer`を満たす場合だけ自動ロードする。
 
 保存するMarkdownは「取得元ページの断片」であり、埋め込み先の見出し階層は保存時点では決まらない。そこで変換時に見出しを**最も浅いものがlevel 1になる正規形**へ畳み、相対関係だけを残す（`<h2>`から始まるサイトと`<h1>`から始まるサイトの差を吸収する）。実際の見出しレベルは、埋め込み文脈を知っている表示側が決める。
 

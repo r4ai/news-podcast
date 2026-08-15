@@ -8,6 +8,8 @@ import remarkParse from "remark-parse"
 import remarkRehype from "remark-rehype"
 import { Fragment, jsx, jsxs } from "react/jsx-runtime"
 import { unified } from "unified"
+import remarkCallout from "@r4ai/remark-callout"
+import type { Callout as ParsedCallout } from "@r4ai/remark-callout"
 
 import { markdownComponents } from "../components"
 import { rehypeDropLeadingTitle } from "./rehype-drop-leading-title"
@@ -16,8 +18,8 @@ import { rehypeMarkCodeBlocks } from "./rehype-mark-code-blocks"
 
 import { rehypeMermaid } from "./rehype-mermaid"
 import { rehypeResolveUrls } from "./rehype-resolve-urls"
-import { remarkCallout } from "./remark-callout"
 import { remarkCodeMeta } from "./remark-code-meta"
+import { remarkEmbedDirective } from "./remark-embed-directive"
 import { markdownSanitizeSchema } from "./sanitize-schema"
 import { rehypeShikiLazy } from "./shiki/rehype-shiki-lazy"
 
@@ -49,7 +51,25 @@ export function createMarkdownProcessor({
   return unified()
     .use(remarkParse)
     .use(remarkGfm)
-    .use(remarkCallout)
+    .use(remarkCallout, {
+      root: (callout: ParsedCallout) => ({
+        tagName: callout.isFoldable
+          ? "markdown-callout-foldable"
+          : "markdown-callout",
+        properties: {
+          dataCalloutType: callout.type,
+          ...(callout.isFoldable
+            ? { dataCalloutFolded: callout.defaultFolded ?? false }
+            : {}),
+        },
+      }),
+      title: (callout: ParsedCallout) => ({
+        tagName: callout.isFoldable ? "summary" : "div",
+        properties: { dataCalloutTitle: true },
+      }),
+      body: { tagName: "div", properties: { dataCalloutBody: true } },
+    })
+    .use(remarkEmbedDirective)
     .use(remarkMath)
     .use(remarkCodeMeta)
     .use(remarkRehype, { allowDangerousHtml: true })

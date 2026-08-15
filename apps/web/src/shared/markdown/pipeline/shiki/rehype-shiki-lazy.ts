@@ -4,7 +4,7 @@ import type { Plugin } from "unified"
 import type { VFile } from "vfile"
 import { visit } from "unist-util-visit"
 
-import { extractHighlightSpec, extractTitle } from "../../lib/line-ranges"
+import { extractCodeDisplayMeta } from "../../lib/line-ranges"
 import {
   DARK_THEME,
   ensureLanguageLoaded,
@@ -21,10 +21,7 @@ const SKIP_LANGUAGES = new Set(["mermaid"])
  * 自動シリアライズされるmetaオブジェクトへ変換する。
  */
 function parseMetaString(metaString: string) {
-  return {
-    title: extractTitle(metaString),
-    highlight: extractHighlightSpec(metaString),
-  }
+  return extractCodeDisplayMeta(metaString)
 }
 
 function collectLanguages(tree: Root): ReadonlySet<string> {

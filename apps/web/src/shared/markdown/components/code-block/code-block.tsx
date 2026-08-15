@@ -32,6 +32,8 @@ export type CodeBlockProps = ComponentPropsWithoutRef<"pre"> & {
   readonly highlight?: string
   readonly diffAdd?: string
   readonly diffRemove?: string
+  readonly showLineNumbers?: boolean | string
+  readonly startLine?: number | string
   readonly "data-raw-code"?: string
 }
 
@@ -49,26 +51,33 @@ function isShikiOutput(className: string | undefined): boolean {
 /** 1行分の行番号ガター付き行を組み立てる。 */
 function renderRow(
   lineNumber: number,
+  displayedLineNumber: number,
   rawLine: string | undefined,
   content: ReactNode,
-  context: LineDecorationContext
+  context: LineDecorationContext,
+  showLineNumbers: boolean
 ): ReactNode {
   const decoration = decorateLine(lineNumber, rawLine, context)
   return (
     <span
       className={cn(
-        "grid grid-cols-[2.5rem_1fr] gap-3 px-4",
+        showLineNumbers
+          ? "grid grid-cols-[2.5rem_1fr] gap-3 px-4"
+          : "block px-4",
         lineDecorationClassName(decoration)
       )}
       data-diff={decoration.diff}
       key={lineNumber}
     >
-      <span
-        aria-hidden="true"
-        className="select-none text-right text-muted-foreground/70"
-      >
-        {lineNumber}
-      </span>
+      {showLineNumbers ? (
+        <span
+          aria-hidden="true"
+          className="select-none text-right text-muted-foreground/70"
+          data-line-number
+        >
+          {displayedLineNumber}
+        </span>
+      ) : null}
       <span className="min-w-0">{content}</span>
     </span>
   )
@@ -78,7 +87,9 @@ function renderRow(
 function buildShikiRows(
   codeChildren: ReactNode,
   rawLines: readonly string[],
-  context: LineDecorationContext
+  context: LineDecorationContext,
+  showLineNumbers: boolean,
+  startLine: number
 ): ReactNode[] {
   const rows: ReactNode[] = []
   let lineNumber = 0
@@ -90,9 +101,11 @@ function buildShikiRows(
     rows.push(
       renderRow(
         lineNumber,
+        startLine + lineNumber - 1,
         rawLines[lineNumber - 1],
         child.props.children,
-        context
+        context,
+        showLineNumbers
       )
     )
   }
@@ -102,10 +115,19 @@ function buildShikiRows(
 /** 言語未対応/未指定のフォールバック時に、生テキストから行を組み立てる。 */
 function buildPlainRows(
   rawLines: readonly string[],
-  context: LineDecorationContext
+  context: LineDecorationContext,
+  showLineNumbers: boolean,
+  startLine: number
 ): ReactNode[] {
   return rawLines.map((rawLine, index) =>
-    renderRow(index + 1, rawLine, rawLine.length > 0 ? rawLine : "​", context)
+    renderRow(
+      index + 1,
+      startLine + index,
+      rawLine,
+      rawLine.length > 0 ? rawLine : "​",
+      context,
+      showLineNumbers
+    )
   )
 }
 
@@ -123,6 +145,8 @@ export function CodeBlock({
   highlight,
   diffAdd,
   diffRemove,
+  showLineNumbers: showLineNumbersProp,
+  startLine: startLineProp,
   "data-raw-code": rawCodeProp,
   ...rest
 }: CodeBlockProps) {
@@ -132,6 +156,15 @@ export function CodeBlock({
   const shiki = isShikiOutput(className)
   const rawCode = rawCodeProp ?? extractPlainText(children)
   const rawLines = splitCodeLines(rawCode)
+  const showLineNumbers =
+    showLineNumbersProp === undefined ||
+    showLineNumbersProp === true ||
+    showLineNumbersProp === "true"
+  const parsedStartLine = Number(startLineProp)
+  const startLine =
+    Number.isInteger(parsedStartLine) && parsedStartLine > 0
+      ? parsedStartLine
+      : 1
   const context: LineDecorationContext = {
     lang,
     highlighted: parseLineRanges(highlight),
@@ -140,8 +173,14 @@ export function CodeBlock({
   }
   const rows =
     shiki && codeElement
-      ? buildShikiRows(codeElement.props.children, rawLines, context)
-      : buildPlainRows(rawLines, context)
+      ? buildShikiRows(
+          codeElement.props.children,
+          rawLines,
+          context,
+          showLineNumbers,
+          startLine
+        )
+      : buildPlainRows(rawLines, context, showLineNumbers, startLine)
 
   return (
     <div className="my-4 overflow-hidden rounded-md border border-border bg-card text-card-foreground">

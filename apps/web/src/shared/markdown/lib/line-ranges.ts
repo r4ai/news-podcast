@@ -20,13 +20,14 @@ export function parseLineRanges(spec: string | undefined): ReadonlySet<number> {
 function addRange(target: Set<number>, part: string): void {
   const rangeMatch = /^(\d+)-(\d+)$/.exec(part)
   if (rangeMatch) {
-    addNumericRange(target, Number(rangeMatch[1]), Number(rangeMatch[2]))
+    const start = Number(rangeMatch[1])
+    const end = Number(rangeMatch[2])
+    if (start > 0 && end > 0) addNumericRange(target, start, end)
     return
   }
   const singleMatch = /^\d+$/.exec(part)
-  if (singleMatch) {
-    target.add(Number(part))
-  }
+  const value = Number(part)
+  if (singleMatch && value > 0) target.add(value)
 }
 
 function addNumericRange(
@@ -58,4 +59,44 @@ export function extractTitle(meta: string | undefined): string | undefined {
   }
   const match = /(?:title|filename)="([^"]+)"/.exec(meta)
   return match?.[1]
+}
+
+const namedMeta = (
+  meta: string | undefined
+): Readonly<Record<string, string>> => {
+  const values: Record<string, string> = {}
+  if (!meta) return values
+  const pattern = /([A-Za-z][A-Za-z0-9]*)=(?:"([^"]*)"|([^\s]+))/g
+  for (const match of meta.matchAll(pattern)) {
+    values[match[1]!] = (match[2] ?? match[3])!
+  }
+  return values
+}
+
+export type CodeDisplayMeta = Readonly<{
+  readonly title?: string
+  readonly highlight?: string
+  readonly diffAdd?: string
+  readonly diffRemove?: string
+  readonly showLineNumbers?: boolean
+  readonly startLine?: number
+}>
+
+export const extractCodeDisplayMeta = (
+  meta: string | undefined
+): CodeDisplayMeta => {
+  const values = namedMeta(meta)
+  const startLine = Number(values.startLine)
+  return {
+    title: extractTitle(meta),
+    highlight: values.highlight ?? extractHighlightSpec(meta),
+    diffAdd: values.diffAdd,
+    diffRemove: values.diffRemove,
+    showLineNumbers:
+      values.showLineNumbers === undefined
+        ? undefined
+        : values.showLineNumbers === "true",
+    startLine:
+      Number.isInteger(startLine) && startLine > 0 ? startLine : undefined,
+  }
 }

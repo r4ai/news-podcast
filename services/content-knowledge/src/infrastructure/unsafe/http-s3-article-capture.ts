@@ -94,7 +94,7 @@ const readBounded = async (
   return body
 }
 
-const captureArtifacts = (raw: Uint8Array, sourceUrl: string) => {
+const captureArtifacts = async (raw: Uint8Array, sourceUrl: string) => {
   return createArticleArchiveArtifacts(raw, sourceUrl)
 }
 
@@ -135,7 +135,7 @@ export const openHttpS3ArticleCaptureUnsafe = (
           if (!contentType.includes("text/html"))
             throw failure("MalformedResponse")
           const raw = await readBounded(response, config.maximumHtmlBytes)
-          const artifacts = captureArtifacts(raw, sourceUrl)
+          const artifacts = await captureArtifacts(raw, sourceUrl)
           const prefix = `articles/${snapshotId}`
           const values = [
             {

@@ -19,10 +19,20 @@ import { defaultSchema } from "rehype-sanitize"
 export const markdownSanitizeSchema: Schema = {
   ...defaultSchema,
   clobberPrefix: "",
-  tagNames: [...(defaultSchema.tagNames ?? []), "markdown-callout"],
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    "markdown-callout",
+    "markdown-callout-foldable",
+    "markdown-embed",
+    "markdown-link-card",
+  ],
   attributes: {
     ...defaultSchema.attributes,
-    "markdown-callout": [["dataCalloutType"]],
+    "markdown-callout": ["dataCalloutType", "dataCalloutFolded"],
+    "markdown-callout-foldable": ["dataCalloutType", "dataCalloutFolded"],
+    "markdown-embed": ["dataEmbedUrl", "dataEmbedFallback"],
+    "markdown-link-card": ["dataEmbedUrl", "dataEmbedFallback"],
+    summary: [...(defaultSchema.attributes?.summary ?? []), "dataCalloutTitle"],
     code: [
       ...(defaultSchema.attributes?.code ?? []),
       ["className", /^language-./],
@@ -37,6 +47,8 @@ export const markdownSanitizeSchema: Schema = {
     div: [
       ...(defaultSchema.attributes?.div ?? []),
       ["className", "math-display"],
+      "dataCalloutTitle",
+      "dataCalloutBody",
     ],
     pre: [...(defaultSchema.attributes?.pre ?? []), "className"],
     img: [
