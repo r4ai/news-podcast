@@ -21,8 +21,6 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@workspace/ui/components/field"
 import {
   InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
   InputGroupInput,
 } from "@workspace/ui/components/input-group"
 import { Spinner } from "@workspace/ui/components/spinner"
@@ -134,31 +132,30 @@ export function AddFeedCardView({
           >
             <Field>
               <FieldLabel htmlFor="feed-url">フィードURL</FieldLabel>
-              <InputGroup>
-                <InputGroupInput
-                  disabled={registration.pending}
-                  id="feed-url"
-                  inputMode="url"
-                  onChange={(event) =>
-                    registration.setFeedUrl(event.target.value)
-                  }
-                  placeholder="https://example.com/feed.xml"
-                  required
-                  type="url"
-                  value={registration.feedUrl}
-                />
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    aria-label="URLから追加"
-                    disabled={!registration.canSubmit}
-                    size="icon-sm"
-                    type="submit"
-                    variant="default"
-                  >
-                    {registration.pending ? <Spinner /> : <Plus aria-hidden="true" />}
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
+              <div className="flex items-center gap-2">
+                <InputGroup className="flex-1">
+                  <InputGroupInput
+                    disabled={registration.pending}
+                    id="feed-url"
+                    inputMode="url"
+                    onChange={(event) =>
+                      registration.setFeedUrl(event.target.value)
+                    }
+                    placeholder="https://example.com/feed.xml"
+                    required
+                    type="url"
+                    value={registration.feedUrl}
+                  />
+                </InputGroup>
+                <Button
+                  aria-label="URLから追加"
+                  disabled={!registration.canSubmit}
+                  size="icon"
+                  type="submit"
+                >
+                  {registration.pending ? <Spinner /> : <Plus aria-hidden="true" />}
+                </Button>
+              </div>
               <FieldDescription>
                 登録後、新着記事は自動的にオフライン保存されます。
               </FieldDescription>

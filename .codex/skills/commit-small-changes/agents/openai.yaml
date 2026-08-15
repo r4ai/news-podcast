@@ -1,4 +1,0 @@
-interface:
-  display_name: "Commit Small Changes"
-  short_description: "Keep implementation commits single-purpose and verified"
-  default_prompt: "Use $commit-small-changes to implement this work in small, single-purpose, verified commits."
