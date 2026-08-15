@@ -19,6 +19,7 @@ const MAXIMUM_TITLE_CHARACTERS = 200
 const MAXIMUM_SCRIPT_CHARACTERS = 6_000
 const MAXIMUM_SOURCE_COUNT = 20
 const MAXIMUM_RESPONSE_BYTES = 1_048_576
+const MAXIMUM_OUTPUT_TOKENS = 4_096
 
 const OutputTextSchema = Schema.Struct({
   type: Schema.Literal("output_text"),
@@ -91,6 +92,7 @@ const requestBody = (
   request: ScriptGenerationRequest
 ) => ({
   model: config.model,
+  max_output_tokens: MAXIMUM_OUTPUT_TOKENS,
   input: [
     {
       role: "system",

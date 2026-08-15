@@ -141,6 +141,8 @@ flowchart LR
 
 `parse, don't validate`を適用し、検査結果をBooleanで返して元の型を使い続けるAPIは作らない。外部入力、永続JSON、NATS messageは`unknown`として受け、余剰propertyも拒否する共通parserの成功値だけを内側へ渡す。job状態はdiscriminated unionで表し、例えば4回目の`Running`を`Retrying`へ渡せないことを型で保証する。詳細は[ADR-0034](adr/0034-functional-domain-model-and-effect-boundaries.md)を正本とする。
 
+NATS RPCは共有payload schemaを`messageEnvelope`で包む。受信時にproducer、actor種別/Service名、correlation、causationを共通policyで照合する。解析不能な外側envelopeへは返信せず、client timeoutを503へ畳む。NATS認証/ACLを使わない開発構成ではproducerとactorの同時偽装が残存する（[ADR-0045](adr/0045-shared-rpc-envelope-and-peer-policy.md)）。
+
 ### 3.5 完成状態
 
 | Surface | 状態 | 現在の証拠 |
@@ -206,6 +208,8 @@ flowchart LR
 ```
 
 外部provider由来の一時障害は設定済みの指数backoffと総経過時間で再試行する。初回を含めjobは最大4回試行し、DB制約も5回目のleaseを拒否する。既定300秒leaseは60秒ごとに更新し、全状態変更とEpisode確定をlease tokenでfenceする。停止したprocessのjobは期限後に再取得し、検証済み台本と音声checkpointから再開する。台本、各provider request、job、応答byteには上限を設ける。
+
+外部契約はコード変更より先に公式仕様・稼働version/digest・匿名化した実応答を照合する。containerは検証済みdigestへ固定し、OpenAI alias変更は台本/補完の両smokeを必須にする（[ADR-0046](adr/0046-evidence-first-external-provider-contracts.md)）。
 
 ### 4.3 ジョブ状態
 
@@ -325,6 +329,8 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0043: Drizzle ORMへの統一とmigration導入](adr/0043-drizzle-persistence-and-migrations.md)
 - [ADR-0044: episode_jobs状態の正規化](adr/0044-normalized-episode-job-state.md)
 - [ADR-0004: 外部VOICEVOX](adr/0004-external-voicevox.md)
+- [ADR-0045: RPC返信封筒とpeer policy](adr/0045-shared-rpc-envelope-and-peer-policy.md)
+- [ADR-0046: 外部provider契約の実証](adr/0046-evidence-first-external-provider-contracts.md)
 - [ADR-0005: Better AuthとGoogle OIDC](adr/0005-authentication.md)
 - [ADR-0007: 事実ベース台本と出典追跡](adr/0007-factual-provenance.md)
 - [ADR-0008: Hono code-first OpenAPI](adr/0008-hono-code-first-openapi.md)

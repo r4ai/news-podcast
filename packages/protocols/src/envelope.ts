@@ -50,3 +50,18 @@ export const messageEnvelope = <Payload extends Schema.Top>(payload: Payload) =>
 export const MessageEnvelopeSchema = messageEnvelope(Schema.Unknown)
 export type MessageEnvelope = Schema.Schema.Type<typeof MessageEnvelopeSchema>
 export const parseMessageEnvelope = parse(MessageEnvelopeSchema)
+
+export type PeerPolicy =
+  | Readonly<{ producer: string; actor: "User" | "Anonymous" }>
+  | Readonly<{ producer: string; actor: "Service"; service: string }>
+
+/** NATSの搬送メタデータを一箇所で照合する。認証/ACLの代替ではない。 */
+export const matchesPeerPolicy = (
+  envelope: MessageEnvelope,
+  policy: PeerPolicy
+): boolean =>
+  envelope.producer === policy.producer &&
+  envelope.actor._tag === policy.actor &&
+  (policy.actor !== "Service" ||
+    (envelope.actor._tag === "Service" &&
+      envelope.actor.service === policy.service))

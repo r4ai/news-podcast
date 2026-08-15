@@ -56,7 +56,11 @@ describe("episode-production Node RPC runtime", () => {
       })
     )
 
-    expect(JSON.parse(replies[0]!)).toMatchObject({ _tag: "Accepted" })
+    expect(JSON.parse(replies[0]!)).toMatchObject({
+      producer: "episode-production",
+      actor: { _tag: "Service", service: "episode-production" },
+      payload: { _tag: "Accepted" },
+    })
     expect(drain).toHaveBeenCalledOnce()
   })
 

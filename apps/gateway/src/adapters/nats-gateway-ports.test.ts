@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   AddFeedSubscriptionReplySchema,
   ArticleLibraryReplySchema,
+  CreateEpisodeJobReplySchema,
   CreateAudioAccessReplySchema,
   DeleteFeedSubscriptionReplySchema,
   EpisodeJobControlReplySchema,
@@ -845,14 +846,15 @@ describe("NATS GatewayPorts adapter", () => {
         return userSessionReply(request)
       }
       if (request.subject === subjects.production.createJob) {
-        return new TextEncoder().encode(
-          JSON.stringify({
-            protocolVersion: "production.create-job.reply.v1",
+        return encodedReply(
+          request.envelope,
+          "episode-production",
+          CreateEpisodeJobReplySchema,
+          {
             _tag: "Accepted",
-            correlationId: request.envelope.correlationId,
             jobId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
             state: "Queued",
-          })
+          }
         )
       }
       if (request.subject === "library.list-episodes.v1") {
@@ -1236,6 +1238,41 @@ describe("NATS GatewayPorts adapter", () => {
 
     expect(problem).toMatchObject({ status: 503, code: "upstream_unavailable" })
   })
+
+  it.each(["producer", "service actor", "causation"] as const)(
+    "rejects a reply with forged %s metadata",
+    async (field) => {
+      const client = fakeClient(async (request) => {
+        const bytes = await encodedReply(
+          field === "causation"
+            ? { ...request.envelope, messageId: ids[4] }
+            : request.envelope,
+          field === "producer" ? "forged-service" : "identity-access",
+          Schema.Struct({
+            actor: Schema.Struct({ _tag: Schema.Literal("Anonymous") }),
+          }),
+          { actor: { _tag: "Anonymous" } }
+        )
+        if (field !== "service actor") return bytes
+        const envelope = JSON.parse(new TextDecoder().decode(bytes)) as Record<
+          string,
+          unknown
+        >
+        envelope.actor = { _tag: "Service", service: "forged-service" }
+        return new TextEncoder().encode(JSON.stringify(envelope))
+      })
+      const ports = makeNatsGatewayPorts(client, dependencies())
+
+      const problem = await Effect.runPromise(
+        ports.resolveSession(sessionHeaders).pipe(Effect.flip)
+      )
+
+      expect(problem).toMatchObject({
+        status: 503,
+        code: "upstream_unavailable",
+      })
+    }
+  )
 
   it("acquires and drains the NATS connection within an Effect scope", async () => {
     const drain = vi.fn(async () => undefined)

@@ -117,11 +117,43 @@ describe("OpenAI enrichment provider HTTP boundary", () => {
       string,
       unknown
     >
-    expect(Object.keys(request).sort()).toEqual(["input", "model", "text"])
+    expect(Object.keys(request).sort()).toEqual([
+      "input",
+      "max_output_tokens",
+      "model",
+      "text",
+    ])
+    expect(request.max_output_tokens).toBe(2_048)
     expect(request).not.toHaveProperty("temperature")
+    // Structured Outputsが対応するarray keywordはminItems/maxItemsだけ。
+    // 一意性はapplication payload schemaで検証する。
+    expect(fake.requests[0]!.body).not.toContain("uniqueItems")
     expect(fake.requests[0]!.body).toContain(input.markdown)
     expect(fake.requests[0]!.body).not.toContain("test-only-key")
     expect(JSON.stringify(result)).not.toContain("never persist this")
+  })
+
+  it("deduplicates set-like tag fields before domain validation", async () => {
+    const fake = await startServer([
+      {
+        body: JSON.stringify(
+          completed({
+            ...payload,
+            tags: ["技術", "技術"],
+            suggestedTags: ["型安全", "型安全"],
+          })
+        ),
+      },
+    ])
+
+    const result = await Effect.runPromise(
+      provider(fake.endpoint).enrich(input)
+    )
+
+    expect(result).toMatchObject({
+      tags: ["技術"],
+      suggestedTags: ["型安全"],
+    })
   })
 
   it.each([
@@ -207,6 +239,21 @@ describe("OpenAI enrichment provider HTTP boundary", () => {
     [
       "unknown tag",
       JSON.stringify(completed({ ...payload, tags: ["未登録"] })),
+    ],
+    [
+      "unknown message content",
+      JSON.stringify({
+        ...completed(payload),
+        output: [
+          {
+            type: "message",
+            content: [
+              { type: "provider_future_part", secret: "secret" },
+              { type: "output_text", text: JSON.stringify(payload) },
+            ],
+          },
+        ],
+      }),
     ],
     [
       "refusal",

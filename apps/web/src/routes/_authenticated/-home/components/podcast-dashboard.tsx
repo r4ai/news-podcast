@@ -62,6 +62,7 @@ export type PodcastDashboardProps = {
   readonly lastProgressAt?: string
   readonly deadlineAt?: string
   readonly retryAt?: string
+  readonly retryLabel?: string
   readonly failure?: string
   readonly episode?: {
     readonly title: string
@@ -196,6 +197,7 @@ function GenerationAction({
   onGenerate,
   onRetry,
   pending,
+  retryLabel = "再試行",
   state,
 }: Pick<
   PodcastDashboardProps,
@@ -205,6 +207,7 @@ function GenerationAction({
   | "onGenerate"
   | "onRetry"
   | "pending"
+  | "retryLabel"
   | "state"
 > & {
   readonly active: boolean
@@ -233,7 +236,7 @@ function GenerationAction({
           onClick={onRetry}
         >
           {pending ? <Spinner data-icon="inline-start" /> : <RotateCcw />}
-          {pending ? "受付中…" : "記事を選び直して再生成"}
+          {pending ? "受付中…" : retryLabel}
         </Button>
       ) : (
         <Button
@@ -265,6 +268,7 @@ function GenerationStatus({
   pending,
   progress,
   retryAt,
+  retryLabel,
   stage,
   stageProgress,
   state = "ready",
@@ -305,6 +309,7 @@ function GenerationStatus({
           onGenerate={onGenerate}
           onRetry={onRetry}
           pending={pending}
+          retryLabel={retryLabel}
           state={state}
         />
       </CardContent>

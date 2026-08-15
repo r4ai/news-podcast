@@ -1,3 +1,4 @@
+import { messageEnvelope } from "@news-podcast/protocols"
 import { Schema } from "effect"
 
 import { SessionHeadersSchema } from "../../contract.js"
@@ -28,10 +29,11 @@ export type CapturedRequest = Readonly<{
 export const encodedReply = async (
   request: Record<string, unknown>,
   producer: string,
-  _payloadSchema: Schema.Top,
+  payloadSchema: Schema.Codec<unknown, unknown, never, never>,
   payload: unknown
 ): Promise<Uint8Array> => {
-  const encoded = {
+  const schema = messageEnvelope(payloadSchema)
+  const encoded = Schema.decodeUnknownSync(schema)({
     messageId: "6518412b-ce2f-4641-9f2c-a02dd515bc31",
     correlationId: request.correlationId,
     causationId: request.messageId,
@@ -40,8 +42,10 @@ export const encodedReply = async (
     traceparent: request.traceparent,
     actor: { _tag: "Service", service: producer },
     payload,
-  }
-  return new TextEncoder().encode(JSON.stringify(encoded))
+  })
+  return new TextEncoder().encode(
+    JSON.stringify(Schema.encodeSync(schema)(encoded))
+  )
 }
 
 export const fakeClient = (

@@ -4,6 +4,7 @@
 - 更新日: 2026-08-13
 - 契約の正本: `apps/gateway` のEffect HttpApi
 - Context間契約: `packages/protocols` のEffect Schemaとversion付きNATS subject
+- RPC返信: 共有payload schemaの`messageEnvelope`。producer/actor/correlation/causationを共通policyで照合
 - 生成契約: Gateway HttpApiから生成するOpenAPI
 - 判断記録: `docs/adr/`
 
@@ -118,6 +119,7 @@ Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% 
 - Domain: 公開interfaceから確認できる規則をunit testし、ドメインロジック100%を維持する。行カバレッジを全体KPIにはしない。
 - Application: portのfakeを使ったユースケース統合テスト。
 - Adapters: SQLite、SeaweedFS S3、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは採用モデルのstrict schemaと実行時allow-listを通し、モデル変更時は実API smokeで適合性を確認する。外部実通信は資格情報のないCIでは行わない。
+- External contract gate: 公式仕様→稼働version/digest→実データの順に照合し、匿名fixtureを`provider-contract:check`でoffline再生する。詳細は[外部provider契約台帳](external-provider-contracts.md)。
 - API: OpenAPI lint/validation、型生成差分、認証matrix、Problem Details、owner isolation、pagination、冪等性競合。
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
 - E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生を重要導線として確認するが、確認ゲート後に実装する。

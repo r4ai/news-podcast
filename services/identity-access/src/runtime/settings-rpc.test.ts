@@ -99,7 +99,7 @@ describe("Identity settings RPC", () => {
     ])
   })
 
-  it("uses a finite raw reply only when no request envelope exists", async () => {
+  it("does not reply when no request envelope exists", async () => {
     let reply = ""
     await Effect.runPromise(
       makeIdentitySettingsRpcHandler(
@@ -111,9 +111,6 @@ describe("Identity settings RPC", () => {
         reply: (payload) => Effect.sync(() => void (reply = payload)),
       })
     )
-    expect(JSON.parse(reply)).toEqual({
-      _tag: "Rejected",
-      code: "INVALID_REQUEST",
-    })
+    expect(reply).toBe("")
   })
 })

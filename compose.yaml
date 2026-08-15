@@ -207,7 +207,7 @@ services:
       start_period: 5s
 
   seaweedfs:
-    image: chrislusf/seaweedfs:4.21
+    image: chrislusf/seaweedfs@sha256:e0b528145ea514040ab00d03ff0833f56acb1f0e07aeab232e20485af9278fd8
     command: ["mini", "-dir=/data", "-s3.port=8333"]
     environment:
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-news-podcast}
@@ -220,7 +220,7 @@ services:
       - object-data:/data
 
   voicevox:
-    image: voicevox/voicevox_engine:cpu-latest
+    image: voicevox/voicevox_engine@sha256:eb8c7f46a7d01217d1ff2b6f018261faedeceded3cc756b4fbbf371791ad6c90
     ports:
       - "127.0.0.1:50021:50021"
     healthcheck:

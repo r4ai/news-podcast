@@ -39,6 +39,8 @@ const AudioQuerySchema = Schema.Struct({
   volumeScale: Schema.Number,
   prePhonemeLength: Schema.Number,
   postPhonemeLength: Schema.Number,
+  pauseLength: Schema.optional(Schema.NullOr(Schema.Number)),
+  pauseLengthScale: Schema.optional(Schema.Number),
   outputSamplingRate: Schema.Int,
   outputStereo: Schema.Boolean,
   kana: Schema.optional(Schema.String),

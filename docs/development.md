@@ -135,6 +135,8 @@ pnpm contract:lint
 
 契約変更では生成物を同じ変更に含め、`contract:check`で差分がないことを確認する。Better Authの`/api/auth/**`は認証provider側の契約で、アプリOpenAPIへ複製しない。
 
+外部provider DTOを変更する前に[外部provider契約台帳](external-provider-contracts.md)を更新する。通常CIは`pnpm provider-contract:check`だけを実行する。live refreshは資格情報とlocal providerを必要とする明示操作であり、`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後に行う。OpenAIは同じ環境で各serviceの`*.contract.test.ts`を実行し、`OPENAI_CONTRACT_SAMPLES`（既定3、最大25/adapter）で実リクエスト数を制御する。model変更は[移行手順](operations/openai-model-migration.md)に従う。
+
 ## 品質gate
 
 | コマンド | 検証内容 |
@@ -145,6 +147,7 @@ pnpm contract:lint
 | `pnpm test` | unit/integration tests |
 | `pnpm test:coverage:functional` | 8 functional packagesのlines 75% / branches 60% |
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
+| `pnpm provider-contract:check` | 匿名化した外部契約fixtureのoffline検査 |
 | `pnpm test:e2e` | Web主要journey |
 | `pnpm test:sqlite-state` | service別backup/restore拒否規則 |
 | `pnpm db:generate` | drizzle schemaからmigration SQLを生成（要レビュー） |

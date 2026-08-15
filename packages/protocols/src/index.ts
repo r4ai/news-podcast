@@ -96,6 +96,7 @@ export {
 } from "./episode-library-rpc.js"
 export {
   CancelEpisodeJobRequestSchema,
+  CreateEpisodeJobReplySchema,
   EpisodeJobControlRejectionSchema,
   EpisodeJobControlReplySchema,
   GetEpisodeJobRequestSchema,
@@ -104,12 +105,14 @@ export {
   ProductionEpisodeJobSchema,
   RetryEpisodeJobRequestSchema,
   parseCancelEpisodeJobRequest,
+  parseCreateEpisodeJobReply,
   parseEpisodeJobControlReply,
   parseGetEpisodeJobRequest,
   parseListEpisodeJobsRequest,
   parseListEpisodeJobEventsRequest,
   parseRetryEpisodeJobRequest,
   type EpisodeJobControlReply,
+  type CreateEpisodeJobReply,
   type ProductionEpisodeJob,
 } from "./episode-production-rpc.js"
 export {
@@ -118,6 +121,7 @@ export {
   messageEnvelope,
   MessageEnvelopeSchema,
   MessageIdSchema,
+  matchesPeerPolicy,
   parseMessageEnvelope,
   ServiceNameSchema,
   TraceparentSchema,
@@ -125,6 +129,7 @@ export {
   type CorrelationId,
   type MessageEnvelope,
   type MessageId,
+  type PeerPolicy,
   type ServiceName,
   type Traceparent,
 } from "./envelope.js"

@@ -10,6 +10,7 @@ import {
   SyncFeedSubscriptionReplySchema,
   UpdateFeedSubscriptionReplySchema,
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   parseAddFeedSubscriptionRequest,
   parseDeleteFeedSubscriptionRequest,
   parseListFeedCatalogRequest,
@@ -90,11 +91,6 @@ const replySchema = (subject: string) => {
   }
 }
 
-const rawReject = <ReplyError>(
-  delivery: ContentKnowledgeRpcDelivery<ReplyError>,
-  code: ContentKnowledgeRejection["code"]
-) => delivery.reply(JSON.stringify(rejection(code)))
-
 const correlatedReply = <ReplyError>(
   delivery: ContentKnowledgeRpcDelivery<ReplyError>,
   request: MessageEnvelope,
@@ -172,16 +168,26 @@ export const makeContentKnowledgeRpcHandler =
     }).pipe(
       Effect.flatMap(parseMessageEnvelope),
       Effect.matchEffect({
-        onFailure: () => rawReject(delivery, "INVALID_REQUEST"),
+        onFailure: () =>
+          Effect.logWarning("content RPC envelope rejected", {
+            subject: delivery.subject,
+            failure_stage: "transport",
+            failure_reason: "invalid_envelope",
+          }),
         onSuccess: (request) => {
           const reject = (code: ContentKnowledgeRejection["code"]) =>
             correlatedReply(delivery, request, rejection(code), dependencies)
-          if (request.actor._tag !== "User") return reject("UNAUTHENTICATED")
           const requiredProducer =
             delivery.subject === subjects.content.materializeArticles
               ? "episode-production"
               : "gateway"
-          if (request.producer !== requiredProducer)
+          if (request.actor._tag !== "User") return reject("UNAUTHENTICATED")
+          if (
+            !matchesPeerPolicy(request, {
+              producer: requiredProducer,
+              actor: "User",
+            })
+          )
             return reject("INVALID_REQUEST")
           return parseOwner(request.actor.userId).pipe(
             Effect.mapError(() => rejection("INVALID_REQUEST")),

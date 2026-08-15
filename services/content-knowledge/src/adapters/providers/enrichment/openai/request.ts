@@ -14,6 +14,7 @@ import {
  */
 
 const MAXIMUM_RESPONSE_BYTES = 1_048_576
+const MAXIMUM_OUTPUT_TOKENS = 2_048
 
 // 構造化出力を厳密モードで要求し、余計なキーの混入を上流側でも防ぐ。
 const responseFormat = {
@@ -31,13 +32,11 @@ const responseFormat = {
       tags: {
         type: "array",
         maxItems: 20,
-        uniqueItems: true,
         items: { type: "string" },
       },
       suggestedTags: {
         type: "array",
         maxItems: 20,
-        uniqueItems: true,
         items: { type: "string" },
       },
     },
@@ -49,6 +48,7 @@ const requestBody = (
   input: EnrichmentProviderInput
 ) => ({
   model: config.model,
+  max_output_tokens: MAXIMUM_OUTPUT_TOKENS,
   input: [
     {
       role: "system",

@@ -14,6 +14,7 @@ import { api } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
 import {
   failureMessage,
+  failureRecovery,
   hasActiveJob,
   resolvedJobStatus,
   stageLabel,
@@ -21,6 +22,7 @@ import {
   type JobStatus,
   type JobStage,
 } from "../model"
+import { settleJobAction } from "./job-action"
 import { useGenerationStream } from "./use-generation-stream"
 
 const jobsQueryOptions = api.queryOptions("get", "/v1/episode-jobs")
@@ -50,6 +52,7 @@ export function useGeneration() {
   const { data: feeds } = useSuspenseQuery(feedsQueryOptions)
   const createJob = api.useMutation("post", "/v1/episode-jobs")
   const cancelJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/cancel")
+  const retryJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/retry")
 
   const latestJob = jobs.data.items[0]
   const latestEpisode = episodes.items[0]
@@ -97,13 +100,22 @@ export function useGeneration() {
   )
   const stage = (liveState?.stage ?? latestJob?.stage) as JobStage | undefined
   const stageProgress = liveState?.progress ?? latestJob?.stageProgress
+  const failure = liveState?.failure ?? latestJob?.failure ?? undefined
+  const recovery = failureRecovery(failure?.code)
 
-  function runJobAction(request: () => Promise<unknown>) {
+  function runJobAction(
+    request: () => Promise<unknown>,
+    fallbackMessage: string
+  ) {
     startTransition(async () => {
-      await request()
-      await queryClient.invalidateQueries({
-        queryKey: jobsQueryOptions.queryKey,
-      })
+      const error = await settleJobAction(request, () =>
+        queryClient.invalidateQueries({
+          queryKey: jobsQueryOptions.queryKey,
+        })
+      )
+      if (error !== undefined) {
+        setSubmitError(messageFromActionError(error, fallbackMessage))
+      }
     })
   }
 
@@ -133,9 +145,15 @@ export function useGeneration() {
     lastProgressAt: latestJob?.lastProgressAt ?? undefined,
     retryAt: latestJob?.nextAttemptAt ?? undefined,
     stageProgress: stageProgress ?? undefined,
-    failure: failureMessage(
-      liveState?.failure ?? latestJob?.failure ?? undefined
-    ),
+    failure: failureMessage(failure),
+    retryLabel:
+      recovery === "reselect"
+        ? "記事を選び直して再生成"
+        : recovery === "retry"
+          ? "同じ条件で再試行"
+          : recovery === "admin"
+            ? "新規生成"
+            : "新規生成",
     progress: state === "running" && stage ? stagePercent(stage) : undefined,
     stage: state === "running" && stage ? stageLabel(stage) : undefined,
     state,
@@ -167,17 +185,42 @@ export function useGeneration() {
     onConfirmGenerate: generate,
     onCancel: () =>
       latestJob &&
-      runJobAction(() =>
-        cancelJob.mutateAsync({ params: { path: { jobId: latestJob.id } } })
+      runJobAction(
+        () =>
+          cancelJob.mutateAsync({
+            params: { path: { jobId: latestJob.id } },
+          }),
+        "生成をキャンセルできませんでした。状態を更新してからもう一度お試しください。"
       ),
     onRetry: () => {
       setSubmitError(undefined)
-      setPickerInitialArticleIds(latestJob?.articleIds ?? [])
+      if (recovery === "reselect") {
+        setPickerInitialArticleIds(latestJob?.articleIds ?? [])
+        setPickerOpen(true)
+        return
+      }
+      if (recovery === "retry" && latestJob) {
+        runJobAction(
+          () =>
+            retryJob.mutateAsync({
+              params: { path: { jobId: latestJob.id } },
+            }),
+          "同じ条件で再試行できませんでした。状態を更新してからもう一度お試しください。"
+        )
+        return
+      }
+      setPickerInitialArticleIds([])
       setPickerOpen(true)
     },
     submitError,
     onDismissSubmitError: () => setSubmitError(undefined),
   } as const
+}
+
+function messageFromActionError(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim().length > 0
+    ? error.message
+    : fallback
 }
 
 function messageFromSubmitError(error: unknown): string {

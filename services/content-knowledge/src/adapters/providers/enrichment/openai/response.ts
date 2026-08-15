@@ -48,6 +48,19 @@ const exactKeys = (value: unknown, expected: readonly string[]): boolean => {
   )
 }
 
+const deduplicateSetLikeFields = (payload: unknown): unknown => {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload))
+    return payload
+  const record = payload as Record<string, unknown>
+  return {
+    ...record,
+    tags: Array.isArray(record.tags) ? [...new Set(record.tags)] : record.tags,
+    suggestedTags: Array.isArray(record.suggestedTags)
+      ? [...new Set(record.suggestedTags)]
+      : record.suggestedTags,
+  }
+}
+
 /** Drops reasoning, annotations, refusal text, ids, and all other provider data. */
 const projectResponse = (value: unknown): unknown => {
   if (typeof value !== "object" || value === null) return value
@@ -65,6 +78,10 @@ const projectResponse = (value: unknown): unknown => {
           content.push({ type: "output_text", text: projected.text })
         } else if (projected.type === "refusal") {
           content.push({ type: "refusal" })
+        } else {
+          // A message content variant outside the verified provider union is
+          // contract drift, not provider-only metadata that may be dropped.
+          content.push({ type: projected.type })
         }
       }
     }
@@ -109,6 +126,7 @@ export const interpret = (
           (payload) => exactKeys(payload, REQUIRED_OUTPUT_KEYS),
           () => providerFailure({ _tag: "Malformed" })
         ),
+        Effect.map(deduplicateSetLikeFields),
         Effect.flatMap((payload) =>
           parseOutput({
             ...(payload as Record<string, unknown>),

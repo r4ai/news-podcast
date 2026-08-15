@@ -5,6 +5,7 @@ import {
 } from "@news-podcast/observability"
 import {
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   ScheduledGenerationReplySchema,
   parseMessageEnvelope,
   parseScheduledGenerationRequest,
@@ -38,8 +39,6 @@ type Subject =
 const rejected = (
   code: "INVALID_REQUEST" | "UNAUTHENTICATED" | "STORAGE_FAILURE"
 ) => deepFreeze({ _tag: "Rejected" as const, code })
-const rawInvalid = <E>(delivery: ScheduledGenerationRpcDelivery<E>) =>
-  delivery.reply(JSON.stringify(rejected("INVALID_REQUEST")))
 const correlated = <E>(
   delivery: ScheduledGenerationRpcDelivery<E>,
   request: MessageEnvelope,
@@ -82,62 +81,63 @@ export const makeScheduledGenerationRpcHandler =
     }).pipe(
       Effect.flatMap(parseMessageEnvelope),
       Effect.matchEffect({
-        onFailure: () => rawInvalid(delivery),
+        onFailure: () =>
+          Effect.logWarning("scheduler RPC envelope rejected", {
+            subject,
+            failure_stage: "transport",
+            failure_reason: "invalid_envelope",
+          }),
         onSuccess: (request) => {
           const reply = (payload: unknown) =>
             correlated(delivery, request, payload, dependencies)
-          const process =
-            request.producer !== "episode-production"
-              ? reply(rejected("INVALID_REQUEST"))
-              : request.actor._tag !== "Service" ||
-                  request.actor.service !== "episode-production"
-                ? reply(rejected("UNAUTHENTICATED"))
-                : parseScheduledGenerationRequest(request.payload).pipe(
-                    Effect.flatMap(
-                      (command): Effect.Effect<unknown, unknown, never> => {
-                        if (
-                          subject === subjects.identity.discoverDueGenerations
-                        ) {
-                          if (command.operation !== "DiscoverDue")
-                            return Effect.fail({
-                              _tag: "InvalidRequest" as const,
-                            })
-                          return operations
-                            .findDue({ instant: command.now })
-                            .pipe(
-                              Effect.map((schedules) => ({
-                                _tag: "Due" as const,
-                                schedules,
-                              }))
-                            )
-                        }
-                        if (command.operation !== "Complete")
-                          return Effect.fail({
-                            _tag: "InvalidRequest" as const,
-                          })
-                        return operations
-                          .completeScheduled({
-                            ownerId: command.ownerId,
-                            localDate: command.localDate,
-                          })
-                          .pipe(Effect.as({ _tag: "Completed" as const }))
-                      }
+          const process = !matchesPeerPolicy(request, {
+            producer: "episode-production",
+            actor: "Service",
+            service: "episode-production",
+          })
+            ? reply(rejected("UNAUTHENTICATED"))
+            : parseScheduledGenerationRequest(request.payload).pipe(
+                Effect.flatMap(
+                  (command): Effect.Effect<unknown, unknown, never> => {
+                    if (subject === subjects.identity.discoverDueGenerations) {
+                      if (command.operation !== "DiscoverDue")
+                        return Effect.fail({
+                          _tag: "InvalidRequest" as const,
+                        })
+                      return operations.findDue({ instant: command.now }).pipe(
+                        Effect.map((schedules) => ({
+                          _tag: "Due" as const,
+                          schedules,
+                        }))
+                      )
+                    }
+                    if (command.operation !== "Complete")
+                      return Effect.fail({
+                        _tag: "InvalidRequest" as const,
+                      })
+                    return operations
+                      .completeScheduled({
+                        ownerId: command.ownerId,
+                        localDate: command.localDate,
+                      })
+                      .pipe(Effect.as({ _tag: "Completed" as const }))
+                  }
+                ),
+                Effect.matchEffect({
+                  onFailure: (failure) =>
+                    reply(
+                      rejected(
+                        typeof failure === "object" &&
+                          failure !== null &&
+                          "_tag" in failure &&
+                          failure._tag === "GenerationSettingsStoreFailed"
+                          ? "STORAGE_FAILURE"
+                          : "INVALID_REQUEST"
+                      )
                     ),
-                    Effect.matchEffect({
-                      onFailure: (failure) =>
-                        reply(
-                          rejected(
-                            typeof failure === "object" &&
-                              failure !== null &&
-                              "_tag" in failure &&
-                              failure._tag === "GenerationSettingsStoreFailed"
-                              ? "STORAGE_FAILURE"
-                              : "INVALID_REQUEST"
-                          )
-                        ),
-                      onSuccess: reply,
-                    })
-                  )
+                  onSuccess: reply,
+                })
+              )
           return withRemoteTraceparent(
             withMessagingSpan(process, subject, "process"),
             request.traceparent

@@ -6,6 +6,7 @@ import {
 import {
   EpisodeJobControlReplySchema,
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   ProductionEpisodeJobSchema,
   parseCancelEpisodeJobRequest,
   parseGetEpisodeJobRequest,
@@ -134,9 +135,11 @@ const handleAuthenticated = <Request, ReplyError>(input: {
     request: Request
   ) => Effect.Effect<EpisodeJobControlReply, unknown>
 }): Effect.Effect<void, ReplyError> => {
-  const rawReply = (value: EpisodeJobControlReply) =>
-    input.delivery.reply(JSON.stringify(encodeReply(value)))
-  const invalid = rawReply(rejected("INVALID_REQUEST"))
+  const invalid = Effect.logWarning("job control RPC envelope rejected", {
+    subject: input.subject,
+    failure_stage: "transport",
+    failure_reason: "invalid_envelope",
+  })
 
   return decodeJson(input.delivery.payload).pipe(
     Effect.flatMap(parseMessageEnvelope),
@@ -166,7 +169,11 @@ const handleAuthenticated = <Request, ReplyError>(input: {
             Effect.flatMap(input.delivery.reply)
           )
         const process =
-          envelope.actor._tag !== "User"
+          envelope.actor._tag !== "User" ||
+          !matchesPeerPolicy(envelope, {
+            producer: "gateway",
+            actor: "User",
+          })
             ? reply(rejected("UNAUTHENTICATED"))
             : Effect.all([
                 parseOwnerId(envelope.actor.userId),

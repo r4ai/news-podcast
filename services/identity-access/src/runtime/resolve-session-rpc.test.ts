@@ -122,7 +122,7 @@ describe("resolve-session NATS RPC", () => {
     })
   })
 
-  it("replies to malformed JSON without fabricating envelope lineage", async () => {
+  it("does not reply to malformed JSON without envelope lineage", async () => {
     const replies: string[] = []
     const findAuthenticatedActor =
       vi.fn<SessionReader["findAuthenticatedActor"]>()
@@ -134,12 +134,7 @@ describe("resolve-session NATS RPC", () => {
     await Effect.runPromise(handler(delivery("{not-json", replies)))
 
     expect(findAuthenticatedActor).not.toHaveBeenCalled()
-    expect(
-      await Effect.runPromise(parseResolveSessionReply(JSON.parse(replies[0]!)))
-    ).toEqual({
-      _tag: "Rejected",
-      code: "INVALID_REQUEST",
-    })
+    expect(replies).toEqual([])
   })
 
   it("converts session-provider failures into stable replies", async () => {

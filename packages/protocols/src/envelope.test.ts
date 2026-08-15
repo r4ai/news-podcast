@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { parseMessageEnvelope } from "./envelope.js"
+import { matchesPeerPolicy, parseMessageEnvelope } from "./envelope.js"
 
 const validEnvelope = {
   messageId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
@@ -36,6 +36,59 @@ describe("MessageEnvelope", () => {
       _tag: "User",
       userId: "better-auth-user_01",
     })
+  })
+
+  it.each([
+    [
+      "matching service",
+      validEnvelope,
+      {
+        producer: "content-knowledge",
+        actor: "Service" as const,
+        service: "content-knowledge",
+      },
+      true,
+    ],
+    [
+      "mismatched service actor",
+      validEnvelope,
+      {
+        producer: "content-knowledge",
+        actor: "Service" as const,
+        service: "episode-production",
+      },
+      false,
+    ],
+    [
+      "mismatched producer",
+      validEnvelope,
+      {
+        producer: "episode-production",
+        actor: "Service" as const,
+        service: "content-knowledge",
+      },
+      false,
+    ],
+    [
+      "matching user",
+      {
+        ...validEnvelope,
+        producer: "gateway",
+        actor: { _tag: "User", userId: "user-1" },
+      },
+      { producer: "gateway", actor: "User" as const },
+      true,
+    ],
+    [
+      "matching anonymous",
+      { ...validEnvelope, producer: "gateway", actor: { _tag: "Anonymous" } },
+      { producer: "gateway", actor: "Anonymous" as const },
+      true,
+    ],
+  ])("matches the %s peer policy", async (_case, input, policy, expected) => {
+    const parsed = await Effect.runPromise(parseMessageEnvelope(input))
+
+    expect(matchesPeerPolicy(parsed, policy)).toBe(expected)
   })
 
   it.each([

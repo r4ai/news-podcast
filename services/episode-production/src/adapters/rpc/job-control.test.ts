@@ -196,7 +196,6 @@ describe("episode job-control NATS RPC", () => {
     expect(replies.map((reply) => replyPayload(reply).code)).toEqual([
       "UNAUTHENTICATED",
       "INVALID_REQUEST",
-      "INVALID_REQUEST",
     ])
   })
 })

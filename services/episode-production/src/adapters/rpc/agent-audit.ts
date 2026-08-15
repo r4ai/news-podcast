@@ -6,6 +6,7 @@ import {
 import {
   AgentAuditReplySchema,
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   parseAgentAuditRequest,
   parseMessageEnvelope,
   subjects,
@@ -89,16 +90,22 @@ export const makeAgentAuditRpcHandler =
       Effect.flatMap(parseMessageEnvelope),
       Effect.matchEffect({
         onFailure: () =>
-          delivery.reply(JSON.stringify(rejected("INVALID_REQUEST"))),
+          Effect.logWarning("agent audit RPC envelope rejected", {
+            failure_stage: "transport",
+            failure_reason: "invalid_envelope",
+          }),
         onSuccess: (request) => {
           const reply = (payload: unknown) => send(request, payload)
           const ownerId =
             request.actor._tag === "User" ? request.actor.userId : undefined
           const process =
-            request.producer !== "gateway"
-              ? reply(rejected("INVALID_REQUEST"))
-              : ownerId === undefined
-                ? reply(rejected("UNAUTHENTICATED"))
+            ownerId === undefined
+              ? reply(rejected("UNAUTHENTICATED"))
+              : !matchesPeerPolicy(request, {
+                    producer: "gateway",
+                    actor: "User",
+                  })
+                ? reply(rejected("INVALID_REQUEST"))
                 : parseAgentAuditRequest(request.payload).pipe(
                     Effect.flatMap(
                       (command): Effect.Effect<unknown, unknown> => {

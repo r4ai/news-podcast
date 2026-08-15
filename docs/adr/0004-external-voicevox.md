@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: `services/episode-production/src/adapters/voicevox-speech-synthesizer.ts`（合成点）と`services/episode-production/src/adapters/voicevox/`（HTTP境界・API・WAV結合）
+- Related: ADR-0046、`services/episode-production/src/adapters/providers/voicevox/`
 
 ## コンテキストと変更契機
 
@@ -13,7 +13,7 @@ VOICEVOXは大きなnative runtimeでありWorkers内では実行できない。
 
 ## 決定
 
-VOICEVOXをHTTP port越しの外部コンテナとして扱う。Composeでは別service、Cloudflareでは外部endpointとする。既定はキャラクター名「ずんだもん」で、数値style IDは `/speakers` から解決する。
+VOICEVOXをHTTP port越しの外部コンテナとして扱う。Composeでは24.04の検証済みdigestへ固定する。既定はキャラクター名「ずんだもん」で、数値style IDは `/speakers` から解決する。`/openapi.json`と実応答を照合し、provider-only fieldはprojection、AudioQueryはstrict parse後に全項目を`/synthesis`へ渡す。
 
 ## 判断要因
 
@@ -45,13 +45,13 @@ VOICEVOXをHTTP port越しの外部コンテナとして扱う。Composeでは�
 | --- | --- | --- | --- |
 | 設計書 | 外部seam | Done | `docs/design.md` |
 | ドメイン/ユースケース | SpeechSynthesizer port | Done | application ports |
-| OpenAPI/外部契約 | N/A — 内部provider | Done | N/A |
+| OpenAPI/外部契約 | 公式・稼働OpenAPI・実応答を照合 | Done | `docs/external-provider-contracts.md` |
 | コード/ポート | HTTP adapter/name resolution | Done | adapters source |
 | データ/ストレージ | N/A — audio bytesのみ | Done | N/A |
 | 実行/配備 | Compose別service | Done | compose file |
 | 認証/セキュリティ | cloud endpoint auth | Pending | 運用判断待ち |
 | フロント/品質保証 | style選択UI | Pending | 確認ゲート |
-| テスト/運用 | mocked adapter test | Pending | 機能縦スライス |
+| テスト/運用 | 実応答fixture、WAV境界test | Done | `speech-synthesizer.test.ts` |
 
 ## 再検討条件
 

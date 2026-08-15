@@ -34,6 +34,25 @@ const commonJobFields = {
   maxAttempts: Schema.Literal(4),
 }
 
+export const CreateEpisodeJobReplySchema = Schema.Union([
+  Schema.TaggedStruct("Accepted", {
+    jobId: EpisodeJobIdSchema,
+    state: Schema.Literal("Queued"),
+  }),
+  Schema.TaggedStruct("Rejected", {
+    code: Schema.Literals([
+      "INVALID_REQUEST",
+      "UNAUTHENTICATED",
+      "IDEMPOTENCY_CONFLICT",
+      "INTERNAL_ERROR",
+    ]),
+  }),
+])
+export type CreateEpisodeJobReply = Schema.Schema.Type<
+  typeof CreateEpisodeJobReplySchema
+>
+export const parseCreateEpisodeJobReply = parse(CreateEpisodeJobReplySchema)
+
 export const ProductionEpisodeJobSchema = Schema.Union([
   Schema.Struct({
     ...commonJobFields,

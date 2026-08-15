@@ -5,6 +5,7 @@ import {
 } from "@news-podcast/observability"
 import {
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   ReadingDictionaryReplySchema,
   parseMessageEnvelope,
   parseReadingDictionaryRequest,
@@ -63,9 +64,6 @@ const toWireEntry = (entry: ReadingDictionaryEntry) => {
   })
 }
 
-const rawInvalid = <E>(delivery: ReadingDictionaryRpcDelivery<E>) =>
-  delivery.reply(JSON.stringify(rejected("INVALID_REQUEST")))
-
 const correlated = <E>(
   delivery: ReadingDictionaryRpcDelivery<E>,
   request: MessageEnvelope,
@@ -109,15 +107,22 @@ export const makeReadingDictionaryRpcHandler =
     }).pipe(
       Effect.flatMap(parseMessageEnvelope),
       Effect.matchEffect({
-        onFailure: () => rawInvalid(delivery),
+        onFailure: () =>
+          Effect.logWarning("reading dictionary RPC envelope rejected", {
+            failure_stage: "transport",
+            failure_reason: "invalid_envelope",
+          }),
         onSuccess: (request) => {
           const reply = (payload: unknown) =>
             correlated(delivery, request, payload, dependencies)
           const process =
-            request.producer !== "gateway"
-              ? reply(rejected("INVALID_REQUEST"))
-              : request.actor._tag !== "User"
-                ? reply(rejected("UNAUTHENTICATED"))
+            request.actor._tag !== "User"
+              ? reply(rejected("UNAUTHENTICATED"))
+              : !matchesPeerPolicy(request, {
+                    producer: "gateway",
+                    actor: "User",
+                  })
+                ? reply(rejected("INVALID_REQUEST"))
                 : Effect.all([
                     parse(OwnerIdSchema)(request.actor.userId),
                     parseReadingDictionaryRequest(request.payload),

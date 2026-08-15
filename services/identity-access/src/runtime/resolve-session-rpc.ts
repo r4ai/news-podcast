@@ -1,7 +1,7 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import {
   MessageEnvelopeSchema,
-  ResolveSessionReplySchema,
+  matchesPeerPolicy,
   ResolveSessionResponseSchema,
   parseMessageEnvelope,
   parseResolveSessionRequest,
@@ -59,17 +59,15 @@ const decodeJson = (payload: string) =>
     catch: invalidRequest,
   })
 
-const encodePayload = (payload: ResolveSessionReply): string =>
-  JSON.stringify(Schema.encodeSync(ResolveSessionReplySchema)(payload))
-
-const rawInvalidReply = <ReplyError>(
-  delivery: ResolveSessionRpcDelivery<ReplyError>
-) => delivery.reply(encodePayload(invalidRequest()))
-
 const verifyRequest = (
   envelope: MessageEnvelope
 ): Effect.Effect<ValidRequestEnvelope, ResolveSessionRejection> => {
-  if (envelope.producer !== "gateway" || envelope.actor._tag !== "Anonymous") {
+  if (
+    !matchesPeerPolicy(envelope, {
+      producer: "gateway",
+      actor: "Anonymous",
+    })
+  ) {
     return Effect.fail(invalidRequest())
   }
   return parseResolveSessionRequest(envelope.payload).pipe(
@@ -127,7 +125,11 @@ export const makeResolveSessionRpcHandler = (
     decodeJson(delivery.payload).pipe(
       Effect.flatMap(parseMessageEnvelope),
       Effect.matchEffect({
-        onFailure: () => rawInvalidReply(delivery),
+        onFailure: () =>
+          Effect.logWarning("session RPC envelope rejected", {
+            failure_stage: "transport",
+            failure_reason: "invalid_envelope",
+          }),
         onSuccess: (envelope) => {
           const process = verifyRequest(envelope).pipe(
             Effect.matchEffect({

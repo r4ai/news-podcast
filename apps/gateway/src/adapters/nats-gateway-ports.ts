@@ -32,7 +32,6 @@ import {
  * 個々の射影と問題詳細の翻訳は`./nats/`配下の各モジュールが持つ。
  */
 
-export { ProductionCreateEpisodeJobResponseSchema } from "./nats/episode-job-ports.js"
 export type { AdapterOptions, Dependencies }
 
 const makeAdapter = (

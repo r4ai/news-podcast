@@ -4,6 +4,7 @@ import type { AgUiEvent, EpisodeJobState } from "@news-podcast/contracts/agui"
 
 import {
   emptyGenerationStream,
+  failureRecovery,
   reduceGenerationStream,
   resolvedJobStatus,
   selectionLabel,
@@ -209,6 +210,23 @@ describe("reduceGenerationStream", () => {
     ])
 
     expect(result).toEqual(emptyGenerationStream)
+  })
+})
+
+describe("failureRecovery", () => {
+  it.each([
+    ["content_materialization_invalid", "reselect"],
+    ["script_unavailable", "retry"],
+    ["speech_malformed_response", "admin"],
+    ["script_client_error", "admin"],
+    ["script_refusal", "admin"],
+    ["speech_unexpected_status", "admin"],
+    ["provider_malformedresponse", "retry"],
+    ["checkpoint_corruption", "admin"],
+    ["audio_storage_failure", "admin"],
+    ["invalid_script_sources", "new"],
+  ] as const)("maps %s to %s", (code, expected) => {
+    expect(failureRecovery(code)).toBe(expected)
   })
 })
 

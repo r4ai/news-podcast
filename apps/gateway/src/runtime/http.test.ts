@@ -235,13 +235,14 @@ describe("Gateway HTTP runtime", () => {
         events: [{ sequence: 42, job }],
       })
     )
+    const retryEpisodeJob = vi.fn(() => Effect.succeed(receipt))
     const runtime = makeGatewayWebHandler({
       ...ports,
       listEpisodeJobs: () =>
         Effect.succeed({ items: [job], page: { hasMore: false } }),
       getEpisodeJob: () => Effect.succeed(job),
       cancelEpisodeJob: () => Effect.succeed(job),
-      retryEpisodeJob: () => Effect.succeed(receipt),
+      retryEpisodeJob,
       replayEpisodeJobEvents,
       getEpisode: () => Effect.succeed(episode),
     })
@@ -295,6 +296,12 @@ describe("Gateway HTTP runtime", () => {
       expect(stream).toContain("event: STATE_SNAPSHOT")
       expect(stream).toContain("id: 42")
       expect(await queryResumed.text()).toContain("event: STATE_SNAPSHOT")
+      expect(retryEpisodeJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId,
+          idempotencyKey: `retry:${jobId}`,
+        })
+      )
       expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({ jobId, afterSequence: 41 })

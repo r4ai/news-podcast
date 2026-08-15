@@ -268,14 +268,60 @@ describe("executeEpisodeJob", () => {
   })
 
   it.each([
-    ["retryable", { _tag: "TransportFailure" }, "Retrying"],
-    ["permanent", { _tag: "Refusal" }, "Failed"],
-  ] as const)("maps %s provider failure", async (_case, failure, expected) => {
+    [
+      "retryable script",
+      { _tag: "TransportFailure" },
+      "Retrying",
+      "script_unavailable",
+    ],
+    ["permanent script", { _tag: "Refusal" }, "Failed", "script_refusal"],
+  ] as const)(
+    "maps %s provider failure",
+    async (_case, failure, expected, code) => {
+      const ports = makePorts()
+      vi.mocked(ports.script.generate).mockReturnValue(Effect.fail(failure))
+      const outcome = await Effect.runPromise(
+        executeEpisodeJob(ports)({ job: running })
+      )
+      expect(outcome._tag).toBe(expected)
+      expect(
+        vi.mocked(ports.persistence.transition).mock.calls[0]![0]
+      ).toMatchObject({
+        state: { failure: { code } },
+      })
+    }
+  )
+
+  it("distinguishes a malformed speech response from script generation", async () => {
     const ports = makePorts()
-    vi.mocked(ports.script.generate).mockReturnValue(Effect.fail(failure))
+    vi.mocked(ports.speech.synthesize).mockReturnValue(
+      Effect.fail({ _tag: "MalformedResponse" })
+    )
+
+    await Effect.runPromise(executeEpisodeJob(ports)({ job: running }))
+
+    expect(
+      vi.mocked(ports.persistence.transition).mock.calls[0]![0]
+    ).toMatchObject({
+      state: { failure: { code: "speech_malformed_response" } },
+    })
+  })
+
+  it("preserves provider cancellation as a canceled job", async () => {
+    const ports = makePorts()
+    vi.mocked(ports.script.generate).mockReturnValue(
+      Effect.fail({ _tag: "Canceled" })
+    )
+
     const outcome = await Effect.runPromise(
       executeEpisodeJob(ports)({ job: running })
     )
-    expect(outcome._tag).toBe(expected)
+
+    expect(outcome).toEqual({ _tag: "Canceled" })
+    expect(
+      vi.mocked(ports.persistence.transition).mock.calls[0]![0]
+    ).toMatchObject({
+      state: { _tag: "Canceled", reason: "requested_by_user" },
+    })
   })
 })

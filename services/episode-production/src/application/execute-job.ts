@@ -12,6 +12,7 @@ import {
 } from "../domain/episode-job.js"
 import { classifyProviderFailure } from "../domain/provider-reliability.js"
 import type { ScriptGenerationFailure } from "./ports/script-generator.js"
+import type { SpeechSynthesisFailure } from "./ports/speech-synthesizer.js"
 import type {
   EpisodeCompletionIntent,
   EpisodeExecutionPorts,
@@ -28,7 +29,24 @@ export type EpisodeExecutionOutcome =
   | Readonly<{ _tag: "Canceled" }>
   | Readonly<{ _tag: "StaleLease" }>
 
-type ExecutionFailure = LeaseFailure | PipelineFailure | ScriptGenerationFailure
+type ProviderStage = "script" | "speech"
+type StagedProviderFailure = Readonly<{
+  _tag: "StagedProviderFailure"
+  stage: ProviderStage
+  failure: ScriptGenerationFailure | SpeechSynthesisFailure
+}>
+type ExecutionFailure = LeaseFailure | PipelineFailure | StagedProviderFailure
+
+const withProviderStage =
+  (stage: ProviderStage) =>
+  (
+    failure: ScriptGenerationFailure | SpeechSynthesisFailure
+  ): StagedProviderFailure =>
+    deepFreeze({
+      _tag: "StagedProviderFailure",
+      stage,
+      failure,
+    })
 
 const canceled = (): LeaseFailure => deepFreeze({ _tag: "ExecutionCanceled" })
 
@@ -41,7 +59,9 @@ const isTagged = (failure: unknown, tag: string) =>
   "_tag" in failure &&
   failure._tag === tag
 
-const providerFailure = (failure: ExecutionFailure) =>
+const providerFailure = (
+  failure: ScriptGenerationFailure | SpeechSynthesisFailure
+) =>
   isTagged(failure, "ProviderRetryExhausted")
     ? (
         failure as Extract<
@@ -50,6 +70,21 @@ const providerFailure = (failure: ExecutionFailure) =>
         >
       ).lastFailure
     : failure
+
+const providerReasonCode = (
+  reason: ReturnType<typeof classifyProviderFailure>["reason"]
+) =>
+  ({
+    RateLimited: "rate_limited",
+    Unavailable: "unavailable",
+    Timeout: "timeout",
+    Incomplete: "incomplete",
+    ClientError: "client_error",
+    Canceled: "canceled",
+    MalformedResponse: "malformed_response",
+    Refusal: "refusal",
+    UnexpectedStatus: "unexpected_status",
+  })[reason]
 
 const classify = (failure: ExecutionFailure) => {
   if (isTagged(failure, "ExecutionCanceled") || isTagged(failure, "Canceled")) {
@@ -65,15 +100,19 @@ const classify = (failure: ExecutionFailure) => {
       code: pipeline.code,
     }
   }
-  const provider = providerFailure(failure) as Parameters<
+  const staged = failure as StagedProviderFailure
+  const provider = providerFailure(staged.failure) as Parameters<
     typeof classifyProviderFailure
   >[0]
+  if (provider._tag === "Canceled") {
+    return { _tag: "Canceled" as const, code: "canceled" }
+  }
   const classification = classifyProviderFailure(provider, Date.now())
   return {
     _tag: classification.retryable
       ? ("Retryable" as const)
       : ("Terminal" as const),
-    code: `provider_${classification.reason.toLowerCase()}`,
+    code: `${staged.stage}_${providerReasonCode(classification.reason)}`,
   }
 }
 
@@ -215,14 +254,16 @@ export const executeEpisodeJob =
       let script = checkpoint?.script
       if (script === undefined) {
         yield* assertLease()
-        script = yield* ports.script.generate({
-          sources: articles.map(({ title, url, markdown }) => ({
-            title,
-            url,
-            markdown,
-          })),
-          ...(signal === undefined ? {} : { signal }),
-        })
+        script = yield* ports.script
+          .generate({
+            sources: articles.map(({ title, url, markdown }) => ({
+              title,
+              url,
+              markdown,
+            })),
+            ...(signal === undefined ? {} : { signal }),
+          })
+          .pipe(Effect.mapError(withProviderStage("script")))
         yield* assertLease()
         yield* ports.persistence.saveScriptCheckpoint({
           jobId: job.jobId,
@@ -234,11 +275,13 @@ export const executeEpisodeJob =
       let audio = checkpoint?.audio
       if (audio === undefined) {
         yield* assertLease()
-        const bytes = yield* ports.speech.synthesize({
-          text: script.script,
-          dictionarySnapshot,
-          ...(signal === undefined ? {} : { signal }),
-        })
+        const bytes = yield* ports.speech
+          .synthesize({
+            text: script.script,
+            dictionarySnapshot,
+            ...(signal === undefined ? {} : { signal }),
+          })
+          .pipe(Effect.mapError(withProviderStage("speech")))
         yield* assertLease()
         audio = yield* ports.audio.put({
           ownerId: job.request.ownerId,

@@ -6,6 +6,7 @@ import {
 import {
   ActorSchema,
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   parseMessageEnvelope,
   subjects,
 } from "@news-podcast/protocols"
@@ -107,7 +108,11 @@ export const makeTransport = (
         const verify = Effect.filterOrFail(
           Effect.succeed(reply),
           (candidate) =>
-            candidate.producer === expectedProducer &&
+            matchesPeerPolicy(candidate, {
+              producer: expectedProducer,
+              actor: "Service",
+              service: expectedProducer,
+            }) &&
             candidate.correlationId === lineage.correlationId &&
             candidate.causationId === lineage.messageId,
           unavailable

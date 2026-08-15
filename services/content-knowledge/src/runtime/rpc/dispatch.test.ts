@@ -186,7 +186,6 @@ describe("Content Knowledge RPC handler", () => {
         undefined,
         "untrusted-client"
       ),
-      "secret malformed payload",
     ]) {
       output = ""
       await Effect.runPromise(
@@ -206,6 +205,15 @@ describe("Content Knowledge RPC handler", () => {
       }
       expect(decoded.payload ?? decoded).toMatchObject({ _tag: "Rejected" })
     }
+    output = ""
+    await Effect.runPromise(
+      handler({
+        subject: subjects.content.materializeArticles,
+        payload: "secret malformed payload",
+        reply: (payload) => Effect.sync(() => void (output = payload)),
+      })
+    )
+    expect(output).toBe("")
   })
 
   it("enqueues a manual sync for an owned enabled subscription", async () => {

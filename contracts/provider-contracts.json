@@ -1,0 +1,69 @@
+{
+  "observedAt": "<redacted>",
+  "voicevox": {
+    "imageVersion": "24.04",
+    "engineVersion": "0.25.2",
+    "digest": "sha256:eb8c7f46a7d01217d1ff2b6f018261faedeceded3cc756b4fbbf371791ad6c90",
+    "audioQueryOptionalFields": {
+      "pauseLength": null,
+      "pauseLengthScale": 1
+    },
+    "synthesis": {
+      "status": 200,
+      "contentType": "audio/wav",
+      "riffWave": true
+    }
+  },
+  "openai": {
+    "modelAlias": "gpt-5.6-luna",
+    "requestsUsed": 0,
+    "latestRefreshRequests": 0,
+    "script": {
+      "status": "completed",
+      "successfulSamples": 0,
+      "consecutiveSamplesAfterFix": 0,
+      "maximumOutputTokens": 4096,
+      "hasOutputText": true,
+      "hasUsage": true
+    },
+    "enrichment": {
+      "status": "completed",
+      "successfulSamples": 0,
+      "consecutiveSamplesAfterFix": 0,
+      "failedSamplesBeforeFix": 0,
+      "maximumOutputTokens": 2048,
+      "hasOutputText": true,
+      "hasUsage": true,
+      "unsupportedKeywordRemoved": "uniqueItems"
+    }
+  },
+  "seaweedfs": {
+    "version": "4.21",
+    "digest": "sha256:e0b528145ea514040ab00d03ff0833f56acb1f0e07aeab232e20485af9278fd8",
+    "putStatus": 200,
+    "headStatus": 200,
+    "getStatus": 200,
+    "contentType": "application/octet-stream",
+    "contentLength": 0,
+    "bytesMatch": true,
+    "signedUrlHasSignature": true,
+    "missingStatus": 404,
+    "cleaned": true
+  },
+  "feed": {
+    "catalogEntries": 0,
+    "format": "rss2",
+    "feedStatus": 200,
+    "feedContentType": "application/xml",
+    "itemCount": 0,
+    "firstItem": {
+      "hasId": true,
+      "hasTitle": true,
+      "hasPublishedAt": true
+    },
+    "article": {
+      "status": 200,
+      "contentType": "text/html; charset=utf-8"
+    }
+  }
+}

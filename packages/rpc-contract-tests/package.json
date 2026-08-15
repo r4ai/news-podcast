@@ -1,0 +1,22 @@
+{
+  "name": "@news-podcast/rpc-contract-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint"
+  },
+  "dependencies": {
+    "@news-podcast/episode-production": "workspace:*",
+    "@news-podcast/gateway": "workspace:*",
+    "@news-podcast/protocols": "workspace:*",
+    "effect": "4.0.0-beta.102"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

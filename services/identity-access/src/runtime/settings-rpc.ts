@@ -6,6 +6,7 @@ import {
 import {
   IdentitySettingsReplySchema,
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   parseIdentitySettingsRequest,
   parseMessageEnvelope,
   subjects,
@@ -41,9 +42,6 @@ type SettingsSubject =
 const rejected = (
   code: "INVALID_REQUEST" | "UNAUTHENTICATED" | "STORAGE_FAILURE"
 ) => deepFreeze({ _tag: "Rejected" as const, code })
-
-const rawInvalid = <E>(delivery: IdentitySettingsRpcDelivery<E>) =>
-  delivery.reply(JSON.stringify(rejected("INVALID_REQUEST")))
 
 const correlated = <E>(
   delivery: IdentitySettingsRpcDelivery<E>,
@@ -87,15 +85,23 @@ export const makeIdentitySettingsRpcHandler =
     }).pipe(
       Effect.flatMap(parseMessageEnvelope),
       Effect.matchEffect({
-        onFailure: () => rawInvalid(delivery),
+        onFailure: () =>
+          Effect.logWarning("settings RPC envelope rejected", {
+            subject,
+            failure_stage: "transport",
+            failure_reason: "invalid_envelope",
+          }),
         onSuccess: (request) => {
           const reply = (payload: unknown) =>
             correlated(delivery, request, payload, dependencies)
           const process =
-            request.producer !== "gateway"
-              ? reply(rejected("INVALID_REQUEST"))
-              : request.actor._tag !== "User"
-                ? reply(rejected("UNAUTHENTICATED"))
+            request.actor._tag !== "User"
+              ? reply(rejected("UNAUTHENTICATED"))
+              : !matchesPeerPolicy(request, {
+                    producer: "gateway",
+                    actor: "User",
+                  })
+                ? reply(rejected("INVALID_REQUEST"))
                 : Effect.all([
                     parse(UserIdSchema)(request.actor.userId),
                     parseIdentitySettingsRequest(request.payload),

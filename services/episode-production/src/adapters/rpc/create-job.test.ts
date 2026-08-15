@@ -14,6 +14,14 @@ const jobId = Schema.decodeUnknownSync(JobIdSchema)(
 const now = Schema.decodeUnknownSync(UtcTimestampSchema)(
   "2026-08-12T00:00:00.000Z"
 )
+const replyDependencies = {
+  newMessageId: () => "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+  now: () => "2026-08-12T00:00:00.000Z",
+}
+const replyEnvelope = (reply: string) =>
+  JSON.parse(reply) as Readonly<Record<string, unknown>>
+const replyPayload = (reply: string) =>
+  replyEnvelope(reply).payload as Readonly<Record<string, unknown>>
 
 const envelope = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   messageId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
@@ -51,6 +59,7 @@ describe("create-job NATS RPC adapter", () => {
       now: Effect.succeed(now),
       saveIdempotently: (job) =>
         Effect.sync(() => void saved.push(job)).pipe(Effect.as(job)),
+      replyDependencies,
     })
 
     await Effect.runPromise(handler(delivery(envelope(), replies)))
@@ -65,10 +74,14 @@ describe("create-job NATS RPC adapter", () => {
         ],
       },
     })
-    expect(JSON.parse(replies[0]!)).toEqual({
-      protocolVersion: "production.create-job.reply.v1",
-      _tag: "Accepted",
+    expect(replyEnvelope(replies[0]!)).toMatchObject({
       correlationId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+      causationId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+      producer: "episode-production",
+      actor: { _tag: "Service", service: "episode-production" },
+    })
+    expect(replyPayload(replies[0]!)).toEqual({
+      _tag: "Accepted",
       jobId: "10e2d4e1-c127-479f-a124-2ea037bd9319",
       state: "Queued",
     })
@@ -85,6 +98,7 @@ describe("create-job NATS RPC adapter", () => {
           saved.push(job)
           return job
         }),
+      replyDependencies,
     })
 
     await Effect.runPromise(
@@ -107,6 +121,7 @@ describe("create-job NATS RPC adapter", () => {
       nextJobId: Effect.succeed(jobId),
       now: Effect.succeed(now),
       saveIdempotently,
+      replyDependencies,
     })
 
     await Effect.runPromise(
@@ -125,8 +140,7 @@ describe("create-job NATS RPC adapter", () => {
     )
 
     expect(saveIdempotently).not.toHaveBeenCalled()
-    expect(JSON.parse(replies[0]!)).toMatchObject({
-      protocolVersion: "production.create-job.reply.v1",
+    expect(replyPayload(replies[0]!)).toMatchObject({
       _tag: "Rejected",
       code: "INVALID_REQUEST",
     })
@@ -139,6 +153,7 @@ describe("create-job NATS RPC adapter", () => {
       nextJobId: Effect.succeed(jobId),
       now: Effect.succeed(now),
       saveIdempotently,
+      replyDependencies,
     })
 
     await Effect.runPromise(
@@ -146,18 +161,19 @@ describe("create-job NATS RPC adapter", () => {
     )
 
     expect(saveIdempotently).not.toHaveBeenCalled()
-    expect(JSON.parse(replies[0]!)).toMatchObject({
+    expect(replyPayload(replies[0]!)).toMatchObject({
       _tag: "Rejected",
       code: "UNAUTHENTICATED",
     })
   })
 
-  it("turns malformed JSON into a stable rejection instead of an RPC timeout", async () => {
+  it("does not reply to an unparseable outer envelope", async () => {
     const replies: string[] = []
     const handler = handleCreateJobRpc({
       nextJobId: Effect.succeed(jobId),
       now: Effect.succeed(now),
       saveIdempotently: (job) => Effect.succeed(job),
+      replyDependencies,
     })
 
     await Effect.runPromise(
@@ -167,10 +183,6 @@ describe("create-job NATS RPC adapter", () => {
       })
     )
 
-    expect(JSON.parse(replies[0]!)).toMatchObject({
-      _tag: "Rejected",
-      correlationId: null,
-      code: "INVALID_REQUEST",
-    })
+    expect(replies).toEqual([])
   })
 })

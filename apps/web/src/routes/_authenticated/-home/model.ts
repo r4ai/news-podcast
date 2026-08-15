@@ -56,13 +56,62 @@ const failureMessages: Readonly<Record<string, string>> = {
     "生成結果を検証できませんでした。内容を変えて再試行してください。",
 }
 
+export type FailureRecovery = "reselect" | "retry" | "new" | "admin"
+
+const terminalProviderReasons = [
+  "client_error",
+  "malformed_response",
+  "refusal",
+  "unexpected_status",
+] as const
+
+const isTerminalStagedProviderFailure = (code: string): boolean =>
+  (code.startsWith("script_") || code.startsWith("speech_")) &&
+  terminalProviderReasons.some((reason) => code.endsWith(`_${reason}`))
+
+export function failureRecovery(code?: string): FailureRecovery {
+  if (
+    code === "content_materialization_invalid" ||
+    code === "content_materialization_empty"
+  )
+    return "reselect"
+  if (code && isTerminalStagedProviderFailure(code)) return "admin"
+  if (
+    code?.startsWith("script_") ||
+    code?.startsWith("speech_") ||
+    code?.startsWith("provider_") ||
+    code === "content_materialization_unavailable"
+  )
+    return "retry"
+  if (
+    code?.includes("checkpoint") ||
+    code?.includes("storage") ||
+    code?.includes("owner_mismatch") ||
+    code?.includes("stale_lease")
+  )
+    return "admin"
+  return "new"
+}
+
 export function failureMessage(failure?: {
   readonly code: string
   readonly message: string
 }): string | undefined {
-  return failure
-    ? (failureMessages[failure.code] ?? failure.message)
-    : undefined
+  if (!failure) return undefined
+  if (isTerminalStagedProviderFailure(failure.code))
+    return "外部サービスの設定または応答契約を確認する必要があります。管理者へ連絡してください。"
+  if (failure.code.startsWith("script_"))
+    return "台本生成サービスで失敗しました。同じ条件で再試行できます。"
+  if (failure.code.startsWith("speech_"))
+    return "音声生成サービスで失敗しました。同じ条件で再試行できます。"
+  if (failure.code.startsWith("provider_"))
+    return "外部サービスで失敗しました。同じ条件で再試行できます。"
+  if (
+    failure.code.startsWith("checkpoint_") ||
+    failure.code.includes("storage")
+  )
+    return "保存済みデータを安全に処理できませんでした。管理者確認後に新規生成してください。"
+  return failureMessages[failure.code] ?? failure.message
 }
 
 const activeStatuses = new Set<JobStatus>(["queued", "running", "retrying"])

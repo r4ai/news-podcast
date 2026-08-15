@@ -1,46 +1,26 @@
+import { randomUUID } from "node:crypto"
+
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import {
   withMessagingSpan,
   withRemoteTraceparent,
 } from "@news-podcast/observability"
 import {
-  CorrelationIdSchema,
+  CreateEpisodeJobReplySchema,
+  MessageEnvelopeSchema,
+  matchesPeerPolicy,
   parseCreateEpisodeJobRequest,
   parseMessageEnvelope,
   subjects,
+  type CreateEpisodeJobReply,
 } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 
 import { createJob, type CreateJobPorts } from "../../application/create-job.js"
 import { JobIdSchema, OwnerIdSchema } from "../../domain/episode-job.js"
 
-const replyVersion = "production.create-job.reply.v1" as const
-
-export const CreateJobRpcReplySchema = Schema.Union([
-  Schema.Struct({
-    protocolVersion: Schema.Literal(replyVersion),
-    _tag: Schema.Literal("Accepted"),
-    correlationId: CorrelationIdSchema,
-    jobId: JobIdSchema,
-    state: Schema.Literal("Queued"),
-  }),
-  Schema.Struct({
-    protocolVersion: Schema.Literal(replyVersion),
-    _tag: Schema.Literal("Rejected"),
-    correlationId: Schema.NullOr(CorrelationIdSchema),
-    code: Schema.Literals([
-      "INVALID_REQUEST",
-      "UNAUTHENTICATED",
-      "IDEMPOTENCY_CONFLICT",
-      "INTERNAL_ERROR",
-    ]),
-  }),
-])
-export type CreateJobRpcReply = Schema.Schema.Type<
-  typeof CreateJobRpcReplySchema
->
-
-const encodeReply = Schema.encodeSync(CreateJobRpcReplySchema)
+const encodeReply = Schema.encodeSync(CreateEpisodeJobReplySchema)
+const decodeReply = Schema.decodeUnknownSync(CreateEpisodeJobReplySchema)
 const parseOwnerId = parse(OwnerIdSchema)
 
 export type CreateJobRpcDelivery<ReplyError = never> = Readonly<{
@@ -49,36 +29,22 @@ export type CreateJobRpcDelivery<ReplyError = never> = Readonly<{
 }>
 
 type RejectionCode = Extract<
-  CreateJobRpcReply,
+  CreateEpisodeJobReply,
   { readonly _tag: "Rejected" }
 >["code"]
-type ReplyCorrelation = Extract<
-  CreateJobRpcReply,
-  { readonly _tag: "Rejected" }
->["correlationId"]
-
-const rejected = (
-  code: RejectionCode,
-  correlationId: ReplyCorrelation
-): CreateJobRpcReply =>
-  deepFreeze({
-    protocolVersion: replyVersion,
-    _tag: "Rejected" as const,
-    correlationId,
-    code,
-  })
+const rejected = (code: RejectionCode): CreateEpisodeJobReply =>
+  deepFreeze({ _tag: "Rejected" as const, code })
 
 const accepted = (
-  correlationId: Schema.Schema.Type<typeof CorrelationIdSchema>,
   jobId: Schema.Schema.Type<typeof JobIdSchema>
-): CreateJobRpcReply =>
-  deepFreeze({
-    protocolVersion: replyVersion,
-    _tag: "Accepted" as const,
-    correlationId,
-    jobId,
-    state: "Queued" as const,
-  })
+): CreateEpisodeJobReply =>
+  deepFreeze(
+    decodeReply({
+      _tag: "Accepted" as const,
+      jobId,
+      state: "Queued" as const,
+    })
+  )
 
 const decodeJson = (payload: string) =>
   Effect.try({
@@ -96,12 +62,37 @@ const rejectionForSaveFailure = (failure: unknown): RejectionCode =>
 
 const replyWith = <ReplyError>(
   delivery: CreateJobRpcDelivery<ReplyError>,
-  reply: CreateJobRpcReply
-) => delivery.reply(JSON.stringify(encodeReply(reply)))
+  request: Effect.Success<ReturnType<typeof parseMessageEnvelope>>,
+  reply: CreateEpisodeJobReply,
+  dependencies: {
+    readonly newMessageId: () => string
+    readonly now: () => string
+  }
+) =>
+  Effect.currentSpan.pipe(
+    Effect.orDie,
+    Effect.flatMap((span) =>
+      parse(MessageEnvelopeSchema)({
+        messageId: dependencies.newMessageId(),
+        correlationId: request.correlationId,
+        causationId: request.messageId,
+        occurredAt: dependencies.now(),
+        producer: "episode-production",
+        traceparent: `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`,
+        actor: { _tag: "Service", service: "episode-production" },
+        payload: encodeReply(reply),
+      }).pipe(Effect.orDie)
+    ),
+    Effect.flatMap((envelope) =>
+      Schema.encodeEffect(MessageEnvelopeSchema)(envelope).pipe(Effect.orDie)
+    ),
+    Effect.map(JSON.stringify),
+    Effect.flatMap(delivery.reply)
+  )
 
 const rejectionLog = (
   code: RejectionCode,
-  correlationId: ReplyCorrelation,
+  correlationId: string | null,
   messageId?: string
 ) =>
   Effect.logWarning("create job RPC rejected", {
@@ -116,17 +107,24 @@ const rejectionLog = (
  * parsed User actor is converted into the domain OwnerId.
  */
 export const handleCreateJobRpc = <SaveError>(
-  ports: CreateJobPorts<SaveError>
+  ports: CreateJobPorts<SaveError> & {
+    readonly replyDependencies?: {
+      readonly newMessageId: () => string
+      readonly now: () => string
+    }
+  }
 ) => {
   const useCase = createJob(ports)
+  const replyDependencies = ports.replyDependencies ?? {
+    newMessageId: randomUUID,
+    now: () => new Date().toISOString(),
+  }
 
   return <ReplyError>(
     delivery: CreateJobRpcDelivery<ReplyError>
   ): Effect.Effect<void, ReplyError> => {
     const invalidEnvelope = withMessagingSpan(
-      rejectionLog("INVALID_REQUEST", null).pipe(
-        Effect.andThen(replyWith(delivery, rejected("INVALID_REQUEST", null)))
-      ),
+      rejectionLog("INVALID_REQUEST", null),
       subjects.production.createJob,
       "process"
     )
@@ -139,12 +137,16 @@ export const handleCreateJobRpc = <SaveError>(
           const reject = (code: RejectionCode) =>
             rejectionLog(code, envelope.correlationId, envelope.messageId).pipe(
               Effect.andThen(
-                replyWith(delivery, rejected(code, envelope.correlationId))
+                replyWith(delivery, envelope, rejected(code), replyDependencies)
               )
             )
 
           const process =
-            envelope.actor._tag !== "User"
+            envelope.actor._tag !== "User" ||
+            !matchesPeerPolicy(envelope, {
+              producer: "gateway",
+              actor: "User",
+            })
               ? reject("UNAUTHENTICATED")
               : Effect.all([
                   parseCreateEpisodeJobRequest(envelope.payload),
@@ -177,7 +179,9 @@ export const handleCreateJobRpc = <SaveError>(
                               Effect.andThen(
                                 replyWith(
                                   delivery,
-                                  accepted(envelope.correlationId, job.jobId)
+                                  envelope,
+                                  accepted(job.jobId),
+                                  replyDependencies
                                 )
                               )
                             ),

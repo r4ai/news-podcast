@@ -1,6 +1,6 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import {
-  CorrelationIdSchema,
+  parseCreateEpisodeJobReply,
   parseEpisodeJobControlReply,
   subjects,
 } from "@news-podcast/protocols"
@@ -13,28 +13,12 @@ import {
 } from "../../contract.js"
 import type { GatewayPorts } from "../../application/ports.js"
 import { conflict, jobConflict, jobNotFound, unavailable } from "./problems.js"
-import { decodeJson, type Transport } from "./transport.js"
+import type { Transport } from "./transport.js"
 
 /**
  * エピソード生成ジョブの投入・制御・リプレイ。
  * 上流の状態遷移ごとに分かれたタイムスタンプを、公開ビューの語彙へ射影する。
  */
-
-export const ProductionCreateEpisodeJobResponseSchema = Schema.Union([
-  Schema.Struct({
-    protocolVersion: Schema.Literal("production.create-job.reply.v1"),
-    _tag: Schema.Literal("Accepted"),
-    correlationId: CorrelationIdSchema,
-    jobId: Schema.String.check(Schema.isUUID(4)),
-    state: Schema.Literal("Queued"),
-  }),
-  Schema.Struct({
-    protocolVersion: Schema.Literal("production.create-job.reply.v1"),
-    _tag: Schema.Literal("Rejected"),
-    correlationId: Schema.NullOr(CorrelationIdSchema),
-    code: Schema.String,
-  }),
-])
 
 type ParsedControlReply = Effect.Success<
   ReturnType<typeof parseEpisodeJobControlReply>
@@ -148,8 +132,9 @@ export const makeEpisodeJobPorts = (transport: Transport): EpisodeJobPorts => {
             transport.nextMessageId()
           )
           return transport
-            .send(
+            .rpc(
               subjects.production.createJob,
+              "episode-production",
               actor,
               {
                 idempotencyKey: headers["idempotency-key"],
@@ -161,11 +146,8 @@ export const makeEpisodeJobPorts = (transport: Transport): EpisodeJobPorts => {
               lineage
             )
             .pipe(
-              Effect.flatMap(decodeJson),
-              Effect.flatMap(parse(ProductionCreateEpisodeJobResponseSchema)),
-              Effect.filterOrFail(
-                (reply) => reply.correlationId === lineage.correlationId,
-                unavailable
+              Effect.flatMap((reply) =>
+                parseCreateEpisodeJobReply(reply.payload)
               ),
               Effect.mapError(unavailable)
             )

@@ -10,10 +10,8 @@ export {
   type VoicevoxSpeechSynthesizerDependencies,
 } from "./adapters/providers/voicevox/speech-synthesizer.js"
 export {
-  CreateJobRpcReplySchema,
   handleCreateJobRpc,
   type CreateJobRpcDelivery,
-  type CreateJobRpcReply,
 } from "./adapters/rpc/create-job.js"
 export {
   handleCancelJobRpc,

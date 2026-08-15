@@ -5,10 +5,10 @@ import {
 } from "@news-podcast/observability"
 import {
   CreateAudioAccessReplySchema,
-  EpisodeLibraryRejectionSchema,
   GetEpisodeReplySchema,
   ListEpisodesReplySchema,
   MessageEnvelopeSchema,
+  matchesPeerPolicy,
   parseCreateAudioAccessRequest,
   parseGetEpisodeRequest,
   parseListEpisodesRequest,
@@ -66,14 +66,6 @@ const replySchema = (subject: string) =>
     : subject === subjects.library.getEpisode
       ? GetEpisodeReplySchema
       : CreateAudioAccessReplySchema
-
-const rawRejection = <ReplyError>(
-  delivery: EpisodeLibraryRpcDelivery<ReplyError>,
-  value: EpisodeLibraryRejection
-) =>
-  parse(EpisodeLibraryRejectionSchema)(value).pipe(
-    Effect.flatMap((parsed) => delivery.reply(JSON.stringify(parsed)))
-  )
 
 const correlatedReply = <ReplyError>(
   delivery: EpisodeLibraryRpcDelivery<ReplyError>,
@@ -163,15 +155,25 @@ export const makeEpisodeLibraryRpcHandler = (
     decodeJson(delivery.payload).pipe(
       Effect.flatMap(parseMessageEnvelope),
       Effect.matchEffect({
-        onFailure: () => rawRejection(delivery, rejection("INVALID_REQUEST")),
+        onFailure: () =>
+          Effect.logWarning("library RPC envelope rejected", {
+            subject: delivery.subject,
+            failure_stage: "transport",
+            failure_reason: "invalid_envelope",
+          }),
         onSuccess: (envelope) => {
           const process = Effect.suspend(() => {
             const reject = (code: EpisodeLibraryRejection["code"]) =>
               correlatedReply(delivery, envelope, rejection(code), dependencies)
 
-            if (envelope.producer !== "gateway")
-              return reject("INVALID_REQUEST")
             if (envelope.actor._tag !== "User") return reject("UNAUTHENTICATED")
+            if (
+              !matchesPeerPolicy(envelope, {
+                producer: "gateway",
+                actor: "User",
+              })
+            )
+              return reject("INVALID_REQUEST")
 
             const owner = parseOwnerId(envelope.actor.userId).pipe(
               Effect.mapError(() => rejection("INVALID_REQUEST"))

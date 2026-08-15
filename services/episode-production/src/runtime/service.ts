@@ -262,8 +262,18 @@ export const runNodeEpisodeProductionService = (
                       observability.count("episode.lease.lost")
                     break
                   case "WorkerFailed":
+                    const [failureStage, ...failureReasonParts] =
+                      event.code.split("_")
                     observability.count("process.error", 1, {
                       "failure.code": event.code,
+                      "failure.stage":
+                        failureStage === "script" || failureStage === "speech"
+                          ? failureStage
+                          : event.stage,
+                      "failure.reason":
+                        failureStage === "script" || failureStage === "speech"
+                          ? failureReasonParts.join("_")
+                          : event.code,
                       "operation.stage": event.stage,
                     })
                     break

@@ -57,6 +57,8 @@ const audioQuery = {
   volumeScale: 1,
   prePhonemeLength: 0.1,
   postPhonemeLength: 0.1,
+  pauseLength: null,
+  pauseLengthScale: 1,
   outputSamplingRate: 24_000,
   outputStereo: false,
   kana: "テ",

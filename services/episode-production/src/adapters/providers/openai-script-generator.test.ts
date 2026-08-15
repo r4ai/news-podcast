@@ -151,7 +151,13 @@ describe("OpenAI ScriptGenerator HTTP boundary", () => {
     expect(Object.isFrozen(draft)).toBe(true)
     expect(Object.isFrozen(draft.sourceUrls)).toBe(true)
     const request = JSON.parse(fake.requests[0]!) as Record<string, unknown>
-    expect(Object.keys(request).sort()).toEqual(["input", "model", "text"])
+    expect(Object.keys(request).sort()).toEqual([
+      "input",
+      "max_output_tokens",
+      "model",
+      "text",
+    ])
+    expect(request.max_output_tokens).toBe(4_096)
     expect(request).not.toHaveProperty("temperature")
     expect(fake.requests[0]).toContain(source.markdown)
     expect(fake.requests[0]).not.toContain("test-only-key")
