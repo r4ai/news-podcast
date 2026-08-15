@@ -2,7 +2,7 @@ import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
 import type { BetterAuthSessionApi } from "../adapters/better-auth-session-reader.js"
-import { createSqliteGenerationSettingsRepository } from "../adapters/sqlite-generation-settings.js"
+import { createGenerationSettingsRepository } from "../adapters/persistence/generation-settings/repository.js"
 import type { GenerationSettingsRepository } from "../application/generation-settings.js"
 import {
   createIdentityRuntimeResourceUnsafe,
@@ -89,7 +89,7 @@ const serviceFailure = (
 const defaultRuntimeDependencies: IdentityAccessRuntimeDependencies =
   deepFreeze({
     openRuntime: createIdentityRuntimeResourceUnsafe,
-    createSettings: createSqliteGenerationSettingsRepository,
+    createSettings: createGenerationSettingsRepository,
   })
 
 /** Transport-neutral seam sharing one SQLite handle across auth and settings. */

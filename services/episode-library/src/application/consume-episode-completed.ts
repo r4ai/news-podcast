@@ -5,7 +5,7 @@ import {
   matchesCompletionNotice,
   type EpisodeCompletionNotice,
 } from "../domain/episode-completion.js"
-import type { EpisodeCompletionPorts } from "./completion-ports.js"
+import type { EpisodeCompletionPorts } from "./ports/completion.js"
 
 export const consumeEpisodeCompleted = (ports: EpisodeCompletionPorts) =>
   Effect.fn("episodeLibrary.consumeEpisodeCompleted")(function* (

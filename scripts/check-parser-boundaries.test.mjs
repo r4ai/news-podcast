@@ -32,9 +32,9 @@ const createFixture = async (files) => {
 }
 
 const validFiles = {
-  "services/content-knowledge/src/adapters/http-rss-feed-reader.ts":
-    'import "./rss-feed-parser.js"\n',
-  "services/content-knowledge/src/adapters/rss-feed-parser.ts":
+  "services/content-knowledge/src/adapters/providers/rss/http-feed-reader.ts":
+    'import "./feed-parser.js"\n',
+  "services/content-knowledge/src/adapters/providers/rss/feed-parser.ts":
     'import "fast-xml-parser"\n',
   "services/content-knowledge/src/infrastructure/unsafe/http-s3-article-capture.ts":
     'import "./article-markdown-parser.js"\n',
@@ -60,7 +60,7 @@ describe("checkParserBoundaries", () => {
   test("rejects a regex parser and a missing parser import", async () => {
     const rootDirectory = await createFixture({
       ...validFiles,
-      "services/content-knowledge/src/adapters/rss-feed-parser.ts": [
+      "services/content-knowledge/src/adapters/providers/rss/feed-parser.ts": [
         'import "fast-xml-parser"',
         "const item = /<item>(.*)<\\/item>/",
       ].join("\n"),
@@ -80,7 +80,7 @@ describe("checkParserBoundaries", () => {
       [
         {
           rule: "parser-boundary-no-regex-parser",
-          file: "services/content-knowledge/src/adapters/rss-feed-parser.ts",
+          file: "services/content-knowledge/src/adapters/providers/rss/feed-parser.ts",
           line: 2,
         },
         {

@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from "vitest"
 import type {
   AudioAccessSigner,
   CompletedEpisodeReader,
-} from "../application/ports.js"
+} from "../application/ports/episode-library.js"
 import {
   CompletedEpisodeSchema,
   type CompletedEpisode,

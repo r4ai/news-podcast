@@ -1,0 +1,1529 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "562e5904-7f6b-4b32-950e-c1c32d5b7465",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "ddl": [
+    {
+      "name": "article_owner_states",
+      "entityType": "tables"
+    },
+    {
+      "name": "article_snapshots",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_article_tags",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_enrichment_daily_progress",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_enrichment_queue",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_enrichment_results",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_interest_profiles",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_outbox",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_tag_suggestions",
+      "entityType": "tables"
+    },
+    {
+      "name": "content_tags",
+      "entityType": "tables"
+    },
+    {
+      "name": "feed_catalog",
+      "entityType": "tables"
+    },
+    {
+      "name": "feed_items",
+      "entityType": "tables"
+    },
+    {
+      "name": "feed_subscriptions",
+      "entityType": "tables"
+    },
+    {
+      "name": "feed_sync_jobs",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "read",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "saved",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "read_later",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "hidden",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "hidden_at",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "article_owner_states"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "archive_request_id",
+      "entityType": "columns",
+      "table": "article_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot_id",
+      "entityType": "columns",
+      "table": "article_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "article_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot_json",
+      "entityType": "columns",
+      "table": "article_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "captured_at",
+      "entityType": "columns",
+      "table": "article_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "content_article_tags"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "content_article_tags"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tag_id",
+      "entityType": "columns",
+      "table": "content_article_tags"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "content_article_tags"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "confidence",
+      "entityType": "columns",
+      "table": "content_article_tags"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "content_article_tags"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "local_date",
+      "entityType": "columns",
+      "table": "content_enrichment_daily_progress"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "processed_count",
+      "entityType": "columns",
+      "table": "content_enrichment_daily_progress"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "priority",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reason",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "attempt",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lease_token",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lease_expires_at",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "published_at",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error",
+      "entityType": "columns",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "summary",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "score",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reason",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tokens_in",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tokens_out",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "content_enrichment_results"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "content_interest_profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "include_topics",
+      "entityType": "columns",
+      "table": "content_interest_profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "exclude_topics",
+      "entityType": "columns",
+      "table": "content_interest_profiles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "content_interest_profiles"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message_id",
+      "entityType": "columns",
+      "table": "content_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "archive_request_id",
+      "entityType": "columns",
+      "table": "content_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "subject",
+      "entityType": "columns",
+      "table": "content_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "envelope_json",
+      "entityType": "columns",
+      "table": "content_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "content_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "published_at",
+      "entityType": "columns",
+      "table": "content_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "content_tag_suggestions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "content_tag_suggestions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "occurrences",
+      "entityType": "columns",
+      "table": "content_tag_suggestions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_seen_at",
+      "entityType": "columns",
+      "table": "content_tag_suggestions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tag_id",
+      "entityType": "columns",
+      "table": "content_tags"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "content_tags"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "content_tags"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "content_tags"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feed_id",
+      "entityType": "columns",
+      "table": "feed_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feed_url",
+      "entityType": "columns",
+      "table": "feed_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "feed_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "feed_items"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feed_id",
+      "entityType": "columns",
+      "table": "feed_items"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "external_id",
+      "entityType": "columns",
+      "table": "feed_items"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_url",
+      "entityType": "columns",
+      "table": "feed_items"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "feed_items"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "published_at",
+      "entityType": "columns",
+      "table": "feed_items"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "discovered_at",
+      "entityType": "columns",
+      "table": "feed_items"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "subscription_id",
+      "entityType": "columns",
+      "table": "feed_subscriptions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "feed_subscriptions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feed_id",
+      "entityType": "columns",
+      "table": "feed_subscriptions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "feed_subscriptions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "feed_subscriptions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "feed_id",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "attempt",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lease_expires_at",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "discovered",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "archived",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "failed",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "columns": ["article_id"],
+      "tableTo": "feed_items",
+      "columnsTo": ["article_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_article_owner_states_article_id_feed_items_article_id_fk",
+      "entityType": "fks",
+      "table": "article_owner_states"
+    },
+    {
+      "columns": ["article_id"],
+      "tableTo": "feed_items",
+      "columnsTo": ["article_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_content_article_tags_article_id_feed_items_article_id_fk",
+      "entityType": "fks",
+      "table": "content_article_tags"
+    },
+    {
+      "columns": ["owner_id", "tag_id"],
+      "tableTo": "content_tags",
+      "columnsTo": ["owner_id", "tag_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": true,
+      "name": "content_article_tags_tag_fk",
+      "entityType": "fks",
+      "table": "content_article_tags"
+    },
+    {
+      "columns": ["article_id"],
+      "tableTo": "feed_items",
+      "columnsTo": ["article_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_content_enrichment_queue_article_id_feed_items_article_id_fk",
+      "entityType": "fks",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "columns": ["article_id"],
+      "tableTo": "feed_items",
+      "columnsTo": ["article_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_content_enrichment_results_article_id_feed_items_article_id_fk",
+      "entityType": "fks",
+      "table": "content_enrichment_results"
+    },
+    {
+      "columns": ["archive_request_id"],
+      "tableTo": "article_snapshots",
+      "columnsTo": ["archive_request_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_content_outbox_archive_request_id_article_snapshots_archive_request_id_fk",
+      "entityType": "fks",
+      "table": "content_outbox"
+    },
+    {
+      "columns": ["feed_id"],
+      "tableTo": "feed_catalog",
+      "columnsTo": ["feed_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_feed_items_feed_id_feed_catalog_feed_id_fk",
+      "entityType": "fks",
+      "table": "feed_items"
+    },
+    {
+      "columns": ["feed_id"],
+      "tableTo": "feed_catalog",
+      "columnsTo": ["feed_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_feed_subscriptions_feed_id_feed_catalog_feed_id_fk",
+      "entityType": "fks",
+      "table": "feed_subscriptions"
+    },
+    {
+      "columns": ["feed_id"],
+      "tableTo": "feed_catalog",
+      "columnsTo": ["feed_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_feed_sync_jobs_feed_id_feed_catalog_feed_id_fk",
+      "entityType": "fks",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "columns": ["owner_id", "article_id"],
+      "nameExplicit": false,
+      "name": "article_owner_states_pk",
+      "entityType": "pks",
+      "table": "article_owner_states"
+    },
+    {
+      "columns": ["owner_id", "article_id", "tag_id"],
+      "nameExplicit": false,
+      "name": "content_article_tags_pk",
+      "entityType": "pks",
+      "table": "content_article_tags"
+    },
+    {
+      "columns": ["owner_id", "article_id"],
+      "nameExplicit": false,
+      "name": "content_enrichment_queue_pk",
+      "entityType": "pks",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "columns": ["owner_id", "article_id"],
+      "nameExplicit": false,
+      "name": "content_enrichment_results_pk",
+      "entityType": "pks",
+      "table": "content_enrichment_results"
+    },
+    {
+      "columns": ["owner_id", "name"],
+      "nameExplicit": false,
+      "name": "content_tag_suggestions_pk",
+      "entityType": "pks",
+      "table": "content_tag_suggestions"
+    },
+    {
+      "columns": ["archive_request_id"],
+      "nameExplicit": false,
+      "name": "article_snapshots_pk",
+      "table": "article_snapshots",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["local_date"],
+      "nameExplicit": false,
+      "name": "content_enrichment_daily_progress_pk",
+      "table": "content_enrichment_daily_progress",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["owner_id"],
+      "nameExplicit": false,
+      "name": "content_interest_profiles_pk",
+      "table": "content_interest_profiles",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["message_id"],
+      "nameExplicit": false,
+      "name": "content_outbox_pk",
+      "table": "content_outbox",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["tag_id"],
+      "nameExplicit": false,
+      "name": "content_tags_pk",
+      "table": "content_tags",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["feed_id"],
+      "nameExplicit": false,
+      "name": "feed_catalog_pk",
+      "table": "feed_catalog",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["article_id"],
+      "nameExplicit": false,
+      "name": "feed_items_pk",
+      "table": "feed_items",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["subscription_id"],
+      "nameExplicit": false,
+      "name": "feed_subscriptions_pk",
+      "table": "feed_subscriptions",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["job_id"],
+      "nameExplicit": false,
+      "name": "feed_sync_jobs_pk",
+      "table": "feed_sync_jobs",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false
+        },
+        {
+          "value": "article_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "article_owner_states_owner",
+      "entityType": "indexes",
+      "table": "article_owner_states"
+    },
+    {
+      "columns": [
+        {
+          "value": "article_id",
+          "isExpression": false
+        },
+        {
+          "value": "\"captured_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"snapshot_id\" DESC",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "article_snapshots_latest",
+      "entityType": "indexes",
+      "table": "article_snapshots"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "article_id",
+          "isExpression": false
+        },
+        {
+          "value": "source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "content_article_tags_article",
+      "entityType": "indexes",
+      "table": "content_article_tags"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "priority",
+          "isExpression": false
+        },
+        {
+          "value": "published_at",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "content_enrichment_queue_claim",
+      "entityType": "indexes",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "columns": [
+        {
+          "value": "created_at",
+          "isExpression": false
+        },
+        {
+          "value": "message_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"content_outbox\".\"published_at\" IS NULL",
+      "origin": "manual",
+      "name": "content_outbox_pending",
+      "entityType": "indexes",
+      "table": "content_outbox"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "tag_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "content_tags_owner_tag",
+      "entityType": "indexes",
+      "table": "content_tags"
+    },
+    {
+      "columns": [
+        {
+          "value": "feed_id",
+          "isExpression": false
+        },
+        {
+          "value": "\"published_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"discovered_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"article_id\" DESC",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "feed_items_latest",
+      "entityType": "indexes",
+      "table": "feed_items"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        },
+        {
+          "value": "subscription_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "feed_subscriptions_owner",
+      "entityType": "indexes",
+      "table": "feed_subscriptions"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        },
+        {
+          "value": "job_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "feed_sync_jobs_claim",
+      "entityType": "indexes",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "columns": ["owner_id", "name"],
+      "nameExplicit": true,
+      "name": "content_tags_owner_name",
+      "entityType": "uniques",
+      "table": "content_tags"
+    },
+    {
+      "columns": ["feed_id", "external_id"],
+      "nameExplicit": true,
+      "name": "feed_items_feed_external",
+      "entityType": "uniques",
+      "table": "feed_items"
+    },
+    {
+      "columns": ["owner_id", "feed_id"],
+      "nameExplicit": true,
+      "name": "feed_subscriptions_owner_feed",
+      "entityType": "uniques",
+      "table": "feed_subscriptions"
+    },
+    {
+      "columns": ["snapshot_id"],
+      "nameExplicit": false,
+      "name": "article_snapshots_snapshot_id_unique",
+      "entityType": "uniques",
+      "table": "article_snapshots"
+    },
+    {
+      "columns": ["archive_request_id"],
+      "nameExplicit": false,
+      "name": "content_outbox_archive_request_id_unique",
+      "entityType": "uniques",
+      "table": "content_outbox"
+    },
+    {
+      "columns": ["feed_url"],
+      "nameExplicit": false,
+      "name": "feed_catalog_feed_url_unique",
+      "entityType": "uniques",
+      "table": "feed_catalog"
+    },
+    {
+      "columns": ["feed_id"],
+      "nameExplicit": false,
+      "name": "feed_sync_jobs_feed_id_unique",
+      "entityType": "uniques",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "value": "\"read\" IN (0, 1)",
+      "name": "article_owner_states_read_check",
+      "entityType": "checks",
+      "table": "article_owner_states"
+    },
+    {
+      "value": "\"saved\" IN (0, 1)",
+      "name": "article_owner_states_saved_check",
+      "entityType": "checks",
+      "table": "article_owner_states"
+    },
+    {
+      "value": "\"read_later\" IN (0, 1)",
+      "name": "article_owner_states_read_later_check",
+      "entityType": "checks",
+      "table": "article_owner_states"
+    },
+    {
+      "value": "\"hidden\" IN (0, 1)",
+      "name": "article_owner_states_hidden_check",
+      "entityType": "checks",
+      "table": "article_owner_states"
+    },
+    {
+      "value": "\"source\" IN ('Manual', 'Ai')",
+      "name": "content_article_tags_source_check",
+      "entityType": "checks",
+      "table": "content_article_tags"
+    },
+    {
+      "value": "\"confidence\" IS NULL OR (\"confidence\" >= 0 AND \"confidence\" <= 1)",
+      "name": "content_article_tags_confidence_check",
+      "entityType": "checks",
+      "table": "content_article_tags"
+    },
+    {
+      "value": "\"processed_count\" >= 0",
+      "name": "content_enrichment_daily_progress_count_check",
+      "entityType": "checks",
+      "table": "content_enrichment_daily_progress"
+    },
+    {
+      "value": "\"reason\" IN ('New', 'Reprocess')",
+      "name": "content_enrichment_queue_reason_check",
+      "entityType": "checks",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "value": "\"status\" IN ('Queued', 'Processing', 'Succeeded', 'Failed')",
+      "name": "content_enrichment_queue_status_check",
+      "entityType": "checks",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "value": "\"attempt\" >= 0",
+      "name": "content_enrichment_queue_attempt_check",
+      "entityType": "checks",
+      "table": "content_enrichment_queue"
+    },
+    {
+      "value": "\"status\" IN ('Succeeded', 'Failed')",
+      "name": "content_enrichment_results_status_check",
+      "entityType": "checks",
+      "table": "content_enrichment_results"
+    },
+    {
+      "value": "\"score\" IS NULL OR (\"score\" >= 0 AND \"score\" <= 100)",
+      "name": "content_enrichment_results_score_check",
+      "entityType": "checks",
+      "table": "content_enrichment_results"
+    },
+    {
+      "value": "\"tokens_in\" >= 0",
+      "name": "content_enrichment_results_tokens_in_check",
+      "entityType": "checks",
+      "table": "content_enrichment_results"
+    },
+    {
+      "value": "\"tokens_out\" >= 0",
+      "name": "content_enrichment_results_tokens_out_check",
+      "entityType": "checks",
+      "table": "content_enrichment_results"
+    },
+    {
+      "value": "\"occurrences\" > 0",
+      "name": "content_tag_suggestions_occurrences_check",
+      "entityType": "checks",
+      "table": "content_tag_suggestions"
+    },
+    {
+      "value": "\"enabled\" IN (0, 1)",
+      "name": "feed_subscriptions_enabled_check",
+      "entityType": "checks",
+      "table": "feed_subscriptions"
+    },
+    {
+      "value": "\"status\" IN ('Queued', 'Processing', 'Succeeded', 'Failed')",
+      "name": "feed_sync_jobs_status_check",
+      "entityType": "checks",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "value": "\"attempt\" >= 0 AND \"attempt\" <= 4",
+      "name": "feed_sync_jobs_attempt_check",
+      "entityType": "checks",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "value": "\"discovered\" >= 0",
+      "name": "feed_sync_jobs_discovered_check",
+      "entityType": "checks",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "value": "\"archived\" >= 0",
+      "name": "feed_sync_jobs_archived_check",
+      "entityType": "checks",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "value": "\"failed\" >= 0",
+      "name": "feed_sync_jobs_failed_check",
+      "entityType": "checks",
+      "table": "feed_sync_jobs"
+    }
+  ],
+  "renames": []
+}

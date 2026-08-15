@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import { parseCompletedEpisode } from "../adapters/parse-stored-episode.js"
-import type { EpisodeCompletionPorts } from "../application/completion-ports.js"
+import type { EpisodeCompletionPorts } from "../application/ports/completion.js"
 import type { EpisodeCompletionNotice } from "../domain/episode-completion.js"
 import { InboxMessageIdSchema } from "../domain/episode-completion.js"
 import { handleNatsEpisodeCompleted } from "./nats-episode-completed.js"

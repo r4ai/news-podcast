@@ -1,15 +1,21 @@
-export * from "./archive-input.js"
-export * from "./http-rss-feed-reader.js"
-export * from "./jetstream-publisher.js"
-export * from "./outbox-relay.js"
-export * from "./outbox.js"
-export * from "./sqlite-archive-store.js"
-export * from "./sqlite-article-catalog.js"
-export * from "./sqlite-article-library.js"
-export * from "./sqlite-content-taxonomy.js"
-export * from "./sqlite-enrichment-queue.js"
-export * from "./sqlite-feed-sync-queue.js"
-export * from "./openai-enrichment-provider.js"
-export * from "./sqlite-interest-profile.js"
-export * from "./sqlite-subscription-repository.js"
-export type * from "./sqlite-port.js"
+export * from "./rpc/archive-input.js"
+export * from "./providers/rss/http-feed-reader.js"
+export * from "./messaging/jetstream-publisher.js"
+export * from "./messaging/outbox-relay.js"
+export * from "./messaging/outbox.js"
+export * from "./providers/enrichment/openai/provider.js"
+export {
+  createArchiveStore,
+  type ArchiveStore,
+} from "./persistence/archive/repository.js"
+export { createArticleCatalog } from "./persistence/article-catalog/repository.js"
+export { createArticleLibrary } from "./persistence/article-library/repository.js"
+export { createContentTaxonomy } from "./persistence/content-taxonomy/repository.js"
+export { createEnrichmentQueue } from "./persistence/enrichment-queue/repository.js"
+export {
+  createFeedSyncQueue,
+  FEED_SYNC_MAX_ATTEMPTS,
+} from "./persistence/feed-sync-queue/repository.js"
+export { createInterestProfileRepository } from "./persistence/interest-profile/repository.js"
+export { createSubscriptionRepository } from "./persistence/subscription/repository.js"
+export type { JsonInterop } from "./persistence/json-interop.js"

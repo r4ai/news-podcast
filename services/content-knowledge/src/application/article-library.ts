@@ -1,7 +1,7 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect, Schema } from "effect"
 
-import type { MarkdownObjectReader } from "./article-catalog-ports.js"
+import type { MarkdownObjectReader } from "./ports/article-catalog.js"
 import {
   ArchiveCommandSchema,
   type ArchiveRequestId,
@@ -28,7 +28,7 @@ import type {
   ArchiveMessageContext,
   ArchiveStoreError,
   CaptureError,
-} from "./ports.js"
+} from "./ports/archive.js"
 
 const uniqueFeedIds = Schema.makeFilter<readonly FeedId[]>((feedIds) =>
   new Set(feedIds).size === feedIds.length ? true : "feed IDs must be unique"

@@ -1,7 +1,7 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
-import type { FeedFetchError, RssFeedReader } from "./article-catalog-ports.js"
+import type { FeedFetchError, RssFeedReader } from "./ports/article-catalog.js"
 import {
   ArchiveCommandSchema,
   type ArchiveRequestId,
@@ -16,15 +16,15 @@ import type {
   ArchiveMessageContext,
   ArchiveStoreError,
   CaptureError,
-} from "./ports.js"
+} from "./ports/archive.js"
 import type {
   SubscriptionRepository,
   SubscriptionStoreError,
-} from "./subscription-ports.js"
+} from "./ports/subscription.js"
 import type {
   ArticleCatalog,
   ArticleCatalogError,
-} from "./article-catalog-ports.js"
+} from "./ports/article-catalog.js"
 
 export type FeedPollFailure = DeepReadonly<{
   readonly _tag: "FeedPollFailed"

@@ -6,7 +6,7 @@ import {
 import { Effect, Option, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import type { SessionReader } from "../application/session-reader.js"
+import type { SessionReader } from "../application/ports/session-reader.js"
 import { authenticatedActor, parseUserId } from "../domain/actor.js"
 import { makeResolveSessionRpcHandler } from "./resolve-session-rpc.js"
 

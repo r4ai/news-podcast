@@ -8,7 +8,7 @@ import type {
   ArticleCatalogError,
   MarkdownObjectError,
   MarkdownObjectReader,
-} from "./article-catalog-ports.js"
+} from "./ports/article-catalog.js"
 
 export type MaterializeSelection = DeepReadonly<
   | { readonly _tag: "Automatic" }

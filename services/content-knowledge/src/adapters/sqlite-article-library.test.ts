@@ -27,17 +27,17 @@ import {
   parseJsonUnsafe,
   stringifyJsonUnsafe,
 } from "../infrastructure/unsafe/json.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
-import { createSqliteArchiveStore } from "./sqlite-archive-store.js"
-import { createSqliteArticleCatalog } from "./sqlite-article-catalog.js"
-import { createSqliteArticleLibrary } from "./sqlite-article-library.js"
-import { createSqliteSubscriptionRepository } from "./sqlite-subscription-repository.js"
+import { openTestDatabase, type TestDatabase } from "./persistence/testing.js"
+import { createArchiveStore } from "./persistence/archive/repository.js"
+import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
+import { createArticleLibrary } from "./persistence/article-library/repository.js"
+import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: unknown
 ) => Schema.decodeUnknownSync(schema)(value)
-const databases: ReturnType<typeof openSqliteUnsafe>[] = []
+const databases: TestDatabase[] = []
 afterEach(() => databases.splice(0).forEach((database) => database.close()))
 
 const ids = {
@@ -50,16 +50,16 @@ const ids = {
 }
 
 const setup = async () => {
-  const database = openSqliteUnsafe(":memory:")
+  const database = openTestDatabase()
   databases.push(database)
   const subscriptions = await Effect.runPromise(
-    createSqliteSubscriptionRepository(database)
+    createSubscriptionRepository(database.db)
   )
   const catalog = await Effect.runPromise(
-    createSqliteArticleCatalog(database, { parse: parseJsonUnsafe })
+    createArticleCatalog(database.db, { parse: parseJsonUnsafe })
   )
   const archiveStore = await Effect.runPromise(
-    createSqliteArchiveStore(database, () => crypto.randomUUID() as never, {
+    createArchiveStore(database.db, () => crypto.randomUUID() as never, {
       parse: parseJsonUnsafe,
       stringify: stringifyJsonUnsafe,
     })
@@ -164,7 +164,7 @@ const setup = async () => {
       },
     })
   )
-  const articles = await Effect.runPromise(createSqliteArticleLibrary(database))
+  const articles = await Effect.runPromise(createArticleLibrary(database.db))
   return { articles, catalog, snapshot }
 }
 

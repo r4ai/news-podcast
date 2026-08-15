@@ -9,7 +9,7 @@ import { Effect, Schema } from "effect"
 import type {
   EpisodeCompletionIntent,
   PipelineFailure,
-} from "./execution-ports.js"
+} from "./ports/execution.js"
 import {
   UtcTimestampSchema,
   type JobId,

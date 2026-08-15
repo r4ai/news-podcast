@@ -17,7 +17,7 @@ import {
 } from "@news-podcast/observability"
 import { Effect, Schema } from "effect"
 
-import type { SessionReader } from "../application/session-reader.js"
+import type { SessionReader } from "../application/ports/session-reader.js"
 import type { Actor } from "../domain/actor.js"
 import { makeResolveSessionHandler } from "./resolve-session-handler.js"
 

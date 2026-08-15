@@ -1,11 +1,27 @@
 # ADR-0020: 記事検索をSQLite FTS5(trigram)へ移行する
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-08-11
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0043（未実装のまま失効。下記「失効時点の状態」を参照）
 - Related: ADR-0003（node:sqlite/D1二系統）、ADR-0019、`packages/adapters/src/db/local-store.ts`
+
+## 失効時点の状態（2026-08-15 追記）
+
+**この決定は実装されないまま失効した。** 記述されている
+`feed_items_fts`（FTS5 trigram仮想テーブル）、同期トリガ、
+`packages/adapters/migrations/0010_article_search_fts.sql` は
+いずれもリポジトリに存在しない。参照先の `packages/adapters/` 自体が
+ADR-0039 の関数型DDD書き直しで削除されている。
+
+現在の記事検索は `title` / `source_url` に対する `LIKE '%q%'` であり、
+実装箇所は `services/content-knowledge/src/adapters/persistence/article-library/filters.ts`
+（`queryFilters`）である。ADR-0043 のDrizzle移行でも検索の挙動は
+意図的に変更していない。
+
+再度FTS5を導入する場合は、drizzle-kit のマイグレーションへ
+仮想テーブルと同期トリガを手書きで追加し、本ADRを新しい番号で書き直すこと。
 
 ## コンテキストと変更契機
 

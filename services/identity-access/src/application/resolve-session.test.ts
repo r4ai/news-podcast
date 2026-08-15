@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest"
 
 import { authenticatedActor, parseUserId } from "../domain/actor.js"
 import { resolveSession } from "./resolve-session.js"
-import type { SessionLookupRequest, SessionReader } from "./session-reader.js"
+import type {
+  SessionLookupRequest,
+  SessionReader,
+} from "./ports/session-reader.js"
 
 const request: SessionLookupRequest = {
   headers: [{ name: "cookie", value: "better-auth.session_token=token" }],

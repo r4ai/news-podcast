@@ -13,6 +13,7 @@
     "dev": "tsx watch src/bootstrap.ts",
     "start": "tsx src/bootstrap.ts",
     "build": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -23,8 +24,10 @@
     "@nats-io/transport-node": "3.4.0",
     "@news-podcast/kernel": "workspace:*",
     "@news-podcast/observability": "workspace:*",
+    "@news-podcast/persistence": "workspace:*",
     "@news-podcast/protocols": "workspace:*",
     "@news-podcast/service-runtime": "workspace:*",
+    "drizzle-orm": "1.0.0-rc.4",
     "effect": "4.0.0-beta.102",
     "fast-xml-parser": "5.10.1",
     "hast-util-to-html": "9.0.5",
@@ -41,6 +44,7 @@
     "@types/hast": "3.0.5",
     "@types/mdast": "4.0.4",
     "@types/node": "24.12.4",
+    "drizzle-kit": "1.0.0-rc.4",
     "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vitest": "4.1.10"

@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import type {
   MarkdownObjectError,
   MarkdownObjectReader,
-} from "../../application/article-catalog-ports.js"
+} from "../../application/ports/article-catalog.js"
 
 export const MAXIMUM_MARKDOWN_BYTES = 1_048_576
 

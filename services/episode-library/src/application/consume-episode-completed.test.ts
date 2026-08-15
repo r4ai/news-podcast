@@ -11,7 +11,7 @@ import {
   type CompletedEpisode,
 } from "../domain/episode.js"
 import { consumeEpisodeCompleted } from "./consume-episode-completed.js"
-import type { EpisodeCompletionPorts } from "./completion-ports.js"
+import type { EpisodeCompletionPorts } from "./ports/completion.js"
 
 const notice: EpisodeCompletionNotice = Effect.runSync(
   parse(EpisodeCompletionNoticeSchema)({

@@ -12,10 +12,10 @@ import {
 import { Effect, Fiber } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import type { AudioAccessSigner } from "../application/ports.js"
+import type { AudioAccessSigner } from "../application/ports/episode-library.js"
 import { InboxMessageIdSchema } from "../domain/episode-completion.js"
 import { CompletedEpisodeSchema } from "../domain/episode.js"
-import { makeSqliteEpisodeRepository } from "../infrastructure/index.js"
+import { makeEpisodeRepository } from "../adapters/persistence/episode/repository.js"
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
 import type { UnsafeEpisodeCompletedConsumer } from "../infrastructure/unsafe/nats-episode-completed-consumer.js"
 import {
@@ -193,7 +193,7 @@ describe("episode-library Node RPC runtime", () => {
     const directory = mkdtempSync(join(tmpdir(), "episode-library-rpc-"))
     directories.push(directory)
     const sqlitePath = join(directory, "library.sqlite")
-    const repository = makeSqliteEpisodeRepository(sqlitePath)
+    const repository = makeEpisodeRepository(sqlitePath)
     const completed = Effect.runSync(
       parse(CompletedEpisodeSchema)({
         _tag: "CompletedEpisode",

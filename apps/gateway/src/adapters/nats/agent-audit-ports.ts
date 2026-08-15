@@ -9,7 +9,7 @@ import {
   AgentRunEventSchema,
   AgentRunSchema,
 } from "../../contract.js"
-import type { GatewayPorts } from "../../ports.js"
+import type { GatewayPorts } from "../../application/ports.js"
 import { conflict, notFound, unavailable } from "./problems.js"
 import type { Transport } from "./transport.js"
 

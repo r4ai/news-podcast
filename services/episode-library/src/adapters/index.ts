@@ -1,3 +1,7 @@
+export {
+  makeEpisodeRepository,
+  type EpisodeRepository,
+} from "./persistence/episode/repository.js"
 export { parseEpisodeCompletedMessage } from "./parse-episode-completed-message.js"
 export { parseCompletedEpisode } from "./parse-stored-episode.js"
 export {

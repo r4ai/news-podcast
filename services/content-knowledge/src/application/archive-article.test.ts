@@ -17,7 +17,7 @@ import {
   createArticleSnapshot,
 } from "../domain/article.js"
 import { archiveArticle } from "./archive-article.js"
-import type { ArchiveArticlePorts } from "./ports.js"
+import type { ArchiveArticlePorts } from "./ports/archive.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,

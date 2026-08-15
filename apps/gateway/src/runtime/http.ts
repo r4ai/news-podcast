@@ -3,8 +3,8 @@ import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 
 import { gatewayApi } from "../contract.js"
-import { makeGatewayHandlerLayer } from "../handlers.js"
-import type { GatewayPorts } from "../ports.js"
+import { makeGatewayHandlerLayer } from "../application/handlers/index.js"
+import type { GatewayPorts } from "../application/ports.js"
 
 /** Builds the transport-neutral HTTP boundary; the OS server stays outside. */
 export const makeGatewayWebHandler = (

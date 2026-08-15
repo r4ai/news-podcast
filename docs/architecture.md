@@ -265,6 +265,22 @@ erDiagram
 
 SQLiteはforeign key、WAL、5秒のbusy timeout、`BEGIN IMMEDIATE` transactionを使用する。音声本体はDBへ格納せず、DBにはstorage keyとbyte lengthだけを保持する。
 
+DBアクセスは全service で **Drizzle ORM** に統一する（[ADR-0043](adr/0043-drizzle-persistence-and-migrations.md)）。
+
+| 関心事 | 置き場所 |
+| --- | --- |
+| table定義 | `services/<svc>/drizzle/schema.ts` |
+| migration | `services/<svc>/drizzle/migrations/` — schemaの唯一の所有者 |
+| 接続確立・PRAGMA・span属性 | `@news-podcast/persistence` |
+| driver接触面 | `services/<svc>/src/infrastructure/unsafe/drizzle/open.ts` |
+| query | `services/<svc>/src/adapters/persistence/<集約>/` |
+
+接続はservice processにつき1本である。起動時DDL（`CREATE TABLE IF NOT EXISTS`）は存在せず、`bootstrap.ts` がmigrationを適用する。testも本番と同一のmigrationでDBを構築するため、test用schemaが本番から乖離する余地はない。
+
+drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`sqlite_master` を検査する `schema.test.ts` で固定する。
+
+`episode_jobs` はjob状態機械を実カラムへ正規化しており、状態eventの記録はtriggerではなく書き込み側が同一transactionで行う（[ADR-0044](adr/0044-normalized-episode-job-state.md)）。
+
 ## 6. 実行環境
 
 supported runtimeはNode self-hostだけである（[ADR-0039](adr/0039-support-node-self-host-runtime-only.md)）。
@@ -306,6 +322,8 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0001: DDDとオニオンアーキテクチャ](adr/0001-ddd-onion.md)
 - [ADR-0002: OpenAPI RESTと非同期ジョブ](adr/0002-openapi-async-jobs.md)
 - [ADR-0003: SQLite/DockerとD1/Cloudflare](adr/0003-dual-runtime.md)
+- [ADR-0043: Drizzle ORMへの統一とmigration導入](adr/0043-drizzle-persistence-and-migrations.md)
+- [ADR-0044: episode_jobs状態の正規化](adr/0044-normalized-episode-job-state.md)
 - [ADR-0004: 外部VOICEVOX](adr/0004-external-voicevox.md)
 - [ADR-0005: Better AuthとGoogle OIDC](adr/0005-authentication.md)
 - [ADR-0007: 事実ベース台本と出典追跡](adr/0007-factual-provenance.md)

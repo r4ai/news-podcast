@@ -5,7 +5,7 @@ import {
   malformedSessionResponse,
   sessionProviderUnavailable,
   type SessionReader,
-} from "../application/session-reader.js"
+} from "../application/ports/session-reader.js"
 import { authenticatedActor, UserIdSchema } from "../domain/actor.js"
 
 const BetterAuthSessionSchema = Schema.NullOr(

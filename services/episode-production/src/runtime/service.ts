@@ -1,3 +1,4 @@
+import { openProductionDatabaseUnsafe } from "../infrastructure/unsafe/drizzle/open.js"
 import { randomUUID } from "node:crypto"
 
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
@@ -7,15 +8,15 @@ import {
 } from "@news-podcast/observability"
 import { DateTime, Effect, Schema } from "effect"
 
-import { makeCompletionPublisher } from "../adapters/completion-publisher.js"
-import { makeContentArticleMaterializer } from "../adapters/content-article-materializer.js"
-import { makeFakeScriptGenerator } from "../adapters/fake-script-generator.js"
-import { makeIdentityScheduleClient } from "../adapters/identity-schedule-client.js"
-import { makeOpenAiScriptGenerator } from "../adapters/openai-script-generator.js"
-import { sqliteExecutionRepository } from "../adapters/sqlite-execution-repository.js"
-import { sqliteJobRepository } from "../adapters/sqlite-job-repository.js"
-import { sqliteReadingDictionaryRepository } from "../adapters/sqlite-reading-dictionary.js"
-import { makeVoicevoxSpeechSynthesizer } from "../adapters/voicevox-speech-synthesizer.js"
+import { makeCompletionPublisher } from "../adapters/messaging/completion-publisher.js"
+import { makeContentArticleMaterializer } from "../adapters/rpc/content-article-materializer.js"
+import { makeFakeScriptGenerator } from "../adapters/providers/fake-script-generator.js"
+import { makeIdentityScheduleClient } from "../adapters/rpc/identity-schedule-client.js"
+import { makeOpenAiScriptGenerator } from "../adapters/providers/openai-script-generator.js"
+import { executionRepository } from "../adapters/persistence/execution/repository.js"
+import { jobRepository } from "../adapters/persistence/job/repository.js"
+import { readingDictionaryRepository } from "../adapters/persistence/reading-dictionary/repository.js"
+import { makeVoicevoxSpeechSynthesizer } from "../adapters/providers/voicevox/speech-synthesizer.js"
 import { relayCompletionOutbox } from "../application/completion-outbox.js"
 import { createJob } from "../application/create-job.js"
 import { executeEpisodeJob } from "../application/execute-job.js"
@@ -30,9 +31,12 @@ import {
   randomJobIdUnsafe,
   randomLeaseTokenUnsafe,
 } from "../infrastructure/unsafe/identity.js"
-import { runCompletionRelayLoop } from "./completion-relay-loop.js"
+import { runCompletionRelayLoop } from "./loops/completion-relay.js"
 import { NodeCreateJobRpcConfigSchema, runNodeProductionRpc } from "./node.js"
-import { runEpisodeWorkerLoop, type EpisodeWorkerEvent } from "./worker-loop.js"
+import {
+  runEpisodeWorkerLoop,
+  type EpisodeWorkerEvent,
+} from "./loops/worker.js"
 
 const positive = (maximum: number) =>
   Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(maximum))
@@ -154,14 +158,22 @@ export const runNodeEpisodeProductionService = (
       Effect.scoped(
         Effect.gen(function* () {
           const observability = dependencies.observability ?? noopObservability
-          const execution = yield* sqliteExecutionRepository(
-            config.rpc.sqlitePath
-          ).pipe(Effect.mapError(() => runtimeError("Execution")))
-          const jobs = yield* sqliteJobRepository(config.rpc.sqlitePath).pipe(
+          // 接続はプロセスにつき1本。以前は同じDBへ最大6本を開いていた。
+          const database = yield* Effect.acquireRelease(
+            Effect.try({
+              try: () => openProductionDatabaseUnsafe(config.rpc.sqlitePath),
+              catch: () => runtimeError("Execution"),
+            }),
+            (handle) => Effect.sync(() => handle.close())
+          )
+          const execution = yield* executionRepository(database.database).pipe(
             Effect.mapError(() => runtimeError("Execution"))
           )
-          const dictionary = yield* sqliteReadingDictionaryRepository(
-            config.rpc.sqlitePath
+          const jobs = yield* jobRepository(database.database).pipe(
+            Effect.mapError(() => runtimeError("Execution"))
+          )
+          const dictionary = yield* readingDictionaryRepository(
+            database.database
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
           const content = yield* Effect.acquireRelease(
             Effect.tryPromise({

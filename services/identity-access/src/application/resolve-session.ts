@@ -6,7 +6,7 @@ import type {
   SessionLookupError,
   SessionLookupRequest,
   SessionReader,
-} from "./session-reader.js"
+} from "./ports/session-reader.js"
 
 export const resolveSession = (reader: SessionReader) =>
   function resolve(

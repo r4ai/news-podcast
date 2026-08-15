@@ -1,12 +1,13 @@
+import { openProductionDatabaseUnsafe } from "../infrastructure/unsafe/drizzle/open.js"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { subjects } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 
-import { handleCreateJobRpc } from "../adapters/create-job-rpc.js"
+import { handleCreateJobRpc } from "../adapters/rpc/create-job.js"
 import {
   makeAgentAuditRpcHandler,
   type AgentAuditRpcDelivery,
-} from "../adapters/agent-audit-rpc.js"
+} from "../adapters/rpc/agent-audit.js"
 import {
   handleCancelJobRpc,
   handleGetJobRpc,
@@ -14,15 +15,15 @@ import {
   handleListJobEventsRpc,
   handleRetryJobRpc,
   type JobControlRpcDelivery,
-} from "../adapters/job-control-rpc.js"
+} from "../adapters/rpc/job-control.js"
 import { retryFailedJob } from "../application/job-control.js"
-import { sqliteJobRepository } from "../adapters/sqlite-job-repository.js"
-import { sqliteAgentAuditMemoryRepository } from "../adapters/sqlite-agent-audit-memory.js"
-import { sqliteReadingDictionaryRepository } from "../adapters/sqlite-reading-dictionary.js"
+import { jobRepository } from "../adapters/persistence/job/repository.js"
+import { agentAuditMemoryRepository } from "../adapters/persistence/agent-audit/repository.js"
+import { readingDictionaryRepository } from "../adapters/persistence/reading-dictionary/repository.js"
 import {
   makeReadingDictionaryRpcHandler,
   type ReadingDictionaryRpcDelivery,
-} from "../adapters/reading-dictionary-rpc.js"
+} from "../adapters/rpc/reading-dictionary.js"
 import {
   UtcTimestampSchema,
   type JobId,
@@ -38,7 +39,7 @@ import {
   connectNatsRpcUnsafe,
   type UnsafeNatsRpcServer,
 } from "../infrastructure/unsafe/nats-rpc.js"
-import { runSingleWriterLoop } from "./single-writer-loop.js"
+import { runSingleWriterLoop } from "./loops/single-writer.js"
 
 const NatsServerSchema = Schema.String.check(
   Schema.isPattern(/^nats:\/\/[\w.-]+(?::\d{1,5})?$/)
@@ -91,7 +92,15 @@ export const runNodeCreateJobRpc = (
     Effect.flatMap((config) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const repository = yield* sqliteJobRepository(config.sqlitePath).pipe(
+          // 接続はプロセスにつき1本。以前は同じDBへ最大6本を開いていた。
+          const database = yield* Effect.acquireRelease(
+            Effect.try({
+              try: () => openProductionDatabaseUnsafe(config.sqlitePath),
+              catch: () => runtimeError("Sqlite"),
+            }),
+            (handle) => Effect.sync(() => handle.close())
+          )
+          const repository = yield* jobRepository(database.database).pipe(
             Effect.mapError(() => runtimeError("Sqlite"))
           )
           const server = yield* Effect.acquireRelease(
@@ -152,14 +161,22 @@ export const runNodeProductionRpc = (
     Effect.flatMap((config) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const repository = yield* sqliteJobRepository(config.sqlitePath).pipe(
+          // 接続はプロセスにつき1本。以前は同じDBへ最大6本を開いていた。
+          const database = yield* Effect.acquireRelease(
+            Effect.try({
+              try: () => openProductionDatabaseUnsafe(config.sqlitePath),
+              catch: () => runtimeError("Sqlite"),
+            }),
+            (handle) => Effect.sync(() => handle.close())
+          )
+          const repository = yield* jobRepository(database.database).pipe(
             Effect.mapError(() => runtimeError("Sqlite"))
           )
-          const dictionary = yield* sqliteReadingDictionaryRepository(
-            config.sqlitePath
+          const dictionary = yield* readingDictionaryRepository(
+            database.database
           ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
-          const agentAudit = yield* sqliteAgentAuditMemoryRepository(
-            config.sqlitePath
+          const agentAudit = yield* agentAuditMemoryRepository(
+            database.database
           ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
           const now = Effect.sync(dependencies.now)
           const replyDependencies = {

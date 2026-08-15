@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "fa1a2d7f-130b-45b2-9ee6-ef4ffa5e8087",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "ddl": [
+    {
+      "name": "user_settings",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "user_settings"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "schedule_enabled",
+      "entityType": "columns",
+      "table": "user_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'07:30'",
+      "generated": null,
+      "name": "schedule_local_time",
+      "entityType": "columns",
+      "table": "user_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'Asia/Tokyo'",
+      "generated": null,
+      "name": "schedule_time_zone",
+      "entityType": "columns",
+      "table": "user_settings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_scheduled_local_date",
+      "entityType": "columns",
+      "table": "user_settings"
+    },
+    {
+      "columns": ["owner_id"],
+      "nameExplicit": false,
+      "name": "user_settings_pk",
+      "table": "user_settings",
+      "entityType": "pks"
+    },
+    {
+      "value": "\"schedule_enabled\" IN (0, 1)",
+      "name": "user_settings_schedule_enabled_check",
+      "entityType": "checks",
+      "table": "user_settings"
+    }
+  ],
+  "renames": []
+}

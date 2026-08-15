@@ -6,7 +6,7 @@ import { Effect } from "effect"
 import type {
   AudioAccessSigner,
   AudioAccessSigningFailure,
-} from "../../application/ports.js"
+} from "../../application/ports/episode-library.js"
 import { HttpUrlSchema } from "../../domain/episode.js"
 
 export type S3AudioAccessSignerConfig = DeepReadonly<{

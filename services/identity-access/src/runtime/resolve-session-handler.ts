@@ -5,7 +5,7 @@ import {
 import { Effect } from "effect"
 
 import { resolveSession } from "../application/resolve-session.js"
-import type { SessionReader } from "../application/session-reader.js"
+import type { SessionReader } from "../application/ports/session-reader.js"
 
 export const SessionLookupRequestSchema = ResolveSessionRequestSchema
 export const parseSessionLookupRequest = parseResolveSessionRequest

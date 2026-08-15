@@ -3,8 +3,8 @@ import { Effect, Fiber } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import type { UnsafeJetStream } from "../infrastructure/unsafe/nats-jetstream.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
-import { unavailableEnrichmentProvider } from "./enrichment-runtime.js"
+import { openContentKnowledgeDatabaseUnsafe } from "../infrastructure/unsafe/drizzle/open.js"
+import { unavailableEnrichmentProvider } from "./enrichment.js"
 import {
   parseNodeRuntimeConfig,
   runNodeService,
@@ -64,7 +64,8 @@ const makeJetStream = (close = vi.fn(async () => undefined)): UnsafeJetStream =>
 const makeDependencies = (
   jetStream: UnsafeJetStream
 ): NodeRuntimeDependencies => ({
-  openSqlite: openSqliteUnsafe,
+  openDatabase: openContentKnowledgeDatabaseUnsafe,
+  newJobId: vi.fn(() => "8fb12955-2175-4675-be63-e42227d5ed21"),
   connectJetStream: vi.fn(async () => jetStream),
   newMessageId: vi.fn(() => "8fb12955-2175-4675-be63-e42227d5ed19" as never),
   now: vi.fn(() => "2026-08-12T00:01:00.000Z" as never),
@@ -82,10 +83,10 @@ describe("content-knowledge Node runtime", () => {
   })
 
   it("rejects invalid configuration without opening SQLite", async () => {
-    const openSqlite = vi.fn(openSqliteUnsafe)
+    const openDatabase = vi.fn(openContentKnowledgeDatabaseUnsafe)
     const dependencies = {
       ...makeDependencies(makeJetStream()),
-      openSqlite,
+      openDatabase,
     }
 
     const exit = await Effect.runPromiseExit(
@@ -96,18 +97,19 @@ describe("content-knowledge Node runtime", () => {
     )
 
     expect(exit._tag).toBe("Failure")
-    expect(openSqlite).not.toHaveBeenCalled()
+    expect(openDatabase).not.toHaveBeenCalled()
   })
 
   it("starts the relay and closes both NATS and SQLite resources", async () => {
     const closeNats = vi.fn(async () => undefined)
     const jetStream = makeJetStream(closeNats)
     const closeSqlite = vi.fn()
-    const database = openSqliteUnsafe(":memory:")
+    const database = openContentKnowledgeDatabaseUnsafe(":memory:")
     const dependencies: NodeRuntimeDependencies = {
       ...makeDependencies(jetStream),
-      openSqlite: () =>
-        deepFreeze({
+      openDatabase: () =>
+        // ORMハンドルを含む資源はdeepFreezeすると型が潰れる。
+        Object.freeze({
           ...database,
           close: () => {
             closeSqlite()
@@ -131,11 +133,12 @@ describe("content-knowledge Node runtime", () => {
   })
 
   it("reports SQLite close exceptions as a typed shutdown failure", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openContentKnowledgeDatabaseUnsafe(":memory:")
     const dependencies: NodeRuntimeDependencies = {
       ...makeDependencies(makeJetStream()),
-      openSqlite: () =>
-        deepFreeze({
+      openDatabase: () =>
+        // ORMハンドルを含む資源はdeepFreezeすると型が潰れる。
+        Object.freeze({
           ...database,
           close: () => {
             throw new Error("disk close failure")
@@ -156,22 +159,22 @@ describe("content-knowledge Node runtime", () => {
   })
 
   it("durably records failure when the enrichment provider is unavailable", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openContentKnowledgeDatabaseUnsafe(":memory:")
     const runtime = await Effect.runPromise(
       startNodeRuntime(validConfig, {
         ...makeDependencies(makeJetStream()),
-        openSqlite: () => database,
+        openDatabase: () => database,
       })
     )
-    database.execute(`
+    database.client.exec(`
       INSERT INTO feed_catalog VALUES ('feed-a', 'https://a.example/feed', '2026-08-12T00:00:00.000Z');
       INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-a', 'owner-a', 'feed-a', '2026-08-12T00:00:00.000Z');
       INSERT INTO feed_items VALUES (
         '5af55f2e-ff0b-475c-866a-f2cff48c101d', 'feed-a', 'external-a',
         'https://a.example/article', 'Article', NULL, '2026-08-12T00:00:00.000Z'
       );
-      INSERT INTO article_snapshots VALUES (
-        'request-a', 'snapshot-a',
+      INSERT INTO article_snapshots(archive_request_id, snapshot_id, article_id, snapshot_json, captured_at) VALUES (
+        'request-a', 'snapshot-a', '5af55f2e-ff0b-475c-866a-f2cff48c101d',
         '{"articleId":"5af55f2e-ff0b-475c-866a-f2cff48c101d","capture":{"markdown":{"key":"articles/a/article.md"}}}',
         '2026-08-12T00:00:00.000Z'
       );
@@ -205,11 +208,12 @@ describe("content-knowledge Node runtime", () => {
   it("closes NATS and SQLite when the continuous service is interrupted", async () => {
     const closeNats = vi.fn(async () => undefined)
     const closeSqlite = vi.fn()
-    const database = openSqliteUnsafe(":memory:")
+    const database = openContentKnowledgeDatabaseUnsafe(":memory:")
     const runtimeDependencies: NodeRuntimeDependencies = {
       ...makeDependencies(makeJetStream(closeNats)),
-      openSqlite: () =>
-        deepFreeze({
+      openDatabase: () =>
+        // ORMハンドルを含む資源はdeepFreezeすると型が潰れる。
+        Object.freeze({
           ...database,
           close: () => void closeSqlite(),
         }),

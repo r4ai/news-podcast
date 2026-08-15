@@ -5,14 +5,14 @@ import { createContentTaxonomy } from "../application/content-taxonomy.js"
 import { CapturedAtSchema, type ArticleId } from "../domain/article.js"
 import { TagIdSchema, TagNameSchema } from "../domain/content-taxonomy.js"
 import { OwnerIdSchema } from "../domain/subscription.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
-import { createSqliteContentTaxonomy } from "./sqlite-content-taxonomy.js"
+import { openTestDatabase, type TestDatabase } from "./persistence/testing.js"
+import { createContentTaxonomy as createContentTaxonomyRepository } from "./persistence/content-taxonomy/repository.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: unknown
 ) => Schema.decodeUnknownSync(schema)(value)
-const databases: ReturnType<typeof openSqliteUnsafe>[] = []
+const databases: TestDatabase[] = []
 afterEach(() => databases.splice(0).forEach((database) => database.close()))
 
 const ownerA = decode(OwnerIdSchema, "owner-a")
@@ -21,22 +21,9 @@ const articleA = "5af55f2e-ff0b-475c-866a-f2cff48c101d" as ArticleId
 const now = decode(CapturedAtSchema, "2026-08-13T01:00:00.000Z")
 
 const setup = async () => {
-  const database = openSqliteUnsafe(":memory:")
+  const database = openTestDatabase()
   databases.push(database)
-  database.execute(`
-    CREATE TABLE feed_catalog (
-      feed_id TEXT PRIMARY KEY, feed_url TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE feed_subscriptions (
-      subscription_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL,
-      feed_id TEXT NOT NULL REFERENCES feed_catalog(feed_id), created_at TEXT NOT NULL,
-      UNIQUE(owner_id, feed_id)
-    ) STRICT;
-    CREATE TABLE feed_items (
-      article_id TEXT PRIMARY KEY, feed_id TEXT NOT NULL REFERENCES feed_catalog(feed_id),
-      external_id TEXT NOT NULL, source_url TEXT NOT NULL, title TEXT NOT NULL,
-      published_at TEXT, discovered_at TEXT NOT NULL, UNIQUE(feed_id, external_id)
-    ) STRICT;
+  database.execSql(`
     INSERT INTO feed_catalog VALUES ('feed-a', 'https://a.example/feed', '${now}');
     INSERT INTO feed_catalog VALUES ('feed-b', 'https://b.example/feed', '${now}');
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-a', 'owner-a', 'feed-a', '${now}');
@@ -44,7 +31,7 @@ const setup = async () => {
     INSERT INTO feed_items VALUES ('${articleA}', 'feed-a', 'a', 'https://a.example/a', 'A', NULL, '${now}');
   `)
   const repository = await Effect.runPromise(
-    createSqliteContentTaxonomy(database)
+    createContentTaxonomyRepository(database.db)
   )
   let sequence = 0
   const tagIds = [

@@ -14,7 +14,7 @@ import {
   JobIdSchema,
   JobReceiptSchema,
 } from "../contract.js"
-import type { GatewayPorts } from "../ports.js"
+import type { GatewayPorts } from "../application/ports.js"
 import { makeGatewayWebHandler } from "./http.js"
 
 const unavailable = {

@@ -9,7 +9,7 @@ import { unified } from "unified"
 import type { Element, Root as HastRoot } from "hast"
 import type { Root as MdastRoot } from "mdast"
 
-import type { CaptureError } from "../../application/ports.js"
+import type { CaptureError } from "../../application/ports/archive.js"
 
 export type ArticleArchiveArtifacts = Readonly<{
   readonly markdown: Uint8Array

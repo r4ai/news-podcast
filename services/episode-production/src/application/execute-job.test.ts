@@ -15,7 +15,7 @@ import { executeEpisodeJob } from "./execute-job.js"
 import type {
   EpisodeExecutionCheckpoint,
   EpisodeExecutionPorts,
-} from "./execution-ports.js"
+} from "./ports/execution.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,

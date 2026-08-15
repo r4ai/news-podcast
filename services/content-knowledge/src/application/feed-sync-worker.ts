@@ -3,7 +3,7 @@ import { Effect } from "effect"
 
 import type { FeedPollResult } from "./poll-subscriptions.js"
 import type { FeedSyncQueueRepository } from "./feed-sync-queue.js"
-import type { SubscriptionRepository } from "./subscription-ports.js"
+import type { SubscriptionRepository } from "./ports/subscription.js"
 import type { PollingFeed } from "../domain/subscription.js"
 
 export const FEED_SYNC_LEASE_MILLIS = 5 * 60 * 1_000

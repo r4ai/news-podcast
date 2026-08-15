@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import type { EpisodeCompletionPorts } from "../application/completion-ports.js"
+import type { EpisodeCompletionPorts } from "../application/ports/completion.js"
 import type {
   UnsafeEpisodeCompletedConsumer,
   UnsafeEpisodeCompletedDelivery,

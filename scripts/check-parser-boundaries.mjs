@@ -9,12 +9,13 @@ import ts from "typescript"
 const PARSER_BOUNDARIES = [
   {
     relativePath:
-      "services/content-knowledge/src/adapters/http-rss-feed-reader.ts",
-    requiredImports: ["./rss-feed-parser.js"],
+      "services/content-knowledge/src/adapters/providers/rss/http-feed-reader.ts",
+    requiredImports: ["./feed-parser.js"],
     forbidRegex: true,
   },
   {
-    relativePath: "services/content-knowledge/src/adapters/rss-feed-parser.ts",
+    relativePath:
+      "services/content-knowledge/src/adapters/providers/rss/feed-parser.ts",
     requiredImports: ["fast-xml-parser"],
     forbidRegex: true,
   },

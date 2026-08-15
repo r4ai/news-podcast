@@ -15,10 +15,10 @@ import {
   OwnerIdSchema,
   SubscriptionIdSchema,
 } from "../domain/subscription.js"
-import { createSqliteArchiveStore } from "./sqlite-archive-store.js"
-import { createSqliteArticleCatalog } from "./sqlite-article-catalog.js"
-import { createSqliteSubscriptionRepository } from "./sqlite-subscription-repository.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
+import { createArchiveStore } from "./persistence/archive/repository.js"
+import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
+import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
+import { openTestDatabase } from "./persistence/testing.js"
 import {
   parseJsonUnsafe,
   stringifyJsonUnsafe,
@@ -36,19 +36,19 @@ const articleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never
 
 describe("article materialization", () => {
   it("returns Markdown only for archived articles owned through a subscription", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
       const subscriptions = await Effect.runPromise(
-        createSqliteSubscriptionRepository(database)
+        createSubscriptionRepository(database.db)
       )
       const catalog = await Effect.runPromise(
-        createSqliteArticleCatalog(database, {
+        createArticleCatalog(database.db, {
           parse: parseJsonUnsafe,
         })
       )
       const archiveStore = await Effect.runPromise(
-        createSqliteArchiveStore(
-          database,
+        createArchiveStore(
+          database.db,
           () => "8fb12955-2175-4675-be63-e42227d5ed19" as never,
           { parse: parseJsonUnsafe, stringify: stringifyJsonUnsafe }
         )

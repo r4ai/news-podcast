@@ -11,14 +11,14 @@ import {
   type RunningJob,
 } from "../domain/episode-job.js"
 import { classifyProviderFailure } from "../domain/provider-reliability.js"
-import type { ScriptGenerationFailure } from "./script-generator.js"
+import type { ScriptGenerationFailure } from "./ports/script-generator.js"
 import type {
   EpisodeCompletionIntent,
   EpisodeExecutionPorts,
   ExecuteEpisodeJobInput,
   LeaseFailure,
   PipelineFailure,
-} from "./execution-ports.js"
+} from "./ports/execution.js"
 
 export type EpisodeExecutionOutcome =
   | Readonly<{ _tag: "Succeeded" }>

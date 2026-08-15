@@ -3,15 +3,15 @@ import { subjects } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
 
 import { parseCompletedEpisode } from "../adapters/parse-stored-episode.js"
-import type { EpisodeCompletionPorts } from "../application/completion-ports.js"
-import type { AudioAccessSigner } from "../application/ports.js"
+import type { EpisodeCompletionPorts } from "../application/ports/completion.js"
+import type { AudioAccessSigner } from "../application/ports/episode-library.js"
+import { makeEpisodeRepository } from "../adapters/persistence/episode/repository.js"
+import type { EpisodeRepository } from "../adapters/persistence/episode/repository.js"
 import {
   connectEpisodeCompletedConsumerUnsafe,
-  makeSqliteEpisodeRepository,
   openS3AudioAccessSignerUnsafe,
   type S3AudioAccessSignerConfig,
   type S3AudioAccessSignerResource,
-  type SqliteEpisodeRepository,
   type UnsafeEpisodeCompletedConsumer,
 } from "../infrastructure/index.js"
 import {
@@ -141,7 +141,7 @@ export type NodeEpisodeLibraryRpcDependencies = DeepReadonly<{
   newMessageId: () => string
   now: () => string
   nowEpochMillis: () => number
-  makeRepository?: typeof makeSqliteEpisodeRepository
+  makeRepository?: typeof makeEpisodeRepository
 }>
 
 export type NodeEpisodeLibraryServiceDependencies = Readonly<{
@@ -160,7 +160,7 @@ const defaultDependencies: NodeEpisodeLibraryRpcDependencies = deepFreeze({
   newMessageId: randomMessageIdUnsafe,
   now: currentUtcInstantUnsafe,
   nowEpochMillis: currentEpochMillisUnsafe,
-  makeRepository: makeSqliteEpisodeRepository,
+  makeRepository: makeEpisodeRepository,
 })
 
 export const defaultNodeEpisodeLibraryServiceDependencies: NodeEpisodeLibraryServiceDependencies =
@@ -177,7 +177,7 @@ const runtimeError = (
 
 const runRpcLoop = (
   server: UnsafeNatsRpcServer,
-  repository: SqliteEpisodeRepository,
+  repository: EpisodeRepository,
   signer: AudioAccessSigner,
   dependencies: NodeEpisodeLibraryRpcDependencies
 ): Effect.Effect<void, NodeEpisodeLibraryRpcError> => {
@@ -226,7 +226,7 @@ export const runNodeEpisodeLibraryRpc = (
           const repository = yield* Effect.acquireRelease(
             Effect.try({
               try: () =>
-                (dependencies.makeRepository ?? makeSqliteEpisodeRepository)(
+                (dependencies.makeRepository ?? makeEpisodeRepository)(
                   config.sqlitePath
                 ),
               catch: () => runtimeError("Sqlite"),
@@ -257,7 +257,7 @@ export const runNodeEpisodeLibraryRpc = (
   )
 
 const makeCompletionPorts = (
-  repository: SqliteEpisodeRepository
+  repository: EpisodeRepository
 ): EpisodeCompletionPorts => ({
   materialize: (notice) =>
     parseCompletedEpisode({
@@ -309,7 +309,7 @@ export const runNodeEpisodeLibraryService = (
               try: () =>
                 (
                   dependencies.rpcDependencies.makeRepository ??
-                  makeSqliteEpisodeRepository
+                  makeEpisodeRepository
                 )(config.sqlitePath),
               catch: () => runtimeError("Sqlite"),
             }),

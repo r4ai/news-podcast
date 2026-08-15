@@ -1,7 +1,7 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import { Effect, Schema } from "effect"
 
-import type { EpisodePagePosition } from "../application/ports.js"
+import type { EpisodePagePosition } from "../application/ports/episode-library.js"
 import { EpisodeIdSchema, UtcInstantSchema } from "../domain/episode.js"
 
 const CursorPayloadSchema = Schema.Struct({

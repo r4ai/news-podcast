@@ -22,11 +22,11 @@ import {
   OwnerIdSchema,
   SubscriptionIdSchema,
 } from "../domain/subscription.js"
-import { createHttpRssFeedReader } from "./http-rss-feed-reader.js"
-import { parseOutboxLimit } from "./outbox.js"
-import { createSqliteArchiveStore } from "./sqlite-archive-store.js"
-import { createSqliteSubscriptionRepository } from "./sqlite-subscription-repository.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
+import { createHttpRssFeedReader } from "./providers/rss/http-feed-reader.js"
+import { parseOutboxLimit } from "./messaging/outbox.js"
+import { createArchiveStore } from "./persistence/archive/repository.js"
+import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
+import { openTestDatabase } from "./persistence/testing.js"
 import {
   parseJsonUnsafe,
   stringifyJsonUnsafe,
@@ -63,14 +63,14 @@ describe("pollSubscriptions integration", () => {
     if (address === null || typeof address === "string")
       throw new Error("missing address")
 
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
       const subscriptions = await Effect.runPromise(
-        createSqliteSubscriptionRepository(database)
+        createSubscriptionRepository(database.db)
       )
       const archiveStore = await Effect.runPromise(
-        createSqliteArchiveStore(
-          database,
+        createArchiveStore(
+          database.db,
           () => decode(MessageIdSchema, "8fb12955-2175-4675-be63-e42227d5ed19"),
           { parse: parseJsonUnsafe, stringify: stringifyJsonUnsafe }
         )

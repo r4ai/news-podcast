@@ -26,7 +26,7 @@ import {
   RegisteredFeedSchema,
   UpdatedFeedSubscriptionSchema,
 } from "../../contract.js"
-import type { GatewayPorts } from "../../ports.js"
+import type { GatewayPorts } from "../../application/ports.js"
 import {
   badRequest,
   normalizeProblem,

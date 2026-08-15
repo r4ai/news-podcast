@@ -5,11 +5,14 @@ export {
   type UnsafeEpisodeCompletedDelivery,
 } from "./unsafe/nats-episode-completed-consumer.js"
 export {
-  makeSqliteEpisodeRepository,
-  restoreSqliteEpisodeLibraryBackup,
+  openEpisodeLibraryDatabaseUnsafe,
+  type EpisodeLibraryDatabase,
+  type EpisodeLibraryDatabaseHandle,
+} from "./unsafe/drizzle/open.js"
+export {
+  restoreEpisodeLibraryBackup,
   type EpisodeLibraryBackupFailure,
-  type SqliteEpisodeRepository,
-} from "./unsafe/sqlite-episode-repository.js"
+} from "./unsafe/sqlite/backup.js"
 export {
   openS3AudioAccessSignerUnsafe,
   type S3AudioAccessSignerConfig,

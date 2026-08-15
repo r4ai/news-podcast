@@ -6,7 +6,7 @@ import {
   ReadingDictionaryEntrySchema,
   ReadingDictionaryPageSchema,
 } from "../../contract.js"
-import type { GatewayPorts } from "../../ports.js"
+import type { GatewayPorts } from "../../application/ports.js"
 import {
   normalizeProblem,
   resourceConflict,

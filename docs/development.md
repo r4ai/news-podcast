@@ -147,6 +147,7 @@ pnpm contract:lint
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
 | `pnpm test:e2e` | Web主要journey |
 | `pnpm test:sqlite-state` | service別backup/restore拒否規則 |
+| `pnpm db:generate` | drizzle schemaからmigration SQLを生成（要レビュー） |
 | `pnpm observability:validate` | LGTM構文、Dashboard UID、未確認metric参照 |
 | `pnpm observability:smoke` | 起動後のGrafana API、datasource、Collector、Browser OTLP、依存endpoint |
 

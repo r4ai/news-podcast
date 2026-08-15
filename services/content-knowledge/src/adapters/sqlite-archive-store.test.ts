@@ -21,9 +21,9 @@ import {
   parseJsonUnsafe,
   stringifyJsonUnsafe,
 } from "../infrastructure/unsafe/json.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
-import { parseOutboxLimit } from "./outbox.js"
-import { createSqliteArchiveStore } from "./sqlite-archive-store.js"
+import { openTestDatabase } from "./persistence/testing.js"
+import { parseOutboxLimit } from "./messaging/outbox.js"
+import { createArchiveStore } from "./persistence/archive/repository.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
@@ -96,10 +96,10 @@ const jsonInterop = deepFreeze({
 
 describe("SQLite archive store", () => {
   it("atomically saves a snapshot and a correlated ArticleArchived outbox message", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
       const store = await Effect.runPromise(
-        createSqliteArchiveStore(database, () => outboxMessageId, jsonInterop)
+        createArchiveStore(database.db, () => outboxMessageId, jsonInterop)
       )
       const result = await Effect.runPromise(store.commit(commitInput))
       const lookup = await Effect.runPromise(
@@ -136,12 +136,12 @@ describe("SQLite archive store", () => {
   })
 
   it("rolls the snapshot back when inserting its outbox record fails", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
       const store = await Effect.runPromise(
-        createSqliteArchiveStore(database, () => outboxMessageId, jsonInterop)
+        createArchiveStore(database.db, () => outboxMessageId, jsonInterop)
       )
-      database.execute(`
+      database.execSql(`
         CREATE TRIGGER reject_content_outbox
         BEFORE INSERT ON content_outbox
         BEGIN
@@ -162,11 +162,11 @@ describe("SQLite archive store", () => {
   })
 
   it("returns the canonical snapshot and creates no second event on request retry", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
       const newMessageId = vi.fn(() => outboxMessageId)
       const store = await Effect.runPromise(
-        createSqliteArchiveStore(database, newMessageId, jsonInterop)
+        createArchiveStore(database.db, newMessageId, jsonInterop)
       )
       await Effect.runPromise(store.commit(commitInput))
 

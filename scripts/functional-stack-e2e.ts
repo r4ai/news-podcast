@@ -18,7 +18,7 @@ import {
   defaultNodeEpisodeLibraryServiceDependencies,
   runNodeEpisodeLibraryService,
 } from "../services/episode-library/src/runtime/node.js"
-import { makeCompletionPublisher } from "../services/episode-production/src/adapters/completion-publisher.js"
+import { makeCompletionPublisher } from "../services/episode-production/src/adapters/messaging/completion-publisher.js"
 import { relayCompletionOutbox } from "../services/episode-production/src/application/completion-outbox.js"
 import { connectProductionJetStreamUnsafe } from "../services/episode-production/src/infrastructure/unsafe/nats-jetstream.js"
 import {

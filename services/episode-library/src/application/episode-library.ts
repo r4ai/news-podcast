@@ -8,8 +8,11 @@ import {
   type OwnerId,
   type UtcInstant,
 } from "../domain/episode.js"
-import type { AudioAccessSigner, CompletedEpisodeReader } from "./ports.js"
-import type { EpisodePagePosition } from "./ports.js"
+import type {
+  AudioAccessSigner,
+  CompletedEpisodeReader,
+} from "./ports/episode-library.js"
+import type { EpisodePagePosition } from "./ports/episode-library.js"
 
 const AUDIO_ACCESS_TTL_MILLIS = 5 * 60_000
 export const COMPLETED_EPISODE_PAGE_SIZE = 20

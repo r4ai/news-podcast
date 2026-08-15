@@ -3,14 +3,14 @@ import { Effect, Schema } from "effect"
 
 import {
   createJetStreamPublisher,
-  createSqliteArticleCatalog,
-  createSqliteArticleLibrary,
-  createSqliteArchiveStore,
-  createSqliteContentTaxonomy,
-  createSqliteEnrichmentQueue,
-  createSqliteFeedSyncQueue,
-  createSqliteInterestProfileRepository,
-  createSqliteSubscriptionRepository,
+  createArticleCatalog,
+  createArticleLibrary,
+  createArchiveStore,
+  createContentTaxonomy as createContentTaxonomyRepository,
+  createEnrichmentQueue,
+  createFeedSyncQueue,
+  createInterestProfileRepository,
+  createSubscriptionRepository,
   makeOpenAiEnrichmentProvider,
   OutboxBatchSizeSchema,
   parseOutboxLimit,
@@ -18,10 +18,9 @@ import {
   type OutboxPublisherError,
   type OutboxStoreError,
   type RelayResult,
-  type SqlitePort,
-  type SqliteArchiveStore,
+  type ArchiveStore,
 } from "../adapters/index.js"
-import type { ArticleCatalog } from "../application/article-catalog-ports.js"
+import type { ArticleCatalog } from "../application/ports/article-catalog.js"
 import type { ArticleLibraryRepository } from "../application/article-library.js"
 import {
   createEnrichmentOperations,
@@ -30,7 +29,7 @@ import {
 } from "../application/enrichment.js"
 import { createContentTaxonomy } from "../application/content-taxonomy.js"
 import { createInterestProfileOperations } from "../application/interest-profile.js"
-import type { SubscriptionRepository } from "../application/subscription-ports.js"
+import type { SubscriptionRepository } from "../application/ports/subscription.js"
 import type { FeedSyncQueueRepository } from "../application/feed-sync-queue.js"
 import { archiveArticle } from "../application/archive-article.js"
 import {
@@ -46,6 +45,7 @@ import {
   randomEnrichmentLeaseTokenUnsafe,
   randomMessageIdUnsafe,
   randomSnapshotIdUnsafe,
+  randomSyncJobIdUnsafe,
   randomTagIdUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import {
@@ -56,20 +56,23 @@ import {
   parseJsonUnsafe,
   stringifyJsonUnsafe,
 } from "../infrastructure/unsafe/json.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
-import { runContentFeedPoller } from "./content-feed-poller.js"
-import { makeArticleLibraryHandler } from "./article-library-handler.js"
-import { runNatsContentKnowledgeRpc } from "./nats-content-knowledge-rpc.js"
+import {
+  openContentKnowledgeDatabaseUnsafe,
+  type ContentKnowledgeDatabaseHandle,
+} from "../infrastructure/unsafe/drizzle/open.js"
+import { runContentFeedPoller } from "./loops/feed-poller.js"
+import { makeArticleLibraryHandler } from "./rpc/article-library-handler.js"
+import { runNatsContentKnowledgeRpc } from "./rpc/nats-server.js"
 import {
   runOutboxRelayLoop,
   type OutboxRelayLoopRuntime,
-} from "./outbox-relay-loop.js"
+} from "./loops/outbox-relay.js"
 import {
   makeEnrichmentSource,
   unavailableEnrichmentProvider,
-} from "./enrichment-runtime.js"
-import { runEnrichmentWorkerLoop } from "./enrichment-worker-loop.js"
-import { makeFeedPollWakeup } from "./feed-poll-loop.js"
+} from "./enrichment.js"
+import { runEnrichmentWorkerLoop } from "./loops/enrichment-worker.js"
+import { makeFeedPollWakeup } from "./loops/feed-poll.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -200,7 +203,7 @@ export type NodeRuntimeError = DeepReadonly<{
 }>
 
 export type NodeContentKnowledgeRuntime = DeepReadonly<{
-  readonly store: SqliteArchiveStore
+  readonly store: ArchiveStore
   readonly articles: ArticleCatalog
   readonly library: ArticleLibraryRepository
   readonly subscriptions: SubscriptionRepository
@@ -222,7 +225,8 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
 }>
 
 export type NodeRuntimeDependencies = DeepReadonly<{
-  readonly openSqlite: (path: string) => SqlitePort
+  readonly openDatabase: (path: string) => ContentKnowledgeDatabaseHandle
+  readonly newJobId: () => string
   readonly connectJetStream: (
     servers: readonly string[]
   ) => Promise<UnsafeJetStream>
@@ -249,7 +253,8 @@ export type NodeServiceDependencies = Readonly<{
 }>
 
 const defaultDependencies: NodeRuntimeDependencies = deepFreeze({
-  openSqlite: openSqliteUnsafe,
+  openDatabase: openContentKnowledgeDatabaseUnsafe,
+  newJobId: randomSyncJobIdUnsafe,
   connectJetStream: connectJetStreamUnsafe,
   newMessageId: randomMessageIdUnsafe,
   now: currentCapturedAtUnsafe,
@@ -266,11 +271,11 @@ const runtimeError = (
 ): NodeRuntimeError =>
   deepFreeze({ _tag: "ContentKnowledgeRuntimeFailed" as const, component })
 
-const closeSqlite = (
-  database: SqlitePort
+const closeDatabase = (
+  handle: ContentKnowledgeDatabaseHandle
 ): Effect.Effect<void, NodeRuntimeError> =>
   Effect.try({
-    try: () => database.close(),
+    try: () => handle.close(),
     catch: () => runtimeError("Sqlite"),
   })
 
@@ -282,26 +287,26 @@ export const startNodeRuntime = (
     Effect.mapError(() => runtimeError("Config")),
     Effect.flatMap((config) =>
       Effect.try({
-        try: () => dependencies.openSqlite(config.sqlitePath),
+        try: () => dependencies.openDatabase(config.sqlitePath),
         catch: () => runtimeError("Sqlite"),
       }).pipe(
-        Effect.flatMap((database) =>
-          createSqliteArchiveStore(
-            database,
+        Effect.flatMap((handle) =>
+          createArchiveStore(
+            handle.database,
             dependencies.newMessageId,
             jsonInterop
           ).pipe(
             Effect.mapError(() => runtimeError("Sqlite")),
             Effect.flatMap((store) =>
               Effect.all([
-                createSqliteArticleCatalog(database, jsonInterop),
-                createSqliteArticleLibrary(database),
-                createSqliteSubscriptionRepository(database),
-                createSqliteContentTaxonomy(database),
-                createSqliteEnrichmentQueue(database),
-                createSqliteFeedSyncQueue(database),
-                createSqliteInterestProfileRepository(
-                  database,
+                createArticleCatalog(handle.database, jsonInterop),
+                createArticleLibrary(handle.database),
+                createSubscriptionRepository(handle.database),
+                createContentTaxonomyRepository(handle.database),
+                createEnrichmentQueue(handle.database),
+                createFeedSyncQueue(handle.database, dependencies.newJobId),
+                createInterestProfileRepository(
+                  handle.database,
                   dependencies.now
                 ),
               ]).pipe(
@@ -364,13 +369,13 @@ export const startNodeRuntime = (
                           }).pipe(
                             Effect.matchEffect({
                               onFailure: (natsError) =>
-                                closeSqlite(database).pipe(
+                                closeDatabase(handle).pipe(
                                   Effect.matchEffect({
                                     onFailure: () => Effect.fail(natsError),
                                     onSuccess: () => Effect.fail(natsError),
                                   })
                                 ),
-                              onSuccess: () => closeSqlite(database),
+                              onSuccess: () => closeDatabase(handle),
                             })
                           )
 
@@ -391,7 +396,7 @@ export const startNodeRuntime = (
                 )
               )
             ),
-            Effect.tapError(() => closeSqlite(database).pipe(Effect.ignore))
+            Effect.tapError(() => closeDatabase(handle).pipe(Effect.ignore))
           )
         )
       )

@@ -25,6 +25,7 @@ export const randomSnapshotIdUnsafe = (): SnapshotId =>
   randomUUID() as SnapshotId
 export const randomTagIdUnsafe = (): TagId => randomUUID() as TagId
 export const randomEnrichmentLeaseTokenUnsafe = (): string => randomUUID()
+export const randomSyncJobIdUnsafe = (): string => randomUUID()
 export const randomTraceparentUnsafe = (): Traceparent => {
   const traceId = createHash("sha256")
     .update(randomUUID())

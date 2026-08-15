@@ -9,7 +9,10 @@ import {
   issueAudioAccess,
   listCompletedEpisodes,
 } from "./episode-library.js"
-import type { AudioAccessSigner, CompletedEpisodeReader } from "./ports.js"
+import type {
+  AudioAccessSigner,
+  CompletedEpisodeReader,
+} from "./ports/episode-library.js"
 
 const ownerId = "339cdfd7-7823-4ac6-82ce-3d56cab7acfa" as never
 const episodeId = "8a76daf6-d3d7-47db-9644-228dc5328c84" as never

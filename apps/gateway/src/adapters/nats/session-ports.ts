@@ -2,7 +2,7 @@ import { deepFreeze, parse } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
 import { SessionResponseSchema } from "../../contract.js"
-import type { GatewayPorts } from "../../ports.js"
+import type { GatewayPorts } from "../../application/ports.js"
 import { unavailable } from "./problems.js"
 import type { Transport } from "./transport.js"
 

@@ -4,14 +4,14 @@ import { afterEach, describe, expect, it } from "vitest"
 import { CapturedAtSchema } from "../domain/article.js"
 import type { EnrichmentProviderOutput } from "../domain/enrichment.js"
 import { OwnerIdSchema } from "../domain/subscription.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
-import { createSqliteEnrichmentQueue } from "./sqlite-enrichment-queue.js"
+import { openTestDatabase, type TestDatabase } from "./persistence/testing.js"
+import { createEnrichmentQueue } from "./persistence/enrichment-queue/repository.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: unknown
 ) => Schema.decodeUnknownSync(schema)(value)
-const databases: ReturnType<typeof openSqliteUnsafe>[] = []
+const databases: TestDatabase[] = []
 afterEach(() => databases.splice(0).forEach((database) => database.close()))
 
 const ownerA = decode(OwnerIdSchema, "owner-a")
@@ -22,40 +22,23 @@ const expires = decode(CapturedAtSchema, "2026-08-13T01:10:00.000Z")
 const articleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never
 
 const setup = async () => {
-  const database = openSqliteUnsafe(":memory:")
+  const database = openTestDatabase()
   databases.push(database)
-  database.execute(`
-    CREATE TABLE feed_catalog (
-      feed_id TEXT PRIMARY KEY, feed_url TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
-    ) STRICT;
-    CREATE TABLE feed_subscriptions (
-      subscription_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL,
-      feed_id TEXT NOT NULL REFERENCES feed_catalog(feed_id), created_at TEXT NOT NULL,
-      UNIQUE(owner_id, feed_id)
-    ) STRICT;
-    CREATE TABLE feed_items (
-      article_id TEXT PRIMARY KEY, feed_id TEXT NOT NULL REFERENCES feed_catalog(feed_id),
-      external_id TEXT NOT NULL, source_url TEXT NOT NULL, title TEXT NOT NULL,
-      published_at TEXT, discovered_at TEXT NOT NULL, UNIQUE(feed_id, external_id)
-    ) STRICT;
-    CREATE TABLE article_snapshots (
-      archive_request_id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL UNIQUE,
-      snapshot_json TEXT NOT NULL, captured_at TEXT NOT NULL
-    ) STRICT;
+  database.execSql(`
     INSERT INTO feed_catalog VALUES ('feed-a', 'https://a.example/feed', '${now}');
     INSERT INTO feed_catalog VALUES ('feed-b', 'https://b.example/feed', '${now}');
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-a', 'owner-a', 'feed-a', '${now}');
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-b', 'owner-b', 'feed-b', '${now}');
     INSERT INTO feed_items VALUES ('${articleId}', 'feed-a', 'a', 'https://a.example/a', 'A', NULL, '${now}');
-    INSERT INTO article_snapshots VALUES (
-      'request-a', 'snapshot-a',
+    INSERT INTO article_snapshots(archive_request_id, snapshot_id, article_id, snapshot_json, captured_at) VALUES (
+      'request-a', 'snapshot-a', '${articleId}',
       '{"articleId":"${articleId}","capture":{"markdown":{"key":"articles/a/article.md"}}}',
       '${now}'
     );
   `)
   return {
     database,
-    queue: await Effect.runPromise(createSqliteEnrichmentQueue(database)),
+    queue: await Effect.runPromise(createEnrichmentQueue(database.db)),
   }
 }
 
@@ -199,7 +182,7 @@ describe("SQLite enrichment queue", () => {
     ).toEqual([])
     // 予約されないので、キューは Queued のまま残る。
     expect(
-      database.get(
+      database.getSql(
         "SELECT status FROM content_enrichment_queue WHERE owner_id = ?",
         [ownerA]
       )
@@ -249,11 +232,11 @@ describe("SQLite enrichment queue", () => {
 
   it("replaces AI tags with known vocabulary and records unknown names as suggestions", async () => {
     const { database, queue } = await setup()
-    database.run(
+    database.runSql(
       "INSERT INTO content_tags(tag_id, owner_id, name, created_at) VALUES (?, ?, ?, ?)",
       ["tag-known", ownerA, "ai", now]
     )
-    database.run(
+    database.runSql(
       `INSERT INTO content_article_tags
         (owner_id, article_id, tag_id, source, confidence, created_at)
        VALUES (?, ?, ?, 'Ai', 1, ?)`,
@@ -280,13 +263,13 @@ describe("SQLite enrichment queue", () => {
     )
 
     expect(
-      database.all(
+      database.allSql(
         "SELECT tag_id AS tagId FROM content_article_tags WHERE owner_id = ? AND source = 'Ai'",
         [ownerA]
       )
     ).toEqual([{ tagId: "tag-known" }])
     expect(
-      database.all(
+      database.allSql(
         "SELECT name, occurrences FROM content_tag_suggestions WHERE owner_id = ?",
         [ownerA]
       )

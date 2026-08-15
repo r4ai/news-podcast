@@ -11,7 +11,7 @@ import {
   EpisodeJobSchema,
   JobReceiptSchema,
 } from "../../contract.js"
-import type { GatewayPorts } from "../../ports.js"
+import type { GatewayPorts } from "../../application/ports.js"
 import { conflict, jobConflict, jobNotFound, unavailable } from "./problems.js"
 import { decodeJson, type Transport } from "./transport.js"
 

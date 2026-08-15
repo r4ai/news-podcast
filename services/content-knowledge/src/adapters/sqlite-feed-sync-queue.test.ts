@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest"
 
 import { SyncJobIdSchema } from "../domain/feed-sync.js"
 import { FeedIdSchema, FeedUrlSchema } from "../domain/subscription.js"
-import { openSqliteUnsafe } from "../infrastructure/unsafe/sqlite.js"
-import { createSqliteFeedSyncQueue } from "./sqlite-feed-sync-queue.js"
+import { openTestDatabase } from "./persistence/testing.js"
+import { createFeedSyncQueue } from "./persistence/feed-sync-queue/repository.js"
+
+let jobSequence = 0
+const newJobId = () =>
+  `00000000-0000-4000-8000-${String(jobSequence++).padStart(12, "0")}`
 
 const feedId = Schema.decodeUnknownSync(FeedIdSchema)(
   "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd"
@@ -15,21 +19,9 @@ const feedUrl = Schema.decodeUnknownSync(FeedUrlSchema)(
 
 describe("SQLite feed sync queue", () => {
   it("persists a queued job and makes it visible to the subscribed owner", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
-      database.execute(`
-        CREATE TABLE feed_catalog (
-          feed_id TEXT PRIMARY KEY,
-          feed_url TEXT NOT NULL UNIQUE,
-          created_at TEXT NOT NULL
-        ) STRICT;
-        CREATE TABLE feed_subscriptions (
-          subscription_id TEXT PRIMARY KEY,
-          owner_id TEXT NOT NULL,
-          feed_id TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          enabled INTEGER NOT NULL DEFAULT 1
-        ) STRICT;
+      database.execSql(`
         INSERT INTO feed_catalog VALUES (
           '${feedId}', '${feedUrl}', '2026-08-13T01:00:00.000Z'
         );
@@ -39,7 +31,9 @@ describe("SQLite feed sync queue", () => {
         );
       `)
 
-      const queue = await Effect.runPromise(createSqliteFeedSyncQueue(database))
+      const queue = await Effect.runPromise(
+        createFeedSyncQueue(database.db, newJobId)
+      )
       const job = await Effect.runPromise(
         queue.enqueue(feedId, "2026-08-13T01:00:00.000Z")
       )
@@ -65,21 +59,9 @@ describe("SQLite feed sync queue", () => {
   })
 
   it("does not claim a job after its subscription is disabled", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
-      database.execute(`
-        CREATE TABLE feed_catalog (
-          feed_id TEXT PRIMARY KEY,
-          feed_url TEXT NOT NULL UNIQUE,
-          created_at TEXT NOT NULL
-        ) STRICT;
-        CREATE TABLE feed_subscriptions (
-          subscription_id TEXT PRIMARY KEY,
-          owner_id TEXT NOT NULL,
-          feed_id TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          enabled INTEGER NOT NULL DEFAULT 1
-        ) STRICT;
+      database.execSql(`
         INSERT INTO feed_catalog VALUES (
           '${feedId}', '${feedUrl}', '2026-08-13T01:00:00.000Z'
         );
@@ -89,9 +71,11 @@ describe("SQLite feed sync queue", () => {
         );
       `)
 
-      const queue = await Effect.runPromise(createSqliteFeedSyncQueue(database))
+      const queue = await Effect.runPromise(
+        createFeedSyncQueue(database.db, newJobId)
+      )
       await Effect.runPromise(queue.enqueue(feedId, "2026-08-13T01:00:00.000Z"))
-      database.run(
+      database.runSql(
         "UPDATE feed_subscriptions SET enabled = 0 WHERE feed_id = ?",
         [feedId]
       )
@@ -107,21 +91,9 @@ describe("SQLite feed sync queue", () => {
   })
 
   it("retries failed syncs up to the durable attempt limit", async () => {
-    const database = openSqliteUnsafe(":memory:")
+    const database = openTestDatabase()
     try {
-      database.execute(`
-        CREATE TABLE feed_catalog (
-          feed_id TEXT PRIMARY KEY,
-          feed_url TEXT NOT NULL UNIQUE,
-          created_at TEXT NOT NULL
-        ) STRICT;
-        CREATE TABLE feed_subscriptions (
-          subscription_id TEXT PRIMARY KEY,
-          owner_id TEXT NOT NULL,
-          feed_id TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          enabled INTEGER NOT NULL DEFAULT 1
-        ) STRICT;
+      database.execSql(`
         INSERT INTO feed_catalog VALUES (
           '${feedId}', '${feedUrl}', '2026-08-13T01:00:00.000Z'
         );
@@ -131,7 +103,9 @@ describe("SQLite feed sync queue", () => {
         );
       `)
 
-      const queue = await Effect.runPromise(createSqliteFeedSyncQueue(database))
+      const queue = await Effect.runPromise(
+        createFeedSyncQueue(database.db, newJobId)
+      )
       let job = await Effect.runPromise(
         queue.enqueue(feedId, "2026-08-13T01:00:00.000Z")
       )

@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import type {
   AudioObjectStore,
   PipelineFailure,
-} from "../../application/execution-ports.js"
+} from "../../application/ports/execution.js"
 import type { EpisodeId, JobId, OwnerId } from "../../domain/episode-job.js"
 
 export const MAX_WAV_BYTES = 128 * 1_024 * 1_024

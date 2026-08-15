@@ -1,20 +1,20 @@
-export { parseCreateJobCommand } from "./adapters/parse-create-job.js"
+export { parseCreateJobCommand } from "./adapters/rpc/parse-create-job.js"
 export {
   makeOpenAiScriptGenerator,
   type OpenAiScriptGeneratorConfig,
   type OpenAiScriptGeneratorDependencies,
-} from "./adapters/openai-script-generator.js"
+} from "./adapters/providers/openai-script-generator.js"
 export {
   makeVoicevoxSpeechSynthesizer,
   type VoicevoxSpeechSynthesizerConfig,
   type VoicevoxSpeechSynthesizerDependencies,
-} from "./adapters/voicevox-speech-synthesizer.js"
+} from "./adapters/providers/voicevox/speech-synthesizer.js"
 export {
   CreateJobRpcReplySchema,
   handleCreateJobRpc,
   type CreateJobRpcDelivery,
   type CreateJobRpcReply,
-} from "./adapters/create-job-rpc.js"
+} from "./adapters/rpc/create-job.js"
 export {
   handleCancelJobRpc,
   handleGetJobRpc,
@@ -23,24 +23,24 @@ export {
   handleRetryJobRpc,
   projectEpisodeJob,
   type JobControlRpcDelivery,
-} from "./adapters/job-control-rpc.js"
+} from "./adapters/rpc/job-control.js"
 export {
-  sqliteJobRepository,
+  jobRepository,
   type IdempotencyConflict,
   type SqliteJobRepository,
-} from "./adapters/sqlite-job-repository.js"
+} from "./adapters/persistence/job/repository.js"
 export {
-  sqliteExecutionRepository,
+  executionRepository,
   type SqliteExecutionRepository,
-} from "./adapters/sqlite-execution-repository.js"
+} from "./adapters/persistence/execution/repository.js"
 export {
-  sqliteAgentAuditMemoryRepository,
+  agentAuditMemoryRepository,
   type SqliteAgentAuditMemoryRepository,
-} from "./adapters/sqlite-agent-audit-memory.js"
+} from "./adapters/persistence/agent-audit/repository.js"
 export {
-  sqliteReadingDictionaryRepository,
+  readingDictionaryRepository,
   type SqliteReadingDictionaryRepository,
-} from "./adapters/sqlite-reading-dictionary.js"
+} from "./adapters/persistence/reading-dictionary/repository.js"
 export {
   MAX_WAV_BYTES,
   openS3AudioObjectStoreUnsafe,
@@ -86,7 +86,7 @@ export {
   executeEpisodeJob,
   type EpisodeExecutionOutcome,
 } from "./application/execute-job.js"
-export * from "./application/execution-ports.js"
+export * from "./application/ports/execution.js"
 export {
   retryProvider,
   type ProviderRetryExhausted,
@@ -105,19 +105,19 @@ export {
   type ReadingDictionaryStoreError,
   type UpdateReadingDictionaryResult,
 } from "./application/reading-dictionary.js"
-export * from "./application/script-generator.js"
-export * from "./application/speech-synthesizer.js"
+export * from "./application/ports/script-generator.js"
+export * from "./application/ports/speech-synthesizer.js"
 export {
   makeReadingDictionaryRpcHandler,
   type ReadingDictionaryRpcDelivery,
   type ReadingDictionaryRpcDependencies,
-} from "./adapters/reading-dictionary-rpc.js"
+} from "./adapters/rpc/reading-dictionary.js"
 export {
   makeAgentAuditRpcHandler,
   type AgentAuditRpcDelivery,
   type AgentAuditRpcDependencies,
-} from "./adapters/agent-audit-rpc.js"
-export { makeIdentityScheduleClient } from "./adapters/identity-schedule-client.js"
+} from "./adapters/rpc/agent-audit.js"
+export { makeIdentityScheduleClient } from "./adapters/rpc/identity-schedule-client.js"
 export {
   runScheduledGenerationLoop,
   runScheduledGenerationTick,
@@ -147,9 +147,9 @@ export {
 export {
   runSingleWriterLoop,
   type SingleWriterSource,
-} from "./runtime/single-writer-loop.js"
+} from "./runtime/loops/single-writer.js"
 export {
   runEpisodeWorkerLoop,
   type EpisodeWorkerEvent,
   type EpisodeWorkerPorts,
-} from "./runtime/worker-loop.js"
+} from "./runtime/loops/worker.js"

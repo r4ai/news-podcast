@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import type {
   ArchiveArticlePorts,
   CaptureError,
-} from "../../application/ports.js"
+} from "../../application/ports/archive.js"
 import { ArchiveCaptureSchema } from "../../domain/article.js"
 import { createArticleArchiveArtifacts } from "./article-markdown-parser.js"
 import { createNodeSafeFetcher } from "./safe-fetch.js"

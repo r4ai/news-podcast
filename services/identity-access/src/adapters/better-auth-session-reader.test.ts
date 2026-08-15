@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import type { SessionLookupRequest } from "../application/session-reader.js"
+import type { SessionLookupRequest } from "../application/ports/session-reader.js"
 import { makeBetterAuthSessionReader } from "./better-auth-session-reader.js"
 
 const request: SessionLookupRequest = {

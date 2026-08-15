@@ -1,12 +1,15 @@
 import { timingSafeEqual } from "node:crypto"
-import { DatabaseSync } from "node:sqlite"
+import type { DatabaseSync } from "node:sqlite"
 
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
+import { openDatabaseClientUnsafe } from "@news-podcast/persistence"
 import { betterAuth } from "better-auth"
 
 import type { BetterAuthSessionApi } from "../../adapters/better-auth-session-reader.js"
-import type { IdentitySqlitePort } from "../../adapters/sqlite-port.js"
-import { createIdentitySqlitePortUnsafe } from "./sqlite-settings.js"
+import {
+  attachIdentityDatabaseUnsafe,
+  type IdentityDatabase,
+} from "./drizzle/open.js"
 
 export type DevBearerAuthConfig =
   | Readonly<{ readonly enabled: false }>
@@ -32,10 +35,14 @@ export type UnsafeIdentityAuth = DeepReadonly<{
   readonly close: () => void
 }>
 
-export type UnsafeIdentityRuntimeResource = DeepReadonly<{
+/**
+ * DeepReadonlyはドメイン値のための道具であり、ORMハンドルに適用すると
+ * 型パラメータが潰れる。この資源はReadonlyで十分。
+ */
+export type UnsafeIdentityRuntimeResource = Readonly<{
   readonly api: BetterAuthSessionApi
   readonly handler: (request: Request) => Promise<Response>
-  readonly database: IdentitySqlitePort
+  readonly database: IdentityDatabase
   readonly close: () => void
 }>
 
@@ -107,21 +114,19 @@ const createIdentitySessionApiUnsafe = async (
 export const createIdentityRuntimeResourceUnsafe = async (
   config: IdentityAuthConfig
 ): Promise<UnsafeIdentityRuntimeResource> => {
-  const rawDatabase = new DatabaseSync(config.databasePath)
+  const client = openDatabaseClientUnsafe({ path: config.databasePath })
   try {
-    const database = createIdentitySqlitePortUnsafe(
-      rawDatabase,
-      config.databasePath
-    )
-    const auth = await createIdentitySessionApiUnsafe(config, rawDatabase)
-    return deepFreeze({
+    const database = attachIdentityDatabaseUnsafe(client)
+    const auth = await createIdentitySessionApiUnsafe(config, client)
+    // ORMハンドルは可変な内部状態を持つ資源であり、凍結対象はこの容れ物だけ。
+    return Object.freeze({
       api: auth.api,
       handler: auth.handler,
       database,
-      close: database.close,
+      close: () => client.close(),
     })
   } catch (error) {
-    rawDatabase.close()
+    client.close()
     throw error
   }
 }

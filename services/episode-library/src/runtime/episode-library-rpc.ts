@@ -34,7 +34,7 @@ import type {
   AudioAccessSigner,
   CompletedEpisodeReader,
   EpisodePagePosition,
-} from "../application/ports.js"
+} from "../application/ports/episode-library.js"
 import { OwnerIdSchema, type EpisodeSource } from "../domain/episode.js"
 
 export type EpisodeLibraryRpcDelivery<ReplyError = never> = Readonly<{

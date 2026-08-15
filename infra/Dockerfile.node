@@ -17,6 +17,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/kernel/package.json packages/kernel/package.json
 COPY packages/observability/package.json packages/observability/package.json
+COPY packages/persistence/package.json packages/persistence/package.json
 COPY packages/protocols/package.json packages/protocols/package.json
 COPY packages/service-runtime/package.json packages/service-runtime/package.json
 COPY packages/ui/package.json packages/ui/package.json

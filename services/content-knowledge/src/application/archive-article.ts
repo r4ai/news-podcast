@@ -11,7 +11,7 @@ import type {
   ArchiveMessageContext,
   ArchiveStoreError,
   CaptureError,
-} from "./ports.js"
+} from "./ports/archive.js"
 
 export type ArchiveArticleInvocation = DeepReadonly<{
   readonly command: ArchiveCommand

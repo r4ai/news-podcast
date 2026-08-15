@@ -1,7 +1,7 @@
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
-import type { EpisodeCompletionPorts } from "../application/completion-ports.js"
+import type { EpisodeCompletionPorts } from "../application/ports/completion.js"
 import type { UnsafeEpisodeCompletedConsumer } from "../infrastructure/unsafe/nats-episode-completed-consumer.js"
 import { handleNatsEpisodeCompleted } from "./nats-episode-completed.js"
 

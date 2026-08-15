@@ -9,7 +9,7 @@ import {
   currentUtcInstantUnsafe,
   randomUuidUnsafe,
 } from "../infrastructure/unsafe/runtime-values.js"
-import type { GatewayPorts } from "../ports.js"
+import type { GatewayPorts } from "../application/ports.js"
 import { makeAgentAuditPorts } from "./nats/agent-audit-ports.js"
 import { makeArticlePorts } from "./nats/article-ports.js"
 import { makeEnrichmentPorts } from "./nats/enrichment-ports.js"
