@@ -90,7 +90,7 @@ UIDとURLは次の通り。UIで作り直さず、`grafana/dashboards/*.json`を
 
 Grafana Alertingはservice error/latency、API 5xx、episode failure/queue age、Collector export failure、未計装入口を1分ごとに評価する。SMTPは`GRAFANA_SMTP_*`で設定し、解消通知を含めて30分ごとに再通知する。
 
-watchdogはGrafana経由ではなくSMTPへ直接通知する。API、Worker、VOICEVOX、Grafana、Collector exporter進捗を監視し、監視基盤そのものの停止も通知対象にする。ホスト全停止とネットワーク全断を検知するには別ホストの外形監視を追加する。
+watchdogはGrafana経由ではなくSMTPへ直接通知する。Gatewayと4 Context serviceの`/health/ready`、VOICEVOX、Grafana、Collector exporter進捗を監視し、監視基盤そのものの停止も通知対象にする。Context health portはhost loopbackだけへ公開する。ホスト全停止とネットワーク全断を検知するには別ホストの外形監視を追加する。
 
 ## 本番OTLP ingress
 

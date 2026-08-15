@@ -128,11 +128,9 @@ export const CreateEpisodeJobHeadersSchema = Schema.Struct({
 
 export const CreateEpisodeJobRequestSchema = Schema.Struct({
   trigger: Schema.Literal("manual"),
-  articleIds: Schema.optional(
-    Schema.Array(ArticleIdSchema).check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(20)
-    )
+  articleIds: Schema.Array(ArticleIdSchema).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(20)
   ),
 }).annotate({ identifier: "CreateEpisodeJobRequest" })
 

@@ -10,25 +10,18 @@ import {
 } from "./contracts.js"
 
 describe("integration contracts", () => {
-  it("preserves explicit article selection while keeping omission valid", async () => {
-    const [automatic, selected] = await Effect.runPromise(
-      Effect.all([
-        parseCreateEpisodeJobRequest({
-          idempotencyKey: "automatic",
-          trigger: "manual",
-        }),
-        parseCreateEpisodeJobRequest({
-          idempotencyKey: "selected",
-          trigger: "manual",
-          articleIds: [
-            "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
-            "3c4d046c-b47b-4047-a562-66ac7e74e995",
-          ],
-        }),
-      ])
+  it("requires and preserves the article selection fixed at acceptance", async () => {
+    const selected = await Effect.runPromise(
+      parseCreateEpisodeJobRequest({
+        idempotencyKey: "selected",
+        trigger: "manual",
+        articleIds: [
+          "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+          "3c4d046c-b47b-4047-a562-66ac7e74e995",
+        ],
+      })
     )
 
-    expect(automatic).not.toHaveProperty("articleIds")
     expect(selected.articleIds).toEqual([
       "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
       "3c4d046c-b47b-4047-a562-66ac7e74e995",
@@ -95,6 +88,7 @@ describe("integration contracts", () => {
         parseCreateEpisodeJobRequest({
           idempotencyKey: "daily-2026-08-12",
           trigger: "manual",
+          articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
         }),
         parseArticleArchived({
           _tag: "ArticleArchived",
@@ -142,11 +136,29 @@ describe("integration contracts", () => {
       () => parseResolveSessionResponse({ actor: { _tag: "User" } }),
     ],
     [
+      "command without an article snapshot",
+      () =>
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "key",
+          trigger: "manual",
+        }),
+    ],
+    [
+      "external scheduled command",
+      () =>
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "key",
+          trigger: "scheduled",
+          articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
+        }),
+    ],
+    [
       "command with forged owner",
       () =>
         parseCreateEpisodeJobRequest({
           idempotencyKey: "key",
           trigger: "manual",
+          articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
           ownerId: "forged",
         }),
     ],

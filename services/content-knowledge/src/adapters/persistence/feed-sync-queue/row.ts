@@ -19,6 +19,7 @@ const RowSchema = Schema.Struct({
   feedUrl: Schema.String,
   status: Schema.String,
   attempt: Schema.Int,
+  leaseToken: Schema.NullOr(Schema.String),
   discovered: Schema.Int,
   archived: Schema.Int,
   failed: Schema.Int,
@@ -41,6 +42,7 @@ export const jobProjection = {
   feedUrl: feedCatalog.feedUrl,
   status: feedSyncJobs.status,
   attempt: feedSyncJobs.attempt,
+  leaseToken: feedSyncJobs.leaseToken,
   discovered: feedSyncJobs.discovered,
   archived: feedSyncJobs.archived,
   failed: feedSyncJobs.failed,
@@ -66,7 +68,13 @@ export const decodeJob = (
 ) =>
   parseRow(row).pipe(
     Effect.flatMap((value) => {
-      const { error, startedAt, completedAt, ...required } = value
+      const {
+        error,
+        leaseToken: _leaseToken,
+        startedAt,
+        completedAt,
+        ...required
+      } = value
       return Effect.all([
         parse(SyncJobIdSchema)(value.jobId),
         parse(FeedIdSchema)(value.feedId),
@@ -83,6 +91,22 @@ export const decodeJob = (
           deepFreeze({ ...job, jobId, feedId, feedUrl })
         )
       )
+    }),
+    Effect.mapError(() => failure(operation, "CorruptRecord"))
+  )
+
+export const decodeClaimedJob = (
+  row: unknown,
+  operation: FeedSyncQueueError["operation"]
+) =>
+  parseRow(row).pipe(
+    Effect.flatMap((value) => {
+      const leaseToken = value.leaseToken
+      return leaseToken === null
+        ? Effect.fail(failure(operation, "CorruptRecord"))
+        : decodeJob(row, operation).pipe(
+            Effect.map((job) => deepFreeze({ ...job, leaseToken }))
+          )
     }),
     Effect.mapError(() => failure(operation, "CorruptRecord"))
   )

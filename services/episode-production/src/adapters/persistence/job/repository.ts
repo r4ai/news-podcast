@@ -34,8 +34,8 @@ const decodeDocument = (document: string) =>
     catch: (cause) => persistenceError("decode-job-json", cause),
   }).pipe(Effect.flatMap(parseJob))
 
-const repositoryFromHandle = (handle: SqliteJobHandle) => ({
-  saveIdempotently: (job: QueuedJob) => {
+const repositoryFromHandle = (handle: SqliteJobHandle) => {
+  const save = (job: QueuedJob, scheduledFirstWriteWins: boolean) => {
     const encoded = encodeJob(job)
     const requestFingerprint = JSON.stringify(encoded.request)
 
@@ -52,19 +52,25 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => ({
     }).pipe(
       Effect.flatMap((result) => {
         if (result._tag === "Inserted") return Effect.succeed(job)
-        if (result.row.requestFingerprint !== requestFingerprint) {
-          return Effect.fail(
-            deepFreeze({
-              _tag: "IdempotencyConflict" as const,
-              ownerId: encoded.request.ownerId,
-              idempotencyKey: encoded.request.idempotencyKey,
-            })
-          )
-        }
-        return decodeDocument(result.row.document) as Effect.Effect<
-          QueuedJob,
-          unknown
-        >
+        return decodeDocument(result.row.document).pipe(
+          Effect.flatMap((existing) => {
+            if (
+              result.row.requestFingerprint === requestFingerprint ||
+              (scheduledFirstWriteWins &&
+                encoded.request.trigger === "scheduled" &&
+                existing.request.trigger === "scheduled")
+            ) {
+              return Effect.succeed(existing as QueuedJob)
+            }
+            return Effect.fail(
+              deepFreeze({
+                _tag: "IdempotencyConflict" as const,
+                ownerId: encoded.request.ownerId,
+                idempotencyKey: encoded.request.idempotencyKey,
+              })
+            )
+          })
+        )
       }),
       Effect.withSpan("sqlite episode_jobs save", {
         kind: "client",
@@ -75,119 +81,125 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => ({
         },
       })
     )
-  },
-  findById: (jobId: JobId): Effect.Effect<EpisodeJob | undefined, unknown> =>
-    Effect.try({
-      try: () => handle.findById(jobId),
-      catch: (cause) => persistenceError("find-job", cause),
-    }).pipe(
-      Effect.flatMap((document) =>
-        document === undefined
-          ? Effect.succeed(undefined)
-          : decodeDocument(document)
-      ),
-      Effect.withSpan("sqlite episode_jobs find", {
-        kind: "client",
-        attributes: {
-          "db.system.name": "sqlite",
-          "db.namespace": "episode-production",
-          "db.operation.name": "SELECT",
-        },
-      })
-    ),
-  findOwned: (
-    ownerId: OwnerId,
-    jobId: JobId
-  ): Effect.Effect<EpisodeJob | undefined, unknown> =>
-    Effect.try({
-      try: () => handle.findOwned(ownerId, jobId),
-      catch: (cause) => persistenceError("find-owned-job", cause),
-    }).pipe(
-      Effect.flatMap((document) =>
-        document === undefined
-          ? Effect.succeed(undefined)
-          : decodeDocument(document)
-      )
-    ),
-  listOwned: (
-    ownerId: OwnerId,
-    limit: number
-  ): Effect.Effect<readonly EpisodeJob[], unknown> =>
-    Effect.try({
-      try: () => handle.listOwned(ownerId, limit),
-      catch: (cause) => persistenceError("list-owned-jobs", cause),
-    }).pipe(
-      Effect.flatMap((documents) =>
-        Effect.all(documents.map(decodeDocument), { concurrency: 1 })
-      )
-    ),
-  statusSnapshot: () =>
-    Effect.try({
-      try: () => handle.statusSnapshot(),
-      catch: (cause) => persistenceError("status-snapshot", cause),
-    }),
-  listOwnedStatusEvents: (input: {
-    readonly ownerId: OwnerId
-    readonly jobId: JobId
-    readonly afterSequence: number
-    readonly limit: number
-  }) =>
-    Effect.try({
-      try: () => handle.listOwnedStatusEvents(input),
-      catch: (cause) => persistenceError("list-owned-job-events", cause),
-    }).pipe(
-      Effect.flatMap((rows) =>
-        Effect.all(
-          rows.map((row) =>
-            decodeDocument(row.document).pipe(
-              Effect.map((job) => ({ sequence: row.sequence, job }))
-            )
-          ),
-          { concurrency: 1 }
-        )
-      )
-    ),
-  cancelOwned: (ownerId: OwnerId, jobId: JobId, canceledAt: UtcTimestamp) =>
-    Effect.try({
-      try: () => {
-        const result = handle.replaceOwnedActive({
-          ownerId,
-          jobId,
-          replace: (document) => {
-            const current = Schema.decodeUnknownSync(EpisodeJobSchema)(
-              JSON.parse(document) as unknown
-            )
-            if (
-              current._tag !== "Queued" &&
-              current._tag !== "Running" &&
-              current._tag !== "Retrying"
-            ) {
-              throw new Error("active job changed during cancellation")
-            }
-            return JSON.stringify(
-              encodeJob(
-                cancelJob(current, {
-                  canceledAt: Schema.decodeUnknownSync(UtcTimestampSchema)(
-                    encodeTimestamp(canceledAt)
-                  ),
-                  reason: "requested_by_user",
-                })
-              )
-            )
+  }
+
+  return {
+    saveIdempotently: (job: QueuedJob) => save(job, false),
+    /** A scheduled local date is one logical request; the first accepted article set stays authoritative. */
+    saveScheduledIdempotently: (job: QueuedJob) => save(job, true),
+    findById: (jobId: JobId): Effect.Effect<EpisodeJob | undefined, unknown> =>
+      Effect.try({
+        try: () => handle.findById(jobId),
+        catch: (cause) => persistenceError("find-job", cause),
+      }).pipe(
+        Effect.flatMap((document) =>
+          document === undefined
+            ? Effect.succeed(undefined)
+            : decodeDocument(document)
+        ),
+        Effect.withSpan("sqlite episode_jobs find", {
+          kind: "client",
+          attributes: {
+            "db.system.name": "sqlite",
+            "db.namespace": "episode-production",
+            "db.operation.name": "SELECT",
           },
         })
-        return result._tag === "Updated"
-          ? ({
-              _tag: "Canceled" as const,
-              job: Schema.decodeUnknownSync(EpisodeJobSchema)(
-                JSON.parse(result.document) as unknown
-              ),
-            } as const)
-          : result
-      },
-      catch: (cause) => persistenceError("cancel-owned-job", cause),
-    }),
-})
+      ),
+    findOwned: (
+      ownerId: OwnerId,
+      jobId: JobId
+    ): Effect.Effect<EpisodeJob | undefined, unknown> =>
+      Effect.try({
+        try: () => handle.findOwned(ownerId, jobId),
+        catch: (cause) => persistenceError("find-owned-job", cause),
+      }).pipe(
+        Effect.flatMap((document) =>
+          document === undefined
+            ? Effect.succeed(undefined)
+            : decodeDocument(document)
+        )
+      ),
+    listOwned: (
+      ownerId: OwnerId,
+      limit: number
+    ): Effect.Effect<readonly EpisodeJob[], unknown> =>
+      Effect.try({
+        try: () => handle.listOwned(ownerId, limit),
+        catch: (cause) => persistenceError("list-owned-jobs", cause),
+      }).pipe(
+        Effect.flatMap((documents) =>
+          Effect.all(documents.map(decodeDocument), { concurrency: 1 })
+        )
+      ),
+    statusSnapshot: () =>
+      Effect.try({
+        try: () => handle.statusSnapshot(),
+        catch: (cause) => persistenceError("status-snapshot", cause),
+      }),
+    listOwnedStatusEvents: (input: {
+      readonly ownerId: OwnerId
+      readonly jobId: JobId
+      readonly afterSequence: number
+      readonly limit: number
+    }) =>
+      Effect.try({
+        try: () => handle.listOwnedStatusEvents(input),
+        catch: (cause) => persistenceError("list-owned-job-events", cause),
+      }).pipe(
+        Effect.flatMap((rows) =>
+          Effect.all(
+            rows.map((row) =>
+              decodeDocument(row.document).pipe(
+                Effect.map((job) => ({ sequence: row.sequence, job }))
+              )
+            ),
+            { concurrency: 1 }
+          )
+        )
+      ),
+    cancelOwned: (ownerId: OwnerId, jobId: JobId, canceledAt: UtcTimestamp) =>
+      Effect.try({
+        try: () => {
+          const result = handle.replaceOwnedActive({
+            ownerId,
+            jobId,
+            replace: (document) => {
+              const current = Schema.decodeUnknownSync(EpisodeJobSchema)(
+                JSON.parse(document) as unknown
+              )
+              if (
+                current._tag !== "Queued" &&
+                current._tag !== "Running" &&
+                current._tag !== "Retrying"
+              ) {
+                throw new Error("active job changed during cancellation")
+              }
+              return JSON.stringify(
+                encodeJob(
+                  cancelJob(current, {
+                    canceledAt: Schema.decodeUnknownSync(UtcTimestampSchema)(
+                      encodeTimestamp(canceledAt)
+                    ),
+                    reason: "requested_by_user",
+                  })
+                )
+              )
+            },
+          })
+          return result._tag === "Updated"
+            ? ({
+                _tag: "Canceled" as const,
+                job: Schema.decodeUnknownSync(EpisodeJobSchema)(
+                  JSON.parse(result.document) as unknown
+                ),
+              } as const)
+            : result
+        },
+        catch: (cause) => persistenceError("cancel-owned-job", cause),
+      }),
+  }
+}
 
 export type SqliteJobRepository = ReturnType<typeof repositoryFromHandle>
 

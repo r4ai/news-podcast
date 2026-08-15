@@ -99,7 +99,10 @@ describe("archiveArticle", () => {
     const result = await Effect.runPromise(archiveArticle(ports)(invocation))
 
     expect(result._tag).toBe("Archived")
-    expect(ports.capture).toHaveBeenCalledWith({ sourceUrl: command.sourceUrl })
+    expect(ports.capture).toHaveBeenCalledWith({
+      sourceUrl: command.sourceUrl,
+      snapshotId,
+    })
     expect(ports.commit).toHaveBeenCalledOnce()
     const commitCall = vi.mocked(ports.commit).mock.calls[0]?.[0]
     expect(commitCall).toEqual({

@@ -11,8 +11,11 @@ import type { FeedId, OwnerId, PollingFeed } from "../domain/subscription.js"
 export type FeedSyncQueueError = DeepReadonly<{
   readonly _tag: "FeedSyncQueueFailed"
   readonly operation: "Initialize" | "Enqueue" | "List" | "Claim" | "Complete"
-  readonly reason: "CorruptRecord" | "Unavailable"
+  readonly reason: "CorruptRecord" | "StaleLease" | "Unavailable"
 }>
+
+export type ClaimedFeedSyncJob = FeedSyncJob &
+  DeepReadonly<{ readonly leaseToken: string }>
 
 export type FeedSyncQueueRepository = DeepReadonly<{
   readonly enqueue: (
@@ -28,10 +31,12 @@ export type FeedSyncQueueRepository = DeepReadonly<{
   ) => Effect.Effect<readonly FeedSyncJob[], FeedSyncQueueError>
   readonly claim: (
     now: string,
-    leaseExpiresAt: string
-  ) => Effect.Effect<FeedSyncJob | undefined, FeedSyncQueueError>
+    leaseExpiresAt: string,
+    leaseToken: string
+  ) => Effect.Effect<ClaimedFeedSyncJob | undefined, FeedSyncQueueError>
   readonly complete: (
     jobId: SyncJobId,
+    leaseToken: string,
     outcome: FeedSyncOutcome,
     now: string
   ) => Effect.Effect<FeedSyncJob, FeedSyncQueueError>

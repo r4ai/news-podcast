@@ -65,7 +65,7 @@ sequenceDiagram
 
 Worker生成traceは100%、logs/metricsは100%送信し、job IDはlogs/tracesだけに含める。active/stuck、queue/stage age、attempt、lease、deadline、checkpoint、provider、cleanup、canaryを低cardinality metricとして記録する。SigNoz v0.135 Dashboard V2とruleをTerraform管理し、SMTPへ発火・再通知・復旧通知する。
 
-SigNozとは別のwatchdogがAPI、Worker、VOICEVOX、SigNoz、telemetry freshnessを確認する。watchdogは同一host配置のため、host全停止または全network断は検出できない残余リスクとして受容する。
+Grafanaとは別のwatchdogがGatewayと4 Context serviceのreadiness、VOICEVOX、Grafana、telemetry freshnessを確認する。Collector再起動によるexport counterのresetも進捗として扱う。watchdogは同一host配置のため、host全停止または全network断は検出できない残余リスクとして受容する。
 
 ## 判断要因
 

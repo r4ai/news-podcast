@@ -3,29 +3,13 @@ import { dirname } from "node:path"
 
 import nodemailer from "nodemailer"
 
+import { watchdogTargets } from "./config.js"
 import { checkWatchdog, type WatchdogState } from "./watchdog.js"
 
 const statePath =
   process.env.WATCHDOG_STATE_PATH ?? "/var/lib/news-podcast-watchdog/state.json"
 const intervalMs = readPositiveNumber("WATCHDOG_INTERVAL_MS", 60_000)
-const targets = [
-  {
-    name: "api",
-    url: process.env.WATCHDOG_API_URL ?? "http://127.0.0.1:4000/health",
-  },
-  {
-    name: "worker",
-    url: process.env.WATCHDOG_WORKER_URL ?? "http://127.0.0.1:3001/health",
-  },
-  {
-    name: "voicevox",
-    url: process.env.WATCHDOG_VOICEVOX_URL ?? "http://127.0.0.1:50021/version",
-  },
-  {
-    name: "grafana",
-    url: process.env.WATCHDOG_GRAFANA_URL ?? "http://127.0.0.1:3100/api/health",
-  },
-]
+const targets = watchdogTargets()
 const collectorMetricsUrl =
   process.env.WATCHDOG_COLLECTOR_METRICS_URL ?? "http://127.0.0.1:8888/metrics"
 const transport = nodemailer.createTransport({

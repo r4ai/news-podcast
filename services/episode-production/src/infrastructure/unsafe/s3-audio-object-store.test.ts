@@ -1,4 +1,8 @@
-import type { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import {
+  DeleteObjectCommand,
+  type PutObjectCommand,
+  type S3Client,
+} from "@aws-sdk/client-s3"
 import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
@@ -79,6 +83,26 @@ describe("S3 audio object store", () => {
     )
     expect(resource.keyFor(ids)).not.toContain(ids.ownerId)
     expect(resource.keyFor(ids)).not.toContain("..")
+  })
+
+  it("deletes an abandoned service-owned audio object", async () => {
+    const send = vi.fn(async (command: DeleteObjectCommand) => {
+      expect(command).toBeInstanceOf(DeleteObjectCommand)
+      expect(command.input).toEqual({
+        Bucket: "private-audio",
+        Key: "episodes/owner-safe/job-safe/episode-safe.wav",
+      })
+      return {}
+    })
+    const resource = openS3AudioObjectStoreUnsafe(config, {
+      createClient: () => ({ client: { send } as never, close: vi.fn() }),
+    })
+
+    await Effect.runPromise(
+      resource.store.remove("episodes/owner-safe/job-safe/episode-safe.wav")
+    )
+
+    expect(send).toHaveBeenCalledOnce()
   })
 
   it("passes an already-aborted signal and returns only a redacted typed failure", async () => {

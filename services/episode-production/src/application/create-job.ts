@@ -14,9 +14,14 @@ export type CreateJobPorts<SaveError = never> = Readonly<{
   saveIdempotently: (job: QueuedJob) => Effect.Effect<QueuedJob, SaveError>
 }>
 
+export type CreateJobInput = CreateJobCommand &
+  Readonly<{
+    articleIds: NonNullable<CreateJobCommand["articleIds"]>
+  }>
+
 export const createJob = <SaveError>(ports: CreateJobPorts<SaveError>) =>
   Effect.fn("episode-production.create-job")(function* (
-    command: CreateJobCommand
+    command: CreateJobInput
   ) {
     const [jobId, now] = yield* Effect.all([ports.nextJobId, ports.now])
     return yield* ports.saveIdempotently(
@@ -25,9 +30,7 @@ export const createJob = <SaveError>(ports: CreateJobPorts<SaveError>) =>
         ownerId: command.ownerId,
         idempotencyKey: command.idempotencyKey,
         trigger: command.trigger,
-        ...(command.articleIds === undefined
-          ? {}
-          : { articleIds: command.articleIds }),
+        articleIds: command.articleIds,
         enqueuedAt: now,
       })
     )

@@ -160,9 +160,7 @@ export const handleCreateJobRpc = <SaveError>(
                           ownerId,
                           idempotencyKey: request.idempotencyKey,
                           trigger: request.trigger,
-                          ...(request.articleIds === undefined
-                            ? {}
-                            : { articleIds: request.articleIds }),
+                          articleIds: request.articleIds,
                         })
                       ).pipe(
                         Effect.matchEffect({

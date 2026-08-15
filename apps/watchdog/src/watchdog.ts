@@ -53,7 +53,7 @@ export async function checkWatchdog(input: {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const current = exportedPoints(await response.text())
     if (current === undefined) throw new Error("export counter missing")
-    if (telemetryValue === undefined || current > telemetryValue) {
+    if (telemetryValue === undefined || current !== telemetryValue) {
       telemetryValue = current
       telemetryChangedAt = input.now.toISOString()
     } else if (

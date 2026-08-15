@@ -117,7 +117,7 @@ export const openHttpS3ArticleCaptureUnsafe = (
 ): HttpS3ArticleCaptureResource => {
   const s3 = dependencies.createS3(config)
   const safe = dependencies.createSafeFetch()
-  const capture: ArchiveArticlePorts["capture"] = ({ sourceUrl }) =>
+  const capture: ArchiveArticlePorts["capture"] = ({ sourceUrl, snapshotId }) =>
     Effect.tryPromise({
       try: async (effectSignal) => {
         const timeout = new AbortController()
@@ -136,8 +136,7 @@ export const openHttpS3ArticleCaptureUnsafe = (
             throw failure("MalformedResponse")
           const raw = await readBounded(response, config.maximumHtmlBytes)
           const artifacts = captureArtifacts(raw, sourceUrl)
-          const identity = createHash("sha256").update(sourceUrl).digest("hex")
-          const prefix = `articles/${identity}`
+          const prefix = `articles/${snapshotId}`
           const values = [
             {
               _tag: "RawResponse" as const,

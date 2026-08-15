@@ -165,6 +165,7 @@ export const feedSyncJobs = sqliteTable(
       enum: ["Queued", "Processing", "Succeeded", "Failed"],
     }).notNull(),
     attempt: integer("attempt").notNull().default(0),
+    leaseToken: text("lease_token"),
     leaseExpiresAt: text("lease_expires_at"),
     discovered: integer("discovered").notNull().default(0),
     archived: integer("archived").notNull().default(0),

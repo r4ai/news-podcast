@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -6,6 +6,7 @@ import {
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeIdSchema,
+  EpisodeJobSchema,
   FeedSubscriptionSchema,
   JobReceiptSchema,
   SessionHeadersSchema,
@@ -226,5 +227,121 @@ describe("gateway port handlers", () => {
     expect(createEpisodeJob).toHaveBeenCalledOnce()
     expect(Object.isFrozen(handlers)).toBe(true)
     expect(Object.isFrozen(receipt)).toBe(true)
+  })
+
+  it("tails episode job events until the job becomes terminal", async () => {
+    const running = Schema.decodeUnknownSync(EpisodeJobSchema)({
+      id: jobReceipt.id,
+      status: "running",
+      createdAt: jobReceipt.createdAt,
+      attempt: 1,
+      maxAttempts: 4,
+      startedAt: "2026-08-12T00:00:01.000Z",
+    })
+    const succeeded = Schema.decodeUnknownSync(EpisodeJobSchema)({
+      id: jobReceipt.id,
+      status: "succeeded",
+      createdAt: jobReceipt.createdAt,
+      attempt: 1,
+      maxAttempts: 4,
+      finishedAt: "2026-08-12T00:00:02.000Z",
+      episodeId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
+    })
+    const replayEpisodeJobEvents = vi
+      .fn()
+      .mockReturnValueOnce(
+        Effect.succeed({
+          snapshot: running,
+          events: [{ sequence: 1, job: jobReceipt }],
+        })
+      )
+      .mockReturnValueOnce(
+        Effect.succeed({
+          snapshot: succeeded,
+          events: [{ sequence: 2, job: succeeded }],
+        })
+      )
+    const handlers = makeGatewayHandlers(
+      { ...makePorts(), replayEpisodeJobEvents },
+      { episodeEventPollMillis: 0 }
+    )
+    const headers = Schema.decodeUnknownSync(SessionHeadersSchema)({})
+
+    const events = await Effect.runPromise(
+      handlers
+        .streamEpisodeJobEvents({
+          headers,
+          jobId: jobReceipt.id,
+          afterSequence: 0,
+        })
+        .pipe(Effect.flatMap(Stream.runCollect))
+    )
+
+    expect(events.map(({ id }) => id)).toEqual(["1", undefined, "2"])
+    expect(events.map(({ data }) => data.snapshot.status)).toEqual([
+      "queued",
+      "running",
+      "succeeded",
+    ])
+    expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ afterSequence: 0 })
+    )
+    expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ afterSequence: 1 })
+    )
+  })
+
+  it("drains every replay page before emitting the authoritative snapshot", async () => {
+    const succeeded = Schema.decodeUnknownSync(EpisodeJobSchema)({
+      id: jobReceipt.id,
+      status: "succeeded",
+      createdAt: jobReceipt.createdAt,
+      attempt: 1,
+      maxAttempts: 4,
+      finishedAt: "2026-08-12T00:00:02.000Z",
+      episodeId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
+    })
+    const replayEpisodeJobEvents = vi
+      .fn()
+      .mockReturnValueOnce(
+        Effect.succeed({
+          snapshot: succeeded,
+          events: Array.from({ length: 100 }, (_, index) => ({
+            sequence: index + 1,
+            job: jobReceipt,
+          })),
+        })
+      )
+      .mockReturnValueOnce(
+        Effect.succeed({
+          snapshot: succeeded,
+          events: [{ sequence: 101, job: succeeded }],
+        })
+      )
+    const handlers = makeGatewayHandlers(
+      { ...makePorts(), replayEpisodeJobEvents },
+      { episodeEventPollMillis: 0 }
+    )
+
+    const events = await Effect.runPromise(
+      handlers
+        .streamEpisodeJobEvents({
+          headers: Schema.decodeUnknownSync(SessionHeadersSchema)({}),
+          jobId: jobReceipt.id,
+          afterSequence: 0,
+        })
+        .pipe(Effect.flatMap(Stream.runCollect))
+    )
+
+    expect(events).toHaveLength(102)
+    expect(events[100]?.id).toBe("101")
+    expect(events[101]?.id).toBeUndefined()
+    expect(events[101]?.data.snapshot.status).toBe("succeeded")
+    expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ afterSequence: 100 })
+    )
   })
 })

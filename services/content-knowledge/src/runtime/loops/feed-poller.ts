@@ -83,6 +83,7 @@ export const makeContentFeedPollOnce = (
     queue: runtime.feedSyncQueue,
     pollFeed: pollFeed(ports),
     now: dependencies.now,
+    newLeaseToken: dependencies.newMessageId,
   })
 }
 

@@ -76,6 +76,7 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
           contentType: "audio/wav" as const,
         })
       ),
+      remove: vi.fn(() => Effect.void),
     },
     dictionary: {
       capture: vi.fn(() =>
@@ -254,6 +255,53 @@ describe("executeEpisodeJob", () => {
     )
     expect(outcome).toEqual({ _tag: "StaleLease" })
     expect(ports.articles.materialize).not.toHaveBeenCalled()
+  })
+
+  it("removes a newly uploaded object when its checkpoint loses the lease", async () => {
+    const persisted = vi.fn()
+    const base = makePorts()
+    const ports = makePorts({
+      persistence: {
+        ...base.persistence,
+        saveAudioCheckpoint: () => Effect.sync(persisted),
+      },
+    })
+    vi.mocked(ports.persistence.assertLease).mockImplementation(() =>
+      vi.mocked(ports.audio.put).mock.calls.length === 0
+        ? Effect.void
+        : Effect.fail({ _tag: "StaleLease" })
+    )
+
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running })
+    )
+
+    expect(outcome).toEqual({ _tag: "StaleLease" })
+    expect(ports.audio.remove).toHaveBeenCalledWith(
+      "episodes/6518412b-ce2f-4641-9f2c-a02dd515bc31.wav"
+    )
+    expect(persisted).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid script sources before synthesizing or uploading audio", async () => {
+    const ports = makePorts({
+      script: {
+        generate: () =>
+          Effect.succeed({
+            title: "Invalid",
+            script: "Script",
+            sourceUrls: ["https://example.com/not-materialized"],
+          }),
+      },
+    })
+
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running })
+    )
+
+    expect(outcome).toEqual({ _tag: "Failed" })
+    expect(ports.speech.synthesize).not.toHaveBeenCalled()
+    expect(ports.audio.put).not.toHaveBeenCalled()
   })
 
   it("treats a duplicate atomic completion as idempotent success", async () => {

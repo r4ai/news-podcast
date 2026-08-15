@@ -56,7 +56,7 @@ flowchart LR
 
 - `ownerId` はセッションから導出し、URLやリクエスト本文から受け取らない。
 - ジョブ作成は `owner + route + Idempotency-Key` で一意。同じキーと異なる入力の組み合わせは競合とする。
-- ジョブ作成時の有効な購読フィードをsnapshotし、処理中の購読変更から切り離す。
+- 手動生成は選択記事IDを必須とし、定期生成は有効購読から記事IDを解決してからジョブを作る。生成入力は受付時のID集合へ固定し、処理中の購読・記事変更から切り離す。
 - 台本が返す出典URLは、ownerが選択しContentが版固定した入力記事だけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
 - 署名付き音声URLは永続化せず、アクセス要求ごとに短期発行する。
@@ -246,8 +246,8 @@ erDiagram
   FEED_ITEM ||--o{ ARTICLE_USER_STATE : has_state
   USER ||--o| USER_SETTINGS : configures
   USER ||--o{ EPISODE_JOB : requests
-  EPISODE_JOB ||--o{ EPISODE_JOB_FEED : snapshots
-  FEED_CATALOG ||--o{ EPISODE_JOB_FEED : included_in
+  EPISODE_JOB ||--|{ EPISODE_JOB_ARTICLE : snapshots
+  ARTICLE_SNAPSHOT ||--o{ EPISODE_JOB_ARTICLE : selected_as
   EPISODE_JOB o|--o| EPISODE : produces
   EPISODE ||--o{ EPISODE_SOURCE : cites
   EPISODE_JOB ||--o{ AGENT_RUN : executes
@@ -261,7 +261,7 @@ erDiagram
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果 |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_user_states` | ユーザーごとの既読・保存状態 |
-| `episode_jobs` / `episode_job_feeds` | 状態、lease、retry、冪等性、生成時点の購読snapshot |
+| `episode_jobs` / `episode_job_articles` | 状態、lease、retry、冪等性、受付時点に固定した記事ID集合 |
 | `episodes` / `episode_sources` | 台本・音声keyと、入力RSSへ遡れるprovenance |
 | `agent_runs` / `agent_tool_calls` | Agent実行結果と、思考過程を含めないtool監査要約 |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |

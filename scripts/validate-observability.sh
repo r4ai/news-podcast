@@ -124,6 +124,14 @@ jq -e '
   (.services.watchdog.depends_on // {})
     | has("otel-collector") == false and has("grafana") == false
 ' <<<"$gateway_compose_json" >/dev/null
+jq -e '
+  .services.watchdog.environment as $environment
+    | $environment.WATCHDOG_GATEWAY_URL == "http://host.docker.internal:4101/health/ready"
+    and $environment.WATCHDOG_IDENTITY_ACCESS_URL == "http://host.docker.internal:4102/health/ready"
+    and $environment.WATCHDOG_CONTENT_KNOWLEDGE_URL == "http://host.docker.internal:4103/health/ready"
+    and $environment.WATCHDOG_EPISODE_PRODUCTION_URL == "http://host.docker.internal:4104/health/ready"
+    and $environment.WATCHDOG_EPISODE_LIBRARY_URL == "http://host.docker.internal:4105/health/ready"
+' <<<"$gateway_compose_json" >/dev/null
 
 for exporter in otlp/tempo otlphttp/loki; do
   rg -U "${exporter}:[\\s\\S]*?storage: file_storage/queue" \

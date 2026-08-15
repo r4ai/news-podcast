@@ -44,14 +44,20 @@ export const archiveArticle =
           )
         }
 
+        const snapshotId = ports.newSnapshotId()
         return ports
-          .capture(deepFreeze({ sourceUrl: invocation.command.sourceUrl }))
+          .capture(
+            deepFreeze({
+              sourceUrl: invocation.command.sourceUrl,
+              snapshotId,
+            })
+          )
           .pipe(
             Effect.map(deepFreeze),
             Effect.flatMap((capture) => {
               const snapshot = createArticleSnapshot({
                 command: invocation.command,
-                snapshotId: ports.newSnapshotId(),
+                snapshotId,
                 capturedAt: ports.now(),
                 capture,
               })

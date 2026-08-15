@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto"
 import { createServer } from "node:http"
 
 import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { ArticleUrlSchema } from "../../domain/article.js"
+import { ArticleUrlSchema, SnapshotIdSchema } from "../../domain/article.js"
 import {
   MAXIMUM_ARTICLE_AST_NODES,
   MAXIMUM_ARTICLE_AST_DEPTH,
@@ -66,13 +65,17 @@ describe("HTTP to S3 article capture", () => {
       createSafeFetch: () => ({ fetch, close: closeFetch }),
     })
 
-    const capture = await Effect.runPromise(resource.capture({ sourceUrl }))
-    const prefix = createHash("sha256").update(sourceUrl).digest("hex")
+    const snapshotId = Schema.decodeUnknownSync(SnapshotIdSchema)(
+      "46c2eef5-a205-4526-8640-dc3ea84d88b4"
+    )
+    const capture = await Effect.runPromise(
+      resource.capture({ sourceUrl, snapshotId })
+    )
 
     expect(objects.map(({ input }) => input.Key)).toEqual([
-      `articles/${prefix}/raw/response.html`,
-      `articles/${prefix}/replay/index.html`,
-      `articles/${prefix}/markdown/article.md`,
+      `articles/${snapshotId}/raw/response.html`,
+      `articles/${snapshotId}/replay/index.html`,
+      `articles/${snapshotId}/markdown/article.md`,
     ])
     expect(capture.markdown.sha256).toHaveLength(64)
     expect(capture.markdown.byteLength).toBeGreaterThan(0)
@@ -130,6 +133,7 @@ describe("HTTP to S3 article capture", () => {
         Effect.flip(
           resource.capture({
             sourceUrl: "https://news.example.com/secret" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
           })
         )
       )
@@ -165,6 +169,7 @@ describe("HTTP to S3 article capture", () => {
           resource.capture({
             sourceUrl:
               "https://news.example.com/oversized-parser-input" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
           })
         )
       )
@@ -195,6 +200,7 @@ describe("HTTP to S3 article capture", () => {
         Effect.flip(
           resource.capture({
             sourceUrl: "https://news.example.com/too-many-nodes" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
           })
         )
       )
@@ -230,6 +236,7 @@ describe("HTTP to S3 article capture", () => {
         Effect.flip(
           resource.capture({
             sourceUrl: "https://news.example.com/too-deep" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
           })
         )
       )
@@ -252,6 +259,7 @@ describe("HTTP to S3 article capture", () => {
         Effect.flip(
           resource.capture({
             sourceUrl: "https://internal.example.com/secret" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
           })
         )
       )
@@ -287,6 +295,7 @@ describe("HTTP to S3 article capture", () => {
         Effect.flip(
           resource.capture({
             sourceUrl: "https://news.example.com/slow" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
           })
         )
       )

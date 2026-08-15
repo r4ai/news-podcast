@@ -109,6 +109,7 @@ export type AudioObjectStore = DeepReadonly<{
     bytes: Uint8Array
     signal?: AbortSignal
   }) => Effect.Effect<StoredAudioCheckpoint, PipelineFailure>
+  remove: (objectKey: string) => Effect.Effect<void, PipelineFailure>
 }>
 
 export type EpisodeExecutionPorts = DeepReadonly<{

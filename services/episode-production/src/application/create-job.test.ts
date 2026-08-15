@@ -24,14 +24,16 @@ describe("createJob", () => {
         Effect.sync(() => saved.push(job)).pipe(Effect.as(job)),
     })
 
+    const command = Schema.decodeUnknownSync(CreateJobCommandSchema)({
+      ownerId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c",
+      idempotencyKey: "daily-2026-08-12",
+      trigger: "manual",
+      articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3a80"],
+    })
+    expect(command.articleIds).toBeDefined()
+
     const result = await Effect.runPromise(
-      useCase(
-        Schema.decodeUnknownSync(CreateJobCommandSchema)({
-          ownerId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c",
-          idempotencyKey: "daily-2026-08-12",
-          trigger: "manual",
-        })
-      )
+      useCase({ ...command, articleIds: command.articleIds! })
     )
 
     expect(result._tag).toBe("Queued")

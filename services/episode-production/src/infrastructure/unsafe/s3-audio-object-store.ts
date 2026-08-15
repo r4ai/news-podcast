@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto"
 
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import {
+  DeleteObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3"
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
@@ -46,7 +50,11 @@ export type S3AudioObjectStoreResource = Readonly<{
 }>
 
 const pipelineFailure = (
-  code: "audio_store_canceled" | "audio_store_unavailable" | "invalid_audio",
+  code:
+    | "audio_store_canceled"
+    | "audio_store_unavailable"
+    | "audio_delete_unavailable"
+    | "invalid_audio",
   retryable: boolean
 ): PipelineFailure =>
   deepFreeze({ _tag: "PipelineFailure" as const, code, retryable })
@@ -155,6 +163,35 @@ export const openS3AudioObjectStoreUnsafe = (
           })
         )
       )
+    },
+    remove: (objectKey) => {
+      if (objectKey.length > 512 || !SAFE_KEY.test(objectKey)) {
+        return Effect.fail(pipelineFailure("invalid_audio", false))
+      }
+      return Effect.tryPromise({
+        try: async (effectSignal) => {
+          const timeout = new AbortController()
+          const timer = setTimeout(
+            () => timeout.abort(),
+            config.requestTimeoutMillis
+          )
+          timer.unref()
+          try {
+            await resource.client.send(
+              new DeleteObjectCommand({
+                Bucket: config.bucket,
+                Key: objectKey,
+              }),
+              {
+                abortSignal: AbortSignal.any([effectSignal, timeout.signal]),
+              }
+            )
+          } finally {
+            clearTimeout(timer)
+          }
+        },
+        catch: () => pipelineFailure("audio_delete_unavailable", true),
+      })
     },
   })
 

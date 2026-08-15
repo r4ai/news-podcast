@@ -139,9 +139,7 @@ export const makeEpisodeJobPorts = (transport: Transport): EpisodeJobPorts => {
               {
                 idempotencyKey: headers["idempotency-key"],
                 trigger: payload.trigger,
-                ...(payload.articleIds === undefined
-                  ? {}
-                  : { articleIds: payload.articleIds }),
+                articleIds: payload.articleIds,
               },
               lineage
             )

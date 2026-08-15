@@ -1,6 +1,8 @@
 import { deepFreeze } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
+import type { ArticleId } from "../domain/episode-job.js"
+
 export type DueScheduledGeneration = Readonly<{
   ownerId: string
   localDate: string
@@ -14,8 +16,15 @@ export type ScheduledGenerationEvent = Readonly<{
 
 export type ScheduledGenerationPorts<E = unknown> = Readonly<{
   discoverDue: () => Effect.Effect<readonly DueScheduledGeneration[], E>
-  create: (ownerId: string, idempotencyKey: string) => Effect.Effect<void, E>
-  complete: (ownerId: string, localDate: string) => Effect.Effect<void, E>
+  resolveArticleIds: (
+    ownerId: string
+  ) => Effect.Effect<readonly [ArticleId, ...ArticleId[]], unknown>
+  create: (
+    ownerId: string,
+    idempotencyKey: string,
+    articleIds: readonly [ArticleId, ...ArticleId[]]
+  ) => Effect.Effect<void, unknown>
+  complete: (ownerId: string, localDate: string) => Effect.Effect<void, unknown>
   observe: (event: ScheduledGenerationEvent) => Effect.Effect<void>
 }>
 
@@ -28,27 +37,29 @@ export const runScheduledGenerationTick = <E>(
       Effect.forEach(
         due,
         (schedule) =>
-          ports
-            .create(
-              schedule.ownerId,
-              `scheduled:${schedule.ownerId}:${schedule.localDate}`
-            )
-            .pipe(
-              Effect.flatMap(() =>
-                ports.complete(schedule.ownerId, schedule.localDate)
-              ),
-              Effect.flatMap(() =>
-                ports.observe({ _tag: "Created", ...schedule })
-              ),
-              Effect.as(true),
-              Effect.matchEffect({
-                onFailure: () =>
-                  ports
-                    .observe({ _tag: "Failed", ...schedule })
-                    .pipe(Effect.as(false)),
-                onSuccess: Effect.succeed,
-              })
+          ports.resolveArticleIds(schedule.ownerId).pipe(
+            Effect.flatMap((articleIds) =>
+              ports.create(
+                schedule.ownerId,
+                `scheduled:${schedule.ownerId}:${schedule.localDate}`,
+                articleIds
+              )
             ),
+            Effect.flatMap(() =>
+              ports.complete(schedule.ownerId, schedule.localDate)
+            ),
+            Effect.flatMap(() =>
+              ports.observe({ _tag: "Created", ...schedule })
+            ),
+            Effect.as(true),
+            Effect.matchEffect({
+              onFailure: () =>
+                ports
+                  .observe({ _tag: "Failed", ...schedule })
+                  .pipe(Effect.as(false)),
+              onSuccess: Effect.succeed,
+            })
+          ),
         { concurrency: 1 }
       ).pipe(
         Effect.map((results) => {

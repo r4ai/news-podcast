@@ -1,0 +1,1 @@
+ALTER TABLE `feed_sync_jobs` ADD `lease_token` text;

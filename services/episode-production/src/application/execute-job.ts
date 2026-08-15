@@ -272,6 +272,19 @@ export const executeEpisodeJob =
         })
       }
 
+      const used = script.sourceUrls.map((url) =>
+        articles.find((candidate) => candidate.url === url)
+      )
+      if (used.some((source) => source === undefined) || used.length === 0) {
+        return yield* Effect.fail<PipelineFailure>(
+          deepFreeze({
+            _tag: "PipelineFailure",
+            code: "invalid_script_sources",
+            retryable: false,
+          })
+        )
+      }
+
       let audio = checkpoint?.audio
       if (audio === undefined) {
         yield* assertLease()
@@ -283,30 +296,36 @@ export const executeEpisodeJob =
           })
           .pipe(Effect.mapError(withProviderStage("speech")))
         yield* assertLease()
-        audio = yield* ports.audio.put({
+        const uploaded = yield* ports.audio.put({
           ownerId: job.request.ownerId,
           jobId: job.jobId,
           episodeId: ports.nextEpisodeId(),
           bytes,
           ...(signal === undefined ? {} : { signal }),
         })
-        yield* assertLease()
-        yield* ports.persistence.saveAudioCheckpoint({
-          jobId: job.jobId,
-          leaseToken: job.lease.token,
-          audio,
-        })
-      }
-
-      const used = script.sourceUrls.map((url) =>
-        articles.find((candidate) => candidate.url === url)
-      )
-      if (used.some((source) => source === undefined) || used.length === 0) {
-        return yield* Effect.fail<PipelineFailure>(
-          deepFreeze({
-            _tag: "PipelineFailure",
-            code: "invalid_script_sources",
-            retryable: false,
+        audio = yield* assertLease().pipe(
+          Effect.andThen(
+            ports.persistence.saveAudioCheckpoint({
+              jobId: job.jobId,
+              leaseToken: job.lease.token,
+              audio: uploaded,
+            })
+          ),
+          Effect.as(uploaded),
+          Effect.matchEffect({
+            onFailure: (failure) =>
+              ports.audio.remove(uploaded.objectKey).pipe(
+                Effect.matchEffect({
+                  onFailure: () =>
+                    Effect.logWarning("abandoned audio cleanup failed", {
+                      event_name: "episode.audio_cleanup_failed",
+                      job_id: job.jobId,
+                    }),
+                  onSuccess: () => Effect.void,
+                }),
+                Effect.andThen(Effect.fail(failure))
+              ),
+            onSuccess: Effect.succeed,
           })
         )
       }

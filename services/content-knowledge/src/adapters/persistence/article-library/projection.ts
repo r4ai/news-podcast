@@ -67,8 +67,15 @@ const latestSnapshotId = sql`(
 export const articleProjection = {
   articleId: feedItems.articleId,
   feedId: feedItems.feedId,
-  title: feedItems.title,
-  sourceUrl: feedItems.sourceUrl,
+  // アーカイブ済みの記事は、本文と同じsnapshotのmetadataを表示する。
+  title: sql<string>`COALESCE(
+    json_extract(${articleSnapshots.snapshotJson}, '$.title'),
+    ${feedItems.title}
+  )`.as("title"),
+  sourceUrl: sql<string>`COALESCE(
+    json_extract(${articleSnapshots.snapshotJson}, '$.sourceUrl'),
+    ${feedItems.sourceUrl}
+  )`.as("sourceUrl"),
   publishedAt: feedItems.publishedAt,
   discoveredAt: feedItems.discoveredAt,
   snapshotId: articleSnapshots.snapshotId,

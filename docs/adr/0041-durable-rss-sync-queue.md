@@ -66,7 +66,7 @@ flowchart LR
 ### Negative and risks
 
 - feedごとのqueue rowとstatus APIを保守する必要がある。
-- lease期限、外部HTTP timeout、archive処理時間のずれで重複処理が起こり得るため、archive側の冪等性を維持する必要がある。
+- lease期限、外部HTTP timeout、archive処理時間のずれで重複処理は起こり得る。完了更新はclaimごとのlease tokenでfenceし、archiveはsnapshot ID単位で版を分離する。
 - 現在のUIは短いintervalのpollingであり、利用者数が増えた場合はSSE等のpushへ再評価する。
 
 ## Impact and synchronization
@@ -76,7 +76,7 @@ flowchart LR
 | Design documents | queue、wake、UI表示、5分定期cycleを記載 | Done | `docs/design.md`、`docs/architecture.md` |
 | Domain and use cases | queue job/status/outcomeを追加 | Done | `services/content-knowledge/src/domain/feed-sync.ts` |
 | OpenAPI and external contracts | owner-scoped status・手動再投入endpointを追加 | Done | `apps/gateway/src/contract.ts`、`packages/contracts/openapi/openapi.json` |
-| Application code and ports | enqueue/claim/completeとworkerを追加 | Done | `services/content-knowledge/src/application/feed-sync-worker.ts` |
+| Application code and ports | enqueue/claim/complete、claim token fencing、処理ごとの現在時刻取得 | Done | `services/content-knowledge/src/application/feed-sync-worker.ts` |
 | Data and storage | `feed_sync_jobs` SQLite tableを追加 | Done | `services/content-knowledge/src/adapters/sqlite-feed-sync-queue.ts` |
 | Runtime and deployment | poller wakeupをRPCとschedulerへ接続 | Done | `services/content-knowledge/src/runtime/node.ts` |
 | Authentication and security | owner query、既存safe RSS readerを維持 | Done | content RPC、feed sync tests |

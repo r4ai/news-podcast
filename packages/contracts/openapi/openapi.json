@@ -6760,35 +6760,29 @@
             ]
           },
           "articleIds": {
-            "anyOf": [
+            "type": "array",
+            "items": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "allOf": [
               {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                      "format": "uuid"
-                    }
-                  ]
-                },
-                "allOf": [
-                  {
-                    "minItems": 1
-                  },
-                  {
-                    "maxItems": 20
-                  }
-                ]
+                "minItems": 1
               },
               {
-                "type": "null"
+                "maxItems": 20
               }
             ]
           }
         },
         "required": [
-          "trigger"
+          "trigger",
+          "articleIds"
         ],
         "additionalProperties": false
       },

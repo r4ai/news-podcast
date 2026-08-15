@@ -59,6 +59,7 @@ export type ArchiveArticlePorts = DeepReadonly<{
   ) => Effect.Effect<ArchiveLookup, ArchiveStoreError>
   readonly capture: (input: {
     readonly sourceUrl: ArticleUrl
+    readonly snapshotId: SnapshotId
   }) => Effect.Effect<ArchiveCapture, CaptureError>
   readonly newSnapshotId: () => SnapshotId
   readonly now: () => CapturedAt

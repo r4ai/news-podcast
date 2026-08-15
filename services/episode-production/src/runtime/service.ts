@@ -21,7 +21,11 @@ import { relayCompletionOutbox } from "../application/completion-outbox.js"
 import { createJob } from "../application/create-job.js"
 import { executeEpisodeJob } from "../application/execute-job.js"
 import { runScheduledGenerationLoop } from "../application/scheduled-generation.js"
-import { IdempotencyKeySchema, OwnerIdSchema } from "../domain/episode-job.js"
+import {
+  ArticleIdSchema,
+  IdempotencyKeySchema,
+  OwnerIdSchema,
+} from "../domain/episode-job.js"
 import { connectProductionJetStreamUnsafe } from "../infrastructure/unsafe/nats-jetstream.js"
 import { connectNatsRequestUnsafe } from "../infrastructure/unsafe/nats-request.js"
 import { s3AudioObjectStoreScoped } from "../infrastructure/unsafe/s3-audio-object-store.js"
@@ -352,12 +356,33 @@ export const runNodeEpisodeProductionService = (
           const createScheduled = createJob({
             nextJobId: Effect.sync(randomJobIdUnsafe),
             now: Effect.sync(now),
-            saveIdempotently: jobs.saveIdempotently,
+            saveIdempotently: jobs.saveScheduledIdempotently,
           })
           const scheduler = runScheduledGenerationLoop(
             {
               discoverDue: identitySchedule.discoverDue,
-              create: (ownerId, idempotencyKey) =>
+              resolveArticleIds: (ownerId) =>
+                parse(OwnerIdSchema)(ownerId).pipe(
+                  Effect.flatMap((parsedOwnerId) =>
+                    articles.materialize({
+                      ownerId: parsedOwnerId,
+                      selection: { _tag: "Automatic" },
+                    })
+                  ),
+                  Effect.flatMap((materialized) =>
+                    Effect.forEach(materialized, (article) =>
+                      parse(ArticleIdSchema)(article.articleId)
+                    )
+                  ),
+                  Effect.map(
+                    (articleIds) =>
+                      articleIds as [
+                        (typeof articleIds)[number],
+                        ...(typeof articleIds)[number][],
+                      ]
+                  )
+                ),
+              create: (ownerId, idempotencyKey, articleIds) =>
                 Effect.all([
                   parse(OwnerIdSchema)(ownerId),
                   parse(IdempotencyKeySchema)(idempotencyKey),
@@ -367,6 +392,7 @@ export const runNodeEpisodeProductionService = (
                       ownerId: parsedOwnerId,
                       idempotencyKey: parsedIdempotencyKey,
                       trigger: "scheduled",
+                      articleIds,
                     })
                   ),
                   Effect.asVoid

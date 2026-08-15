@@ -230,6 +230,30 @@ describe("SQLite article library", () => {
     expect(read).toHaveBeenCalledTimes(1)
   })
 
+  it("keeps archived title and URL aligned with the immutable snapshot", async () => {
+    const { articles, catalog } = await setup()
+    await Effect.runPromise(
+      catalog.upsert({
+        articleId: ids.articleA,
+        feedId: ids.feedA,
+        externalId: "entry-a",
+        sourceUrl: "https://news.example.com/a-updated" as never,
+        title: "Updated feed title" as never,
+        publishedAt: "2026-08-13T00:00:00.000Z",
+        discoveredAt: "2026-08-13T02:00:00.000Z",
+      })
+    )
+
+    const found = await Effect.runPromise(
+      articles.list(ids.ownerA, await query())
+    )
+
+    expect(found.items[0]).toMatchObject({
+      title: "Owner A article",
+      sourceUrl: "https://news.example.com/a",
+    })
+  })
+
   it("patches hidden/read state per owner and excludes hidden generation candidates", async () => {
     const { articles, catalog } = await setup()
     const patch = await Effect.runPromise(

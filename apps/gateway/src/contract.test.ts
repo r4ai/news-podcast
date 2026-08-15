@@ -168,6 +168,7 @@ describe("gateway HttpApi contract", () => {
 
     for (const invalid of [
       { trigger: "scheduled" },
+      { trigger: "manual" },
       { trigger: "manual", articleIds: [] },
       { trigger: "manual", articleIds: ["article-1"] },
       {

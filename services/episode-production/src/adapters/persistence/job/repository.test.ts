@@ -134,6 +134,41 @@ describe("SQLite job repository", () => {
     expect(exit._tag).toBe("Failure")
   })
 
+  it("keeps the first scheduled snapshot when schedule completion is retried", async () => {
+    const first = job(
+      "10e2d4e1-c127-479f-a124-2ea037bd9319",
+      "scheduled",
+      ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
+      "scheduled:owner:2026-08-15"
+    )
+    const changed = job(
+      "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+      "scheduled",
+      ["3c4d046c-b47b-4047-a562-66ac7e74e995"],
+      "scheduled:owner:2026-08-15"
+    )
+
+    const repeated = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(
+            openProductionDatabaseUnsafe(
+              join(
+                mkdtempSync(join(tmpdir(), "episode-production-")),
+                "jobs.sqlite"
+              )
+            ).database
+          )
+          yield* repository.saveScheduledIdempotently(first)
+          return yield* repository.saveScheduledIdempotently(changed)
+        })
+      )
+    )
+
+    expect(repeated.jobId).toBe(first.jobId)
+    expect(repeated.request.articleIds).toEqual(first.request.articleIds)
+  })
+
   it("treats selected articles as an order-independent idempotency input", async () => {
     const first = job("10e2d4e1-c127-479f-a124-2ea037bd9319", "manual", [
       "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",

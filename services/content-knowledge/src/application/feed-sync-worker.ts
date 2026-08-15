@@ -15,6 +15,7 @@ export type FeedSyncWorkerPorts = Readonly<{
     feed: PollingFeed
   ) => Effect.Effect<FeedPollResult, unknown>
   readonly now: () => string
+  readonly newLeaseToken: () => string
   readonly leaseMillis?: number
 }>
 
@@ -53,13 +54,20 @@ const leaseExpiry = (now: string, leaseMillis: number): string =>
 export const runFeedSyncCycle =
   (ports: FeedSyncWorkerPorts) =>
   (): Effect.Effect<FeedPollResult, unknown> => {
-    const now = ports.now()
+    const enqueuedAt = ports.now()
     const leaseMillis = ports.leaseMillis ?? FEED_SYNC_LEASE_MILLIS
     const processNext = (
       result: FeedPollResult
     ): Effect.Effect<FeedPollResult, unknown> =>
       Effect.suspend(() =>
-        ports.queue.claim(now, leaseExpiry(now, leaseMillis)).pipe(
+        (() => {
+          const claimedAt = ports.now()
+          return ports.queue.claim(
+            claimedAt,
+            leaseExpiry(claimedAt, leaseMillis),
+            ports.newLeaseToken()
+          )
+        })().pipe(
           Effect.flatMap((job) => {
             if (job === undefined) return Effect.succeed(result)
             return ports
@@ -73,13 +81,14 @@ export const runFeedSyncCycle =
                     ports.queue
                       .complete(
                         job.jobId,
+                        job.leaseToken,
                         {
                           discovered: 0,
                           archived: 0,
                           failed: 1,
                           error: failureReason(failure),
                         },
-                        now
+                        ports.now()
                       )
                       .pipe(
                         Effect.andThen(
@@ -105,6 +114,7 @@ export const runFeedSyncCycle =
                     ports.queue
                       .complete(
                         job.jobId,
+                        job.leaseToken,
                         {
                           discovered: outcome.discovered,
                           archived: outcome.archived,
@@ -113,7 +123,7 @@ export const runFeedSyncCycle =
                             ? {}
                             : { error: outcome.failures[0].reason }),
                         },
-                        now
+                        ports.now()
                       )
                       .pipe(
                         Effect.andThen(processNext(combine(result, outcome)))
@@ -125,7 +135,9 @@ export const runFeedSyncCycle =
       )
 
     return ports.subscriptions.listFeedsForPolling().pipe(
-      Effect.flatMap((feeds) => ports.queue.enqueueForPolling(feeds, now)),
+      Effect.flatMap((feeds) =>
+        ports.queue.enqueueForPolling(feeds, enqueuedAt)
+      ),
       Effect.andThen(processNext(empty()))
     )
   }

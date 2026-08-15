@@ -57,11 +57,11 @@ flowchart LR
 1. 認証済みユーザーが `Idempotency-Key` 付きで生成ジョブを作成する。
 2. APIは `owner + method + canonical route + key` を一意に保存し、同一request hashなら同じreceiptを返す。異なるhashなら409にする。
 3. Episode Productionはジョブをleaseして `queued -> running` へ遷移する。
-4. RSS取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にし、検証済み台本と音声chunkから再開する。
+4. 受付時に固定した記事snapshotの取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にし、検証済み台本と音声checkpointから再開する。
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 
-RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease付きworkerで進める。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。
+RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease tokenでfenceしたworkerで進める。claim・完了ごとに現在時刻を再取得し、期限切れleaseのworkerによる完了上書きを拒否する。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。
 
 Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
 
@@ -76,7 +76,7 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
 - Episodeへ署名URLを保存しない。音声アクセス操作が短期URLを発行し、`Cache-Control: private, no-store`を返す。
 - Better Authの `/api/auth/**` はBetter Auth側の生成契約を正本とし、アプリOpenAPIへ複製しない。Google tokenを `/v1` のbearer tokenとして扱わない。
 
-`POST /v1/episode-jobs` は手動生成を表し、その時点の有効購読をsnapshotする。定期生成は同じapplication commandをschedulerが `scheduled` triggerで呼ぶ。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
+`POST /v1/episode-jobs` は手動生成を表し、1〜20件の`articleIds`を必須とする。定期生成はその時点の有効購読から対象記事IDを解決した後、同じapplication commandを`scheduled` triggerで呼ぶ。どちらもjobへ受付時の記事ID集合を保存する。`GET /v1/episode-jobs/{jobId}/events`は`Last-Event-ID`以降を追尾し、terminal状態までSSE接続を維持する。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
 
 ## 6. 配備トポロジー
 
@@ -202,7 +202,7 @@ articles/{snapshot-id}/raw/response.json
 articles/{snapshot-id}/replay/index.html
 articles/{snapshot-id}/markdown/article.md
 articles/{snapshot-id}/assets/{content-hash}.{extension}
-episodes/{owner-id}/{episode-id}.wav
+episodes/{sha256(owner-id)}/{job-id}/{episode-id}.wav
 ```
 
 bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去し、認可済みの専用routeからCSP付きで返す。記事更新時は上書きせずsnapshotを追加する。

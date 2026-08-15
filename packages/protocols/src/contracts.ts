@@ -56,12 +56,10 @@ export const CreateEpisodeJobRequestSchema = Schema.Struct({
   idempotencyKey: Schema.NonEmptyString.check(Schema.isMaxLength(128)).pipe(
     Schema.brand("IdempotencyKey")
   ),
-  trigger: Schema.Literals(["manual", "scheduled"]),
-  articleIds: Schema.optional(
-    Schema.Array(uuid("ArticleId")).check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(20)
-    )
+  trigger: Schema.Literal("manual"),
+  articleIds: Schema.Array(uuid("ArticleId")).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(20)
   ),
 })
 export type CreateEpisodeJobRequest = Schema.Schema.Type<

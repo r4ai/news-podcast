@@ -17,6 +17,7 @@ import type {
 } from "../../../infrastructure/unsafe/drizzle/open.js"
 import {
   decodeJob,
+  decodeClaimedJob,
   failure,
   FEED_SYNC_MAX_ATTEMPTS,
   selectJobs,
@@ -27,6 +28,7 @@ export { FEED_SYNC_MAX_ATTEMPTS }
 /** 再投入時に持ち越さない実行結果。前回の計数が次回に混ざらないようにする。 */
 const resetFields = (now: string) => ({
   status: "Queued" as const,
+  leaseToken: null,
   leaseExpiresAt: null,
   discovered: 0,
   archived: 0,
@@ -148,6 +150,7 @@ export const createFeedSyncQueue = (
               feedUrl: feedCatalog.feedUrl,
               status: feedSyncJobs.status,
               attempt: feedSyncJobs.attempt,
+              leaseToken: feedSyncJobs.leaseToken,
               discovered: feedSyncJobs.discovered,
               archived: feedSyncJobs.archived,
               failed: feedSyncJobs.failed,
@@ -173,7 +176,11 @@ export const createFeedSyncQueue = (
         Effect.map(deepFreeze)
       )
 
-    const claim: FeedSyncQueueRepository["claim"] = (now, leaseExpiresAt) =>
+    const claim: FeedSyncQueueRepository["claim"] = (
+      now,
+      leaseExpiresAt,
+      leaseToken
+    ) =>
       Effect.try({
         try: () =>
           database.transaction((tx) => {
@@ -181,6 +188,7 @@ export const createFeedSyncQueue = (
             tx.update(feedSyncJobs)
               .set({
                 status: "Queued",
+                leaseToken: null,
                 leaseExpiresAt: null,
                 startedAt: null,
               })
@@ -223,6 +231,7 @@ export const createFeedSyncQueue = (
               .set({
                 status: "Processing",
                 attempt: sql`${feedSyncJobs.attempt} + 1`,
+                leaseToken,
                 leaseExpiresAt,
                 startedAt: now,
                 error: null,
@@ -242,21 +251,23 @@ export const createFeedSyncQueue = (
         Effect.flatMap((row) =>
           row === undefined
             ? Effect.succeed(undefined)
-            : decodeJob(row, "Claim")
+            : decodeClaimedJob(row, "Claim")
         )
       )
 
     const complete: FeedSyncQueueRepository["complete"] = (
       jobId,
+      leaseToken,
       outcome,
       now
     ) =>
       Effect.try({
         try: () => {
-          database
+          const updated = database
             .update(feedSyncJobs)
             .set({
               status: outcome.failed > 0 ? "Failed" : "Succeeded",
+              leaseToken: null,
               leaseExpiresAt: null,
               discovered: outcome.discovered,
               archived: outcome.archived,
@@ -264,12 +275,28 @@ export const createFeedSyncQueue = (
               error: outcome.error ?? null,
               completedAt: now,
             })
-            .where(eq(feedSyncJobs.jobId, jobId))
+            .where(
+              and(
+                eq(feedSyncJobs.jobId, jobId),
+                eq(feedSyncJobs.status, "Processing"),
+                eq(feedSyncJobs.leaseToken, leaseToken)
+              )
+            )
             .run()
+
+          if (Number(updated.changes) !== 1) {
+            throw failure("Complete", "StaleLease")
+          }
 
           return findByJob(database, jobId)
         },
-        catch: () => failure("Complete"),
+        catch: (error) =>
+          typeof error === "object" &&
+          error !== null &&
+          "_tag" in error &&
+          error._tag === "FeedSyncQueueFailed"
+            ? (error as FeedSyncQueueError)
+            : failure("Complete"),
       }).pipe(
         Effect.flatMap((row) =>
           row === undefined

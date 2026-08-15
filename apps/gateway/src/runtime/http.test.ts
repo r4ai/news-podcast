@@ -242,13 +242,15 @@ describe("Gateway HTTP runtime", () => {
     }
   })
 
-  it("serves job control, episode detail, and bounded replay routes", async () => {
+  it("serves job control, episode detail, and terminal replay routes", async () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
-      status: "queued",
+      status: "succeeded",
       createdAt: "2026-08-12T00:00:00.000Z",
-      attempt: 0,
+      attempt: 1,
       maxAttempts: 4,
+      finishedAt: "2026-08-12T00:01:00.000Z",
+      episodeId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
     })
     const receipt = Schema.decodeUnknownSync(JobReceiptSchema)(job)
     const episode = Schema.decodeUnknownSync(EpisodeSchema)({

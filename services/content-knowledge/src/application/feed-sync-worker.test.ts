@@ -17,13 +17,14 @@ const job = Schema.decodeUnknownSync(FeedSyncJobSchema)({
   createdAt: "2026-08-13T01:00:00.000Z",
   startedAt: "2026-08-13T01:00:01.000Z",
 })
+const claimedJob = { ...job, leaseToken: "lease-1" } as const
 
 describe("feed sync worker", () => {
   it("claims, processes, completes, and drains one durable job", async () => {
     const complete = vi.fn(() => Effect.succeed(job))
     const claim = vi
       .fn()
-      .mockReturnValueOnce(Effect.succeed(job))
+      .mockReturnValueOnce(Effect.succeed(claimedJob))
       .mockReturnValueOnce(Effect.succeed(undefined))
     const pollFeed = vi.fn(() =>
       Effect.succeed({
@@ -36,6 +37,17 @@ describe("feed sync worker", () => {
       })
     )
 
+    const now = vi
+      .fn()
+      .mockReturnValueOnce("2026-08-13T01:00:00.000Z")
+      .mockReturnValueOnce("2026-08-13T01:00:01.000Z")
+      .mockReturnValueOnce("2026-08-13T01:00:05.000Z")
+      .mockReturnValueOnce("2026-08-13T01:00:06.000Z")
+
+    const newLeaseToken = vi
+      .fn()
+      .mockReturnValueOnce("lease-1")
+      .mockReturnValueOnce("lease-2")
     const result = await Effect.runPromise(
       runFeedSyncCycle({
         subscriptions: {
@@ -49,7 +61,8 @@ describe("feed sync worker", () => {
           complete,
         },
         pollFeed,
-        now: () => "2026-08-13T01:00:00.000Z",
+        now,
+        newLeaseToken,
         leaseMillis: 10_000,
       })()
     )
@@ -61,13 +74,21 @@ describe("feed sync worker", () => {
     })
     expect(complete).toHaveBeenCalledWith(
       job.jobId,
+      "lease-1",
       { discovered: 3, archived: 2, failed: 0 },
-      "2026-08-13T01:00:00.000Z"
+      "2026-08-13T01:00:05.000Z"
     )
     expect(claim).toHaveBeenNthCalledWith(
       1,
-      "2026-08-13T01:00:00.000Z",
-      "2026-08-13T01:00:10.000Z"
+      "2026-08-13T01:00:01.000Z",
+      "2026-08-13T01:00:11.000Z",
+      "lease-1"
+    )
+    expect(claim).toHaveBeenNthCalledWith(
+      2,
+      "2026-08-13T01:00:06.000Z",
+      "2026-08-13T01:00:16.000Z",
+      "lease-2"
     )
   })
 })

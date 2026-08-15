@@ -1,12 +1,67 @@
 import { deepFreeze } from "@news-podcast/kernel"
-import { Effect, Stream } from "effect"
+import { Effect, Option, Stream } from "effect"
 import type { GatewayPorts } from "../ports.js"
 
 const freezeSuccess = <Success, Error, Requirements>(
   effect: Effect.Effect<Success, Error, Requirements>
 ) => effect.pipe(Effect.map(deepFreeze))
 
-export const makeGatewayHandlers = (ports: GatewayPorts) =>
+type EpisodeReplay = Effect.Success<
+  ReturnType<GatewayPorts["replayEpisodeJobEvents"]>
+>
+type EpisodeJob = EpisodeReplay["snapshot"]
+type EpisodeTailState = Readonly<{
+  afterSequence: number
+  replaying: boolean
+}>
+
+const isTerminalEpisodeJob = (job: EpisodeJob) =>
+  job.status === "succeeded" ||
+  job.status === "failed" ||
+  job.status === "canceled"
+
+const toEpisodeSseEvent = (job: EpisodeJob, sequence?: number) =>
+  deepFreeze({
+    id: sequence === undefined ? undefined : String(sequence),
+    event: "STATE_SNAPSHOT" as const,
+    data: deepFreeze({
+      type: "STATE_SNAPSHOT" as const,
+      timestamp: Date.parse(
+        job.finishedAt ??
+          job.lastProgressAt ??
+          job.startedAt ??
+          job.nextAttemptAt ??
+          job.createdAt
+      ),
+      snapshot: {
+        jobId: job.id,
+        status: job.status,
+        attempt: job.attempt,
+        maxAttempts: job.maxAttempts,
+        adoptedArticles: [],
+        ...(job.failure === undefined
+          ? {}
+          : {
+              failure: {
+                code: job.failure.code,
+                message: job.failure.message,
+              },
+            }),
+        ...(job.episodeId === undefined ? {} : { episodeId: job.episodeId }),
+      },
+    }),
+  })
+
+const latestSequence = (fallback: number, replay: EpisodeReplay) =>
+  replay.events.reduce(
+    (latest, event) => Math.max(latest, event.sequence),
+    fallback
+  )
+
+export const makeGatewayHandlers = (
+  ports: GatewayPorts,
+  options: { readonly episodeEventPollMillis?: number } = {}
+) =>
   deepFreeze({
     health: () => freezeSuccess(ports.health()),
     resolveSession: (headers: Parameters<GatewayPorts["resolveSession"]>[0]) =>
@@ -27,42 +82,85 @@ export const makeGatewayHandlers = (ports: GatewayPorts) =>
       input: Parameters<GatewayPorts["replayEpisodeJobEvents"]>[0]
     ) =>
       ports.replayEpisodeJobEvents(deepFreeze(input)).pipe(
-        Effect.map(({ snapshot, events }) => {
-          const toEvent = (job: typeof snapshot) =>
-            deepFreeze({
-              type: "STATE_SNAPSHOT" as const,
-              timestamp: Date.parse(job.createdAt),
-              snapshot: {
-                jobId: job.id,
-                status: job.status,
-                attempt: job.attempt,
-                maxAttempts: job.maxAttempts,
-                adoptedArticles: [],
-                ...(job.failure === undefined
-                  ? {}
-                  : {
-                      failure: {
-                        code: job.failure.code,
-                        message: job.failure.message,
-                      },
-                    }),
-                ...(job.episodeId === undefined
-                  ? {}
-                  : { episodeId: job.episodeId }),
-              },
-            })
-          return Stream.fromIterable([
+        Effect.map((initial) => {
+          const initialHasMoreReplay = initial.events.length === 100
+          const initialEvents = [
+            ...initial.events.map(({ sequence, job }) =>
+              toEpisodeSseEvent(job, sequence)
+            ),
+            // Do not place the current snapshot before a later replay page.
+            ...(initialHasMoreReplay
+              ? []
+              : [toEpisodeSseEvent(initial.snapshot)]),
+          ]
+          const initialSequence = latestSequence(input.afterSequence, initial)
+          const initialIsComplete =
+            isTerminalEpisodeJob(initial.snapshot) && !initialHasMoreReplay
+          if (initialIsComplete) {
+            return Stream.fromIterable(initialEvents)
+          }
+
+          const tail = Stream.paginate(
             {
-              id: undefined,
-              event: "STATE_SNAPSHOT" as const,
-              data: toEvent(snapshot),
+              afterSequence: initialSequence,
+              replaying: initialHasMoreReplay,
             },
-            ...events.map(({ sequence, job }) => ({
-              id: String(sequence),
-              event: "STATE_SNAPSHOT" as const,
-              data: toEvent(job),
-            })),
-          ])
+            (state) =>
+              Effect.sleep(options.episodeEventPollMillis ?? 1_000).pipe(
+                Effect.andThen(
+                  ports.replayEpisodeJobEvents(
+                    deepFreeze({
+                      ...input,
+                      afterSequence: state.afterSequence,
+                    })
+                  )
+                ),
+                Effect.matchEffect({
+                  onFailure: () =>
+                    Effect.logWarning("episode job event tail stopped", {
+                      event_name: "episode.events_tail_stopped",
+                      job_id: input.jobId,
+                    }).pipe(
+                      Effect.as([
+                        [] as ReadonlyArray<
+                          ReturnType<typeof toEpisodeSseEvent>
+                        >,
+                        Option.none<EpisodeTailState>(),
+                      ] as const)
+                    ),
+                  onSuccess: (replay) => {
+                    const nextSequence = latestSequence(
+                      state.afterSequence,
+                      replay
+                    )
+                    const fullReplayPage = replay.events.length === 100
+                    const replayFinished = state.replaying && !fullReplayPage
+                    const terminalSnapshotWithoutEvent =
+                      !state.replaying &&
+                      replay.events.length === 0 &&
+                      isTerminalEpisodeJob(replay.snapshot)
+                    const events = replay.events.map(({ sequence, job }) =>
+                      toEpisodeSseEvent(job, sequence)
+                    )
+                    if (replayFinished || terminalSnapshotWithoutEvent) {
+                      events.push(toEpisodeSseEvent(replay.snapshot))
+                    }
+                    const complete =
+                      isTerminalEpisodeJob(replay.snapshot) && !fullReplayPage
+                    return Effect.succeed([
+                      events,
+                      complete
+                        ? Option.none()
+                        : Option.some({
+                            afterSequence: nextSequence,
+                            replaying: fullReplayPage,
+                          }),
+                    ] as const)
+                  },
+                })
+              )
+          )
+          return Stream.concat(Stream.fromIterable(initialEvents), tail)
         })
       ),
     listEpisodes: (input: Parameters<GatewayPorts["listEpisodes"]>[0]) =>
