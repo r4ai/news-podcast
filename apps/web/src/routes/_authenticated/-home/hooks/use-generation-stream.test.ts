@@ -1,11 +1,23 @@
 import { waitFor } from "@testing-library/react"
+import { useAtomValue } from "jotai"
 import { describe, expect, it, vi } from "vitest"
 
 import type { EpisodeJobAgUiEvent } from "@news-podcast/contracts/agui"
 
 import { renderHookWithProviders } from "@/shared/test/render"
 
+import { generationStreamAtom } from "../atoms"
+import { emptyGenerationStream } from "../model"
 import { useGenerationStream } from "./use-generation-stream"
+
+/**
+ * hookは値を返さずatomへ書く (描画範囲を絞るため)。読み口はatomなので、
+ * テストも同じatomを購読して確かめる。
+ */
+function useStreamUnderTest(jobId: string) {
+  useGenerationStream(jobId)
+  return useAtomValue(generationStreamAtom)
+}
 
 const frame = (event: EpisodeJobAgUiEvent, id?: number): string =>
   [
@@ -79,7 +91,7 @@ describe("useGenerationStream", () => {
     ].join("\n\n")
     const requests = stubStream(body)
     const { result } = renderHookWithProviders(() =>
-      useGenerationStream("job-1")
+      useStreamUnderTest("job-1")
     )
 
     await waitFor(() => expect(result.current.finished).toBe(true))
@@ -101,12 +113,54 @@ describe("useGenerationStream", () => {
     ].join("\n\n")
     stubStream(body)
     const { result } = renderHookWithProviders(() =>
-      useGenerationStream("job-1")
+      useStreamUnderTest("job-1")
     )
 
     await waitFor(() => expect(result.current.state?.status).toBe("running"))
     expect(result.current.timeline.map((entry) => entry.stepName)).toEqual([
       "generating_script",
     ])
+  })
+})
+
+/**
+ * 畳み込み結果はアプリ全体で1つのatomにあり、画面を離れても残る。
+ * 前のジョブの状態が次の訪問へ持ち越されると、戻ってきた最初の1描画で
+ * 終わったはずのジョブの状態と作業ログが出る。
+ */
+describe("購読の後始末", () => {
+  it("purges the folded stream when the subscription unmounts", async () => {
+    const body = [
+      frame({ type: "STATE_SNAPSHOT", snapshot: state }, 1),
+      frame({ type: "STEP_STARTED", stepName: "generating_script" }, 2),
+      "",
+    ].join("\n\n")
+    stubStream(body)
+    const { result, store, unmount } = renderHookWithProviders(() =>
+      useStreamUnderTest("job-1")
+    )
+
+    await waitFor(() => expect(result.current.timeline).toHaveLength(1))
+
+    unmount()
+
+    const left = store.get(generationStreamAtom)
+    expect(left).toEqual(emptyGenerationStream)
+    expect(left.jobId).toBeUndefined()
+  })
+
+  // 購読の張り替えはEffectなので、最新ジョブが変わってから空へ戻るまでに
+  // 1描画の隙がある。どのジョブのものかを値が持っていれば、読む側は
+  // 突き合わせるだけで前のジョブの値を弾ける。
+  it("tags the folded stream with the job it belongs to", async () => {
+    stubStream(
+      [frame({ type: "STATE_SNAPSHOT", snapshot: state }, 1), ""].join("\n\n")
+    )
+    const { result } = renderHookWithProviders(() =>
+      useStreamUnderTest("job-1")
+    )
+
+    await waitFor(() => expect(result.current.state?.status).toBe("running"))
+    expect(result.current.jobId).toBe("job-1")
   })
 })

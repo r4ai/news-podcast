@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { expect, fn, userEvent, within } from "storybook/test"
 
+import { GenerationSettingsSummary } from "./generation-settings-summary"
 import { PodcastDashboard } from "./podcast-dashboard"
 
 const meta = {
@@ -8,13 +9,18 @@ const meta = {
   component: PodcastDashboard,
   args: {
     onGenerate: fn(),
-    schedule: {
-      enabled: true,
-      localTime: "07:30",
-      timeZone: "Asia/Tokyo",
-    },
     state: "ready",
-    subscriptionNames: ["Zenn", "azukiazusaの技術ブログ", "Hacker News"],
+    // 実画面ではSSEと3つのqueryを購読する差し込み。ここは値を固定して渡す。
+    settingsSlot: (
+      <GenerationSettingsSummary
+        schedule={{
+          enabled: true,
+          localTime: "07:30",
+          timeZone: "Asia/Tokyo",
+        }}
+        subscriptionNames={["Zenn", "azukiazusaの技術ブログ", "Hacker News"]}
+      />
+    ),
   },
   parameters: {
     layout: "fullscreen",

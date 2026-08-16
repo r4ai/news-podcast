@@ -153,6 +153,15 @@ export type TimelineEntry = TimelineStep
 export type AdoptedArticle = EpisodeJobState["selectedArticles"][number]
 
 export type GenerationStream = {
+  /**
+   * このストリームがどのジョブのものか。
+   *
+   * 畳み込み結果はアプリ全体で1つのatomにあり、画面を離れても残る。読む側が
+   * 「今見ているジョブのものか」を判断できないと、戻ってきた最初の1描画で
+   * 前のジョブの状態が出る。由来を値に含めることで、突き合わせが純粋な比較で
+   * 済む (ADR-0060の「前の値を覚えるstateを作らない」)。
+   */
+  readonly jobId?: string
   readonly connected: boolean
   readonly state?: EpisodeJobState
   readonly timeline: readonly TimelineEntry[]
@@ -165,6 +174,47 @@ export const emptyGenerationStream: GenerationStream = {
   timeline: [],
   adoptedArticles: [],
   finished: false,
+}
+
+/** そのジョブのために開かれた、まだ何も届いていないストリーム。 */
+export function openingGenerationStream(jobId: string): GenerationStream {
+  return { ...emptyGenerationStream, jobId }
+}
+
+export type JobFailure = NonNullable<EpisodeJobState["failure"]>
+
+/**
+ * 採用記事の一覧が実質同じか。
+ *
+ * `STATE_SNAPSHOT`は進捗のたびに届き、そのたびに採用記事の配列を作り直す。
+ * 参照で比べると「中身は同じなのに別物」と見えて、購読側が毎フレーム
+ * 描き直される。何をもって同じとするかをここで決める。
+ */
+export function sameAdoptedArticles(
+  a: readonly AdoptedArticle[],
+  b: readonly AdoptedArticle[]
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((article, index) => {
+      const other = b[index]
+      return (
+        other !== undefined &&
+        article.articleId === other.articleId &&
+        article.title === other.title &&
+        article.sourceName === other.sourceName
+      )
+    })
+  )
+}
+
+/** 失敗の同一性。表示に使うのはcodeとmessageだけなので、その2つで決める。 */
+export function sameJobFailure(
+  a: JobFailure | undefined,
+  b: JobFailure | undefined
+): boolean {
+  if (a === undefined || b === undefined) return a === b
+  return a.code === b.code && a.message === b.message
 }
 
 function isJobStage(value: string): value is JobStage {

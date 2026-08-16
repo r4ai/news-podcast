@@ -163,6 +163,90 @@ export function selectDictionaryEntries<T extends DictionaryEntry>(
 }
 
 /* ------------------------------------------------------------------ *
+ * 楽観的更新
+ * ------------------------------------------------------------------ */
+
+/**
+ * 楽観適用は純粋なreducerとして切り出し、環境非依存にテストする
+ * (`useSubscriptions`と同じ形)。
+ *
+ * 適用結果はあくまで一時的な投影で、確定値は常にサーバ応答。失敗時の巻き戻し
+ * はTransitionの終了時にReactが行うので、ここでは「意図をそのまま当てる」
+ * ことだけを書く。
+ */
+
+export type TagVocabulary<Tag, Suggestion> = {
+  readonly tags: readonly Tag[]
+  readonly suggestions: readonly Suggestion[]
+}
+
+export type TagVocabularyDraft<Tag> =
+  /** `tag.id`は送信前に手元で振る仮の識別子。確定値はサーバ応答で置き換わる。 */
+  | { readonly kind: "add"; readonly tag: Tag }
+  | { readonly kind: "remove"; readonly id: string }
+  | { readonly kind: "promote"; readonly tag: Tag }
+
+export function applyTagVocabularyDraft<
+  Tag extends { readonly id: string; readonly name: string },
+  Suggestion extends { readonly name: string },
+>(
+  state: TagVocabulary<Tag, Suggestion>,
+  draft: TagVocabularyDraft<Tag>
+): TagVocabulary<Tag, Suggestion> {
+  if (draft.kind === "remove") {
+    return {
+      tags: state.tags.filter((tag) => tag.id !== draft.id),
+      suggestions: state.suggestions,
+    }
+  }
+  // 同名の作成はサーバ側で冪等。手元にある名前なら見た目も変えない。
+  const known = state.tags.some((tag) => tag.name === draft.tag.name)
+  return {
+    tags: known ? state.tags : [...state.tags, draft.tag],
+    // 採用した提案は、語彙へ移ったのだから提案側からは消える。
+    suggestions:
+      draft.kind === "promote"
+        ? state.suggestions.filter(
+            (suggestion) => suggestion.name !== draft.tag.name
+          )
+        : state.suggestions,
+  }
+}
+
+export type ReadingDictionaryPatch = {
+  readonly surface?: string
+  readonly reading?: string
+  readonly accentType?: number
+}
+
+export type ReadingDictionaryDraft<Entry> =
+  | { readonly kind: "add"; readonly entry: Entry }
+  | {
+      readonly kind: "update"
+      readonly id: string
+      readonly patch: ReadingDictionaryPatch
+    }
+  | { readonly kind: "remove"; readonly id: string }
+
+export function applyReadingDictionaryDraft<
+  Entry extends { readonly id: string },
+>(
+  entries: readonly Entry[],
+  draft: ReadingDictionaryDraft<Entry>
+): readonly Entry[] {
+  switch (draft.kind) {
+    case "add":
+      return [draft.entry, ...entries]
+    case "update":
+      return entries.map((entry) =>
+        entry.id === draft.id ? { ...entry, ...draft.patch } : entry
+      )
+    case "remove":
+      return entries.filter((entry) => entry.id !== draft.id)
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * エラー応答
  * ------------------------------------------------------------------ */
 

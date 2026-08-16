@@ -10,6 +10,8 @@ import {
   failureRecovery,
   reduceGenerationStream,
   resolvedJobStatus,
+  sameAdoptedArticles,
+  sameJobFailure,
   selectionLabel,
   type GenerationStream,
 } from "./model"
@@ -140,5 +142,62 @@ describe("view model helpers", () => {
     expect(resolvedJobStatus(undefined, "running")).toBe("running")
     expect(selectionLabel(0)).toBe("記事を選択してください")
     expect(selectionLabel(3)).toBe("3/20件を選択中")
+  })
+})
+
+/**
+ * `STATE_SNAPSHOT`は進捗のたびに届き、そのたびに配列とオブジェクトを作り
+ * 直す。参照で比べると中身が同じでも別物に見え、購読側が毎フレーム描き直
+ * される。何をもって同じとするかをここで固定する。
+ */
+describe("sameAdoptedArticles", () => {
+  const article = (id: string) => ({
+    articleId: id,
+    title: `記事 ${id}`,
+    sourceName: "Zenn",
+  })
+
+  it("treats a rebuilt but identical list as unchanged", () => {
+    expect(sameAdoptedArticles([article("a")], [article("a")])).toBe(true)
+  })
+
+  it("detects an added article", () => {
+    expect(
+      sameAdoptedArticles([article("a")], [article("a"), article("b")])
+    ).toBe(false)
+  })
+
+  // 記事情報は後から埋まる (`sourceName`が「取得中」から名前へ変わる)。
+  // それは画面に出る変化なので、同じとは見なさない。
+  it("detects metadata that arrived later", () => {
+    expect(
+      sameAdoptedArticles(
+        [{ articleId: "a", title: "記事 a", sourceName: undefined }],
+        [article("a")]
+      )
+    ).toBe(false)
+  })
+})
+
+describe("sameJobFailure", () => {
+  const failure = {
+    code: "provider-timeout",
+    message: "timed out",
+    retryable: true,
+  }
+
+  it("treats a rebuilt but identical failure as unchanged", () => {
+    expect(sameJobFailure(failure, { ...failure })).toBe(true)
+  })
+
+  it("separates absence from presence", () => {
+    expect(sameJobFailure(undefined, failure)).toBe(false)
+    expect(sameJobFailure(undefined, undefined)).toBe(true)
+  })
+
+  it("detects a different failure code", () => {
+    expect(
+      sameJobFailure(failure, { ...failure, code: "job-deadline-exceeded" })
+    ).toBe(false)
   })
 })

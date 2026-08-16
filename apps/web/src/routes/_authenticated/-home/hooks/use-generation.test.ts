@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
+import { generationStreamAtom } from "../atoms"
 import { emptyGenerationStream, type GenerationStream } from "../model"
 
-const streamState = vi.hoisted(() => ({
-  current: undefined as GenerationStream | undefined,
-}))
-
+// 実際の購読はしない。ストリームの状態はatomへ直接置いて動かす
+// (`useGeneration`はそのatomしか見ない)。
 vi.mock("./use-generation-stream", () => ({
-  useGenerationStream: () => streamState.current,
+  useGenerationStream: () => {},
 }))
 vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -51,6 +50,17 @@ function routes(): Parameters<typeof stubFetch>[0] {
   ]
 }
 
+/** 最新ジョブのストリームが繋がった状態。idを揃えないと今のジョブとみなされない。 */
+function connectStream(store: {
+  set: (atom: typeof generationStreamAtom, value: GenerationStream) => void
+}) {
+  store.set(generationStreamAtom, {
+    ...emptyGenerationStream,
+    jobId: runningJob.id,
+    connected: true,
+  })
+}
+
 function jobPolls(calls: ReadonlyArray<{ url: string; method: string }>) {
   return calls.filter(
     (call) => call.url === "/v1/episode-jobs" && call.method === "GET"
@@ -58,14 +68,10 @@ function jobPolls(calls: ReadonlyArray<{ url: string; method: string }>) {
 }
 
 describe("useGeneration", () => {
-  beforeEach(() => {
-    streamState.current = emptyGenerationStream
-    vi.useFakeTimers()
-  })
+  beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
   it("polls the job while the stream is down", async () => {
-    streamState.current = { ...emptyGenerationStream, connected: false }
     const { calls } = stubFetch(routes())
     const { result } = renderHookWithProviders(() => useGeneration())
 
@@ -79,14 +85,12 @@ describe("useGeneration", () => {
   })
 
   it("stops polling as soon as the stream is connected", async () => {
-    streamState.current = { ...emptyGenerationStream, connected: false }
     const { calls } = stubFetch(routes())
-    const { result, rerender } = renderHookWithProviders(() => useGeneration())
+    const { result, store } = renderHookWithProviders(() => useGeneration())
 
     await vi.waitFor(() => expect(result.current?.state).toBe("running"))
 
-    streamState.current = { ...emptyGenerationStream, connected: true }
-    rerender()
+    connectStream(store)
     await vi.advanceTimersByTimeAsync(0)
     const afterConnect = jobPolls(calls)
 
@@ -98,19 +102,44 @@ describe("useGeneration", () => {
   })
 
   it("resumes polling when the stream drops", async () => {
-    streamState.current = { ...emptyGenerationStream, connected: true }
     const { calls } = stubFetch(routes())
-    const { result, rerender } = renderHookWithProviders(() => useGeneration())
+    const { result, store } = renderHookWithProviders(() => useGeneration())
+    connectStream(store)
 
     await vi.waitFor(() => expect(result.current?.state).toBe("running"))
 
-    streamState.current = { ...emptyGenerationStream, connected: false }
-    rerender()
+    store.set(generationStreamAtom, emptyGenerationStream)
+    await vi.advanceTimersByTimeAsync(0)
     const afterDrop = jobPolls(calls)
 
     await vi.advanceTimersByTimeAsync(2_500)
 
     expect(jobPolls(calls)).toBeGreaterThan(afterDrop)
+  })
+
+  /**
+   * 前のジョブのストリームでポーリングを止めない。止めると、新しいジョブの
+   * 進捗を誰も追わなくなる（SSEの購読が張り替わるまでの隙に起きうる）。
+   */
+  it("keeps polling while the connected stream belongs to another job", async () => {
+    const { calls } = stubFetch(routes())
+    const { result, store } = renderHookWithProviders(() => useGeneration())
+
+    await vi.waitFor(() => expect(result.current?.state).toBe("running"))
+
+    store.set(generationStreamAtom, {
+      ...emptyGenerationStream,
+      jobId: "job-previous",
+      connected: true,
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    const before = jobPolls(calls)
+
+    await vi.advanceTimersByTimeAsync(2_500)
+
+    expect(jobPolls(calls)).toBeGreaterThan(before)
+    // 前のジョブの状態を「今のジョブのライブ表示」として出さない。
+    expect(result.current?.streaming).toBe(false)
   })
 })
 
