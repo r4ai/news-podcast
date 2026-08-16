@@ -1,17 +1,17 @@
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
+import { useAtomValue } from "jotai"
 import { useEffect, useState, useTransition } from "react"
 
 import { episodesQueryOptions } from "@/features/episodes"
-import { settingsQueryOptions } from "@/features/settings"
-import {
-  enabledFeedNames,
-  feedsQueryOptions,
-  subscriptionsQueryOptions,
-  type Feed,
-  type Subscription,
-} from "@/features/subscriptions"
 import { api } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
+import {
+  generationConnectedAtom,
+  generationFinishedAtom,
+  generationLiveFailureAtom,
+  generationLiveStageAtom,
+  generationLiveStatusAtom,
+} from "../atoms"
 import {
   failureMessage,
   failureRecovery,
@@ -20,7 +20,6 @@ import {
   stageLabel,
   stagePercent,
   type JobStatus,
-  type JobStage,
 } from "../model"
 import { settleJobAction } from "./job-action"
 import { useGenerationStream } from "./use-generation-stream"
@@ -35,10 +34,15 @@ export function useGeneration() {
     readonly string[]
   >([])
   const [submitError, setSubmitError] = useState<string>()
-  // SSEの購読は最新ジョブのIDに依存するので、このqueryより後でしか呼べない。
-  // `refetchInterval`はQueryがcommit後とtickごとに評価するcallbackなので、
-  // このrenderのbindingを後から埋めれば足りる。stateへミラーする必要はない。
-  let streamConnected = false
+  // ストリームの状態は「実際に描くもの」だけを購読する。timelineと採用記事は
+  // 進捗カードの中でしか描かれないので、ここでは読まない。読むと毎フレーム
+  // ダッシュボード全体が描き直される (ADR-0060)。
+  const streamConnected = useAtomValue(generationConnectedAtom)
+  const streamFinished = useAtomValue(generationFinishedAtom)
+  const liveStatus = useAtomValue(generationLiveStatusAtom)
+  const liveStage = useAtomValue(generationLiveStageAtom)
+  const liveFailure = useAtomValue(generationLiveFailureAtom)
+
   const jobs = api.useSuspenseQuery("get", "/v1/episode-jobs", undefined, {
     // 進行中のジョブがある間だけ追従し、静止したら止める。SSEが生きている
     // 間はそちらが最新なので、ポーリングはフォールバックとして眠らせる。
@@ -50,9 +54,6 @@ export function useGeneration() {
         : false,
   })
   const { data: episodes } = useSuspenseQuery(episodesQueryOptions)
-  const { data: settings } = useSuspenseQuery(settingsQueryOptions)
-  const { data: subscriptions } = useSuspenseQuery(subscriptionsQueryOptions)
-  const { data: feeds } = useSuspenseQuery(feedsQueryOptions)
   const createJob = api.useMutation("post", "/v1/episode-jobs")
   const cancelJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/cancel")
   const retryJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/retry")
@@ -63,25 +64,24 @@ export function useGeneration() {
   // 進行中かどうかで絞らず、常に最新ジョブを購読する。終端済みのジョブでも
   // サーバは履歴を全部リプレイして閉じるので、完成後も生成処理が何を
   // したかが残る。進行中だけを購読すると、完了と同時に作業ログが消える。
-  const stream = useGenerationStream(latestJob?.id)
-  streamConnected = stream.connected
+  useGenerationStream(latestJob?.id)
 
   // ストリームが終端に達したら、ジョブとエピソードの両方を取り直す。
   // ポーリング中は latestJob.status の変化が同じ役割を果たす。
   useEffect(() => {
-    if (!stream.finished) return
+    if (!streamFinished) return
     void queryClient.invalidateQueries({ queryKey: jobsQueryOptions.queryKey })
     void queryClient.invalidateQueries({
       queryKey: episodesQueryOptions.queryKey,
     })
-  }, [stream.finished, queryClient])
+  }, [streamFinished, queryClient])
 
   // SSEのretrying eventには次回時刻がある一方、画面の正本はjobs API。
   // 一度だけ再取得して、接続中でも再試行予定時刻とattemptを同期する。
   useEffect(() => {
-    if (stream.state?.status !== "retrying") return
+    if (liveStatus !== "retrying") return
     void queryClient.invalidateQueries({ queryKey: jobsQueryOptions.queryKey })
-  }, [stream.state?.status, queryClient])
+  }, [liveStatus, queryClient])
 
   useEffect(() => {
     if (latestJob?.status === "succeeded") {
@@ -92,17 +92,15 @@ export function useGeneration() {
   }, [latestJob?.status, queryClient])
 
   // SSEが繋がっている間はそちらが最新。切れていればポーリング結果を使う。
-  const liveState =
-    stream.connected || stream.finished ? stream.state : undefined
+  const live = streamConnected || streamFinished
   const state = resolvedJobStatus(
-    liveState?.status as JobStatus | undefined,
+    live ? (liveStatus as JobStatus | undefined) : undefined,
     latestJob?.status
   )
-  const stage = (liveState?.currentStage ?? latestJob?.stage) as
-    | JobStage
-    | undefined
+  const stage = (live ? liveStage : undefined) ?? latestJob?.stage
   const stageProgress = latestJob?.stageProgress
-  const failure = liveState?.failure ?? latestJob?.failure ?? undefined
+  const failure =
+    (live ? liveFailure : undefined) ?? latestJob?.failure ?? undefined
   const recovery = failureRecovery(failure?.code)
 
   function runJobAction(
@@ -159,14 +157,7 @@ export function useGeneration() {
     progress: state === "running" && stage ? stagePercent(stage) : undefined,
     stage: state === "running" && stage ? stageLabel(stage) : undefined,
     state,
-    timeline: stream.timeline,
-    adoptedArticles: stream.adoptedArticles,
-    streaming: stream.connected,
-    schedule: settings.generationSchedule,
-    subscriptionNames: enabledFeedNames(
-      subscriptions.items as readonly Subscription[],
-      feeds.items as readonly Feed[]
-    ),
+    streaming: streamConnected,
     episode: latestEpisode
       ? {
           title: latestEpisode.title,

@@ -174,7 +174,11 @@ Gatewayと4 Context serviceは`@news-podcast/service-runtime`のSupervisorを使
 - OSの配色やキーボードショートカットのような外部への購読はatomの`onMount`へ置く。リスナの寿命が購読の有無と一致し、依存配列が消える。
 - 定期取得する応答は`select`で実際に描く分まで絞る。キュー状態のように明細を丸ごと含む応答をそのまま購読すると、無関係な進捗だけで参照が変わり、ポーリングのたびに描き直される。`select`の結果にも構造共有が掛かるので、絞れば値が動いた時だけ描き直る（設定のAI処理パネルは30秒ごとに1回 → 0回。`ai-enrich-panel.render-count.test.tsx`が予算にしている）。
 - server stateはTanStack Queryのまま。ただし**suspendしない読み**（件数、同期状態）は`atomWithQuery`にして購読の単位を分ける。suspendする読みはTanStack Queryのsuspense hookを使う。`Panel`の表示・回復境界がそれに依存しており、`jotai-tanstack-query`のsuspense系atomはReact 19のSuspenseで解決しないことを実測している。
+- **流れ続ける外部イベントも同じ扱い**。生成中のAG-UIストリームは数分にわたり毎秒フレームを送るので、畳み込んだ結果をhookの返り値にすると購読が呼び出し位置に固定され、1フレームごとにダッシュボード全体（購読フィード、最新エピソード、記事選択ダイアログ）が描き直される。結果は`generationStreamAtom`が持ち、`selectAtom`で「実際に描く値」まで切り出して配る。段階と状態は文字列、採用記事は中身での同一性（`sameAdoptedArticles`）で比べ、値が動いた時だけ描き直す（実測: 3フレームで3回 → 0回。`generation-dashboard.render-count.test.tsx`が予算にしている）。
+- **表示境界は情報源ごとに割る**。1つのhookが画面全部のqueryを読むと、最も遅い1本が画面全体の初回表示を止める。ダッシュボードの右カラム（生成時刻・購読フィード）は設定/購読/フィードの3queryを自分で読み、自分の`Panel`を持つ。生成ステータスはジョブとエピソードだけを待って先に出る。
 - 初回フレームに要らないものはcritical pathへ置かない。OTelのSDK、Markdownのコンパイル器（KaTeX・Shiki・parse5）、トースト、better-authのclientはいずれも動的importにする。遅延で観測が欠けないよう、計装が載るまでのfetchは`pre-init-fetch`が記録し、後からspanへ起こす（ADR-0025）。
+- **画面が読むものはrouteのloaderで先読みする**。mount後に初めて取りに行くと、そのぶん往復1回分だけ空のカードが見える。読むものが画面の状態で変わる場合（設定画面の節）は`loaderDeps`へ入れ、開く節のqueryも一緒に走らせる。`queryOptions`はloaderと画面とinvalidationが同じ定義を指すよう1箇所に置く（ADR-0047）。
+- **確定を待たずに見せられる操作は`useOptimistic`で先に見せる**。追加・削除・切り替えは、更新と取り直しで往復2回分待たせると「押したのに何も起きない」時間になる。楽観適用は純粋なreducer（`applyDraft`／`applyTagVocabularyDraft`／`applyReadingDictionaryDraft`）として切り出し、環境非依存にテストする。確定値は常にサーバ応答で、失敗時の巻き戻しはTransitionの終了時にReactが行う。
 
 ### 7.3 初期画面構成
 

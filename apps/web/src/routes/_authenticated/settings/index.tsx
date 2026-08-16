@@ -9,12 +9,31 @@ import { ReadingDictionaryManager } from "./-components/reading-dictionary-manag
 import { SettingsNav } from "./-components/settings-nav"
 import { TagVocabularyManager } from "./-components/tag-vocabulary-manager"
 import { validateSettingsSearch, type SettingsSection } from "./-model"
+import {
+  readingDictionaryQueryOptions,
+  tagSuggestionsQueryOptions,
+  tagsQueryOptions,
+} from "./-queries"
 
 export const Route = createFileRoute("/_authenticated/settings/")({
   validateSearch: validateSettingsSearch,
-  // awaitしない先読み。未達ならPanelのfallbackが出る。
-  loader: ({ context }) => {
+  // 節ごとに読むものが違うので、どの節を開くかを先読みの依存に入れる。
+  loaderDeps: ({ search }) => ({ section: search.section }),
+  // awaitしない先読み。未達ならその節のfallbackが出る。
+  //
+  // 開く節の分もここで走らせ、mount後に初めて取りに行く往復を無くす。
+  // 以前は設定本体しか先読みせず、タグ・読み辞書は節を開いてから取りに
+  // いっていたので、切り替えのたびに空のカードが1往復分見えていた。
+  loader: ({ context, deps }) => {
     void context.queryClient.ensureQueryData(settingsQueryOptions)
+    if (deps.section === "tags") {
+      void context.queryClient.ensureQueryData(tagsQueryOptions)
+      void context.queryClient.ensureQueryData(tagSuggestionsQueryOptions)
+      return
+    }
+    if (deps.section === "dictionary") {
+      void context.queryClient.ensureQueryData(readingDictionaryQueryOptions)
+    }
   },
   component: SettingsRoute,
 })

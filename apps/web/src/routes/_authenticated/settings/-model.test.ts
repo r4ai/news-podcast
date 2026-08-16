@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  applyReadingDictionaryDraft,
+  applyTagVocabularyDraft,
   normalizeReading,
   problemStatus,
   readingProblem,
@@ -152,5 +154,104 @@ describe("problemStatus", () => {
     for (const value of [undefined, null, "409", new Error("boom"), {}]) {
       expect(problemStatus(value)).toBeUndefined()
     }
+  })
+})
+
+describe("applyTagVocabularyDraft", () => {
+  const tag = (id: string, name: string) => ({
+    id,
+    name,
+    createdAt: "2026-08-12T00:00:00.000Z",
+  })
+  const suggestion = (name: string) => ({
+    name,
+    occurrences: 3,
+    lastSeenAt: "2026-08-12T00:00:00.000Z",
+  })
+  const state = {
+    tags: [tag("tag-0", "AI"), tag("tag-1", "Rust")],
+    suggestions: [suggestion("WASM")],
+  }
+
+  it("removes only the targeted tag", () => {
+    const next = applyTagVocabularyDraft(state, { kind: "remove", id: "tag-0" })
+    expect(next.tags.map((item) => item.name)).toEqual(["Rust"])
+    expect(next.suggestions).toBe(state.suggestions)
+  })
+
+  it("appends a provisional tag while the request is in flight", () => {
+    const next = applyTagVocabularyDraft(state, {
+      kind: "add",
+      tag: tag("draft-1", "TypeScript"),
+    })
+    expect(next.tags.map((item) => item.name)).toEqual([
+      "AI",
+      "Rust",
+      "TypeScript",
+    ])
+  })
+
+  // 同名の作成はサーバ側で冪等。件数が増えたように見せると、応答が返った
+  // 瞬間に1件減って見える。
+  it("leaves the vocabulary untouched when the name is already known", () => {
+    const next = applyTagVocabularyDraft(state, {
+      kind: "add",
+      tag: tag("draft-1", "AI"),
+    })
+    expect(next.tags).toBe(state.tags)
+  })
+
+  // 採用は「提案から語彙へ移す」操作。片側だけ動くと、採用した名前が
+  // 両方に出たままになる。
+  it("moves a promoted suggestion into the vocabulary", () => {
+    const next = applyTagVocabularyDraft(state, {
+      kind: "promote",
+      tag: tag("draft-1", "WASM"),
+    })
+    expect(next.tags.map((item) => item.name)).toContain("WASM")
+    expect(next.suggestions).toEqual([])
+  })
+})
+
+describe("applyReadingDictionaryDraft", () => {
+  const entry = {
+    id: "entry-0",
+    surface: "GPT-5",
+    reading: "ジーピーティーファイブ",
+    accentType: 0,
+    source: "manual" as const,
+    createdAt: "2026-08-12T00:00:00.000Z",
+  }
+
+  it("removes only the targeted entry", () => {
+    expect(
+      applyReadingDictionaryDraft([entry], { kind: "remove", id: "entry-0" })
+    ).toEqual([])
+  })
+
+  // 新しい登録は「新しい順」の先頭に来る。末尾へ足すと、既定の並びでは
+  // 画面の外に現れて、追加できたのかどうか分からない。
+  it("puts a new entry at the head", () => {
+    const added = {
+      ...entry,
+      id: "draft-1",
+      surface: "Rust",
+      reading: "ラスト",
+    }
+    expect(
+      applyReadingDictionaryDraft([entry], { kind: "add", entry: added }).map(
+        (item) => item.id
+      )
+    ).toEqual(["draft-1", "entry-0"])
+  })
+
+  it("applies a patch to the matching entry only", () => {
+    const next = applyReadingDictionaryDraft([entry], {
+      kind: "update",
+      id: "entry-0",
+      patch: { reading: "ジーピーティーゴ" },
+    })
+    expect(next[0]?.reading).toBe("ジーピーティーゴ")
+    expect(next[0]?.surface).toBe("GPT-5")
   })
 })

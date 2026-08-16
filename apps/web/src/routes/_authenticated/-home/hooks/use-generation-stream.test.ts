@@ -1,11 +1,22 @@
 import { waitFor } from "@testing-library/react"
+import { useAtomValue } from "jotai"
 import { describe, expect, it, vi } from "vitest"
 
 import type { EpisodeJobAgUiEvent } from "@news-podcast/contracts/agui"
 
 import { renderHookWithProviders } from "@/shared/test/render"
 
+import { generationStreamAtom } from "../atoms"
 import { useGenerationStream } from "./use-generation-stream"
+
+/**
+ * hookは値を返さずatomへ書く (描画範囲を絞るため)。読み口はatomなので、
+ * テストも同じatomを購読して確かめる。
+ */
+function useStreamUnderTest(jobId: string) {
+  useGenerationStream(jobId)
+  return useAtomValue(generationStreamAtom)
+}
 
 const frame = (event: EpisodeJobAgUiEvent, id?: number): string =>
   [
@@ -79,7 +90,7 @@ describe("useGenerationStream", () => {
     ].join("\n\n")
     const requests = stubStream(body)
     const { result } = renderHookWithProviders(() =>
-      useGenerationStream("job-1")
+      useStreamUnderTest("job-1")
     )
 
     await waitFor(() => expect(result.current.finished).toBe(true))
@@ -101,7 +112,7 @@ describe("useGenerationStream", () => {
     ].join("\n\n")
     stubStream(body)
     const { result } = renderHookWithProviders(() =>
-      useGenerationStream("job-1")
+      useStreamUnderTest("job-1")
     )
 
     await waitFor(() => expect(result.current.state?.status).toBe("running"))

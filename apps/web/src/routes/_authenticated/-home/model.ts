@@ -167,6 +167,42 @@ export const emptyGenerationStream: GenerationStream = {
   finished: false,
 }
 
+export type JobFailure = NonNullable<EpisodeJobState["failure"]>
+
+/**
+ * 採用記事の一覧が実質同じか。
+ *
+ * `STATE_SNAPSHOT`は進捗のたびに届き、そのたびに採用記事の配列を作り直す。
+ * 参照で比べると「中身は同じなのに別物」と見えて、購読側が毎フレーム
+ * 描き直される。何をもって同じとするかをここで決める。
+ */
+export function sameAdoptedArticles(
+  a: readonly AdoptedArticle[],
+  b: readonly AdoptedArticle[]
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((article, index) => {
+      const other = b[index]
+      return (
+        other !== undefined &&
+        article.articleId === other.articleId &&
+        article.title === other.title &&
+        article.sourceName === other.sourceName
+      )
+    })
+  )
+}
+
+/** 失敗の同一性。表示に使うのはcodeとmessageだけなので、その2つで決める。 */
+export function sameJobFailure(
+  a: JobFailure | undefined,
+  b: JobFailure | undefined
+): boolean {
+  if (a === undefined || b === undefined) return a === b
+  return a.code === b.code && a.message === b.message
+}
+
 function isJobStage(value: string): value is JobStage {
   return value in stageLabels
 }

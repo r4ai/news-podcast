@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
-import { emptyGenerationStream, type GenerationStream } from "../model"
+import { generationStreamAtom } from "../atoms"
+import { emptyGenerationStream } from "../model"
 
-const streamState = vi.hoisted(() => ({
-  current: undefined as GenerationStream | undefined,
-}))
-
+// 実際の購読はしない。ストリームの状態はatomへ直接置いて動かす
+// (`useGeneration`はそのatomしか見ない)。
 vi.mock("./use-generation-stream", () => ({
-  useGenerationStream: () => streamState.current,
+  useGenerationStream: () => {},
 }))
 vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -58,14 +57,10 @@ function jobPolls(calls: ReadonlyArray<{ url: string; method: string }>) {
 }
 
 describe("useGeneration", () => {
-  beforeEach(() => {
-    streamState.current = emptyGenerationStream
-    vi.useFakeTimers()
-  })
+  beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
   it("polls the job while the stream is down", async () => {
-    streamState.current = { ...emptyGenerationStream, connected: false }
     const { calls } = stubFetch(routes())
     const { result } = renderHookWithProviders(() => useGeneration())
 
@@ -79,14 +74,15 @@ describe("useGeneration", () => {
   })
 
   it("stops polling as soon as the stream is connected", async () => {
-    streamState.current = { ...emptyGenerationStream, connected: false }
     const { calls } = stubFetch(routes())
-    const { result, rerender } = renderHookWithProviders(() => useGeneration())
+    const { result, store } = renderHookWithProviders(() => useGeneration())
 
     await vi.waitFor(() => expect(result.current?.state).toBe("running"))
 
-    streamState.current = { ...emptyGenerationStream, connected: true }
-    rerender()
+    store.set(generationStreamAtom, {
+      ...emptyGenerationStream,
+      connected: true,
+    })
     await vi.advanceTimersByTimeAsync(0)
     const afterConnect = jobPolls(calls)
 
@@ -98,14 +94,20 @@ describe("useGeneration", () => {
   })
 
   it("resumes polling when the stream drops", async () => {
-    streamState.current = { ...emptyGenerationStream, connected: true }
     const { calls } = stubFetch(routes())
-    const { result, rerender } = renderHookWithProviders(() => useGeneration())
+    const { result, store } = renderHookWithProviders(() => useGeneration())
+    store.set(generationStreamAtom, {
+      ...emptyGenerationStream,
+      connected: true,
+    })
 
     await vi.waitFor(() => expect(result.current?.state).toBe("running"))
 
-    streamState.current = { ...emptyGenerationStream, connected: false }
-    rerender()
+    store.set(generationStreamAtom, {
+      ...emptyGenerationStream,
+      connected: false,
+    })
+    await vi.advanceTimersByTimeAsync(0)
     const afterDrop = jobPolls(calls)
 
     await vi.advanceTimersByTimeAsync(2_500)

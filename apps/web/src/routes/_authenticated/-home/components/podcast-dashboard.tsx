@@ -1,12 +1,11 @@
 import {
   AlertTriangle,
-  Clock3,
   Library,
   ListMusic,
   RotateCcw,
-  Rss,
   Square,
 } from "lucide-react"
+import type { ReactNode } from "react"
 
 import {
   Alert,
@@ -31,13 +30,9 @@ import {
   EmptyTitle,
 } from "@workspace/ui/components/empty"
 import { Progress, ProgressLabel } from "@workspace/ui/components/progress"
-import { Separator } from "@workspace/ui/components/separator"
 import { Spinner } from "@workspace/ui/components/spinner"
 
 import { PageHeader } from "@/shared/layouts/page-header"
-
-import type { AdoptedArticle, TimelineEntry } from "../model"
-import { GenerationTimeline } from "./generation-timeline"
 
 export type DashboardState =
   | "ready"
@@ -69,18 +64,13 @@ export type PodcastDashboardProps = {
     readonly createdAt: string
     readonly sourceCount: number
   }
-  readonly schedule?: {
-    readonly enabled: boolean
-    readonly localTime: string
-    readonly timeZone: string
-  }
-  readonly subscriptionNames?: readonly string[]
-  readonly timeline?: readonly TimelineEntry[]
-  readonly adoptedArticles?: readonly AdoptedArticle[]
-  readonly streaming?: boolean
   readonly onGenerate?: () => void
   readonly onCancel?: () => void
   readonly onRetry?: () => void
+  /** 作業実況。SSEを購読するのはこの中だけ。 */
+  readonly timelineSlot?: ReactNode
+  /** 生成時刻と購読フィードの要約。独自の取得と表示境界を持つ。 */
+  readonly settingsSlot?: ReactNode
 }
 
 const statusCopy: Record<
@@ -370,81 +360,19 @@ function LatestEpisode({ episode }: Pick<PodcastDashboardProps, "episode">) {
   )
 }
 
-function SettingsSummary({
-  schedule,
-  subscriptionNames = [],
-}: Pick<PodcastDashboardProps, "schedule" | "subscriptionNames">) {
-  return (
-    <aside aria-label="購読と生成設定" className="flex flex-col gap-4">
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>
-            <h2 className="flex items-center gap-2">
-              <Clock3 aria-hidden="true" />
-              生成時刻
-            </h2>
-          </CardTitle>
-          <CardAction>
-            <a
-              className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href="/schedule"
-            >
-              変更
-            </a>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1">
-          <p className="font-medium">
-            {schedule?.enabled
-              ? `毎日 ${schedule.localTime}`
-              : "自動生成はオフ"}
-          </p>
-          {schedule ? (
-            <p className="text-sm text-muted-foreground">{schedule.timeZone}</p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>
-            <h2 className="flex items-center gap-2">
-              <Rss aria-hidden="true" />
-              購読フィード
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            {subscriptionNames.length}件を購読中
-          </CardDescription>
-          <CardAction>
-            <a
-              className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href="/subscriptions"
-            >
-              管理
-            </a>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {subscriptionNames.length > 0 ? (
-            <ul className="flex flex-col text-sm">
-              {subscriptionNames.map((name, index) => (
-                <li className="flex flex-col gap-3" key={name}>
-                  {index > 0 ? <Separator /> : null}
-                  <span>{name}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">購読はありません。</p>
-          )}
-        </CardContent>
-      </Card>
-    </aside>
-  )
-}
-
-export function PodcastDashboard(props: PodcastDashboardProps) {
+/**
+ * 作業実況と設定要約は**slot**で受け取る。
+ *
+ * どちらも別の情報源を持つ (前者はSSE、後者は設定・購読・フィードの3query)。
+ * このcomponentが直接読むと、その更新のたびに生成ステータスと最新エピソード
+ * まで描き直され、初回表示も全部が揃うまで出せなくなる。propsだけを受け取る
+ * 約束は保ったまま、購読と表示境界を差し込む側へ預ける (ADR-0060)。
+ */
+export function PodcastDashboard({
+  settingsSlot,
+  timelineSlot,
+  ...props
+}: PodcastDashboardProps) {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -454,17 +382,10 @@ export function PodcastDashboard(props: PodcastDashboardProps) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.8fr)] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">
           <GenerationStatus {...props} />
-          <GenerationTimeline
-            adoptedArticles={props.adoptedArticles ?? []}
-            streaming={props.streaming}
-            timeline={props.timeline ?? []}
-          />
+          {timelineSlot}
           <LatestEpisode episode={props.episode} />
         </div>
-        <SettingsSummary
-          schedule={props.schedule}
-          subscriptionNames={props.subscriptionNames}
-        />
+        {settingsSlot}
       </div>
     </div>
   )
