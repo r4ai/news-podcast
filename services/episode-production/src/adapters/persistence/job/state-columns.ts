@@ -46,6 +46,8 @@ export type EpisodeJobRow = {
     | null
   stageStartedAt?: string | null
   lastProgressAt?: string | null
+  stageProgressCompleted?: number | null
+  stageProgressTotal?: number | null
 }
 
 const encodeJob = Schema.encodeSync(EpisodeJobSchema)
@@ -146,6 +148,14 @@ export const toJobRow = (job: EpisodeJob): EpisodeJobRow => {
       encoded._tag === "Running" ? (encoded.stageStartedAt ?? null) : null,
     lastProgressAt:
       encoded._tag === "Running" ? (encoded.lastProgressAt ?? null) : null,
+    stageProgressCompleted:
+      encoded._tag === "Running"
+        ? (encoded.stageProgress?.completed ?? null)
+        : null,
+    stageProgressTotal:
+      encoded._tag === "Running"
+        ? (encoded.stageProgress?.total ?? null)
+        : null,
     ...stateColumnsOf(encoded),
   }
 }
@@ -198,6 +208,14 @@ const documentOf = (row: EpisodeJobRow, articleIds: readonly string[]) => {
         ...(row.lastProgressAt == null
           ? {}
           : { lastProgressAt: row.lastProgressAt }),
+        ...(row.stageProgressCompleted == null || row.stageProgressTotal == null
+          ? {}
+          : {
+              stageProgress: {
+                completed: row.stageProgressCompleted,
+                total: row.stageProgressTotal,
+              },
+            }),
       }
     case "Retrying":
       return {

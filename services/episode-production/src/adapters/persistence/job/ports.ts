@@ -63,6 +63,14 @@ export type SqliteJobHandle = Readonly<{
     readonly phase: "started" | "finished"
     readonly occurredAt: string
   }) => boolean
+  reportStageProgress: (input: {
+    readonly jobId: string
+    readonly leaseToken: string
+    readonly step: "synthesizing_audio"
+    readonly completed: number
+    readonly total: number
+    readonly occurredAt: string
+  }) => boolean
   recordSelectedArticles: (input: {
     readonly jobId: string
     readonly leaseToken: string

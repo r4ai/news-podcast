@@ -392,11 +392,23 @@ export const executeEpisodeJob =
         yield* markStep("synthesizing_audio", "started")
         yield* assertLease()
         const bytes = yield* ports.speech
-          .synthesize({
-            text: script.script,
-            dictionarySnapshot,
-            ...(signal === undefined ? {} : { signal }),
-          })
+          .synthesize(
+            {
+              text: script.script,
+              dictionarySnapshot,
+              ...(signal === undefined ? {} : { signal }),
+            },
+            (progress) =>
+              ports.persistence
+                .reportStageProgress({
+                  jobId: job.jobId,
+                  leaseToken: job.lease.token,
+                  step: "synthesizing_audio",
+                  ...progress,
+                  occurredAt: ports.now(),
+                })
+                .pipe(Effect.ignore)
+          )
           .pipe(Effect.mapError(withProviderStage("speech")))
         yield* markStep("synthesizing_audio", "finished")
         yield* markStep("storing_episode", "started")

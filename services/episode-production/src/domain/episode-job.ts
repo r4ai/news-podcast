@@ -69,6 +69,12 @@ export const RunningJobSchema = Schema.TaggedStruct("Running", {
   stage: Schema.optional(EpisodeJobStageSchema),
   stageStartedAt: Schema.optional(UtcTimestampSchema),
   lastProgressAt: Schema.optional(UtcTimestampSchema),
+  stageProgress: Schema.optional(
+    Schema.Struct({
+      completed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      total: Schema.Int.check(Schema.isGreaterThan(0)),
+    }).check(Schema.makeFilter(({ completed, total }) => completed <= total))
+  ),
   lease: Schema.Struct({
     token: LeaseTokenSchema,
     leasedUntil: UtcTimestampSchema,

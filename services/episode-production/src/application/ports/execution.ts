@@ -158,6 +158,14 @@ export type EpisodeExecutionPorts = DeepReadonly<{
       phase: "started" | "finished"
       occurredAt: UtcTimestamp
     }) => Effect.Effect<void, PipelineFailure | LeaseFailure>
+    reportStageProgress: (input: {
+      jobId: JobId
+      leaseToken: LeaseToken
+      step: "synthesizing_audio"
+      completed: number
+      total: number
+      occurredAt: UtcTimestamp
+    }) => Effect.Effect<void, PipelineFailure | LeaseFailure>
     recordSelectedArticles: (input: {
       jobId: JobId
       leaseToken: LeaseToken

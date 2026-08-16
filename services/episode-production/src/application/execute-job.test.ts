@@ -112,6 +112,7 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
     },
     persistence: {
       markStep: vi.fn(() => Effect.void),
+      reportStageProgress: vi.fn(() => Effect.void),
       recordSelectedArticles: vi.fn(() => Effect.void),
       renewLease: () => Effect.succeed("Applied"),
       assertLease: vi.fn(() => Effect.void),
@@ -176,7 +177,8 @@ describe("executeEpisodeJob", () => {
         dictionarySnapshot: expect.objectContaining({
           fingerprint: "a".repeat(64),
         }),
-      })
+      }),
+      expect.any(Function)
     )
 
     const saved = vi.mocked(first.persistence.saveDictionarySnapshot).mock
@@ -228,6 +230,12 @@ describe("executeEpisodeJob", () => {
 
   it("completes selected sources and atomically writes success plus outbox intent", async () => {
     const ports = makePorts()
+    vi.mocked(ports.speech.synthesize).mockImplementation(
+      (_request, onProgress) =>
+        onProgress!({ completed: 1, total: 1 }).pipe(
+          Effect.as(new Uint8Array([1, 2, 3]))
+        )
+    )
     const outcome = await Effect.runPromise(
       executeEpisodeJob(ports)({ job: running })
     )
@@ -251,6 +259,14 @@ describe("executeEpisodeJob", () => {
         episodeId: "6518412b-ce2f-4641-9f2c-a02dd515bc31",
       })
     )
+    expect(ports.persistence.reportStageProgress).toHaveBeenCalledWith({
+      jobId: running.jobId,
+      leaseToken: running.lease.token,
+      step: "synthesizing_audio",
+      completed: 1,
+      total: 1,
+      occurredAt: at("2026-08-12T00:00:30.000Z"),
+    })
     expect(ports.persistence.completeWithOutbox).toHaveBeenCalledWith(
       expect.objectContaining({
         leaseToken: "lease-1",

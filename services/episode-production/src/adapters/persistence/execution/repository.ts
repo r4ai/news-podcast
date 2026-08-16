@@ -130,6 +130,17 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
           applied ? Effect.void : Effect.fail(staleLease())
         )
       ),
+    reportStageProgress: (input) =>
+      tryPersistence("report_stage_progress", () =>
+        handle.reportStageProgress({
+          ...input,
+          occurredAt: encodeTimestamp(input.occurredAt),
+        })
+      ).pipe(
+        Effect.flatMap((applied) =>
+          applied ? Effect.void : Effect.fail(staleLease())
+        )
+      ),
     recordSelectedArticles: (input) =>
       tryPersistence("record_selected_articles", () =>
         handle.recordSelectedArticles({

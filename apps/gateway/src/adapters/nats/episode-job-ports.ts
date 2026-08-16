@@ -76,6 +76,9 @@ export const toEpisodeJob = (
     ...(job.status === "running" && job.lastProgressAt !== undefined
       ? { lastProgressAt: job.lastProgressAt }
       : {}),
+    ...(job.status === "running" && job.stageProgress !== undefined
+      ? { stageProgress: job.stageProgress }
+      : {}),
     ...(job.status === "retrying" ? { nextAttemptAt: job.retryAt } : {}),
     ...(["succeeded", "failed", "canceled"].includes(job.status)
       ? { finishedAt: stateTimestamp(job) }

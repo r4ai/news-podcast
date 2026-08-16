@@ -90,6 +90,9 @@ export const projectEpisodeJob = (job: EpisodeJob): ProductionEpisodeJob => {
         ...(job.lastProgressAt === undefined
           ? {}
           : { lastProgressAt: encodeTimestamp(job.lastProgressAt) }),
+        ...(job.stageProgress === undefined
+          ? {}
+          : { stageProgress: job.stageProgress }),
       })
     case "Retrying":
       return decodeProductionJob({

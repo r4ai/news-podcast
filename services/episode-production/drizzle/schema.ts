@@ -68,6 +68,8 @@ export const episodeJobs = sqliteTable(
     }),
     stageStartedAt: text("stage_started_at"),
     lastProgressAt: text("last_progress_at"),
+    stageProgressCompleted: integer("stage_progress_completed"),
+    stageProgressTotal: integer("stage_progress_total"),
   },
   (table) => [
     unique("episode_jobs_owner_idempotency").on(
@@ -110,6 +112,10 @@ export const episodeJobs = sqliteTable(
     check(
       "episode_jobs_canceled_check",
       sql`${table.status} <> 'Canceled' OR (${table.canceledAt} IS NOT NULL AND ${table.cancelReason} IS NOT NULL)`
+    ),
+    check(
+      "episode_jobs_stage_progress_check",
+      sql`(${table.stageProgressCompleted} IS NULL AND ${table.stageProgressTotal} IS NULL) OR (${table.stageProgressCompleted} >= 0 AND ${table.stageProgressTotal} > 0 AND ${table.stageProgressCompleted} <= ${table.stageProgressTotal})`
     ),
   ]
 )

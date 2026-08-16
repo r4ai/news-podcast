@@ -105,6 +105,14 @@ const progressStateOf = (
       plan?.selectionMode ?? (requestedIds.length > 0 ? "manual" : "automatic"),
     selectedArticles,
     ...(row.currentStage == null ? {} : { currentStage: row.currentStage }),
+    ...(row.stageProgressCompleted == null || row.stageProgressTotal == null
+      ? {}
+      : {
+          stageProgress: {
+            completed: row.stageProgressCompleted,
+            total: row.stageProgressTotal,
+          },
+        }),
     ...(row.failureCode === null
       ? {}
       : {
@@ -330,6 +338,8 @@ export const makeJobHandle = (
             currentStage,
             stageStartedAt,
             lastProgressAt: input.occurredAt,
+            stageProgressCompleted: null,
+            stageProgressTotal: null,
           })
           .where(eq(episodeJobs.jobId, input.jobId))
           .run()
@@ -338,6 +348,8 @@ export const makeJobHandle = (
           currentStage,
           stageStartedAt,
           lastProgressAt: input.occurredAt,
+          stageProgressCompleted: null,
+          stageProgressTotal: null,
         }
         const state = progressStateOf(tx, updated)
         appendAgUiEvent(
@@ -354,6 +366,53 @@ export const makeJobHandle = (
             state,
             input.occurredAt,
             `${input.jobId}:run:${row.attempt}:step:${input.step}:${input.phase}:state`
+          )
+        )
+        return true
+      }),
+
+    reportStageProgress: (input) =>
+      database.transaction((tx) => {
+        if (
+          !Number.isSafeInteger(input.completed) ||
+          !Number.isSafeInteger(input.total) ||
+          input.completed < 0 ||
+          input.total <= 0 ||
+          input.completed > input.total
+        )
+          return false
+        const row = selectJob(tx)
+          .where(
+            and(
+              eq(episodeJobs.jobId, input.jobId),
+              eq(episodeJobs.status, "Running"),
+              eq(episodeJobs.leaseToken, input.leaseToken),
+              eq(episodeJobs.currentStage, input.step)
+            )
+          )
+          .get()
+        if (row === undefined) return false
+        tx.update(episodeJobs)
+          .set({
+            lastProgressAt: input.occurredAt,
+            stageProgressCompleted: input.completed,
+            stageProgressTotal: input.total,
+          })
+          .where(eq(episodeJobs.jobId, input.jobId))
+          .run()
+        const updated = {
+          ...row,
+          lastProgressAt: input.occurredAt,
+          stageProgressCompleted: input.completed,
+          stageProgressTotal: input.total,
+        }
+        appendAgUiEvent(
+          tx,
+          updated,
+          stateSnapshotEvent(
+            progressStateOf(tx, updated),
+            input.occurredAt,
+            `${input.jobId}:run:${row.attempt}:step:${input.step}:progress:${input.completed}:${input.total}`
           )
         )
         return true

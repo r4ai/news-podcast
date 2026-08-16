@@ -411,6 +411,7 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
 
   it("chunks long text and merges compatible WAV data under the total byte limit", async () => {
     let synthesisCount = 0
+    const progress: { completed: number; total: number }[] = []
     const fake = await startServer((request, response) => {
       const path = new URL(request.url!, "http://test").pathname
       if (path !== "/synthesis") return defaultHandler(request, response, "", 0)
@@ -419,16 +420,20 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
       response.end(wav(synthesisCount === 1 ? [1, 2] : [3, 4]))
     })
 
+    const synthesizer = makeSynthesizer(fake.baseUrl, {
+      maximumTextCharactersPerRequest: 4,
+    })
     const bytes = await Effect.runPromise(
-      synthesize(
-        makeSynthesizer(fake.baseUrl, {
-          maximumTextCharactersPerRequest: 4,
-        }),
-        "12345678"
+      synthesizer.synthesize({ text: "12345678" }, (reported) =>
+        Effect.sync(() => progress.push(reported))
       )
     )
 
     expect(synthesisCount).toBe(2)
+    expect(progress).toEqual([
+      { completed: 1, total: 2 },
+      { completed: 2, total: 2 },
+    ])
     expect(Array.from(bytes.slice(44))).toEqual([1, 2, 3, 4])
     expect(new DataView(bytes.buffer).getUint32(4, true)).toBe(bytes.length - 8)
     expect(new DataView(bytes.buffer).getUint32(40, true)).toBe(4)

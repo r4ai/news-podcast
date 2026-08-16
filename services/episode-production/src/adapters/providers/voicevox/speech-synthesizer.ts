@@ -4,7 +4,6 @@ import { Effect } from "effect"
 import { retryProvider } from "../../../application/retry-provider.js"
 import { applyReadingDictionary } from "../../../application/apply-reading-dictionary.js"
 import type { SpeechSynthesizer } from "../../../application/ports/speech-synthesizer.js"
-import type { ProviderFailure } from "../../../domain/provider-reliability.js"
 import { resolveStyleId, splitSpeech, synthesizeChunk } from "./api.js"
 import type {
   VoicevoxSpeechSynthesizerConfig,
@@ -28,12 +27,12 @@ export const makeVoicevoxSpeechSynthesizer = (
   dependencies: VoicevoxSpeechSynthesizerDependencies = {}
 ): SpeechSynthesizer => {
   const fetcher = dependencies.fetcher ?? fetch
-  const synthesize: SpeechSynthesizer["synthesize"] = (request) => {
+  const synthesize: SpeechSynthesizer["synthesize"] = (request, onProgress) => {
     const applied = applyReadingDictionary(
       request.text,
       request.dictionarySnapshot?.entries ?? []
     )
-    const operation = (): Effect.Effect<Uint8Array, ProviderFailure> => {
+    const operation = () => {
       const chunks = splitSpeech(
         applied.text,
         config.maximumTextCharactersPerRequest
@@ -42,7 +41,7 @@ export const makeVoicevoxSpeechSynthesizer = (
       return Effect.gen(function* () {
         const styleId = yield* resolveStyleId(config, fetcher, request.signal)
         const waves: Uint8Array[] = []
-        for (const chunk of chunks) {
+        for (const [index, chunk] of chunks.entries()) {
           waves.push(
             yield* synthesizeChunk(
               config,
@@ -52,6 +51,9 @@ export const makeVoicevoxSpeechSynthesizer = (
               request.signal
             )
           )
+          if (onProgress !== undefined) {
+            yield* onProgress({ completed: index + 1, total: chunks.length })
+          }
         }
         const merged = mergeWaves(waves, config.maximumAudioBytes)
         return merged ?? (yield* Effect.fail(malformed()))

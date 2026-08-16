@@ -11,13 +11,21 @@ export type SpeechSynthesisRequest = Readonly<{
   readonly signal?: AbortSignal
 }>
 
+export type SpeechSynthesisProgress = Readonly<{
+  readonly completed: number
+  readonly total: number
+}>
+
 export type SpeechSynthesisFailure =
   | ProviderFailure
   | ProviderRetryExhausted<ProviderFailure>
 
 /** Transfers ownership of a fresh WAV byte array to the caller. */
 export type SpeechSynthesizer = Readonly<{
-  readonly synthesize: (
-    request: SpeechSynthesisRequest
-  ) => Effect.Effect<Uint8Array, SpeechSynthesisFailure>
+  readonly synthesize: <R = never>(
+    request: SpeechSynthesisRequest,
+    onProgress?: (
+      progress: SpeechSynthesisProgress
+    ) => Effect.Effect<void, never, R>
+  ) => Effect.Effect<Uint8Array, SpeechSynthesisFailure, R>
 }>
