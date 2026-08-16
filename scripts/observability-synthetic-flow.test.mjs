@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { createSyntheticTracePayload } from "./observability-synthetic-flow.mjs"
+import {
+  createSyntheticTracePayload,
+  sendSyntheticTrace,
+} from "./observability-synthetic-flow.mjs"
 
 test("creates a parent-linked client/server trace for the service graph", () => {
   const payload = createSyntheticTracePayload({
@@ -29,4 +32,23 @@ test("creates a parent-linked client/server trace for the service graph", () => 
   assert.equal(server.kind, 2)
   assert.equal(client.traceId, server.traceId)
   assert.equal(server.parentSpanId, client.spanId)
+})
+
+test("bounds the synthetic trace export request", async () => {
+  await assert.rejects(
+    sendSyntheticTrace({
+      timeoutMillis: 1,
+      fetchImpl: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener(
+            "abort",
+            () => reject(init.signal.reason),
+            {
+              once: true,
+            }
+          )
+        }),
+    }),
+    (error) => error?.name === "TimeoutError"
+  )
 })

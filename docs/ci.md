@@ -33,6 +33,8 @@ flowchart TD
 
 observability smokeはCIでhermeticなdev loginから認証済みfeed subscription APIまでの実サービスフローを通し、続けて機密情報を含まないOTLP client/server traceをCollectorへ送る。これにより、アプリの計装結果だけに依存せず、Collectorのservice graph契約も検証する。service graphのstore TTL（30秒）、metric flush（15秒）、remote write遅延を考慮してPrometheusにsynthetic edgeが現れるまで最大90秒待ってから判定する。ブラウザジョブは`web` workspaceから次のコマンドでChromiumとOS依存パッケージを準備する。
 
+CIの各jobには上限時間を設定し、Composeのhealth待機（180秒）とsmokeのHTTP要求（10秒）も明示的に期限を設ける。依存サービスの停止やrunner異常は、無期限の`in_progress`ではなく診断artifact付きの失敗として収束させる。pnpm store cacheは`static` jobだけが保存し、並行job間の同一cache key予約競合を避ける。
+
 ```bash
 pnpm --filter web exec playwright install --with-deps chromium
 ```

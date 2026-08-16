@@ -28,7 +28,10 @@ const config = {
   bucket: "news-podcast",
   accessKeyId: "access",
   secretAccessKey: "secret",
-  timeoutMillis: 1_000,
+  // The production archive deadline is 30 seconds. Keep the real-HTTP test
+  // comfortably below that while allowing concurrent CI workers to schedule
+  // the HTML, stylesheet, and image requests without aborting the capture.
+  timeoutMillis: 10_000,
   maximumHtmlBytes: 4_096,
 }
 

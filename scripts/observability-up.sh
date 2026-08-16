@@ -10,6 +10,6 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 docker compose --project-directory "$OBSERVABILITY_DIR" \
-  -f "$OBSERVABILITY_DIR/compose.yaml" up -d --wait
+  -f "$OBSERVABILITY_DIR/compose.yaml" up -d --wait --wait-timeout 180
 
 node "$REPOSITORY_ROOT/scripts/ensure-grafana-mcp-token.mjs"

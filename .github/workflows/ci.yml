@@ -23,6 +23,7 @@ jobs:
   static:
     name: static
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -84,6 +85,7 @@ jobs:
   unit:
     name: unit
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,8 +101,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -114,6 +114,7 @@ jobs:
   web-e2e:
     name: web-e2e
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -129,8 +130,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -156,6 +155,7 @@ jobs:
   visual:
     name: visual
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     # スナップショットの比較はピクセル単位なので、フォントとラスタライザが
     # 違えば同じページでも別の絵になる。ローカルの`pnpm test:visual`も
     # scripts/run-visual.sh が同じイメージで実行し、環境差そのものを無くす。
@@ -179,8 +179,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -200,6 +198,7 @@ jobs:
   web-perf:
     name: web-perf
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     # 計測は実行環境で揺れるので、ここでは落とさず数字を残すだけにする。
     # 退行はログとバンドル予算の差分で判断する。
     continue-on-error: true
@@ -218,8 +217,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -239,6 +236,7 @@ jobs:
   functional-e2e:
     name: functional-e2e
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -254,8 +252,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -275,6 +271,7 @@ jobs:
   observability:
     name: observability
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -290,8 +287,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -320,10 +315,10 @@ jobs:
           trap cleanup EXIT
 
           pnpm observability:infra:up
-          PROVIDER_MODE=fake docker compose -f compose.yaml -f compose.observability.yaml up -d --build --wait
+          PROVIDER_MODE=fake docker compose -f compose.yaml -f compose.observability.yaml up -d --build --wait --wait-timeout 180
 
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:4101/health/ready >/dev/null; then
+            if curl --connect-timeout 3 --max-time 5 --fail --silent http://127.0.0.1:4101/health/ready >/dev/null; then
               break
             fi
             if (( attempt == 30 )); then
@@ -334,7 +329,7 @@ jobs:
           done
 
           for attempt in $(seq 1 5); do
-            curl --fail --silent http://127.0.0.1:4001/api/auth/state >/dev/null
+            curl --connect-timeout 3 --max-time 10 --fail --silent http://127.0.0.1:4001/api/auth/state >/dev/null
             sleep 2
           done
 
@@ -344,12 +339,12 @@ jobs:
             exit 1
           fi
           cookie_jar="$RUNNER_TEMP/observability-dev-auth.cookies"
-          curl --fail --silent --show-error \
+          curl --connect-timeout 3 --max-time 10 --fail --silent --show-error \
             --cookie-jar "$cookie_jar" \
             --header "content-type: application/json" \
             --data "{\"password\":\"$dev_auth_password\"}" \
             http://127.0.0.1:4001/api/dev/login >/dev/null
-          curl --fail --silent --show-error \
+          curl --connect-timeout 3 --max-time 10 --fail --silent --show-error \
             --cookie "$cookie_jar" \
             http://127.0.0.1:4001/v1/me/feed-subscriptions >/dev/null
 
