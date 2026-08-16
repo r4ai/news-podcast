@@ -273,6 +273,7 @@ erDiagram
 | `episodes` / `episode_sources` | 台本・音声keyと、`articleId`・snapshot・入力RSSへ遡れるprovenance。legacy sourceだけ`articleId`がnullable |
 | `episode_job_agui_events` | 公式AG-UI event envelopeを保存する再開可能な進捗ログ |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
+| `content_enrichment_daily_progress` | ownerとUTC日付ごとのAI記事補完使用量。別ownerの枯渇・リセットから分離 |
 | `job_outbox` | Productionが完成eventをJetStreamへ確実に配信するtransactional outbox |
 | Better Auth tables | user、session、account、verification |
 

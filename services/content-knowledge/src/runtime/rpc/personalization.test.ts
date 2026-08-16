@@ -70,4 +70,38 @@ describe("personalization RPC", () => {
       { _tag: "Enqueued", count: 1 },
     ])
   })
+
+  it("scopes a daily enrichment reset to the actor owner", async () => {
+    const resetDaily = vi.fn(() => Effect.void)
+    const reply = vi.fn((_wire: string) => Effect.void)
+    const handler = makePersonalizationRpcHandler(
+      {
+        taxonomy: {} as never,
+        interestProfiles: {} as never,
+        enrichment: { resetDaily } as never,
+      },
+      {
+        newMessageId: () => "00508c91-8d8a-452f-82d3-fc621faea801",
+        now: () => "2026-08-13T01:00:00.000Z",
+      }
+    )
+
+    await Effect.runPromise(
+      handler({
+        subject: subjects.content.personalization,
+        payload: envelope({
+          operation: "ResetDailyEnrichment",
+          localDate: "2026-08-13",
+        }),
+        reply,
+      })
+    )
+
+    expect(resetDaily).toHaveBeenCalledWith("owner-a")
+    expect(
+      Schema.decodeUnknownSync(MessageEnvelopeSchema)(
+        JSON.parse(reply.mock.calls[0]![0])
+      ).payload
+    ).toEqual({ _tag: "Reset" })
+  })
 })
