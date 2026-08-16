@@ -57,14 +57,23 @@ function renderReader(markdown: string) {
   )
 }
 
+/**
+ * 本文はunified + Shikiの動的importを通ってから差し替わる。既定の1秒は
+ * テストファイルが並列で走る時のCPU次第で足りず、待ち時間だけが理由で
+ * 落ちることがある。待つ対象は変えず、締切だけ他の非同期待ちと揃える。
+ */
+const PIPELINE_TIMEOUT = { timeout: 5_000 } as const
+
 describe("ArticleReaderView table of contents", () => {
   it("shows the toc once the body has enough headings to navigate", async () => {
     const { container } = renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
 
-    await waitFor(() =>
-      expect(
-        screen.getAllByRole("navigation", { name: "目次" }).length
-      ).toBeGreaterThan(0)
+    await waitFor(
+      () =>
+        expect(
+          screen.getAllByRole("navigation", { name: "目次" }).length
+        ).toBeGreaterThan(0),
+      PIPELINE_TIMEOUT
     )
     expect(container.querySelector("details")).not.toBeNull()
   })
@@ -74,7 +83,10 @@ describe("ArticleReaderView table of contents", () => {
     // 「目次」と幅だけ取るレールが本文を狭める。
     const { container } = renderReader("# 章だけ\n\n本文が続く。")
 
-    await waitFor(() => expect(container.querySelector("h3")).not.toBeNull())
+    await waitFor(
+      () => expect(container.querySelector("h3")).not.toBeNull(),
+      PIPELINE_TIMEOUT
+    )
     expect(screen.queryByRole("navigation", { name: "目次" })).toBeNull()
     expect(container.querySelector("details")).toBeNull()
     expect(container.querySelector(".w-56")).toBeNull()
@@ -105,8 +117,9 @@ describe("ArticleReaderView table of contents", () => {
       </TestProviders>
     )
 
-    await waitFor(() =>
-      expect(container.querySelector("iframe")).not.toBeNull()
+    await waitFor(
+      () => expect(container.querySelector("iframe")).not.toBeNull(),
+      PIPELINE_TIMEOUT
     )
     expect(screen.queryByRole("navigation", { name: "目次" })).toBeNull()
   })

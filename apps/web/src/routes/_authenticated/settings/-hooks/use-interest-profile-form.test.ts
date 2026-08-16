@@ -42,7 +42,25 @@ describe("useInterestProfileForm", () => {
     await waitFor(() =>
       expect(result.current.draft).toEqual(savedSettings.interestProfile)
     )
+    // 開いた直後は保存済みと同じ内容なので、保存する意味がない。
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.canSubmit).toBe(false)
+  })
+
+  it("becomes submittable once the draft differs from what is saved", async () => {
+    const { result } = await renderForm([
+      { path: "/v1/me/settings", body: savedSettings },
+    ])
+    await waitFor(() => expect(result.current.draft).toBeDefined())
+
+    act(() => result.current.update({ include: "AI 半導体" }))
+    expect(result.current.dirty).toBe(true)
     expect(result.current.canSubmit).toBe(true)
+
+    // 元の内容へ戻せば、また押せなくなる。
+    act(() => result.current.discard())
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.draft).toEqual(savedSettings.interestProfile)
   })
 
   it("does not save until the confirmation dialog is accepted", async () => {

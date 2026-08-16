@@ -5,7 +5,12 @@ import { toast } from "@/shared/ui/toast"
 import { settingsQueryOptions } from "@/features/settings"
 import { api } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
-import { isSubmittable, toDraft, type InterestProfileDraft } from "../-model"
+import {
+  isDirty,
+  isWithinLimit,
+  toDraft,
+  type InterestProfileDraft,
+} from "../-model"
 
 /**
  * 興味プロフィール(include/exclude)の編集フォーム。保存は即座に反映せず、
@@ -16,10 +21,8 @@ export function useInterestProfileForm() {
   const queryClient = useQueryClient()
   const { data: settings } = useSuspenseQuery(settingsQueryOptions)
   const save = api.useMutation("patch", "/v1/me/settings")
-  const initial = settings.interestProfile
-  const [draft, setDraft] = useState<InterestProfileDraft>(() =>
-    toDraft(initial)
-  )
+  const saved = toDraft(settings.interestProfile)
+  const [draft, setDraft] = useState<InterestProfileDraft>(() => saved)
   const [pending, startTransition] = useTransition()
   const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -33,6 +36,10 @@ export function useInterestProfileForm() {
 
   function cancelSave() {
     setConfirmOpen(false)
+  }
+
+  function discard() {
+    setDraft(saved)
   }
 
   function confirmSave() {
@@ -55,12 +62,18 @@ export function useInterestProfileForm() {
     })
   }
 
+  // 変えていないのに押せる保存ボタンは、押した後に何が起きたのか分からない。
+  // 「未保存の変更があるか」を状態として持ち、そのまま画面へ出す。
+  const dirty = isDirty(draft, saved)
+
   return {
     draft,
     pending,
     confirmOpen,
-    canSubmit: isSubmittable(draft) && !pending,
+    dirty,
+    canSubmit: dirty && isWithinLimit(draft) && !pending,
     update,
+    discard,
     requestSave,
     cancelSave,
     confirmSave,

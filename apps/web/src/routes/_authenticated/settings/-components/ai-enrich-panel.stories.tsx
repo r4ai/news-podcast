@@ -28,7 +28,7 @@ const meta = {
   args: args({}),
   decorators: [
     (Story) => (
-      <main className="mx-auto max-w-xl p-4 sm:p-6">
+      <main className="mx-auto max-w-lg p-4 sm:p-6">
         <Story />
       </main>
     ),

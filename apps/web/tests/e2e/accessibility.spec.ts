@@ -63,15 +63,20 @@ const targets: readonly Target[] = [
       ).toBeVisible()
     },
   },
-  {
-    path: "/settings",
-    name: "設定",
-    ready: async (page) => {
-      await expect(
-        page.getByRole("heading", { name: "読み辞書" })
-      ).toBeVisible()
+  // 設定は項目ごとに独立した画面になったので、1つ開くだけでは残りを見ない。
+  ...(
+    [
+      ["ai", "興味プロフィール"],
+      ["tags", "タグ語彙"],
+      ["dictionary", "読み辞書"],
+    ] as const
+  ).map(([section, heading]) => ({
+    path: `/settings?section=${section}`,
+    name: `設定(${heading})`,
+    ready: async (page: Page) => {
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible()
     },
-  },
+  })),
 ]
 
 type Violation = {

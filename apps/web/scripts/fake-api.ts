@@ -23,6 +23,25 @@ type Job = {
   episodeId: string
 }
 
+type Tag = { id: string; name: string; createdAt: string }
+
+type TagSuggestion = {
+  name: string
+  occurrences: number
+  lastSeenAt: string
+}
+
+type ReadingDictionaryEntry = {
+  id: string
+  surface: string
+  reading: string
+  accentType: number
+  source: "manual" | "ai_auto"
+  episodeJobId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 type FeedSyncJob = {
   jobId: string
   feedId: string
@@ -102,6 +121,72 @@ function seedArticles() {
   }))
 }
 
+/**
+ * 設定画面は「登録済みが何十件も並んだ状態」でこそ一覧性が問われる。
+ * 空に近いseedだと、幅の使い方も折り返しも絵に出ない。
+ */
+function seedTags(): Tag[] {
+  return [
+    "生成AI",
+    "フロントエンド",
+    "TypeScript",
+    "データベース",
+    "セキュリティ",
+    "インフラ",
+    "設計",
+    "パフォーマンス",
+    "アクセシビリティ",
+    "モバイル",
+    "オープンソース",
+    "開発者体験",
+  ].map((name, index) => ({
+    id: `00000000-0000-4000-8000-00000000003${index.toString(16)}`,
+    name,
+    createdAt,
+  }))
+}
+
+function seedTagSuggestions(): TagSuggestion[] {
+  return [
+    ["エッジコンピューティング", 12],
+    ["WebAssembly", 9],
+    ["観測可能性", 7],
+    ["Rust", 6],
+    ["分散システム", 5],
+    ["型システム", 4],
+    ["CI/CD", 3],
+    ["ビルドツール", 3],
+    ["状態管理", 2],
+    ["テスト戦略", 2],
+  ].map(([name, occurrences]) => ({
+    name: name as string,
+    occurrences: occurrences as number,
+    lastSeenAt: createdAt,
+  }))
+}
+
+function seedReadingDictionary(): ReadingDictionaryEntry[] {
+  return [
+    ["GPT-5", "ジーピーティーファイブ", "manual"],
+    ["Durable Objects", "デュラブルオブジェクツ", "ai_auto"],
+    ["SQLite", "エスキューライト", "manual"],
+    ["WAL", "ダブリューエーエル", "ai_auto"],
+    ["TypeScript", "タイプスクリプト", "manual"],
+    ["Kubernetes", "クーベルネティス", "ai_auto"],
+    ["OAuth", "オーオース", "manual"],
+    ["nginx", "エンジンエックス", "ai_auto"],
+  ].map(([surface, reading, source], index) => ({
+    id: `00000000-0000-4000-8000-00000000004${index.toString(16)}`,
+    surface: surface as string,
+    reading: reading as string,
+    accentType: 0,
+    source: source as "manual" | "ai_auto",
+    episodeJobId: null,
+    createdAt,
+    updatedAt: createdAt,
+  }))
+}
+
 export type FakeApi = {
   readonly fetch: (request: Request) => Promise<Response>
   readonly articles: ReturnType<typeof seedArticles>
@@ -125,11 +210,18 @@ export function createFakeApi(): FakeApi {
         localTime: "07:00",
         timeZone: "Asia/Tokyo",
       },
-      interestProfile: { include: "", exclude: "" },
+      interestProfile: {
+        include: "生成AIの基盤モデル、フロントエンドの新技術、型システム",
+        exclude: "芸能ゴシップ、スポーツの試合速報",
+      },
     },
     jobs: [] as Job[],
     syncJob: undefined as FeedSyncJob | undefined,
     episodes: [] as Array<Record<string, unknown>>,
+    tags: seedTags(),
+    suggestions: seedTagSuggestions(),
+    dictionary: seedReadingDictionary(),
+    dailyUsed: 34,
   }
 
   async function fetch(request: Request): Promise<Response> {
@@ -217,6 +309,105 @@ export function createFakeApi(): FakeApi {
         state.settings = { ...state.settings, ...patch }
       }
       return json(state.settings)
+    }
+    if (path === "/v1/me/tags") {
+      if (request.method === "POST") {
+        const body = (await request.json()) as { name: string }
+        const tag: Tag = {
+          id: randomUUID(),
+          name: body.name,
+          createdAt: new Date().toISOString(),
+        }
+        state.tags = [...state.tags, tag]
+        return json(tag, 201)
+      }
+      return json({ items: state.tags, page: { hasMore: false } })
+    }
+    const tagMatch = /^\/v1\/me\/tags\/([^/]+)$/.exec(path)
+    if (tagMatch && request.method === "DELETE") {
+      state.tags = state.tags.filter((tag) => tag.id !== tagMatch[1])
+      return new Response(null, { status: 204 })
+    }
+    if (path === "/v1/me/tag-suggestions" && request.method === "GET") {
+      return json({ items: state.suggestions, page: { hasMore: false } })
+    }
+    if (
+      path === "/v1/me/tag-suggestions/promote" &&
+      request.method === "POST"
+    ) {
+      const body = (await request.json()) as { name: string }
+      const suggestion = state.suggestions.find(
+        (item) => item.name === body.name
+      )
+      if (suggestion === undefined) return json({ error: "not found" }, 404)
+      const tag: Tag = {
+        id: randomUUID(),
+        name: suggestion.name,
+        createdAt: new Date().toISOString(),
+      }
+      state.tags = [...state.tags, tag]
+      state.suggestions = state.suggestions.filter(
+        (item) => item.name !== body.name
+      )
+      return json(tag, 201)
+    }
+    if (path === "/v1/me/reading-dictionary") {
+      if (request.method === "POST") {
+        const body = (await request.json()) as {
+          surface: string
+          reading: string
+          accentType?: number
+        }
+        const now = new Date().toISOString()
+        const entry: ReadingDictionaryEntry = {
+          id: randomUUID(),
+          surface: body.surface,
+          reading: body.reading,
+          accentType: body.accentType ?? 0,
+          source: "manual",
+          episodeJobId: null,
+          createdAt: now,
+          updatedAt: now,
+        }
+        state.dictionary = [entry, ...state.dictionary]
+        return json(entry, 201)
+      }
+      return json({ items: state.dictionary, page: { hasMore: false } })
+    }
+    const dictionaryMatch = /^\/v1\/me\/reading-dictionary\/([^/]+)$/.exec(path)
+    if (dictionaryMatch) {
+      const entry = state.dictionary.find(
+        (item) => item.id === dictionaryMatch[1]
+      )
+      if (entry === undefined) return json({ error: "not found" }, 404)
+      if (request.method === "DELETE") {
+        state.dictionary = state.dictionary.filter(
+          (item) => item.id !== entry.id
+        )
+        return new Response(null, { status: 204 })
+      }
+      if (request.method === "PUT") {
+        const patch = (await request.json()) as Partial<ReadingDictionaryEntry>
+        Object.assign(entry, patch, { updatedAt: new Date().toISOString() })
+        return json(entry)
+      }
+    }
+    if (path === "/v1/me/enrich/queue" && request.method === "GET") {
+      return json({
+        processing: [],
+        pending: { count: 0, items: [] },
+        failed: { count: 0, items: [] },
+        recent: [],
+        daily: { used: state.dailyUsed, limit: 200 },
+        reprocessable: { count: articles.length },
+      })
+    }
+    if (path === "/v1/me/enrich/reprocess" && request.method === "POST") {
+      return json({ enqueued: articles.length })
+    }
+    if (path === "/v1/me/enrich/reset-daily" && request.method === "POST") {
+      state.dailyUsed = 0
+      return json({ message: "Daily enrichment usage reset" })
     }
     if (path === "/v1/me/articles" && request.method === "GET") {
       return json({ items: articles, page: { hasMore: false } })

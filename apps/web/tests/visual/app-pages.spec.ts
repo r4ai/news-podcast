@@ -8,6 +8,27 @@ const pages = [
   { path: "/subscriptions", title: "購読フィード", snapshot: "subscriptions" },
   { path: "/schedule", title: "生成時刻", snapshot: "schedule" },
   { path: "/library", title: "ライブラリ", snapshot: "library" },
+  // 設定は項目ごとに独立した画面なので、1枚では足りない。登録が積み上がるほど
+  // 幅の使い方が問われるので、偽Gatewayもタグ・提案・読み辞書をまとまった
+  // 件数で返す。
+  {
+    path: "/settings?section=ai",
+    title: "設定",
+    ready: "興味プロフィール",
+    snapshot: "settings-ai",
+  },
+  {
+    path: "/settings?section=tags",
+    title: "設定",
+    ready: "タグ語彙",
+    snapshot: "settings-tags",
+  },
+  {
+    path: "/settings?section=dictionary",
+    title: "設定",
+    ready: "読み辞書",
+    snapshot: "settings-dictionary",
+  },
 ] as const
 
 async function expectNoAccessibilityViolations(page: Page) {
@@ -97,6 +118,13 @@ for (const theme of ["light", "dark"] as const) {
             .getByRole("heading", { name: appPage.title, exact: true })
             .first()
         ).toBeVisible()
+        // 設定は`h1`が全項目で同じなので、開いている区画の見出しまで待つ。
+        const ready = "ready" in appPage ? appPage.ready : undefined
+        if (ready !== undefined) {
+          await expect(
+            page.getByRole("heading", { name: ready, exact: true })
+          ).toBeVisible()
+        }
         await expectStablePage(page, `${appPage.snapshot}-${suffix}`)
       }
 

@@ -9,6 +9,10 @@ import { tagNameDraftAtom } from "../-atoms"
 const TAGS_KEY = ["get", "/v1/me/tags"] as const
 const SUGGESTIONS_KEY = ["get", "/v1/me/tag-suggestions"] as const
 
+// 未取得のときに`?? []`と書くと、描画のたびに別物の空配列が下流へ渡る。
+const NO_TAGS = [] as const
+const NO_SUGGESTIONS = [] as const
+
 /**
  * タグ語彙(tags)とAI提案(tag_suggestions)の管理。
  * 語彙はAIの構造化出力のenum候補にそのまま使われるため、ここでの追加/削除が
@@ -38,12 +42,22 @@ export function useTagVocabulary() {
   function createTag() {
     const trimmed = store.get(tagNameDraftAtom).trim()
     if (!trimmed) return
+    // 同名の作成はサーバ側で冪等 (`onConflictDoNothing` して既存を読み直す)。
+    // エラーにならないので、既にあったことは応答のidが手元の語彙と一致するかで
+    // 見分ける。「追加しました」と出しておいて件数が増えないのが一番戸惑う。
+    const known = new Set((tagsQuery.data?.items ?? NO_TAGS).map((t) => t.id))
     startTransition(async () => {
       try {
-        await createMutation.mutateAsync({ body: { name: trimmed } })
+        const created = await createMutation.mutateAsync({
+          body: { name: trimmed },
+        })
         store.set(tagNameDraftAtom, "")
         await invalidate()
-        toast.success(`タグ「${trimmed}」を追加しました`)
+        toast.success(
+          known.has(created.id)
+            ? `タグ「${trimmed}」は既に登録されています`
+            : `タグ「${trimmed}」を追加しました`
+        )
       } catch {
         toast.error("タグを追加できませんでした")
       }
@@ -76,8 +90,8 @@ export function useTagVocabulary() {
   }
 
   return {
-    tags: tagsQuery.data?.items ?? [],
-    suggestions: suggestionsQuery.data?.items ?? [],
+    tags: tagsQuery.data?.items ?? NO_TAGS,
+    suggestions: suggestionsQuery.data?.items ?? NO_SUGGESTIONS,
     isLoading: tagsQuery.isPending,
     pending,
     createTag,
