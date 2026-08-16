@@ -11,6 +11,7 @@ import {
   generationLiveFailureAtom,
   generationLiveStageAtom,
   generationLiveStatusAtom,
+  generationStreamJobIdAtom,
 } from "../atoms"
 import {
   failureMessage,
@@ -37,6 +38,7 @@ export function useGeneration() {
   // ストリームの状態は「実際に描くもの」だけを購読する。timelineと採用記事は
   // 進捗カードの中でしか描かれないので、ここでは読まない。読むと毎フレーム
   // ダッシュボード全体が描き直される (ADR-0060)。
+  const streamJobId = useAtomValue(generationStreamJobIdAtom)
   const streamConnected = useAtomValue(generationConnectedAtom)
   const streamFinished = useAtomValue(generationFinishedAtom)
   const liveStatus = useAtomValue(generationLiveStatusAtom)
@@ -46,12 +48,18 @@ export function useGeneration() {
   const jobs = api.useSuspenseQuery("get", "/v1/episode-jobs", undefined, {
     // 進行中のジョブがある間だけ追従し、静止したら止める。SSEが生きている
     // 間はそちらが最新なので、ポーリングはフォールバックとして眠らせる。
-    refetchInterval: (query) =>
-      !streamConnected &&
-      query.state.data &&
-      hasActiveJob(query.state.data.items)
+    //
+    // 眠らせてよいのは「今の最新ジョブのストリームが繋がっている」時だけ。
+    // 前のジョブのストリームで止めると、新しいジョブの進捗が誰も追わなくなる。
+    refetchInterval: (query) => {
+      const items = query.state.data?.items
+      if (!items) return false
+      const streamIsCurrent =
+        items[0] !== undefined && streamJobId === items[0].id
+      return !(streamIsCurrent && streamConnected) && hasActiveJob(items)
         ? 1_000
-        : false,
+        : false
+    },
   })
   const { data: episodes } = useSuspenseQuery(episodesQueryOptions)
   const createJob = api.useMutation("post", "/v1/episode-jobs")
@@ -92,7 +100,10 @@ export function useGeneration() {
   }, [latestJob?.status, queryClient])
 
   // SSEが繋がっている間はそちらが最新。切れていればポーリング結果を使う。
-  const live = streamConnected || streamFinished
+  // ただし今のジョブのストリームである時だけ。購読の張り替えはEffectなので、
+  // ジョブが変わった直後の1描画では前のジョブの値がまだatomに残っている。
+  const liveForThisJob = latestJob !== undefined && streamJobId === latestJob.id
+  const live = liveForThisJob && (streamConnected || streamFinished)
   const state = resolvedJobStatus(
     live ? (liveStatus as JobStatus | undefined) : undefined,
     latestJob?.status
@@ -157,7 +168,7 @@ export function useGeneration() {
     progress: state === "running" && stage ? stagePercent(stage) : undefined,
     stage: state === "running" && stage ? stageLabel(stage) : undefined,
     state,
-    streaming: streamConnected,
+    streaming: liveForThisJob && streamConnected,
     episode: latestEpisode
       ? {
           title: latestEpisode.title,

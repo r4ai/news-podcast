@@ -82,7 +82,7 @@ export function useTagVocabulary() {
     draft: TagVocabularyDraft<Tag>,
     request: () => Promise<unknown>,
     onSuccess: (result: unknown) => void,
-    errorMessage: string
+    onError: () => void
   ) {
     startTransition(async () => {
       addDraft(draft)
@@ -91,7 +91,7 @@ export function useTagVocabulary() {
         await invalidate()
         onSuccess(result)
       } catch {
-        toast.error(errorMessage)
+        onError()
       }
     })
   }
@@ -103,6 +103,7 @@ export function useTagVocabulary() {
     // エラーにならないので、既にあったことは応答のidが手元の語彙と一致するかで
     // 見分ける。「追加しました」と出しておいて件数が増えないのが一番戸惑う。
     const known = new Set(vocabulary.tags.map((tag) => tag.id))
+    // 入力欄は先に空にする。楽観的に出した語彙と打った文字が二重に見えない。
     store.set(tagNameDraftAtom, "")
     run(
       { kind: "add", tag: provisionalTag(trimmed) },
@@ -114,7 +115,12 @@ export function useTagVocabulary() {
             : `タグ「${trimmed}」を追加しました`
         )
       },
-      "タグを追加できませんでした"
+      () => {
+        // 失敗したら打った内容を戻す。楽観的に出した語彙はReactが巻き戻すが、
+        // 入力欄は別の持ち主なので、ここで戻さないと打ち直しになる。
+        store.set(tagNameDraftAtom, trimmed)
+        toast.error("タグを追加できませんでした")
+      }
     )
   }
 
@@ -123,7 +129,7 @@ export function useTagVocabulary() {
       { kind: "remove", id: tagId },
       () => deleteMutation.mutateAsync({ params: { path: { tagId } } }),
       () => {},
-      "タグを削除できませんでした"
+      () => toast.error("タグを削除できませんでした")
     )
   }
 
@@ -132,7 +138,7 @@ export function useTagVocabulary() {
       { kind: "promote", tag: provisionalTag(suggestionName) },
       () => promoteMutation.mutateAsync({ body: { name: suggestionName } }),
       () => toast.success(`「${suggestionName}」をタグにしました`),
-      "タグを作成できませんでした"
+      () => toast.error("タグを作成できませんでした")
     )
   }
 

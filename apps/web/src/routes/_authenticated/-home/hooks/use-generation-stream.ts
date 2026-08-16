@@ -7,7 +7,11 @@ import { subscribeEventStream } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
 
 import { generationStreamAtom } from "../atoms"
-import { emptyGenerationStream, reduceGenerationStream } from "../model"
+import {
+  emptyGenerationStream,
+  openingGenerationStream,
+  reduceGenerationStream,
+} from "../model"
 
 /**
  * 進行中ジョブのAG-UIストリームを購読し、畳み込んだ結果をatomへ書く。
@@ -19,6 +23,9 @@ import { emptyGenerationStream, reduceGenerationStream } from "../model"
  * 接続できなかった場合は `connected: false` のままにし、呼び出し側が従来の
  * 1秒ポーリングへ落とせるようにする。ストリームは進捗の見せ方を良くする
  * ためのもので、正しさの単一障害点にはしない。
+ *
+ * atomはアプリ全体で1つなので、購読を畳む時は必ず空へ戻す。残したままだと、
+ * 画面を離れて戻ってきた最初の1描画に前のジョブの状態が出る。
  */
 export function useGenerationStream(jobId: string | undefined): void {
   const setStream = useSetAtom(generationStreamAtom)
@@ -30,7 +37,7 @@ export function useGenerationStream(jobId: string | undefined): void {
       return
     }
     // ジョブが変わったら状態を捨てる。前のジョブのタイムラインが混ざらない。
-    setStream(emptyGenerationStream)
+    setStream(openingGenerationStream(jobId))
     lastSequence.current = 0
     const controller = new AbortController()
 
@@ -68,6 +75,11 @@ export function useGenerationStream(jobId: string | undefined): void {
       }
     })
 
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      // 購読を畳んだら値も捨てる。unmountを跨いで残すと、次にこの画面へ
+      // 来た時の最初の1描画が前のジョブのままになる。
+      setStream(emptyGenerationStream)
+    }
   }, [jobId, setStream])
 }

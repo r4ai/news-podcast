@@ -153,6 +153,15 @@ export type TimelineEntry = TimelineStep
 export type AdoptedArticle = EpisodeJobState["selectedArticles"][number]
 
 export type GenerationStream = {
+  /**
+   * このストリームがどのジョブのものか。
+   *
+   * 畳み込み結果はアプリ全体で1つのatomにあり、画面を離れても残る。読む側が
+   * 「今見ているジョブのものか」を判断できないと、戻ってきた最初の1描画で
+   * 前のジョブの状態が出る。由来を値に含めることで、突き合わせが純粋な比較で
+   * 済む (ADR-0060の「前の値を覚えるstateを作らない」)。
+   */
+  readonly jobId?: string
   readonly connected: boolean
   readonly state?: EpisodeJobState
   readonly timeline: readonly TimelineEntry[]
@@ -165,6 +174,11 @@ export const emptyGenerationStream: GenerationStream = {
   timeline: [],
   adoptedArticles: [],
   finished: false,
+}
+
+/** そのジョブのために開かれた、まだ何も届いていないストリーム。 */
+export function openingGenerationStream(jobId: string): GenerationStream {
+  return { ...emptyGenerationStream, jobId }
 }
 
 export type JobFailure = NonNullable<EpisodeJobState["failure"]>

@@ -88,6 +88,10 @@ export function useReadingDictionary() {
     // 送るのは正規化した後の読み。ひらがなのままだとRPC境界で落ちる。
     const reading = normalizeReading(store.get(readingReadingDraftAtom))
     if (!trimmedSurface || readingProblem(reading) !== undefined) return
+    // 入力欄は先に空にする。楽観的に出した行と打った文字が二重に見えない。
+    // 打った内容そのものは控えておき、失敗したら戻す。
+    const typedSurface = store.get(readingSurfaceDraftAtom)
+    const typedReading = store.get(readingReadingDraftAtom)
     store.set(readingSurfaceDraftAtom, "")
     store.set(readingReadingDraftAtom, "")
     run(
@@ -108,14 +112,19 @@ export function useReadingDictionary() {
           body: { surface: trimmedSurface, reading, accentType: 0 },
         }),
       () => toast.success(`「${trimmedSurface}」を登録しました`),
-      // 409は名寄せの衝突。「追加できません」だけでは、何をどうすれば
-      // いいのか分からない。
-      (error) =>
+      (error) => {
+        // 失敗したら打った内容を戻す。入力欄は楽観値とは別の持ち主なので、
+        // Reactの巻き戻しでは戻らない。
+        store.set(readingSurfaceDraftAtom, typedSurface)
+        store.set(readingReadingDraftAtom, typedReading)
+        // 409は名寄せの衝突。「追加できません」だけでは、何をどうすれば
+        // いいのか分からない。
         toast.error(
           problemStatus(error) === 409
             ? `「${trimmedSurface}」は既に登録されています`
             : "辞書に追加できませんでした"
         )
+      }
     )
   }
 

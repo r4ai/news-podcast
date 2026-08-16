@@ -140,3 +140,82 @@ describe("設定画面の楽観的更新", () => {
     release()
   })
 })
+
+/**
+ * 楽観値はReactが巻き戻すが、入力欄はatomという別の持ち主にある。
+ * そちらを戻さないと、失敗のトーストだけが出て打った内容が消える。
+ */
+describe("失敗したときの入力の扱い", () => {
+  function stubFailingMutations(
+    routes: readonly { readonly path: string; readonly body: unknown }[]
+  ) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const url = new URL(request.url, "http://localhost")
+        if (request.method.toUpperCase() !== "GET") {
+          return new Response(JSON.stringify({ status: 500 }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        const route = routes.find(
+          (candidate) => candidate.path === url.pathname
+        )
+        return new Response(JSON.stringify(route?.body ?? { items: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      })
+    )
+  }
+
+  it("タグの追加に失敗したら、打った名前を入力欄へ戻す", async () => {
+    const user = userEvent.setup()
+    stubFailingMutations([
+      { path: "/v1/me/tags", body: { items: tags } },
+      { path: "/v1/me/tag-suggestions", body: { items: [] } },
+    ])
+    render(
+      <TestProviders queryClient={createTestQueryClient()}>
+        <TagVocabularyManager />
+      </TestProviders>
+    )
+    await waitFor(() => expect(screen.getByText("AI")).toBeDefined())
+
+    const field = screen.getByRole("textbox", { name: "新しいタグ名" })
+    await user.type(field, "TypeScript")
+    await user.click(screen.getByRole("button", { name: "追加" }))
+
+    // 楽観的に出した語彙は消える。打った文字は戻る。
+    await waitFor(() =>
+      expect((field as HTMLInputElement).value).toBe("TypeScript")
+    )
+    expect(screen.queryByText("TypeScript")).toBeNull()
+  })
+
+  it("読みの追加に失敗したら、打った表記と読みを入力欄へ戻す", async () => {
+    const user = userEvent.setup()
+    stubFailingMutations([
+      { path: "/v1/me/reading-dictionary", body: { items: entries } },
+    ])
+    render(
+      <TestProviders queryClient={createTestQueryClient()}>
+        <ReadingDictionaryManager />
+      </TestProviders>
+    )
+    await waitFor(() => expect(screen.getByText("GPT-5")).toBeDefined())
+
+    const surface = screen.getByRole("textbox", { name: "表記（漢字・英字）" })
+    const reading = screen.getByRole("textbox", { name: "読み（カタカナ）" })
+    await user.type(surface, "Rust")
+    await user.type(reading, "ラスト")
+    await user.click(screen.getByRole("button", { name: "追加" }))
+
+    await waitFor(() =>
+      expect((surface as HTMLInputElement).value).toBe("Rust")
+    )
+    expect((reading as HTMLInputElement).value).toBe("ラスト")
+  })
+})

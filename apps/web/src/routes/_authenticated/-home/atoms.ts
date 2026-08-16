@@ -41,6 +41,18 @@ export const generationAdoptedArticlesAtom = selectAtom(
   sameAdoptedArticles
 )
 
+/**
+ * このストリームがどのジョブのものか。
+ *
+ * 購読の張り替えはEffectなので、最新ジョブが変わってから空へ戻るまでに
+ * 1描画の隙がある。読む側はこのidを今のジョブと突き合わせ、一致しない値は
+ * 使わない。cleanupで空へ戻すのと合わせて、前のジョブの状態が出る窓を塞ぐ。
+ */
+export const generationStreamJobIdAtom = selectAtom(
+  generationStreamAtom,
+  (stream) => stream.jobId
+)
+
 /** SSEが繋がっているか。ポーリングへ落とすかの判断に使う。 */
 export const generationConnectedAtom = selectAtom(
   generationStreamAtom,
