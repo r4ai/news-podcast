@@ -76,12 +76,14 @@ export const createSyntheticTracePayload = ({
 export const sendSyntheticTrace = async ({
   endpoint = process.env.OBSERVABILITY_OTLP_ENDPOINT ?? "http://127.0.0.1:4318",
   fetchImpl = globalThis.fetch,
+  timeoutMillis = 10_000,
 } = {}) => {
   const payload = createSyntheticTracePayload()
   const response = await fetchImpl(`${endpoint.replace(/\/$/, "")}/v1/traces`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMillis),
   })
   const responseBody = await response.text()
   if (!response.ok) {
