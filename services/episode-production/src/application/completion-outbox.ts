@@ -76,6 +76,7 @@ const envelopeFor = (pending: PendingCompletion) =>
       },
       sources: pending.completion.sources.map((source) => ({
         sourceKind: "rss" as const,
+        articleId: source.articleId,
         snapshotId: source.snapshotId,
         url: source.url,
         title: source.title,

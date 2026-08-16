@@ -81,6 +81,7 @@ export const selectSourcesFor = (
       sourceKind: episodeSources.sourceKind,
       url: episodeSources.url,
       title: episodeSources.title,
+      articleId: episodeSources.articleId,
       publishedAt: episodeSources.publishedAt,
       snapshotId: episodeSources.snapshotId,
     })

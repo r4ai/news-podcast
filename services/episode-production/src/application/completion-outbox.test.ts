@@ -32,7 +32,7 @@ const pending = {
     },
     sources: [
       {
-        articleId: "article-1",
+        articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
         snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
         url: "https://example.com/news",
         title: "News",
@@ -62,7 +62,12 @@ describe("completion outbox relay", () => {
       payload: {
         script: "Verified script",
         audio: { byteLength: 44 },
-        sources: [{ snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4" }],
+        sources: [
+          {
+            articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+            snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
+          },
+        ],
       },
     })
     expect(dependencies.markPublished).toHaveBeenCalledWith(jobId, completedAt)

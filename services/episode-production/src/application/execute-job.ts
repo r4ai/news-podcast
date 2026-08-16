@@ -55,8 +55,19 @@ const withProviderStage =
 
 const canceled = (): LeaseFailure => deepFreeze({ _tag: "ExecutionCanceled" })
 
-const failWhenCanceled = (signal: AbortSignal | undefined) =>
-  signal?.aborted ? Effect.fail(canceled()) : Effect.void
+const failWhenCanceled = (
+  signal: AbortSignal | undefined
+): Effect.Effect<void, LeaseFailure | PipelineFailure> => {
+  if (!signal?.aborted) return Effect.void
+  if (signal.reason !== "job_deadline_exceeded") return Effect.fail(canceled())
+  return Effect.fail(
+    deepFreeze({
+      _tag: "PipelineFailure",
+      code: "job_deadline_exceeded",
+      retryable: false,
+    })
+  )
+}
 
 const isTagged = (failure: unknown, tag: string) =>
   typeof failure === "object" &&
@@ -235,12 +246,21 @@ export const executeEpisodeJob =
         job.jobId
       )
       if (generationPlan === undefined) {
+        const excludedArticleIds =
+          job.request.articleIds === undefined
+            ? yield* ports.persistence.listUsedAutomaticArticleIds(
+                job.request.ownerId
+              )
+            : []
         generationPlan = yield* ports.planning.create({
           jobId: job.jobId,
           ownerId: job.request.ownerId,
           selection:
             job.request.articleIds === undefined
-              ? deepFreeze({ _tag: "Automatic" as const })
+              ? deepFreeze({
+                  _tag: "Automatic" as const,
+                  excludedArticleIds,
+                })
               : deepFreeze({
                   _tag: "Manual" as const,
                   articleIds: job.request.articleIds,
@@ -439,7 +459,7 @@ export const executeEpisodeJob =
             ...(source!.publishedAt === undefined
               ? {}
               : { publishedAt: source!.publishedAt }),
-          })) as unknown as EpisodeCompletionIntent["sources"],
+          })) as EpisodeCompletionIntent["sources"],
           completedAt,
           traceparent: `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`,
         }),

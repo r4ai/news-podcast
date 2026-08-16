@@ -42,9 +42,11 @@ const HttpUrlSchema = Schema.String.check(
 
 const EpisodeIdSchema = uuid("LibraryEpisodeId")
 const SnapshotIdSchema = uuid("LibrarySnapshotId")
+const ArticleIdSchema = uuid("LibraryArticleId")
 
 const RssEpisodeSourceSchema = Schema.Struct({
   sourceKind: Schema.Literal("rss"),
+  articleId: Schema.optional(ArticleIdSchema),
   url: HttpUrlSchema,
   title: boundedText(500),
   publishedAt: Schema.optional(UtcInstantSchema),

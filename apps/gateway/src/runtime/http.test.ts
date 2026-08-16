@@ -616,12 +616,52 @@ describe("Gateway HTTP runtime", () => {
         new Request("http://gateway.test/v1/episode-jobs", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ trigger: "manual" }),
+          body: JSON.stringify({
+            trigger: "manual",
+            articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
+          }),
         })
       )
 
       expect(response.status).toBe(400)
       expect(calls).toBe(0)
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("returns the accepted job resource in Location", async () => {
+    const receipt = Schema.decodeUnknownSync(JobReceiptSchema)({
+      id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+      status: "queued",
+      createdAt: "2026-08-12T00:00:00.000Z",
+      attempt: 0,
+      maxAttempts: 4,
+    })
+    const runtime = makeGatewayWebHandler({
+      ...ports,
+      createEpisodeJob: () => Effect.succeed(receipt),
+    })
+
+    try {
+      const response = await runtime.handler(
+        new Request("http://gateway.test/v1/episode-jobs", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": "daily-2026-08-12",
+          },
+          body: JSON.stringify({
+            trigger: "manual",
+            articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
+          }),
+        })
+      )
+
+      expect(response.status).toBe(202)
+      expect(response.headers.get("location")).toBe(
+        `/v1/episode-jobs/${receipt.id}`
+      )
     } finally {
       await runtime.dispose()
     }

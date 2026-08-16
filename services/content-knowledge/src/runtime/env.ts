@@ -31,9 +31,10 @@ export const readContentKnowledgeConfig = (
   const openAiApiKey = env.OPENAI_API_KEY?.trim() ?? ""
   const openAiModel =
     env.CONTENT_ENRICH_OPENAI_MODEL?.trim() || env.OPENAI_MODEL?.trim() || ""
-  // A model name is non-secret and may be shared by other services. Only a
-  // usable key opts this service into external calls.
-  const enrichmentProviderEnabled = openAiApiKey.length > 0
+  // Fake mode is an explicit no-network boundary even when a developer keeps
+  // credentials in the environment while switching providers.
+  const enrichmentProviderEnabled =
+    env.PROVIDER_MODE?.trim() === "live" && openAiApiKey.length > 0
 
   if (sqlitePath === "" || sqlitePath === ":memory:") {
     return Effect.fail(configFailure())
@@ -99,6 +100,18 @@ export const readContentKnowledgeConfig = (
       secretAccessKey: env.S3_SECRET_ACCESS_KEY?.trim() ?? "",
       timeoutMillis: decimalInteger(env.CONTENT_ARCHIVE_TIMEOUT_MS),
       maximumHtmlBytes: decimalInteger(env.CONTENT_ARCHIVE_MAX_HTML_BYTES),
+      maximumAssetBytes: decimalInteger(
+        env.CONTENT_ARCHIVE_MAX_ASSET_BYTES,
+        20 * 1_024 * 1_024
+      ),
+      maximumAssetCount: decimalInteger(
+        env.CONTENT_ARCHIVE_MAX_ASSET_COUNT,
+        512
+      ),
+      maximumAssetTotalBytes: decimalInteger(
+        env.CONTENT_ARCHIVE_MAX_ASSET_TOTAL_BYTES,
+        100 * 1_024 * 1_024
+      ),
     },
   }).pipe(Effect.mapError(configFailure))
 }

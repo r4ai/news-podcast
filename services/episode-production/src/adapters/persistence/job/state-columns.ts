@@ -44,6 +44,8 @@ export type EpisodeJobRow = {
     | "synthesizing_audio"
     | "storing_episode"
     | null
+  stageStartedAt?: string | null
+  lastProgressAt?: string | null
 }
 
 const encodeJob = Schema.encodeSync(EpisodeJobSchema)
@@ -139,6 +141,11 @@ export const toJobRow = (job: EpisodeJob): EpisodeJobRow => {
     status: encoded._tag,
     attempt: encoded.attempt,
     createdAt: encoded.createdAt,
+    currentStage: encoded._tag === "Running" ? (encoded.stage ?? null) : null,
+    stageStartedAt:
+      encoded._tag === "Running" ? (encoded.stageStartedAt ?? null) : null,
+    lastProgressAt:
+      encoded._tag === "Running" ? (encoded.lastProgressAt ?? null) : null,
     ...stateColumnsOf(encoded),
   }
 }
@@ -184,6 +191,13 @@ const documentOf = (row: EpisodeJobRow, articleIds: readonly string[]) => {
         attempt: row.attempt,
         startedAt: row.startedAt,
         lease: { token: row.leaseToken, leasedUntil: row.leasedUntil },
+        ...(row.currentStage == null ? {} : { stage: row.currentStage }),
+        ...(row.stageStartedAt == null
+          ? {}
+          : { stageStartedAt: row.stageStartedAt }),
+        ...(row.lastProgressAt == null
+          ? {}
+          : { lastProgressAt: row.lastProgressAt }),
       }
     case "Retrying":
       return {

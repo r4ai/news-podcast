@@ -42,6 +42,9 @@ const validServiceConfig = {
     secretAccessKey: "secret-key",
     timeoutMillis: 1_000,
     maximumHtmlBytes: 8_192,
+    maximumAssetBytes: 20_971_520,
+    maximumAssetCount: 512,
+    maximumAssetTotalBytes: 104_857_600,
   },
 }
 

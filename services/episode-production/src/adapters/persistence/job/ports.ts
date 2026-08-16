@@ -103,6 +103,7 @@ export type SqliteJobHandle = Readonly<{
   }) => boolean
   loadCheckpoint: (jobId: string) => StoredCheckpointRow | undefined
   loadGenerationPlan: (jobId: string) => string | undefined
+  listUsedAutomaticArticleIds: (ownerId: string) => readonly string[]
   saveGenerationPlan: (input: {
     readonly jobId: string
     readonly leaseToken: string

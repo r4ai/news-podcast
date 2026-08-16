@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import {
   articleOwnerStates,
   articleSnapshots,
+  feedCatalog,
   feedItems,
   feedSubscriptions,
 } from "../../../../drizzle/schema.js"
@@ -65,14 +66,16 @@ export const makeFacets = (database: ContentKnowledgeDatabase): Facets => ({
         feeds: database
           .select({
             feedId: feedItems.feedId,
+            feedUrl: feedCatalog.feedUrl,
             count: sql<number>`COUNT(*)`.as("count"),
           })
           .from(feedItems)
+          .innerJoin(feedCatalog, eq(feedCatalog.feedId, feedItems.feedId))
           .innerJoin(feedSubscriptions, ownedBySubscription)
           .leftJoin(articleOwnerStates, ownerStateOfArticle)
           .leftJoin(articleSnapshots, latestSnapshotOfArticle)
           .where(where)
-          .groupBy(feedItems.feedId)
+          .groupBy(feedItems.feedId, feedCatalog.feedUrl)
           .orderBy(asc(feedItems.feedId))
           .all(),
       }),
@@ -86,7 +89,11 @@ export const makeFacets = (database: ContentKnowledgeDatabase): Facets => ({
               Effect.flatMap((value) =>
                 parse(FeedIdSchema)(value.feedId).pipe(
                   Effect.map((feedId) =>
-                    deepFreeze({ feedId, count: value.count })
+                    deepFreeze({
+                      feedId,
+                      feedUrl: value.feedUrl,
+                      count: value.count,
+                    })
                   )
                 )
               )

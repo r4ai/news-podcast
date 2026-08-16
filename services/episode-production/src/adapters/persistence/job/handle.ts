@@ -323,11 +323,22 @@ export const makeJobHandle = (
           .get()
         if (row === undefined) return false
         const currentStage = input.phase === "started" ? input.step : null
+        const stageStartedAt =
+          input.phase === "started" ? input.occurredAt : null
         tx.update(episodeJobs)
-          .set({ currentStage })
+          .set({
+            currentStage,
+            stageStartedAt,
+            lastProgressAt: input.occurredAt,
+          })
           .where(eq(episodeJobs.jobId, input.jobId))
           .run()
-        const updated = { ...row, currentStage }
+        const updated = {
+          ...row,
+          currentStage,
+          stageStartedAt,
+          lastProgressAt: input.occurredAt,
+        }
         const state = progressStateOf(tx, updated)
         appendAgUiEvent(
           tx,
@@ -543,6 +554,29 @@ export const makeJobHandle = (
             model: row.model,
             createdAt: row.createdAt,
           })
+    },
+
+    listUsedAutomaticArticleIds: (ownerId) => {
+      const rows = database
+        .select({ articleIds: episodeGenerationPlans.selectedArticleIds })
+        .from(episodeGenerationPlans)
+        .innerJoin(
+          episodeJobs,
+          eq(episodeJobs.jobId, episodeGenerationPlans.jobId)
+        )
+        .where(
+          and(
+            eq(episodeGenerationPlans.ownerId, ownerId),
+            eq(episodeGenerationPlans.selectionMode, "automatic"),
+            eq(episodeJobs.status, "Succeeded")
+          )
+        )
+        .all()
+      return [
+        ...new Set(
+          rows.flatMap((row) => JSON.parse(row.articleIds) as readonly string[])
+        ),
+      ]
     },
 
     saveGenerationPlan: (input) =>

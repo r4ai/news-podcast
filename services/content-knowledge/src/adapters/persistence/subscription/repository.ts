@@ -232,27 +232,20 @@ export const createSubscriptionRepository = (
       )
 
     const listCatalog: SubscriptionRepository["listCatalog"] = (
-      ownerId,
+      _ownerId,
       query
     ) =>
       Effect.try({
         try: () =>
           database
-            .selectDistinct(feedProjection)
+            .select(feedProjection)
             .from(feedCatalog)
-            .innerJoin(
-              feedSubscriptions,
-              eq(feedSubscriptions.feedId, feedCatalog.feedId)
-            )
             .where(
               query === undefined
-                ? eq(feedSubscriptions.ownerId, ownerId)
-                : and(
-                    eq(feedSubscriptions.ownerId, ownerId),
-                    like(
-                      feedCatalog.feedUrl,
-                      sql`${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`
-                    )
+                ? undefined
+                : like(
+                    feedCatalog.feedUrl,
+                    sql`${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`
                   )
             )
             .orderBy(asc(feedCatalog.feedUrl), asc(feedCatalog.feedId))

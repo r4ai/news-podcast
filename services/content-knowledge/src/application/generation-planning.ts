@@ -34,7 +34,10 @@ export type GenerationPlanningResult = DeepReadonly<
 >
 
 export type GenerationPlanningSelection = DeepReadonly<
-  | { readonly _tag: "Automatic" }
+  | {
+      readonly _tag: "Automatic"
+      readonly excludedArticleIds?: readonly ArticleId[]
+    }
   | {
       readonly _tag: "Manual"
       readonly articleIds: readonly [ArticleId, ...ArticleId[]]
@@ -94,7 +97,8 @@ export const createGenerationPlanning = (ports: {
     }
     const candidates = yield* ports.catalog.listGenerationCandidates(
       ownerId,
-      50
+      50,
+      selection.excludedArticleIds
     )
     if (candidates.length === 0) {
       return deepFreeze({ _tag: "NoCandidates" as const })

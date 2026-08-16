@@ -33,6 +33,14 @@ const commonJobFields = {
   ),
   maxAttempts: Schema.Literal(4),
 }
+const EpisodeJobStageSchema = Schema.Literals([
+  "selecting_articles",
+  "materializing_articles",
+  "generating_script",
+  "preparing_pronunciation",
+  "synthesizing_audio",
+  "storing_episode",
+])
 
 export const CreateEpisodeJobReplySchema = Schema.Union([
   Schema.TaggedStruct("Accepted", {
@@ -65,6 +73,9 @@ export const ProductionEpisodeJobSchema = Schema.Union([
     status: Schema.Literal("running"),
     attempt: Schema.Literals([1, 2, 3, 4]),
     startedAt: UtcInstantSchema,
+    stage: Schema.optional(EpisodeJobStageSchema),
+    stageStartedAt: Schema.optional(UtcInstantSchema),
+    lastProgressAt: Schema.optional(UtcInstantSchema),
   }),
   Schema.Struct({
     ...commonJobFields,

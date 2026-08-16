@@ -120,7 +120,10 @@ export type EpisodeExecutionPorts = DeepReadonly<{
       jobId: JobId
       ownerId: OwnerId
       selection:
-        | { readonly _tag: "Automatic" }
+        | {
+            readonly _tag: "Automatic"
+            readonly excludedArticleIds?: readonly ArticleId[]
+          }
         | { readonly _tag: "Manual"; readonly articleIds: readonly ArticleId[] }
       signal?: AbortSignal
     }) => Effect.Effect<GenerationPlan, PipelineFailure>
@@ -179,6 +182,9 @@ export type EpisodeExecutionPorts = DeepReadonly<{
     loadGenerationPlan: (
       jobId: JobId
     ) => Effect.Effect<GenerationPlan | undefined, PipelineFailure>
+    listUsedAutomaticArticleIds: (
+      ownerId: OwnerId
+    ) => Effect.Effect<readonly ArticleId[], PipelineFailure>
     /** First write wins; returns the persisted winner on concurrent recovery. */
     saveGenerationPlan: (input: {
       jobId: JobId

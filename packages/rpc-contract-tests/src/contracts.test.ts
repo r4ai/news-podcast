@@ -60,6 +60,21 @@ const makeBroker = (
         })
         return envelopeReply(request, "identity-access", payload)
       }
+      if (subject === subjects.production.getJob) {
+        return envelopeReply(request, "episode-production", {
+          _tag: "Found",
+          job: {
+            jobId: ids[0],
+            createdAt: instant,
+            trigger: "manual",
+            articleIds: [ids[1]],
+            maxAttempts: 4,
+            status: "queued",
+            attempt: 0,
+            enqueuedAt: instant,
+          },
+        })
+      }
       let reply: string | undefined
       await Effect.runPromise(
         create({

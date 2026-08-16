@@ -89,7 +89,13 @@ describe("NATS GatewayPorts adapter", () => {
                     _tag: "Facets",
                     facets: {
                       states: { all: 1, unread: 1, saved: 1, later: 0 },
-                      feeds: [{ feedId: article.feedId, count: 1 }],
+                      feeds: [
+                        {
+                          feedId: article.feedId,
+                          feedUrl: "https://feeds.example.com/news.xml",
+                          count: 1,
+                        },
+                      ],
                     },
                   }
                 : payload.operation === "Archive"
@@ -875,6 +881,25 @@ describe("NATS GatewayPorts adapter", () => {
           }
         )
       }
+      if (request.subject === subjects.production.getJob) {
+        return encodedReply(
+          request.envelope,
+          "episode-production",
+          EpisodeJobControlReplySchema,
+          {
+            _tag: "Found",
+            job: {
+              jobId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+              status: "running",
+              trigger: "manual",
+              attempt: 1,
+              maxAttempts: 4,
+              createdAt: "2026-08-12T00:00:00.000Z",
+              startedAt: "2026-08-12T00:01:00.000Z",
+            },
+          }
+        )
+      }
       if (request.subject === "library.list-episodes.v1") {
         return encodedReply(
           request.envelope,
@@ -949,7 +974,11 @@ describe("NATS GatewayPorts adapter", () => {
       })
     )
 
-    expect(receipt.status).toBe("queued")
+    expect(receipt).toMatchObject({
+      status: "running",
+      createdAt: "2026-08-12T00:00:00.000Z",
+      attempt: 1,
+    })
     expect(page.items).toEqual([])
     expect(episode.id).toBe(episodeId)
     expect(Schema.decodeUnknownSync(AudioAccessSchema)(access).expiresAt).toBe(
@@ -960,13 +989,17 @@ describe("NATS GatewayPorts adapter", () => {
     )
     expect(downstream.map(({ subject }) => subject)).toEqual([
       subjects.production.createJob,
+      subjects.production.getJob,
       subjects.library.listEpisodes,
       subjects.library.getEpisode,
       subjects.library.createAudioAccess,
     ])
     for (const request of downstream) {
       expect(request.envelope.actor).toEqual({ _tag: "User", userId })
-      const priorIdentityRequest = requests[requests.indexOf(request) - 1]!
+      const priorIdentityRequest = requests
+        .slice(0, requests.indexOf(request))
+        .reverse()
+        .find(({ subject }) => subject === subjects.identity.resolveSession)!
       expect(request.envelope.correlationId).toBe(
         priorIdentityRequest.envelope.correlationId
       )
@@ -979,7 +1012,10 @@ describe("NATS GatewayPorts adapter", () => {
       trigger: "manual",
       articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
     })
-    expect(downstream[1]?.envelope.payload).toEqual({ cursor: "opaque-cursor" })
+    expect(downstream[1]?.envelope.payload).toEqual({
+      jobId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+    })
+    expect(downstream[2]?.envelope.payload).toEqual({ cursor: "opaque-cursor" })
   })
 
   it("stops before the domain RPC when the resolved actor is anonymous", async () => {

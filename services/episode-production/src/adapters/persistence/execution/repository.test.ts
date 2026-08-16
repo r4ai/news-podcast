@@ -9,6 +9,7 @@ import { openProductionDatabaseUnsafe } from "../../../infrastructure/unsafe/dri
 import { executionRepository } from "./repository.js"
 import { jobRepository } from "../job/repository.js"
 import {
+  ArticleIdSchema,
   EpisodeIdSchema,
   IdempotencyKeySchema,
   JobIdSchema,
@@ -31,6 +32,9 @@ const jobId = Schema.decodeUnknownSync(JobIdSchema)(
 const ownerId = Schema.decodeUnknownSync(OwnerIdSchema)("owner-1")
 const episodeId = Schema.decodeUnknownSync(EpisodeIdSchema)(
   "cd31ca98-fb40-4925-a51c-60940a535c8a"
+)
+const articleId = Schema.decodeUnknownSync(ArticleIdSchema)(
+  "f8f15e30-6877-4b4d-9568-76bfa3dc3e40"
 )
 const token = (value: string) =>
   Schema.decodeUnknownSync(LeaseTokenSchema)(value)
@@ -76,6 +80,22 @@ describe("SQLite execution repository", () => {
           })
           expect(leased?.recovered).toBe(false)
           const running = leased!.job
+
+          yield* execution.saveGenerationPlan({
+            jobId,
+            leaseToken: token("lease-1"),
+            plan: {
+              jobId,
+              ownerId,
+              selectionMode: "automatic",
+              interestProfile: { include: "", exclude: "" },
+              selectedArticleIds: [articleId],
+              model: "deterministic-fallback",
+              createdAt: timestamp("2026-08-13T00:01:00.000Z"),
+            },
+          })
+          const usedBeforeSuccess =
+            yield* execution.listUsedAutomaticArticleIds(ownerId)
 
           const dictionarySnapshot = Schema.decodeUnknownSync(
             ReadingDictionarySnapshotSchema
@@ -152,6 +172,8 @@ describe("SQLite execution repository", () => {
           const pending = yield* execution.listPendingCompletionOutbox(10)
           yield* execution.markCompletionPublished(jobId, completedAt)
           const afterPublish = yield* execution.listPendingCompletionOutbox(10)
+          const usedAfterSuccess =
+            yield* execution.listUsedAutomaticArticleIds(ownerId)
           return {
             staleExit,
             staleDictionaryExit,
@@ -162,6 +184,8 @@ describe("SQLite execution repository", () => {
             outbox,
             pending,
             afterPublish,
+            usedBeforeSuccess,
+            usedAfterSuccess,
           }
         })
       )
@@ -179,6 +203,8 @@ describe("SQLite execution repository", () => {
     expect(result.pending).toHaveLength(1)
     expect(result.pending[0]?.jobId).toBe(jobId)
     expect(result.afterPublish).toEqual([])
+    expect(result.usedBeforeSuccess).toEqual([])
+    expect(result.usedAfterSuccess).toEqual([articleId])
   })
 
   it("recovers an expired lease without consuming another attempt", async () => {

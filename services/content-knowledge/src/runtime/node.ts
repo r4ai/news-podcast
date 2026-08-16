@@ -86,6 +86,10 @@ const PositiveBytesSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(10 * 1_024 * 1_024)
 )
+const AssetBytesSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(100 * 1_024 * 1_024)
+)
 const DailyLimitSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(10_000)
@@ -157,6 +161,12 @@ export const NodeServiceConfigSchema = Schema.Struct({
     secretAccessKey: S3TextSchema,
     timeoutMillis: LoopDelaySchema,
     maximumHtmlBytes: PositiveBytesSchema,
+    maximumAssetBytes: AssetBytesSchema,
+    maximumAssetCount: Schema.Int.check(
+      Schema.isGreaterThan(0),
+      Schema.isLessThanOrEqualTo(512)
+    ),
+    maximumAssetTotalBytes: AssetBytesSchema,
   }),
 })
 const parseNodeServiceStructure = parse(NodeServiceConfigSchema)

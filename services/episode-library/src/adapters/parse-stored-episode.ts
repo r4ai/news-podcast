@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 
 import {
   AudioObjectKeySchema,
+  ArticleIdSchema,
   CompletedEpisodeSchema,
   EpisodeIdSchema,
   EpisodeScriptSchema,
@@ -17,6 +18,7 @@ import {
 
 const RawRssSourceSchema = Schema.Struct({
   sourceKind: Schema.Literal("rss"),
+  articleId: Schema.optionalKey(ArticleIdSchema),
   url: HttpUrlSchema,
   title: Schema.NonEmptyString,
   publishedAt: Schema.optionalKey(UtcInstantSchema),
@@ -64,6 +66,9 @@ export const parseCompletedEpisode = (input: unknown) =>
         source.sourceKind === "rss"
           ? {
               _tag: "RssSource",
+              ...(source.articleId === undefined
+                ? {}
+                : { articleId: source.articleId }),
               url: source.url,
               title: source.title,
               ...(source.publishedAt

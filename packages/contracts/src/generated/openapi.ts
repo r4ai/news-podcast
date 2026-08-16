@@ -672,6 +672,7 @@ export interface components {
             detail?: components["schemas"]["Union_"];
         };
         EpisodeSource: {
+            articleId?: (string & unknown) | null;
             url: string;
             title: string & (unknown & unknown & unknown);
             publishedAt?: components["schemas"]["Union_2"];
@@ -1080,6 +1081,7 @@ export interface operations {
             /** @description JobReceipt */
             202: {
                 headers: {
+                    location: string & unknown;
                     [name: string]: unknown;
                 };
                 content: {

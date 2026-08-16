@@ -66,6 +66,8 @@ export const episodeJobs = sqliteTable(
         "storing_episode",
       ],
     }),
+    stageStartedAt: text("stage_started_at"),
+    lastProgressAt: text("last_progress_at"),
   },
   (table) => [
     unique("episode_jobs_owner_idempotency").on(

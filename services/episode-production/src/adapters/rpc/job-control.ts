@@ -83,6 +83,13 @@ export const projectEpisodeJob = (job: EpisodeJob): ProductionEpisodeJob => {
         status: "running",
         attempt: job.attempt,
         startedAt: encodeTimestamp(job.startedAt),
+        ...(job.stage === undefined ? {} : { stage: job.stage }),
+        ...(job.stageStartedAt === undefined
+          ? {}
+          : { stageStartedAt: encodeTimestamp(job.stageStartedAt) }),
+        ...(job.lastProgressAt === undefined
+          ? {}
+          : { lastProgressAt: encodeTimestamp(job.lastProgressAt) }),
       })
     case "Retrying":
       return decodeProductionJob({

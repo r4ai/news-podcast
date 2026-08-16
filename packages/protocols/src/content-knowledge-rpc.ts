@@ -265,7 +265,18 @@ export const parseMaterializeArticlesReply = parse(
 
 export const PlanGenerationRequestSchema = Schema.Struct({
   selection: Schema.Union([
-    Schema.TaggedStruct("Automatic", {}),
+    Schema.TaggedStruct("Automatic", {
+      excludedArticleIds: Schema.optional(
+        Schema.Array(ArticleIdSchema).check(
+          Schema.isMaxLength(10_000),
+          Schema.makeFilter((ids: readonly string[]) =>
+            new Set(ids).size === ids.length
+              ? true
+              : "excluded article IDs must be unique"
+          )
+        )
+      ),
+    }),
     Schema.TaggedStruct("Manual", {
       articleIds: Schema.NonEmptyArray(ArticleIdSchema).check(
         Schema.isMaxLength(20),

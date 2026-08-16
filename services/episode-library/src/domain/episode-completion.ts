@@ -50,6 +50,7 @@ export const matchesCompletionNotice = (
       source.url === notice.sources[index]?.url &&
       source.title === notice.sources[index]?.title &&
       source._tag === "RssSource" &&
+      source.articleId === notice.sources[index]?.articleId &&
       source.snapshotId === notice.sources[index]?.snapshotId &&
       source.publishedAt === notice.sources[index]?.publishedAt
   )

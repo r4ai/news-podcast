@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Architecture
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: ADR-0034、`docs/functional-ddd-migration.md`、`packages/protocols`
+- Related: ADR-0034、ADR-0062、`docs/functional-ddd-migration.md`、`packages/protocols`
 
 ## コンテキストと変更契機
 

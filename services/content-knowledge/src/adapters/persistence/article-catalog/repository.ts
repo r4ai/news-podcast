@@ -1,5 +1,5 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
-import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm"
+import { and, desc, eq, inArray, notInArray, sql, type SQL } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
@@ -56,7 +56,11 @@ export const createArticleCatalog = (
      * 購読を通じた所有と、アーカイブ済みであることの結合。
      * 非表示にした記事は生成対象に含めない。
      */
-    const ownedArchived = (ownerId: string, extra?: SQL) =>
+    const ownedArchived = (
+      ownerId: string,
+      extra?: SQL,
+      requireEnabled = false
+    ) =>
       database
         .select(projection)
         .from(feedItems)
@@ -78,6 +82,7 @@ export const createArticleCatalog = (
         .where(
           and(
             eq(feedSubscriptions.ownerId, ownerId),
+            ...(requireEnabled ? [eq(feedSubscriptions.enabled, 1)] : []),
             sql`COALESCE(${articleOwnerStates.hidden}, 0) = 0`,
             ...(extra === undefined ? [] : [extra])
           )
@@ -138,10 +143,22 @@ export const createArticleCatalog = (
         catch: () => failure("Upsert"),
       }).pipe(Effect.asVoid)
 
-    const findAutomatic: ArticleCatalog["findAutomatic"] = (ownerId, limit) =>
+    const findAutomatic = (
+      ownerId: Parameters<ArticleCatalog["findAutomatic"]>[0],
+      limit: number,
+      excludedArticleIds: readonly Parameters<
+        ArticleCatalog["findSelected"]
+      >[1][number][] = []
+    ) =>
       Effect.try({
         try: () =>
-          ownedArchived(ownerId)
+          ownedArchived(
+            ownerId,
+            excludedArticleIds.length === 0
+              ? undefined
+              : notInArray(feedItems.articleId, [...excludedArticleIds]),
+            true
+          )
             .orderBy(desc(sortKey), desc(feedItems.articleId))
             .limit(limit)
             .all(),
@@ -178,8 +195,8 @@ export const createArticleCatalog = (
     }
 
     const listGenerationCandidates: ArticleCatalog["listGenerationCandidates"] =
-      (ownerId, limit) =>
-        findAutomatic(ownerId, limit).pipe(
+      (ownerId, limit, excludedArticleIds) =>
+        findAutomatic(ownerId, limit, excludedArticleIds).pipe(
           Effect.flatMap((articles) => {
             if (articles.length === 0) return Effect.succeed([])
             const ids = articles.map((article) => article.articleId)

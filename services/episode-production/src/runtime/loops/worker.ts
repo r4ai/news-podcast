@@ -1,5 +1,5 @@
 import { deepFreeze } from "@news-podcast/kernel"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 import type {
   ExecuteEpisodeJobInput,
@@ -11,7 +11,17 @@ import type {
   RenewLeaseInput,
 } from "../../application/ports/execution.js"
 import type { EpisodeExecutionOutcome } from "../../application/execute-job.js"
-import type { UtcTimestamp } from "../../domain/episode-job.js"
+import {
+  UtcTimestampSchema,
+  type UtcTimestamp,
+} from "../../domain/episode-job.js"
+
+export const EPISODE_JOB_DEADLINE_MILLIS = 30 * 60_000
+const encodeTimestamp = Schema.encodeSync(UtcTimestampSchema)
+export const episodeJobDeadlineAt = (createdAt: UtcTimestamp): string =>
+  new Date(
+    Date.parse(encodeTimestamp(createdAt)) + EPISODE_JOB_DEADLINE_MILLIS
+  ).toISOString()
 
 export type EpisodeWorkerEvent =
   | Readonly<{
@@ -86,6 +96,17 @@ const runWithHeartbeat = (
     const abortExecution = () => controller.abort()
     if (processSignal.aborted) abortExecution()
     else processSignal.addEventListener("abort", abortExecution, { once: true })
+    const deadlineDelay =
+      Date.parse(episodeJobDeadlineAt(leased.job.createdAt)) -
+      Date.parse(encodeTimestamp(ports.now()))
+    const deadlineTimer =
+      deadlineDelay <= 0
+        ? undefined
+        : setTimeout(
+            () => controller.abort("job_deadline_exceeded"),
+            deadlineDelay
+          )
+    if (deadlineDelay <= 0) controller.abort("job_deadline_exceeded")
 
     const heartbeat = Effect.gen(function* () {
       while (!controller.signal.aborted) {
@@ -128,6 +149,7 @@ const runWithHeartbeat = (
       ),
       Effect.ensuring(
         Effect.sync(() => {
+          if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
           processSignal.removeEventListener("abort", abortExecution)
           abortExecution()
         })

@@ -76,7 +76,7 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
 - Episodeへ署名URLを保存・公開しない。`GET /v1/episodes/{episodeId}/audio`はGatewayがowner認可後にprivate S3からRange streamし、`Cache-Control: private, no-store`を返す。
 - Better Authの `/api/auth/**` はBetter Auth側の生成契約を正本とし、アプリOpenAPIへ複製しない。Google tokenを `/v1` のbearer tokenとして扱わない。
 
-`POST /v1/episode-jobs` は手動生成を表し、1〜20件の`articleIds`を必須とする。定期生成は記事IDなしの`automatic` jobを作成し、workerが最新InterestProfileを1回だけ読み、最大50候補から1〜20件を選定する。空profileではLLMを呼ばず媒体を跨ぐ決定論的fallbackを使う。`GET /v1/episode-jobs/{jobId}/events`はdurable AG-UI eventを100件ずつreplayし、`Last-Event-ID`以降をterminal状態まで追尾する。詳細は[進捗protocol](protocols/episode-job-ag-ui.md)を正本とする。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
+`POST /v1/episode-jobs` は手動生成を表し、1〜20件の`articleIds`を必須とする。定期生成は記事IDなしの`automatic` jobを作成し、workerが最新InterestProfileを1回だけ読み、有効な購読に属する未使用記事を最大50件取得して1〜20件を選定する。成功済み自動GenerationPlanの記事は期限なしで候補から除外し、手動指定では再利用を許す。空profileではLLMを呼ばず媒体を跨ぐ決定論的fallbackを使う。`POST`の成功は現在のjob状態と`Location`を返し、冪等再送でもqueuedへ巻き戻さない。`GET /v1/episode-jobs/{jobId}/events`はdurable AG-UI eventを100件ずつreplayし、`Last-Event-ID`以降をterminal状態まで追尾する。詳細は[進捗protocol](protocols/episode-job-ag-ui.md)を正本とする。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
 
 ## 6. 配備トポロジー
 
@@ -260,12 +260,12 @@ AG-UI timelineは標準`RUN_ERROR`と`RUN_FINISHED`で未完了stepを閉じる�
 
 ### 8.4 GenerationPlanとdurable進捗
 
-自動生成はContent Knowledgeが所有する最新InterestProfileと記事metadataから選定し、本文取得前にGenerationPlanを固定する。手動生成は指定記事を全件維持し、profileは台本の重点にだけ利用する。
+自動生成はContent Knowledgeが所有する最新InterestProfileと、有効な購読に属し成功済み自動Planで未使用の記事metadataから選定し、本文取得前にGenerationPlanを固定する。手動生成は使用済みかどうかに関係なく指定記事を全件維持し、profileは台本の重点にだけ利用する。完成eventの各sourceは`articleId`と`snapshotId`を持ち、Libraryが外部URL失効後も保存記事まで追跡できるようにする。
 
 ```mermaid
 flowchart LR
   Profile["InterestProfile"] --> Select["Effect AI / deterministic fallback"]
-  Candidates["最大50件のmetadata"] --> Select
+  Candidates["有効購読の未使用metadata 最大50件"] --> Select
   Select --> Plan[("GenerationPlan")]
   Plan --> Materialize["版固定snapshot"]
   Materialize --> Pipeline["Script / Pronunciation / TTS / Store"]
@@ -273,7 +273,7 @@ flowchart LR
   Events --> Web["SSE + Last-Event-ID"]
 ```
 
-旧Agent run/tool/memory監査は本番経路で使われないため、HTTP API、NATS subject、domain/application/adapters、5 tableを削除した。生成の再現性はGenerationPlan、checkpoint、完成outboxで、進捗監査はAG-UI event logで担う。詳細は[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)、[ADR-0059](adr/0059-latest-interest-profile-generation-plan.md)を正本とする。
+旧Agent run/tool/memory監査は本番経路で使われないため、HTTP API、NATS subject、domain/application/adapters、5 tableを削除した。生成の再現性はGenerationPlan、checkpoint、完成outboxで、進捗監査はAG-UI event logで担う。詳細は[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)、[ADR-0059](adr/0059-latest-interest-profile-generation-plan.md)、[ADR-0061](adr/0061-exclude-used-articles-from-automatic-generation.md)、[ADR-0062](adr/0062-preserve-article-id-in-episode-provenance.md)を正本とする。
 
 ## 9. 実装と変更の順序
 

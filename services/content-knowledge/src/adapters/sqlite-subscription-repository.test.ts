@@ -113,7 +113,7 @@ describe("SQLite subscription repository", () => {
     }
   })
 
-  it("pauses polling and lists only the actor owner's feed catalog", async () => {
+  it("pauses polling and exposes the shared feed catalog to every owner", async () => {
     const database = openTestDatabase()
     try {
       const repository = await Effect.runPromise(
@@ -156,9 +156,9 @@ describe("SQLite subscription repository", () => {
       expect(
         await Effect.runPromise(repository.listCatalog(ownerA, "news"))
       ).toEqual([{ feedId: added.subscription.feedId, feedUrl }])
-      expect(await Effect.runPromise(repository.listCatalog(ownerB))).toEqual(
-        []
-      )
+      expect(await Effect.runPromise(repository.listCatalog(ownerB))).toEqual([
+        { feedId: added.subscription.feedId, feedUrl },
+      ])
     } finally {
       database.close()
     }

@@ -78,7 +78,8 @@ export type ArticleCatalog = DeepReadonly<{
   ) => Effect.Effect<readonly CatalogArticle[], ArticleCatalogError>
   readonly listGenerationCandidates: (
     ownerId: OwnerId,
-    limit: number
+    limit: number,
+    excludedArticleIds?: readonly ArticleId[]
   ) => Effect.Effect<readonly GenerationCandidate[], ArticleCatalogError>
 }>
 

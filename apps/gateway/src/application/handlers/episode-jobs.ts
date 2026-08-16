@@ -1,4 +1,5 @@
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { Effect } from "effect"
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 
 import { gatewayApi } from "../../contract.js"
 import type { GatewayHandlers } from "./definitions.js"
@@ -8,7 +9,14 @@ export const episodeJobsGroup = (handlers: GatewayHandlers) =>
   HttpApiBuilder.group(gatewayApi, "episodeJobs", (group) =>
     group
       .handle("createEpisodeJob", ({ headers, payload }) =>
-        handlers.createEpisodeJob({ headers, payload })
+        handlers.createEpisodeJob({ headers, payload }).pipe(
+          Effect.map((receipt) =>
+            HttpApiSchema.withHeaders({
+              body: receipt,
+              headers: { Location: `/v1/episode-jobs/${receipt.id}` },
+            })
+          )
+        )
       )
       .handle("listEpisodeJobs", ({ headers, query }) =>
         handlers.listEpisodeJobs({

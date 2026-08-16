@@ -192,6 +192,15 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             : decodeGenerationPlan(document)
         )
       ),
+    listUsedAutomaticArticleIds: (ownerId) =>
+      tryPersistence("list_used_automatic_articles", () =>
+        handle.listUsedAutomaticArticleIds(ownerId)
+      ).pipe(
+        Effect.map(
+          (ids) =>
+            ids as readonly import("../../../domain/episode-job.js").ArticleId[]
+        )
+      ),
     saveGenerationPlan: (input) =>
       input.plan.jobId !== input.jobId
         ? Effect.fail(pipelineFailure("invalid_generation_plan", false))

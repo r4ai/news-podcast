@@ -29,6 +29,7 @@ const validMessage = {
     sources: [
       {
         sourceKind: "rss",
+        articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
         snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
         url: "https://example.com/news/1",
         title: "News 1",
@@ -56,6 +57,7 @@ const makePorts = (
       createdAt: notice.completedAt,
       sources: notice.sources.map((source) => ({
         sourceKind: "rss",
+        articleId: source.articleId,
         url: source.url,
         title: source.title,
         snapshotId: source.snapshotId,

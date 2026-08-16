@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Editorial
 - Supersedes: ADR-0037のAgent Memory嗜好、ADR-0038の「手動選択だけ」の生成入力
 - Superseded by: N/A
-- Related: `GenerationPlan`、Content Knowledge personalization
+- Related: ADR-0061、`GenerationPlan`、Content Knowledge personalization
 
 ## Context and change trigger
 
