@@ -1,3 +1,5 @@
+import { Bot } from "lucide-react"
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,17 +12,14 @@ import {
 } from "@workspace/ui/components/alert-dialog"
 import { Button } from "@workspace/ui/components/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
-import { Progress } from "@workspace/ui/components/progress"
+  Progress,
+  ProgressLabel,
+  ProgressValue,
+} from "@workspace/ui/components/progress"
 import { Spinner } from "@workspace/ui/components/spinner"
 
 import { useAiEnrichPanel } from "../-hooks/use-ai-enrich-panel"
+import { SettingsSection } from "./settings-section"
 
 /** データ接続: hookを呼び、viewへ渡すだけ。 */
 export function AiEnrichPanel() {
@@ -30,9 +29,9 @@ export function AiEnrichPanel() {
       cancelReprocess={panel.cancelReprocess}
       confirmOpen={panel.confirmOpen}
       confirmReprocess={panel.confirmReprocess}
-      daily={panel.status?.daily}
+      daily={panel.daily}
       pending={panel.pending}
-      reprocessableCount={panel.status?.reprocessable.count}
+      reprocessableCount={panel.reprocessableCount}
       requestReprocess={panel.requestReprocess}
       resetDaily={panel.resetDaily}
     />
@@ -50,6 +49,8 @@ export type AiEnrichPanelViewProps = {
   readonly resetDaily: () => void
 }
 
+const counter = new Intl.NumberFormat("ja-JP")
+
 export function AiEnrichPanelView({
   daily,
   reprocessableCount,
@@ -60,57 +61,15 @@ export function AiEnrichPanelView({
   confirmReprocess,
   resetDaily,
 }: AiEnrichPanelViewProps) {
-  const percent = daily
-    ? Math.min(100, Math.round((daily.used / daily.limit) * 100))
-    : undefined
+  const remaining = daily ? Math.max(0, daily.limit - daily.used) : undefined
+  const nothingToReprocess = reprocessableCount === 0
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2>AI処理</h2>
-        </CardTitle>
-        <CardDescription>
-          新着記事の要約・適合度スコア・タグ付与は自動で行われます。既に処理済みの
-          記事を再計算するには、ここから明示的に実行してください。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>本日の処理上限</span>
-            {daily ? (
-              <span className="tabular-nums">
-                {daily.used} / {daily.limit}件
-              </span>
-            ) : null}
-          </div>
-          <Progress
-            aria-label="本日の処理上限の使用率"
-            value={percent ?? null}
-          />
-        </div>
-
-        {import.meta.env.DEV ? (
-          <div className="flex items-center justify-between rounded-md border border-dashed border-muted-foreground/20 p-3">
-            <span className="text-xs text-muted-foreground">
-              開発用：日次上限をリセット
-            </span>
-            <Button onClick={resetDaily} size="sm" variant="outline">
-              リセット
-            </Button>
-          </div>
-        ) : null}
-
-        {reprocessableCount === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            再処理できる処理済み記事はありません。
-          </p>
-        ) : null}
-      </CardContent>
-      <CardFooter className="justify-end">
+    <SettingsSection
+      description="新着記事の要約・適合度スコア・タグ付与は自動で行われます。既に処理済みの記事を再計算するには、ここから明示的に実行してください。"
+      footer={
         <Button
-          disabled={pending || reprocessableCount === 0}
+          disabled={pending || nothingToReprocess}
           onClick={requestReprocess}
           variant="outline"
         >
@@ -118,10 +77,54 @@ export function AiEnrichPanelView({
           {pending
             ? "キューに追加中…"
             : reprocessableCount !== undefined
-              ? `全記事を再処理（${reprocessableCount}件）`
+              ? `全記事を再処理（${counter.format(reprocessableCount)}件）`
               : "全記事を再処理"}
         </Button>
-      </CardFooter>
+      }
+      icon={Bot}
+      title="AI処理"
+    >
+      {/*
+        `value`と`max`は素の件数のまま渡す。百分率へ丸めてから渡すと
+        `aria-valuenow`が「34%」になり、読み上げが実際の件数から離れる。
+      */}
+      <Progress
+        getAriaValueText={(_, value) =>
+          daily
+            ? `${counter.format(value ?? 0)}件 / ${counter.format(daily.limit)}件`
+            : "読み込み中"
+        }
+        max={daily?.limit ?? 100}
+        value={daily?.used ?? null}
+      >
+        <ProgressLabel>本日の処理上限</ProgressLabel>
+        <ProgressValue>
+          {(_, value) =>
+            daily
+              ? `${counter.format(value ?? 0)} / ${counter.format(daily.limit)}件`
+              : "—"
+          }
+        </ProgressValue>
+      </Progress>
+
+      <p className="text-sm text-muted-foreground">
+        {remaining === undefined
+          ? "使用量を読み込んでいます。"
+          : nothingToReprocess
+            ? `本日はあと${counter.format(remaining)}件処理できます。再処理できる処理済み記事はありません。`
+            : `本日はあと${counter.format(remaining)}件処理できます。上限を超えた分は翌日へ繰り越して処理されます。`}
+      </p>
+
+      {import.meta.env.DEV ? (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            開発用：日次上限をリセット
+          </span>
+          <Button onClick={resetDaily} size="sm" variant="outline">
+            リセット
+          </Button>
+        </div>
+      ) : null}
 
       <AlertDialog
         onOpenChange={(open) => (!open ? cancelReprocess() : undefined)}
@@ -131,7 +134,7 @@ export function AiEnrichPanelView({
           <AlertDialogHeader>
             <AlertDialogTitle>全記事を再処理しますか</AlertDialogTitle>
             <AlertDialogDescription>
-              既に処理済みの{reprocessableCount ?? 0}
+              既に処理済みの{counter.format(reprocessableCount ?? 0)}
               件を再処理キューへ追加します。
               本日の処理上限に従って日をまたいで処理され、コストが発生します。
             </AlertDialogDescription>
@@ -146,6 +149,6 @@ export function AiEnrichPanelView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </SettingsSection>
   )
 }

@@ -5,8 +5,13 @@ import { toast } from "@/shared/ui/toast"
 
 import { api } from "@/shared/api"
 import { readingReadingDraftAtom, readingSurfaceDraftAtom } from "../-atoms"
+import { normalizeReading, problemStatus, readingProblem } from "../-model"
 
 const DICTIONARY_KEY = ["get", "/v1/me/reading-dictionary"] as const
+
+// 未取得のときに`?? []`と書くと、描画のたびに別物の空配列が下流へ渡る。
+// 参照が変わる限りCompilerのメモ化も効かないので、空は1つを共有する。
+const NO_ENTRIES = [] as const
 
 export function useReadingDictionary() {
   const queryClient = useQueryClient()
@@ -32,14 +37,15 @@ export function useReadingDictionary() {
 
   function addEntry() {
     const trimmedSurface = store.get(readingSurfaceDraftAtom).trim()
-    const trimmedReading = store.get(readingReadingDraftAtom).trim()
-    if (!trimmedSurface || !trimmedReading) return
+    // 送るのは正規化した後の読み。ひらがなのままだとRPC境界で落ちる。
+    const reading = normalizeReading(store.get(readingReadingDraftAtom))
+    if (!trimmedSurface || readingProblem(reading) !== undefined) return
     startTransition(async () => {
       try {
         await createMutation.mutateAsync({
           body: {
             surface: trimmedSurface,
-            reading: trimmedReading,
+            reading,
             accentType: 0,
           },
         })
@@ -47,8 +53,14 @@ export function useReadingDictionary() {
         store.set(readingReadingDraftAtom, "")
         await invalidate()
         toast.success(`「${trimmedSurface}」を登録しました`)
-      } catch {
-        toast.error("辞書に追加できませんでした")
+      } catch (error) {
+        // 409は名寄せの衝突。「追加できません」だけでは、何をどうすれば
+        // いいのか分からない。
+        toast.error(
+          problemStatus(error) === 409
+            ? `「${trimmedSurface}」は既に登録されています`
+            : "辞書に追加できませんでした"
+        )
       }
     })
   }
@@ -61,7 +73,7 @@ export function useReadingDictionary() {
       patch.surface !== undefined
         ? { surface: patch.surface }
         : patch.reading !== undefined
-          ? { reading: patch.reading }
+          ? { reading: normalizeReading(patch.reading) }
           : patch.accentType !== undefined
             ? { accentType: patch.accentType }
             : undefined
@@ -74,8 +86,12 @@ export function useReadingDictionary() {
         })
         await invalidate()
         toast.success("辞書を更新しました")
-      } catch {
-        toast.error("辞書を更新できませんでした")
+      } catch (error) {
+        toast.error(
+          problemStatus(error) === 409
+            ? "同じ表記が既に登録されています"
+            : "辞書を更新できませんでした"
+        )
       }
     })
   }
@@ -94,7 +110,7 @@ export function useReadingDictionary() {
   }
 
   return {
-    entries: listQuery.data?.items ?? [],
+    entries: listQuery.data?.items ?? NO_ENTRIES,
     isLoading: listQuery.isPending,
     pending,
     addEntry,

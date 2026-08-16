@@ -1,6 +1,8 @@
 import { atom } from "jotai"
 import { atomFamily } from "jotai/utils"
 
+import { readingProblem, willConvertReading } from "./-model"
+
 /**
  * 設定画面の下書き。
  *
@@ -13,11 +15,29 @@ import { atomFamily } from "jotai/utils"
 export const readingSurfaceDraftAtom = atom("")
 export const readingReadingDraftAtom = atom("")
 
+/**
+ * 読みとして受け付けられない文字が入っているか。
+ *
+ * 派生atomにしておくと、購読側が見るのは「問題の種類」だけになる。
+ * 正しいカタカナを打ち続けている間は値が`undefined`のままなので、
+ * 打鍵のたびに注意書きが描き直されることもない。
+ */
+export const readingProblemAtom = atom((get) => {
+  const reading = get(readingReadingDraftAtom)
+  return reading.trim() === "" ? undefined : readingProblem(reading)
+})
+
+/** 打った内容と、実際に登録される内容が違うか（ひらがな→カタカナなど）。 */
+export const readingWillConvertAtom = atom((get) =>
+  willConvertReading(get(readingReadingDraftAtom))
+)
+
 /** 「追加」を押せるか。派生atomなので、判定の置き場は1つで済む。 */
 export const canAddReadingAtom = atom(
   (get) =>
     get(readingSurfaceDraftAtom).trim().length > 0 &&
-    get(readingReadingDraftAtom).trim().length > 0
+    get(readingReadingDraftAtom).trim().length > 0 &&
+    get(readingProblemAtom) === undefined
 )
 
 /**

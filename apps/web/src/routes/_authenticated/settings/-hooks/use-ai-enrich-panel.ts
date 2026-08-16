@@ -18,7 +18,16 @@ export function useAiEnrichPanel() {
   const [, startTransition] = useTransition()
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const statusQuery = useEnrichQueueStatus({ refetchInterval: 30_000 })
+  // この画面が描くのは日次使用量と再処理可能件数だけ。応答にはキューの明細も
+  // 入っており、30秒ごとのポーリングでそちらだけが動くことの方が多い。
+  // ここで絞っておけば、構造共有が効いて描き直しは値が実際に変わった時だけになる。
+  const statusQuery = useEnrichQueueStatus({
+    refetchInterval: 30_000,
+    select: (status) => ({
+      daily: status.daily,
+      reprocessableCount: status.reprocessable.count,
+    }),
+  })
   const reprocessMutation = api.useMutation("post", "/v1/me/enrich/reprocess")
   const resetDailyMutation = api.useMutation(
     "post",
@@ -73,7 +82,8 @@ export function useAiEnrichPanel() {
   }
 
   return {
-    status: statusQuery.data,
+    daily: statusQuery.data?.daily,
+    reprocessableCount: statusQuery.data?.reprocessableCount,
     pending: reprocessMutation.isPending,
     confirmOpen,
     requestReprocess,
