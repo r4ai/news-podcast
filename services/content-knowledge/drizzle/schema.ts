@@ -343,10 +343,12 @@ export const contentEnrichmentQueue = sqliteTable(
 export const contentEnrichmentDailyProgress = sqliteTable(
   "content_enrichment_daily_progress",
   {
-    localDate: text("local_date").primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    localDate: text("local_date").notNull(),
     processedCount: integer("processed_count").notNull().default(0),
   },
   (table) => [
+    primaryKey({ columns: [table.ownerId, table.localDate] }),
     check(
       "content_enrichment_daily_progress_count_check",
       sql`${table.processedCount} >= 0`

@@ -11,6 +11,7 @@ import {
 import { Effect, Schema } from "effect"
 
 import { OwnerIdSchema } from "../../domain/subscription.js"
+import type { makeArticleLibraryHandler } from "./article-library-handler.js"
 
 type Delivery<E = never> = Readonly<{
   readonly subject: string
@@ -18,15 +19,7 @@ type Delivery<E = never> = Readonly<{
   readonly reply: (payload: string) => Effect.Effect<void, E>
 }>
 
-type Library = Readonly<
-  Record<
-    "list" | "find" | "markdown" | "patch" | "bulkPatch" | "facets",
-    (input: unknown) => Effect.Effect<any, any>
-  >
-> &
-  Readonly<{
-    readonly archive: (input: unknown, context: any) => Effect.Effect<any, any>
-  }>
+type Library = ReturnType<typeof makeArticleLibraryHandler>
 
 type Dependencies = Readonly<{
   readonly newMessageId: () => string
@@ -59,36 +52,6 @@ const correlated = <E>(
     Effect.map(JSON.stringify),
     Effect.flatMap(delivery.reply)
   )
-
-const toReply = (operation: string, value: any): ArticleLibraryReply => {
-  if (operation === "List")
-    return deepFreeze({
-      _tag: "Listed",
-      articles: value.items,
-      nextCursor: value.nextCursor,
-    }) as ArticleLibraryReply
-  if (operation === "Find")
-    return value._tag === "Found"
-      ? deepFreeze({ _tag: "Found", article: value.article })
-      : deepFreeze({ _tag: "NotFound" })
-  if (operation === "Markdown")
-    return value._tag === "Found"
-      ? deepFreeze({ _tag: "Markdown", markdown: value.markdown })
-      : deepFreeze({ _tag: "NotFound" })
-  if (operation === "Patch")
-    return value._tag === "Found"
-      ? deepFreeze({ _tag: "Updated", article: value.article })
-      : deepFreeze({ _tag: "NotFound" })
-  if (operation === "BulkPatch")
-    return deepFreeze({ _tag: "BulkUpdated", updated: value })
-  if (operation === "Facets")
-    return deepFreeze({ _tag: "Facets", facets: value })
-  if (operation === "Archive") {
-    if (value._tag === "NotFound") return deepFreeze({ _tag: "NotFound" })
-    return deepFreeze({ _tag: "ArchiveTriggered", status: value._tag })
-  }
-  return rejected("INVALID_REQUEST")
-}
 
 const storageCode = (
   failure: unknown
@@ -138,48 +101,106 @@ export const makeArticleLibraryRpcHandler =
               Effect.mapError(() => ({ _tag: "InvalidRequest" as const }))
             ),
           ]).pipe(
-            Effect.flatMap(([ownerId, command]) => {
-              const input =
-                command.operation === "List" ||
-                command.operation === "BulkPatch" ||
-                command.operation === "Facets"
-                  ? {
-                      ownerId,
-                      query: command.query,
-                      ...(command.operation === "BulkPatch"
-                        ? { patch: command.patch }
-                        : {}),
-                    }
-                  : {
-                      ownerId,
-                      articleId: command.articleId,
-                      ...(command.operation === "Patch"
-                        ? { patch: command.patch }
-                        : {}),
-                    }
-              const effect =
-                command.operation === "List"
-                  ? library.list(input)
-                  : command.operation === "Find"
-                    ? library.find(input)
-                    : command.operation === "Markdown"
-                      ? library.markdown(input)
-                      : command.operation === "Patch"
-                        ? library.patch(input)
-                        : command.operation === "BulkPatch"
-                          ? library.bulkPatch(input)
-                          : command.operation === "Facets"
-                            ? library.facets(input)
-                            : library.archive(input, {
-                                messageId: request.messageId,
-                                correlationId: request.correlationId,
-                                traceparent: request.traceparent,
-                                actor: request.actor,
+            Effect.flatMap(
+              ([ownerId, command]): Effect.Effect<unknown, unknown, never> => {
+                switch (command.operation) {
+                  case "List":
+                    return library.list({ ownerId, query: command.query }).pipe(
+                      Effect.map((value) =>
+                        deepFreeze({
+                          _tag: "Listed",
+                          articles: value.items,
+                          nextCursor: value.nextCursor,
+                        })
+                      )
+                    )
+                  case "Find":
+                    return library
+                      .find({ ownerId, articleId: command.articleId })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "Found",
+                                article: value.article,
                               })
-              return effect.pipe(
-                Effect.map((value) => toReply(command.operation, value))
-              )
-            }),
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
+                  case "Markdown":
+                    return library
+                      .markdown({ ownerId, articleId: command.articleId })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "Markdown",
+                                markdown: value.markdown,
+                              })
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
+                  case "Patch":
+                    return library
+                      .patch({
+                        ownerId,
+                        articleId: command.articleId,
+                        patch: command.patch,
+                      })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "Updated",
+                                article: value.article,
+                              })
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
+                  case "BulkPatch":
+                    return library
+                      .bulkPatch({
+                        ownerId,
+                        query: command.query,
+                        patch: command.patch,
+                      })
+                      .pipe(
+                        Effect.map((updated) =>
+                          deepFreeze({ _tag: "BulkUpdated", updated })
+                        )
+                      )
+                  case "Facets":
+                    return library
+                      .facets({ ownerId, query: command.query })
+                      .pipe(
+                        Effect.map((facets) =>
+                          deepFreeze({ _tag: "Facets", facets })
+                        )
+                      )
+                  case "Archive":
+                    return library
+                      .archive(
+                        { ownerId, articleId: command.articleId },
+                        {
+                          messageId: request.messageId,
+                          correlationId: request.correlationId,
+                          traceparent: request.traceparent,
+                          actor: request.actor,
+                        }
+                      )
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "NotFound"
+                            ? deepFreeze({ _tag: "NotFound" })
+                            : deepFreeze({
+                                _tag: "ArchiveTriggered",
+                                status: value._tag,
+                              })
+                        )
+                      )
+                }
+              }
+            ),
             Effect.matchEffect({
               onFailure: (failure) => reply(rejected(storageCode(failure))),
               onSuccess: reply,

@@ -154,4 +154,38 @@ describe("enrichment operations", () => {
     ).toEqual({ processed: 0 })
     expect(repository.claim).not.toHaveBeenCalled()
   })
+
+  it("continues with another owner when one owner's daily budget is exhausted", async () => {
+    const ownerB = Schema.decodeUnknownSync(OwnerIdSchema)("owner-b")
+    const repository = {
+      ...queue(),
+      listOwners: vi.fn(() => Effect.succeed([ownerId, ownerB])),
+      budgetUsed: vi.fn((owner) => Effect.succeed(owner === ownerId ? 200 : 0)),
+      claim: vi.fn((owner) => Effect.succeed(owner === ownerB ? [target] : [])),
+    } as EnrichmentQueueRepository
+
+    expect(
+      await Effect.runPromise(
+        operations(repository, () =>
+          Effect.succeed({
+            summary: "summary",
+            score: 90,
+            reason: "matches",
+            tags: ["Known"],
+            suggestedTags: [],
+            tokensIn: 10,
+            tokensOut: 5,
+          })
+        ).runCycle()
+      )
+    ).toEqual({ processed: 1 })
+    expect(repository.claim).toHaveBeenCalledTimes(1)
+    expect(repository.claim).toHaveBeenCalledWith(
+      ownerB,
+      8,
+      now,
+      expect.any(String),
+      "lease-token-0001"
+    )
+  })
 })
