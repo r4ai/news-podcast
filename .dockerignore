@@ -1,11 +1,13 @@
 .git
 .github
+.codex/state/
 .turbo
 **/.turbo
 **/node_modules
 **/dist
 **/test-results
 **/coverage
+artifacts/
 infra/observability/pours
 data
 audio

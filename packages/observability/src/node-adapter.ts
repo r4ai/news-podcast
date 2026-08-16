@@ -13,8 +13,14 @@ import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
-import { HttpInstrumentation } from "@opentelemetry/instrumentation-http"
-import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici"
+import {
+  HttpInstrumentation,
+  type HttpInstrumentationConfig,
+} from "@opentelemetry/instrumentation-http"
+import {
+  UndiciInstrumentation,
+  type UndiciInstrumentationConfig,
+} from "@opentelemetry/instrumentation-undici"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import {
   BatchLogRecordProcessor,
@@ -36,6 +42,8 @@ import {
   ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
+  ATTR_URL_FULL,
+  ATTR_URL_QUERY,
 } from "@opentelemetry/semantic-conventions"
 import type { RequestOptions } from "node:http"
 
@@ -130,12 +138,8 @@ export function createNodeObservability(
   })
   const instrumentations = config.autoInstrumentation
     ? [
-        createHttpInstrumentation(config),
-        new UndiciInstrumentation({
-          // OTLP JSON exporters use fetch/Undici; tracing those requests would
-          // turn telemetry transport into misleading business dependencies.
-          ignoreRequestHook: (request) => isOtlpUndiciRequest(config, request),
-        }),
+        new HttpInstrumentation(createHttpInstrumentationConfig(config)),
+        new UndiciInstrumentation(createUndiciInstrumentationConfig(config)),
       ]
     : []
   const sdk = new NodeSDK({
@@ -296,9 +300,9 @@ export function createNodeObservability(
   }
 }
 
-function createHttpInstrumentation(
+export function createHttpInstrumentationConfig(
   config: NodeObservabilityConfig
-): HttpInstrumentation {
+): HttpInstrumentationConfig {
   const endpoint = config.endpoint ? new URL(config.endpoint) : undefined
   const isOtlpExport = (options: RequestOptions): boolean => {
     if (!endpoint) return false
@@ -308,13 +312,33 @@ function createHttpInstrumentation(
     const path = options.path ?? ""
     return host === endpoint.hostname && path.startsWith("/v1/")
   }
-  return new HttpInstrumentation({
+  return {
     // Browser telemetryの再転送はserver spanにしない（ノイズ抑制）。
     ignoreIncomingRequestHook: (request) =>
       request.url?.startsWith("/v1/telemetry") ?? false,
     // telemetry自身のexportはclient spanにしない（自己計装の回避）。
     ignoreOutgoingRequestHook: isOtlpExport,
-  })
+    requestHook: (span) => {
+      span.setAttribute(ATTR_URL_QUERY, "")
+    },
+  }
+}
+
+export function createUndiciInstrumentationConfig(
+  config: NodeObservabilityConfig
+): UndiciInstrumentationConfig {
+  return {
+    // OTLP JSON exporters use fetch/Undici; tracing those requests would
+    // turn telemetry transport into misleading business dependencies.
+    ignoreRequestHook: (request) => isOtlpUndiciRequest(config, request),
+    requestHook: (span, request) => {
+      const url = new URL(request.path, request.origin)
+      url.search = ""
+      url.hash = ""
+      span.setAttribute(ATTR_URL_FULL, url.toString())
+      span.setAttribute(ATTR_URL_QUERY, "")
+    },
+  }
 }
 
 function isOtlpUndiciRequest(

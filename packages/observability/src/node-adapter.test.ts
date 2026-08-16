@@ -21,8 +21,10 @@ import {
 } from "@opentelemetry/sdk-trace-base"
 
 import {
+  createHttpInstrumentationConfig,
   createNodeObservability,
   createNodeSampler,
+  createUndiciInstrumentationConfig,
   readNodeObservabilityConfig,
 } from "./node-adapter.js"
 
@@ -78,6 +80,49 @@ describe("Node observability configuration", () => {
         "api"
       )
     ).toThrow("OTEL_TRACE_SAMPLE_RATE")
+  })
+
+  it("removes all query values from automatic HTTP and Undici spans", () => {
+    const attributes: Record<string, unknown> = {}
+    const span = {
+      setAttribute(name: string, value: unknown) {
+        attributes[name] = value
+        return this
+      },
+    }
+    const config = {
+      enabled: true,
+      endpoint: "http://collector:4318",
+      serviceName: "test",
+      serviceVersion: "test",
+      environment: "test",
+      traceSampleRate: 1,
+      autoInstrumentation: true,
+      propagationAllowlist: new Set<string>(),
+    }
+
+    createHttpInstrumentationConfig(config).requestHook?.(
+      span as never,
+      {
+        url: "/api/auth/callback/google?code=oauth-code&state=oauth-state",
+      } as never
+    )
+    expect(attributes).toMatchObject({ "url.query": "" })
+
+    createUndiciInstrumentationConfig(config).requestHook?.(
+      span as never,
+      {
+        origin: "https://feeds.example",
+        path: "/private.xml?access_token=private-feed-token",
+      } as never
+    )
+    expect(attributes).toMatchObject({
+      "url.full": "https://feeds.example/private.xml",
+      "url.query": "",
+    })
+    expect(JSON.stringify(attributes)).not.toContain("oauth-code")
+    expect(JSON.stringify(attributes)).not.toContain("oauth-state")
+    expect(JSON.stringify(attributes)).not.toContain("private-feed-token")
   })
 
   it("continues remote parents and links independent worker traces", async () => {

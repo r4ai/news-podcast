@@ -17,10 +17,27 @@ const hopByHopHeaders = new Set([
   "upgrade",
 ])
 
-const forwardHeaders = (source: Headers) => {
+const blockedResponseHeaders = new Set([...hopByHopHeaders, "set-cookie"])
+
+const otlpRequestHeaders = new Set([
+  "accept",
+  "content-encoding",
+  "content-type",
+])
+
+const forwardRequestHeaders = (source: Headers) => {
   const headers = new Headers()
   source.forEach((value, name) => {
-    if (!hopByHopHeaders.has(name.toLowerCase())) headers.set(name, value)
+    if (otlpRequestHeaders.has(name.toLowerCase())) headers.set(name, value)
+  })
+  return headers
+}
+
+const forwardResponseHeaders = (source: Headers) => {
+  const headers = new Headers()
+  source.forEach((value, name) => {
+    if (!blockedResponseHeaders.has(name.toLowerCase()))
+      headers.set(name, value)
   })
   return headers
 }
@@ -99,7 +116,7 @@ export const makeGatewayTelemetryProxy =
       const target = new URL(upstreamPath + source.search, input.upstream)
       const response = await input.fetch(target, {
         method: "POST",
-        headers: forwardHeaders(request.headers),
+        headers: forwardRequestHeaders(request.headers),
         body,
         redirect: "manual",
         signal: controller.signal,
@@ -116,7 +133,7 @@ export const makeGatewayTelemetryProxy =
       })
       return new Response(responseBody.byteLength === 0 ? null : responseBody, {
         status: response.status,
-        headers: forwardHeaders(response.headers),
+        headers: forwardResponseHeaders(response.headers),
       })
     } catch (error) {
       if (error === requestTooLarge)

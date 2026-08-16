@@ -87,9 +87,9 @@ flowchart LR
 
 | 項目 | 値 |
 | --- | --- |
-| backup | `/home/<operator>/backups/news-podcast/content-<timestamp>.sqlite` |
+| backup | `<secure-backup-path>/content-<timestamp>.sqlite` |
 | `PRAGMA quick_check` | `ok` |
-| 未配信Outbox | <verified-count>件 |
+| 未配信Outbox | `<verified-count>`件 |
 | SHA-256 | `<verified-sha256>` |
 | file mode | `0600` |
 | migration | `20260815135150_jittery_makkari` |

@@ -12,6 +12,9 @@ describe("safeRedirect", () => {
 
   it("rejects protocol-relative and external destinations", () => {
     expect(safeRedirect("//evil.example.com")).toBe("/")
+    expect(safeRedirect("/\\evil.example.com")).toBe("/")
+    expect(safeRedirect("/\\\\evil.example.com")).toBe("/")
+    expect(safeRedirect("/library\\evil.example.com")).toBe("/")
     expect(safeRedirect("https://evil.example.com")).toBe("/")
     expect(safeRedirect(undefined, "/login")).toBe("/login")
   })

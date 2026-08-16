@@ -8,17 +8,31 @@ const fixtureUrl = new URL(
 const raw = await readFile(fixtureUrl, "utf8")
 const contract = JSON.parse(raw)
 
+for (const privateEvidenceField of [
+  "observedAt",
+  "requestsUsed",
+  "latestRefreshRequests",
+  "itemCount",
+  "successfulSamples",
+  "consecutiveSamplesAfterFix",
+  "failedSamplesBeforeFix",
+  "catalogEntries",
+  "contentLength",
+]) {
+  assert.equal(
+    raw.includes(`"${privateEvidenceField}"`),
+    false,
+    `${privateEvidenceField} must not be committed to the public fixture`
+  )
+}
+
 assert.equal(contract.voicevox.imageVersion, "24.04")
 assert.equal(contract.voicevox.audioQueryOptionalFields.pauseLength, null)
 assert.equal(contract.voicevox.audioQueryOptionalFields.pauseLengthScale, 1)
 assert.equal(contract.voicevox.synthesis.riffWave, true)
-assert.equal(contract.openai.requestsUsed, 12)
-assert.equal(contract.openai.latestRefreshRequests, 10)
 assert.equal(contract.openai.script.status, "completed")
-assert.equal(contract.openai.script.consecutiveSamplesAfterFix, 5)
 assert.equal(contract.openai.script.maximumOutputTokens, 4_096)
 assert.equal(contract.openai.enrichment.status, "completed")
-assert.equal(contract.openai.enrichment.consecutiveSamplesAfterFix, 5)
 assert.equal(contract.openai.enrichment.maximumOutputTokens, 2_048)
 assert.equal(
   contract.openai.enrichment.unsupportedKeywordRemoved,

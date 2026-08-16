@@ -7,6 +7,7 @@ import {
   createRepresentativeTraceArtifact,
   evaluateSummary,
   parseArgs,
+  resolveGrafanaToken,
   runProcess,
   shouldSkipFakeControl,
 } from "./loadtest-run.mjs"
@@ -38,6 +39,21 @@ test("parseArgs parses flags and boolean switches", () => {
       start: true,
       duration: "30s",
     }
+  )
+})
+
+test("Grafana credentials cannot be supplied through process arguments", () => {
+  assert.throws(
+    () =>
+      resolveGrafanaToken(
+        { "grafana-token": "secret-in-history" },
+        { LOADTEST_GRAFANA_TOKEN: "safe-environment-token" }
+      ),
+    /must not be passed on the command line/
+  )
+  assert.equal(
+    resolveGrafanaToken({}, { LOADTEST_GRAFANA_TOKEN: "environment-token" }),
+    "environment-token"
   )
 })
 

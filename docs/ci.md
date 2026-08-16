@@ -91,6 +91,8 @@ Dockerを使うobservability smokeをローカルで初めて実行する場合�
 
 security workflowの検査ツールは公式release assetをダウンロードし、固定したSHA256 checksumを検証する。Gitleaksの結果や診断artifactへ実シークレットを出力しない。
 
+`pnpm test:publication-safety`は、tracked fileへ実operatorのhome path、timestamp付きbackup名、live providerの観測時刻・実件数が混入していないことを検査する。`.gitignore`だけではDocker build contextを保護できないため、credentialとruntime artifactの生成先は`.dockerignore`でも除外する。既にcommitした値はこの検査で履歴から消えないため、public化前に`gitleaks git --log-opts='--all'`と履歴書き換え要否の確認を別途行う。
+
 ## GitHub設定
 
 Repository Settingsで次を設定する。

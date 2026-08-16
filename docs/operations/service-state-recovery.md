@@ -110,9 +110,9 @@ SIGINT/SIGTERMはresource drainとtelemetry flush後にexit 0、subscription/con
 
 | 項目 | 値 |
 | --- | --- |
-| backup | `/home/<operator>/backups/news-podcast/content-<timestamp>.sqlite` |
+| backup | `<secure-backup-path>/content-<timestamp>.sqlite` |
 | quick check | `ok` |
-| 未配信Outbox | <verified-count>件 |
+| 未配信Outbox | `<verified-count>`件 |
 | SHA-256 | `<verified-sha256>` |
 
 `20260815135150_jittery_makkari`は`content_outbox`とそのindexだけを削除する。記事snapshot、購読、タグ候補の保持はmigration testで固定し、Content参照はNATS RPCを正本とする。

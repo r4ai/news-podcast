@@ -1,5 +1,4 @@
 {
-  "observedAt": "<redacted>",
   "voicevox": {
     "imageVersion": "24.04",
     "engineVersion": "0.25.2",
@@ -16,21 +15,14 @@
   },
   "openai": {
     "modelAlias": "gpt-5.6-luna",
-    "requestsUsed": 0,
-    "latestRefreshRequests": 0,
     "script": {
       "status": "completed",
-      "successfulSamples": 0,
-      "consecutiveSamplesAfterFix": 0,
       "maximumOutputTokens": 4096,
       "hasOutputText": true,
       "hasUsage": true
     },
     "enrichment": {
       "status": "completed",
-      "successfulSamples": 0,
-      "consecutiveSamplesAfterFix": 0,
-      "failedSamplesBeforeFix": 0,
       "maximumOutputTokens": 2048,
       "hasOutputText": true,
       "hasUsage": true,
@@ -44,18 +36,15 @@
     "headStatus": 200,
     "getStatus": 200,
     "contentType": "application/octet-stream",
-    "contentLength": 0,
     "bytesMatch": true,
     "signedUrlHasSignature": true,
     "missingStatus": 404,
     "cleaned": true
   },
   "feed": {
-    "catalogEntries": 0,
     "format": "rss2",
     "feedStatus": 200,
     "feedContentType": "application/xml",
-    "itemCount": 0,
     "firstItem": {
       "hasId": true,
       "hasTitle": true,

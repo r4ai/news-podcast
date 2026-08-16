@@ -56,6 +56,14 @@ const isTrue = (value) =>
 export const shouldSkipFakeControl = (args, env = process.env) =>
   args["skip-fake-control"] === true || isTrue(env.LOADTEST_SKIP_FAKE_CONTROL)
 
+export const resolveGrafanaToken = (args, env = process.env) => {
+  if (Object.hasOwn(args, "grafana-token"))
+    throw new Error(
+      "Grafana tokens must not be passed on the command line; use LOADTEST_GRAFANA_TOKEN"
+    )
+  return env.LOADTEST_GRAFANA_TOKEN ?? env.GRAFANA_API_TOKEN
+}
+
 const metricValue = (summary, name, key) =>
   summary?.metrics?.[name]?.values?.[key]
 
@@ -233,10 +241,7 @@ const collectRepresentativeTraces = async (args) => {
     q: query,
   })
   const headers = {}
-  const token =
-    args["grafana-token"] ??
-    process.env.LOADTEST_GRAFANA_TOKEN ??
-    process.env.GRAFANA_API_TOKEN
+  const token = resolveGrafanaToken(args)
   if (token) headers.authorization = `Bearer ${token}`
 
   try {

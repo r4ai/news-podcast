@@ -40,7 +40,7 @@ RSS 2.0は`rss/channel/title/link/description`、Atomは`feed/id/title/updated`�
 
 ## 証拠管理と更新
 
-- commitするのは[匿名fixture](../contracts/provider-contracts.json)だけ。秘密、本文、provider ID、署名URL、完全feed/article URLは保存しない。
+- commitするのは[匿名fixture](../contracts/provider-contracts.json)だけ。秘密、本文、provider ID、署名URL、完全feed/article URLに加え、観測時刻、実リクエスト数、実feed件数も保存しない。
 - offline CIは`pnpm provider-contract:check`を実行する。
 - live再調査は`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後、この文書の4 probeを明示実行する。OpenAIは既存keyを表示せず、各serviceの`*.contract.test.ts`を実行する。`OPENAI_CONTRACT_SAMPLES`は既定3、最大25/adapter（合計最大50 request）で、retryは行わない。
 - 公式仕様と実データが矛盾した場合はDTOを広げず停止し、version、status/header/content type、匿名化した構造差分を報告する。

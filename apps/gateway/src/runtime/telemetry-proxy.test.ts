@@ -9,8 +9,21 @@ describe("Gateway browser telemetry proxy", () => {
       expect(init?.method).toBe("POST")
       const headers = new Headers(init?.headers)
       expect(headers.get("content-type")).toBe("application/json")
+      expect(headers.get("content-encoding")).toBe("gzip")
+      expect(headers.has("authorization")).toBe(false)
+      expect(headers.has("cookie")).toBe(false)
+      expect(headers.has("x-csrf-token")).toBe(false)
       expect(await new Response(init?.body).text()).toBe('{"resourceSpans":[]}')
-      return Response.json({ ok: true }, { status: 200 })
+      return Response.json(
+        { ok: true },
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": "collector-session=unexpected; Secure; HttpOnly",
+          },
+        }
+      )
     })
     const next = vi.fn(async () => Response.json({ route: "gateway" }))
     const proxy = makeGatewayTelemetryProxy({
@@ -25,12 +38,19 @@ describe("Gateway browser telemetry proxy", () => {
     const response = await proxy(
       new Request("http://gateway/v1/telemetry/traces", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          authorization: "Bearer browser-session",
+          cookie: "session=private",
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+          "x-csrf-token": "private",
+        },
         body: '{"resourceSpans":[]}',
       })
     )
 
     expect(response.status).toBe(200)
+    expect(response.headers.has("set-cookie")).toBe(false)
     expect(await response.json()).toEqual({ ok: true })
     expect(fetch).toHaveBeenCalledOnce()
     expect(next).not.toHaveBeenCalled()

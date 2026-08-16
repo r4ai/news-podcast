@@ -16,13 +16,30 @@ export class AuthStateError extends Error {
   }
 }
 
+const containsRedirectControlCharacter = (value: string) =>
+  Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return character === "\\" || codePoint <= 0x1f || codePoint === 0x7f
+  })
+
 /** open redirectを避け、same-originの絶対パスだけを許可する。 */
 export function safeRedirect(value: unknown, fallback = "/") {
-  return typeof value === "string" &&
-    value.startsWith("/") &&
-    !value.startsWith("//")
-    ? value
-    : fallback
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/") ||
+    containsRedirectControlCharacter(value)
+  )
+    return fallback
+
+  const trustedOrigin = "https://same-origin.invalid"
+  try {
+    const destination = new URL(value, trustedOrigin)
+    return destination.origin === trustedOrigin
+      ? `${destination.pathname}${destination.search}${destination.hash}`
+      : fallback
+  } catch {
+    return fallback
+  }
 }
 
 export { currentPath } from "@/shared/lib/location"
