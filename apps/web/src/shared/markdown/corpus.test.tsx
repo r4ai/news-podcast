@@ -49,14 +49,25 @@ const EXPECTED_UNMAPPED_TAGS = [
   "svg", // lucideアイコン
 ] as const
 
+// Shiki can load a language grammar lazily. On a busy GitHub-hosted runner
+// this can exceed Testing Library's 1 second default even though rendering is
+// progressing correctly. Keep the assertion bounded, but give the async
+// processor the same tolerance as the production-like corpus test needs.
+const MARKDOWN_READY_TIMEOUT_MILLIS = 5_000
+
 async function renderCorpus(markdown: string) {
   const result = render(<Markdown headingBaseLevel={3} markdown={markdown} />)
   // Shikiの言語遅延importとMermaidの読み込みを挟むので、readyまで待つ。
-  await waitFor(() =>
-    expect(result.container.querySelector("[data-markdown-loading]")).toBeNull()
+  await waitFor(
+    () =>
+      expect(
+        result.container.querySelector("[data-markdown-loading]")
+      ).toBeNull(),
+    { timeout: MARKDOWN_READY_TIMEOUT_MILLIS }
   )
-  await waitFor(() =>
-    expect(result.container.textContent?.length ?? 0).toBeGreaterThan(0)
+  await waitFor(
+    () => expect(result.container.textContent?.length ?? 0).toBeGreaterThan(0),
+    { timeout: MARKDOWN_READY_TIMEOUT_MILLIS }
   )
   return result
 }
