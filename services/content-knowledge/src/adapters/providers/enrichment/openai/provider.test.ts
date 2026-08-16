@@ -1,8 +1,7 @@
-import { createServer, type Server } from "node:http"
-import type { AddressInfo } from "node:net"
-
-import { Effect } from "effect"
-import { afterEach, describe, expect, it } from "vitest"
+import { makeFakeLanguageModelLayer } from "@news-podcast/ai-runtime/testing"
+import { Duration, Effect } from "effect"
+import { AiError } from "effect/unstable/ai"
+import { describe, expect, it } from "vitest"
 
 import { makeOpenAiEnrichmentProvider } from "./provider.js"
 
@@ -13,7 +12,6 @@ const input = {
   interestProfile: { include: "TypeScriptと型安全性", exclude: "" },
   tagVocabulary: ["技術", "経済"],
 }
-
 const payload = {
   summary: "型安全な境界についての記事です。",
   score: 90,
@@ -21,300 +19,94 @@ const payload = {
   tags: ["技術"],
   suggestedTags: ["型安全"],
 }
-
-const completed = (value: unknown) => ({
-  id: "provider-only-id",
-  status: "completed",
-  output: [
-    { type: "reasoning", summary: [{ text: "never persist this" }] },
-    {
-      type: "message",
-      content: [{ type: "output_text", text: JSON.stringify(value) }],
-    },
-  ],
-  usage: { input_tokens: 123, output_tokens: 45, total_tokens: 168 },
-})
-
-type Reply = Readonly<{
-  readonly status?: number
-  readonly headers?: Readonly<Record<string, string>>
-  readonly body?: string
-  readonly hang?: boolean
-}>
-
-const servers: Server[] = []
-
-afterEach(async () => {
-  for (const server of servers.splice(0)) {
-    server.closeAllConnections()
-    await new Promise<void>((resolve) => server.close(() => resolve()))
-  }
-})
-
-const startServer = async (replies: readonly Reply[]) => {
-  const requests: Array<{ readonly headers: unknown; readonly body: string }> =
-    []
-  let count = 0
-  const server = createServer((request, response) => {
-    const chunks: Buffer[] = []
-    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
-    request.on("end", () => {
-      requests.push({
-        headers: request.headers,
-        body: Buffer.concat(chunks).toString("utf8"),
-      })
-      const reply = replies[Math.min(count, replies.length - 1)]!
-      count += 1
-      if (reply.hang) return
-      response.writeHead(reply.status ?? 200, {
-        "content-type": "application/json",
-        ...(reply.headers ?? {}),
-      })
-      response.end(reply.body ?? JSON.stringify(completed(payload)))
-    })
-  })
-  servers.push(server)
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
-  const address = server.address() as AddressInfo
-  return {
-    endpoint: new URL(`http://127.0.0.1:${address.port}/v1/responses`),
-    requests,
-    count: () => count,
-  }
+const config = {
+  apiUrl: new URL("https://api.openai.com/v1"),
+  apiKey: "test-only-key",
+  model: "gpt-test",
+  requestTimeoutMillis: 1_000,
+  maximumAttempts: 2,
+  baseDelayMillis: 25,
+  maximumDelayMillis: 2_000,
 }
 
-const provider = (
-  endpoint: URL,
-  options: {
-    readonly timeout?: number
-    readonly fetcher?: typeof fetch
-    readonly sleep?: (milliseconds: number) => Effect.Effect<void>
-  } = {}
-) =>
-  makeOpenAiEnrichmentProvider(
-    {
-      endpoint,
-      apiKey: "test-only-key",
-      model: "gpt-test",
-      requestTimeoutMillis: options.timeout ?? 1_000,
-      maximumAttempts: 2,
-      baseDelayMillis: 25,
-      maximumDelayMillis: 2_000,
-    },
-    {
-      ...(options.fetcher ? { fetcher: options.fetcher } : {}),
-      ...(options.sleep ? { sleep: options.sleep } : {}),
-    }
-  )
-
-describe("OpenAI enrichment provider HTTP boundary", () => {
-  it("sends strict structured output and projects only domain fields", async () => {
-    const fake = await startServer([{}])
-
-    const result = await Effect.runPromise(
-      provider(fake.endpoint).enrich(input)
-    )
-
-    expect(result).toEqual({ ...payload, tokensIn: 123, tokensOut: 45 })
-    expect(Object.isFrozen(result)).toBe(true)
-    const request = JSON.parse(fake.requests[0]!.body) as Record<
-      string,
-      unknown
-    >
-    expect(Object.keys(request).sort()).toEqual([
-      "input",
-      "max_output_tokens",
-      "model",
-      "text",
-    ])
-    expect(request.max_output_tokens).toBe(2_048)
-    expect(request).not.toHaveProperty("temperature")
-    // Structured Outputsが対応するarray keywordはminItems/maxItemsだけ。
-    // 一意性はapplication payload schemaで検証する。
-    expect(fake.requests[0]!.body).not.toContain("uniqueItems")
-    expect(fake.requests[0]!.body).toContain(input.markdown)
-    expect(fake.requests[0]!.body).not.toContain("test-only-key")
-    expect(JSON.stringify(result)).not.toContain("never persist this")
-  })
-
-  it("deduplicates set-like tag fields before domain validation", async () => {
-    const fake = await startServer([
-      {
-        body: JSON.stringify(
-          completed({
-            ...payload,
-            tags: ["技術", "技術"],
-            suggestedTags: ["型安全", "型安全"],
-          })
-        ),
-      },
-    ])
-
-    const result = await Effect.runPromise(
-      provider(fake.endpoint).enrich(input)
-    )
-
-    expect(result).toMatchObject({
-      tags: ["技術"],
-      suggestedTags: ["型安全"],
+describe("Effect AI enrichment provider", () => {
+  it("generates only schema-validated domain fields and provider usage", async () => {
+    let prompt = ""
+    const provider = makeOpenAiEnrichmentProvider(config, {
+      languageModelLayer: makeFakeLanguageModelLayer((options) => {
+        prompt = JSON.stringify(options.prompt)
+        return Effect.succeed(payload)
+      }),
     })
+
+    const result = await Effect.runPromise(provider.enrich(input))
+
+    expect(result).toEqual({ ...payload, tokensIn: 0, tokensOut: 0 })
+    expect(Object.isFrozen(result)).toBe(true)
+    expect(prompt).toContain(input.markdown)
+    expect(prompt).toContain(input.interestProfile.include)
+    expect(prompt).not.toContain(config.apiKey)
   })
 
-  it.each([
-    [429, { "retry-after": "2" }, 2_000],
-    [503, {}, 25],
-  ] as const)(
-    "retries HTTP %s with bounded delay",
-    async (status, headers, delay) => {
-      const fake = await startServer([
-        {
-          status,
-          headers,
-          body: JSON.stringify({ error: { message: "secret" } }),
-        },
-        {},
-      ])
-      const delays: number[] = []
+  it("fails closed when the model selects a tag outside the vocabulary", async () => {
+    const provider = makeOpenAiEnrichmentProvider(config, {
+      languageModelLayer: makeFakeLanguageModelLayer(() =>
+        Effect.succeed({ ...payload, tags: ["未登録"] })
+      ),
+    })
 
-      const result = await Effect.runPromise(
-        provider(fake.endpoint, {
-          sleep: (milliseconds) =>
-            Effect.sync(() => void delays.push(milliseconds)),
-        }).enrich(input)
-      )
-
-      expect(result).toMatchObject({ score: 90 })
-      expect(fake.count()).toBe(2)
-      expect(delays).toEqual([delay])
-    }
-  )
-
-  it("does not retry or retain 4xx provider errors", async () => {
-    const fake = await startServer([
-      {
-        status: 400,
-        body: JSON.stringify({ error: { message: input.markdown } }),
-      },
-    ])
-
-    const failure = await Effect.runPromise(
-      Effect.flip(provider(fake.endpoint).enrich(input))
-    )
+    const failure = await Effect.runPromise(Effect.flip(provider.enrich(input)))
 
     expect(failure).toEqual({
       _tag: "EnrichmentProviderFailed",
       reason: "Permanent",
-      message: "enrichment provider rejected request",
+      message: "invalid enrichment provider response",
     })
-    expect(JSON.stringify(failure)).not.toContain(input.markdown)
-    expect(fake.count()).toBe(1)
   })
 
-  it("does not shorten an excessive Retry-After value", async () => {
-    const fake = await startServer([
-      { status: 429, headers: { "retry-after": "60" }, body: "{}" },
-    ])
+  it("feeds Retry-After into the existing bounded retry policy", async () => {
+    let attempts = 0
     const delays: number[] = []
-
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        provider(fake.endpoint, {
-          sleep: (milliseconds) =>
-            Effect.sync(() => void delays.push(milliseconds)),
-        }).enrich(input)
-      )
-    )
-
-    expect(failure).toEqual({
-      _tag: "EnrichmentProviderFailed",
-      reason: "RateLimited",
-      message: "enrichment provider rate limited",
+    const provider = makeOpenAiEnrichmentProvider(config, {
+      languageModelLayer: makeFakeLanguageModelLayer(() => {
+        attempts += 1
+        return attempts === 1
+          ? Effect.fail(
+              new AiError.AiError({
+                module: "test",
+                method: "generateObject",
+                reason: new AiError.RateLimitError({
+                  retryAfter: Duration.seconds(2),
+                }),
+              })
+            )
+          : Effect.succeed(payload)
+      }),
+      nowMillis: () => Effect.succeed(0),
+      sleep: (milliseconds) =>
+        Effect.sync(() => {
+          delays.push(milliseconds)
+        }),
     })
-    expect(delays).toEqual([])
-    expect(fake.count()).toBe(1)
+
+    await Effect.runPromise(provider.enrich(input))
+
+    expect(attempts).toBe(2)
+    expect(delays).toEqual([2_000])
   })
 
-  it.each([
-    ["invalid JSON", "not-json"],
-    [
-      "extra payload field",
-      JSON.stringify(completed({ ...payload, reasoning: "secret" })),
-    ],
-    [
-      "unknown tag",
-      JSON.stringify(completed({ ...payload, tags: ["未登録"] })),
-    ],
-    [
-      "unknown message content",
-      JSON.stringify({
-        ...completed(payload),
-        output: [
-          {
-            type: "message",
-            content: [
-              { type: "provider_future_part", secret: "secret" },
-              { type: "output_text", text: JSON.stringify(payload) },
-            ],
-          },
-        ],
-      }),
-    ],
-    [
-      "refusal",
-      JSON.stringify({
-        status: "completed",
-        output: [
-          {
-            type: "message",
-            content: [{ type: "refusal", refusal: "secret refusal" }],
-          },
-        ],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }),
-    ],
-  ])("fails closed for %s without retry", async (_case, body) => {
-    const fake = await startServer([{ body }])
+  it("classifies structured-output schema drift as permanent", async () => {
+    const provider = makeOpenAiEnrichmentProvider(config, {
+      languageModelLayer: makeFakeLanguageModelLayer(() =>
+        Effect.succeed({ ...payload, score: "high" })
+      ),
+    })
 
-    const failure = await Effect.runPromise(
-      Effect.flip(provider(fake.endpoint).enrich(input))
-    )
+    const failure = await Effect.runPromise(Effect.flip(provider.enrich(input)))
 
     expect(failure).toMatchObject({
       _tag: "EnrichmentProviderFailed",
       reason: "Permanent",
     })
-    expect(JSON.stringify(failure)).not.toContain("secret")
-    expect(fake.count()).toBe(1)
-  })
-
-  it("retries a request timeout only within the attempt budget", async () => {
-    let requests = 0
-    const fetcher: typeof fetch = async (_input, init) => {
-      requests += 1
-      const signal = init?.signal
-      if (!signal) throw new Error("request signal missing")
-      return new Promise<Response>((_resolve, reject) => {
-        const abort = () => reject(new DOMException("aborted", "AbortError"))
-        if (signal.aborted) abort()
-        else signal.addEventListener("abort", abort, { once: true })
-      })
-    }
-
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        provider(new URL("http://provider.invalid/v1/responses"), {
-          timeout: 20,
-          fetcher,
-          sleep: () => Effect.void,
-        }).enrich(input)
-      )
-    )
-
-    expect(failure).toEqual({
-      _tag: "EnrichmentProviderFailed",
-      reason: "Retryable",
-      message: "enrichment provider request timed out",
-    })
-    expect(requests).toBe(2)
   })
 })

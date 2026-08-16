@@ -162,7 +162,21 @@ const main = Effect.scoped(
       requestTimeoutMillis: 500,
       loginMethods: { development: true, google: false },
     })
-    const web = makeGatewayWebHandler(ports)
+    let requestedAudioUrl: string | undefined
+    const web = makeGatewayWebHandler(ports, undefined, {
+      fetcher: (input) => {
+        requestedAudioUrl = String(input)
+        return Promise.resolve(
+          new Response(Uint8Array.from([82, 73, 70, 70]), {
+            status: 200,
+            headers: {
+              "content-length": "4",
+              "content-type": "audio/wav",
+            },
+          })
+        )
+      },
+    })
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => web.dispose()).pipe(Effect.ignore)
     )
@@ -384,16 +398,23 @@ const main = Effect.scoped(
         "episode detail returned another episode"
       )
 
-      const audioAccessResponse = await request(
+      const audioResponse = await request(
         web.handler,
-        `/v1/episodes/${episodeId}/audio-access`,
-        { method: "POST", headers }
+        `/v1/episodes/${episodeId}/audio`,
+        { headers }
       )
-      assert(audioAccessResponse.status === 200, "audio access was not issued")
-      const audioAccess = await json(audioAccessResponse)
+      assert(audioResponse.status === 200, "audio was not streamed")
       assert(
-        audioAccess.url === "https://audio.e2e.invalid/signed",
-        "audio access URL was not owner-scoped through Library"
+        requestedAudioUrl === "https://audio.e2e.invalid/signed",
+        "audio access was not owner-scoped through Library"
+      )
+      assert(
+        new TextDecoder().decode(await audioResponse.arrayBuffer()) === "RIFF",
+        "audio stream did not preserve WAV bytes"
+      )
+      assert(
+        !audioResponse.headers.has("location"),
+        "signed audio URL escaped the same-origin Gateway"
       )
 
       const anonymous = await request(web.handler, "/v1/episodes")
@@ -407,7 +428,7 @@ const main = Effect.scoped(
         subscription: "owner-scoped",
         ownerBoundary: "enforced",
         completion: "jetstream-materialized",
-        episodeDetail: "readable-with-audio-access",
+        episodeDetail: "readable-with-same-origin-audio",
       }
     })
   })

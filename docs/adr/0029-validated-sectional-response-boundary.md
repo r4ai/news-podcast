@@ -4,7 +4,7 @@
 - Date: 2026-08-12
 - Decision owners: Platform / Editorial
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0057（provider解析）、ADR-0058（進捗protocol）
 - Related: ADR-0013、ADR-0026、ADR-0031、`docs/design.md` §8.3、[OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
 
 ## Context and change trigger

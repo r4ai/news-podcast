@@ -1,4 +1,7 @@
-import type { AgUiEvent, EpisodeJobState } from "@news-podcast/contracts/agui"
+import type {
+  EpisodeJobAgUiEvent,
+  EpisodeJobState,
+} from "@news-podcast/contracts/agui"
 import type { components } from "@news-podcast/contracts/openapi"
 
 export type JobStatus = components["schemas"]["JobStatus"]
@@ -23,9 +26,10 @@ const statusLabels = {
 } satisfies Record<JobStatus, string>
 
 const stageLabels = {
-  researching_sources: "記事を調査中",
-  fetching_sources: "RSSを取得中",
+  selecting_articles: "記事を選定中",
+  materializing_articles: "記事本文を固定中",
   generating_script: "台本を生成中",
+  preparing_pronunciation: "読み方を準備中",
   synthesizing_audio: "音声を生成中",
   storing_episode: "番組を保存中",
 } satisfies Record<JobStage, string>
@@ -123,9 +127,10 @@ export function hasActiveJob(
 }
 
 const stageProgress = {
-  researching_sources: 35,
-  fetching_sources: 20,
+  selecting_articles: 10,
+  materializing_articles: 25,
   generating_script: 45,
+  preparing_pronunciation: 60,
   synthesizing_audio: 75,
   storing_episode: 90,
 } satisfies Record<JobStage, number>
@@ -143,19 +148,9 @@ export type TimelineStep = {
   readonly done: boolean
 }
 
-export type TimelineToolCall = {
-  readonly kind: "tool"
-  readonly toolCallId: string
-  readonly name: string
-  readonly label: string
-  readonly args?: string
-  readonly result?: string
-  readonly done: boolean
-}
+export type TimelineEntry = TimelineStep
 
-export type TimelineEntry = TimelineStep | TimelineToolCall
-
-export type AdoptedArticle = EpisodeJobState["adoptedArticles"][number]
+export type AdoptedArticle = EpisodeJobState["selectedArticles"][number]
 
 export type GenerationStream = {
   readonly connected: boolean
@@ -172,17 +167,6 @@ export const emptyGenerationStream: GenerationStream = {
   finished: false,
 }
 
-const toolLabels: Readonly<Record<string, string>> = {
-  list_rss_articles: "記事一覧を確認",
-  read_article: "記事を読む",
-  web_search: "Webで裏取り",
-  submit_episode_draft: "台本を提出",
-}
-
-export function toolLabel(name: string): string {
-  return toolLabels[name] ?? name
-}
-
 function isJobStage(value: string): value is JobStage {
   return value in stageLabels
 }
@@ -193,11 +177,18 @@ function isJobStage(value: string): value is JobStage {
  */
 export function reduceGenerationStream(
   current: GenerationStream,
-  event: AgUiEvent
+  event: EpisodeJobAgUiEvent
 ): GenerationStream {
   switch (event.type) {
     case "STATE_SNAPSHOT":
-      return { ...current, state: event.snapshot, finished: false }
+      return {
+        ...current,
+        state: event.snapshot,
+        adoptedArticles: event.snapshot.selectedArticles,
+        finished: ["succeeded", "failed", "canceled"].includes(
+          event.snapshot.status
+        ),
+      }
 
     case "RUN_STARTED":
       return {
@@ -217,7 +208,12 @@ export function reduceGenerationStream(
       return {
         ...current,
         ...(current.state
-          ? { state: { ...current.state, stage: event.stepName } }
+          ? {
+              state: {
+                ...current.state,
+                currentStage: event.stepName as never,
+              },
+            }
           : {}),
         timeline: existing
           ? current.timeline.map((entry) =>
@@ -239,43 +235,6 @@ export function reduceGenerationStream(
           isSameStep(event.stepName)(entry) ? { ...entry, done: true } : entry
         ),
       }
-
-    case "TOOL_CALL_START":
-      return {
-        ...current,
-        timeline: [
-          ...current.timeline,
-          {
-            kind: "tool",
-            toolCallId: event.toolCallId,
-            name: event.toolCallName,
-            label: toolLabel(event.toolCallName),
-            done: false,
-          },
-        ],
-      }
-
-    case "TOOL_CALL_ARGS":
-      return patchTool(current, event.toolCallId, (tool) => ({
-        ...tool,
-        args: `${tool.args ?? ""}${event.delta}`,
-      }))
-
-    case "TOOL_CALL_RESULT":
-      return patchTool(current, event.toolCallId, (tool) => ({
-        ...tool,
-        result: event.content,
-        done: true,
-      }))
-
-    case "TOOL_CALL_END":
-      return patchTool(current, event.toolCallId, (tool) => ({
-        ...tool,
-        done: true,
-      }))
-
-    case "STATE_DELTA":
-      return event.delta.reduce(applyPatch, current)
 
     case "RUN_FINISHED":
       return {
@@ -300,24 +259,12 @@ export function reduceGenerationStream(
                 failure: {
                   code: event.code ?? "unknown",
                   message: event.message,
+                  retryable: false,
                 },
               },
             }
           : {}),
       }
-
-    case "CUSTOM":
-      if (event.name !== "job.retrying") return current
-      return {
-        ...current,
-        timeline: finishTimeline(current.timeline),
-        ...(current.state
-          ? { state: { ...current.state, status: "retrying" } }
-          : {}),
-      }
-
-    default:
-      return current
   }
 }
 
@@ -333,52 +280,3 @@ const isSameStep =
   (stepName: string) =>
   (entry: TimelineEntry): entry is TimelineStep =>
     entry.kind === "step" && entry.stepName === stepName
-
-function patchTool(
-  current: GenerationStream,
-  toolCallId: string,
-  patch: (tool: TimelineToolCall) => TimelineToolCall
-): GenerationStream {
-  return {
-    ...current,
-    timeline: current.timeline.map((entry) =>
-      entry.kind === "tool" && entry.toolCallId === toolCallId
-        ? patch(entry)
-        : entry
-    ),
-  }
-}
-
-/**
- * RFC 6902 のうち、このエージェントが実際に送る操作だけを実装する。
- * 汎用のJSON Patch実装を持ち込むほどの形状ではない。
- */
-function applyPatch(
-  current: GenerationStream,
-  operation: {
-    readonly op: string
-    readonly path: string
-    readonly value?: unknown
-  }
-): GenerationStream {
-  if (operation.op === "add" && operation.path === "/adoptedArticles/-") {
-    const article = operation.value as AdoptedArticle
-    if (
-      current.adoptedArticles.some((it) => it.articleId === article.articleId)
-    ) {
-      return current
-    }
-    return {
-      ...current,
-      adoptedArticles: [...current.adoptedArticles, article],
-    }
-  }
-  if (operation.op === "replace" && operation.path === "/progress") {
-    const progress = operation.value as { completed: number; total: number }
-    return {
-      ...current,
-      ...(current.state ? { state: { ...current.state, progress } } : {}),
-    }
-  }
-  return current
-}

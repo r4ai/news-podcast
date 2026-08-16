@@ -254,7 +254,7 @@ export const handleListJobEventsRpc =
       ownerId: OwnerId,
       jobId: JobId
     ) => Effect.Effect<EpisodeJob | undefined, StorageError>
-    readonly listOwnedStatusEvents: (input: {
+    readonly listOwnedAgUiEvents: (input: {
       readonly ownerId: OwnerId
       readonly jobId: JobId
       readonly afterSequence: number
@@ -262,7 +262,7 @@ export const handleListJobEventsRpc =
     }) => Effect.Effect<
       readonly Readonly<{
         readonly sequence: number
-        readonly job: EpisodeJob
+        readonly event: unknown
       }>[],
       StorageError
     >
@@ -281,7 +281,7 @@ export const handleListJobEventsRpc =
             job === undefined
               ? Effect.succeed<EpisodeJobControlReply>({ _tag: "NotFound" })
               : ports
-                  .listOwnedStatusEvents({
+                  .listOwnedAgUiEvents({
                     ownerId,
                     jobId,
                     afterSequence: request.afterSequence ?? 0,
@@ -290,10 +290,7 @@ export const handleListJobEventsRpc =
                   .pipe(
                     Effect.map((events): EpisodeJobControlReply => ({
                       _tag: "Events",
-                      events: events.map((event) => ({
-                        sequence: event.sequence,
-                        job: projectEpisodeJob(event.job),
-                      })),
+                      events,
                     }))
                   )
           )

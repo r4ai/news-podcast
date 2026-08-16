@@ -38,16 +38,12 @@ const schemaSql = (): ReadonlyMap<string, string> => {
 const TABLES = [
   "episode_jobs",
   "episode_job_articles",
-  "episode_job_status_events",
+  "episode_generation_plans",
+  "episode_job_agui_events",
   "episode_execution_checkpoints",
   "episode_dictionary_snapshots",
   "episode_completion_outbox",
   "reading_dictionary",
-  "production_agent_instances",
-  "production_agent_runs",
-  "production_agent_events",
-  "production_agent_memories",
-  "production_agent_memory_versions",
 ]
 
 describe("episode-production migrated schema", () => {
@@ -72,6 +68,19 @@ describe("episode-production migrated schema", () => {
     )
 
     expect(triggers).toEqual([])
+  })
+
+  it("removes the legacy Agent audit and memory tables", () => {
+    const schema = schemaSql()
+    for (const table of [
+      "production_agent_instances",
+      "production_agent_runs",
+      "production_agent_events",
+      "production_agent_memories",
+      "production_agent_memory_versions",
+    ]) {
+      expect(schema.has(table)).toBe(false)
+    }
   })
 
   it("requires a lease on a running job", () => {

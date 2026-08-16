@@ -54,17 +54,17 @@ const running = leaseQueuedJob(queued, {
   startedAt: at("2026-08-13T00:01:00.000Z"),
 })
 
-const eventStatuses = (
+const eventTypes = (
   handle: ReturnType<typeof makeJobHandle>
 ): readonly string[] =>
   handle
-    .listOwnedStatusEvents({
+    .listOwnedAgUiEvents({
       ownerId,
       jobId,
       afterSequence: 0,
       limit: 50,
     })
-    .map(({ document }) => (JSON.parse(document) as { _tag: string })._tag)
+    .map(({ payload }) => (JSON.parse(payload) as { type: string }).type)
 
 const save = (handle: ReturnType<typeof makeJobHandle>) =>
   handle.saveIdempotently({
@@ -79,13 +79,13 @@ const save = (handle: ReturnType<typeof makeJobHandle>) =>
  * 以前は episode_jobs のトリガが状態イベントを materialize していた。
  * 書き込む側が明示的に積むようになっても、記録される列と条件が同じであることを固定する。
  */
-describe("job status events", () => {
+describe("durable AG-UI events", () => {
   it("records the initial state when the job is created", () => {
     const { handle, database } = openHandle()
     try {
       save(handle)
 
-      expect(eventStatuses(handle)).toEqual(["Queued"])
+      expect(eventTypes(handle)).toEqual(["STATE_SNAPSHOT"])
     } finally {
       database.close()
     }
@@ -101,7 +101,11 @@ describe("job status events", () => {
         replace: () => toStatusEventDocument(running),
       })
 
-      expect(eventStatuses(handle)).toEqual(["Queued", "Running"])
+      expect(eventTypes(handle)).toEqual([
+        "STATE_SNAPSHOT",
+        "RUN_STARTED",
+        "STATE_SNAPSHOT",
+      ])
     } finally {
       database.close()
     }
@@ -118,7 +122,7 @@ describe("job status events", () => {
         replace: () => toStatusEventDocument(queued),
       })
 
-      expect(eventStatuses(handle)).toEqual(["Queued"])
+      expect(eventTypes(handle)).toEqual(["STATE_SNAPSHOT"])
     } finally {
       database.close()
     }
@@ -130,7 +134,7 @@ describe("job status events", () => {
       save(handle)
 
       expect(
-        handle.listOwnedStatusEvents({
+        handle.listOwnedAgUiEvents({
           ownerId: "another-owner",
           jobId,
           afterSequence: 0,

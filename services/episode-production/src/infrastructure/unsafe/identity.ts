@@ -7,11 +7,14 @@ import type {
   LeaseTokenSchema,
   UtcTimestamp,
 } from "../../domain/episode-job.js"
+import type { ReadingDictionaryId } from "../../domain/reading-dictionary.js"
 import type { Schema } from "effect"
 
 /** Platform guarantees are asserted only at the unsafe edge. */
 export const randomJobIdUnsafe = (): JobId => randomUUID() as JobId
 export const randomEpisodeIdUnsafe = (): EpisodeId => randomUUID() as EpisodeId
+export const randomReadingDictionaryIdUnsafe = (): ReadingDictionaryId =>
+  randomUUID() as ReadingDictionaryId
 export const randomLeaseTokenUnsafe = (): Schema.Schema.Type<
   typeof LeaseTokenSchema
 > => randomUUID() as Schema.Schema.Type<typeof LeaseTokenSchema>

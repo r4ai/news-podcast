@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect"
 import {
   OwnerIdSchema,
   UtcTimestampSchema,
+  type JobId,
   type OwnerId,
   type UtcTimestamp,
 } from "../domain/episode-job.js"
@@ -19,6 +20,10 @@ import {
   type ReadingPronunciation,
   type ReadingSurface,
 } from "../domain/reading-dictionary.js"
+import type {
+  ReadingTermCandidate,
+  ReadingTermExtractor,
+} from "./ports/reading-term-extractor.js"
 
 export type ReadingDictionaryStoreError = DeepReadonly<{
   readonly _tag: "ReadingDictionaryStoreFailed"
@@ -182,3 +187,100 @@ export const captureReadingDictionarySnapshot = (
   repository: Pick<ReadingDictionaryRepository, "captureSnapshot">,
   ownerId: OwnerId
 ) => repository.captureSnapshot(ownerId)
+
+const normalizedSurfaceKey = (surface: string) =>
+  surface.normalize("NFKC").trim().toLocaleLowerCase("ja")
+
+export type PreparedReadingDictionary = DeepReadonly<{
+  readonly snapshot: ReadingDictionarySnapshot
+  readonly addedCount: number
+  readonly extractionFailed: boolean
+}>
+
+/**
+ * Best-effort AI extraction followed by durable owner-scoped registration.
+ * Provider failure never blocks audio; persistence failure remains retryable by the caller.
+ */
+export const prepareReadingDictionary = (
+  ports: Pick<
+    ReadingDictionaryRepository,
+    "list" | "create" | "captureSnapshot"
+  > & {
+    readonly extractor: ReadingTermExtractor
+    readonly nextId: () => ReadingDictionaryId
+    readonly now: () => UtcTimestamp
+  },
+  input: {
+    readonly ownerId: OwnerId
+    readonly episodeJobId: JobId
+    readonly script: string
+    readonly signal?: AbortSignal
+  }
+): Effect.Effect<PreparedReadingDictionary, ReadingDictionaryStoreError> =>
+  ports.extractor
+    .extract({
+      script: input.script,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    })
+    .pipe(
+      Effect.matchEffect({
+        onFailure: () =>
+          Effect.succeed({
+            candidates: [] as readonly ReadingTermCandidate[],
+            extractionFailed: true,
+          }),
+        onSuccess: (candidates) =>
+          Effect.succeed({ candidates, extractionFailed: false }),
+      }),
+      Effect.flatMap(({ candidates, extractionFailed }) =>
+        ports.list(input.ownerId).pipe(
+          Effect.flatMap((existing) => {
+            const seen = new Set(
+              existing.map(({ surface }) => normalizedSurfaceKey(surface))
+            )
+            const normalizedScript = input.script
+              .normalize("NFKC")
+              .toLocaleLowerCase("ja")
+            const unique = candidates.filter(({ surface }) => {
+              const key = normalizedSurfaceKey(surface)
+              if (!normalizedScript.includes(key) || seen.has(key)) return false
+              seen.add(key)
+              return true
+            })
+            return Effect.forEach(
+              unique,
+              (candidate) => {
+                const now = ports.now()
+                const entry = Schema.decodeUnknownSync(
+                  ReadingDictionaryEntrySchema
+                )({
+                  id: ports.nextId(),
+                  ownerId: input.ownerId,
+                  ...candidate,
+                  source: "ai_auto",
+                  episodeJobId: input.episodeJobId,
+                  createdAt: encodeTimestamp(now),
+                  updatedAt: encodeTimestamp(now),
+                })
+                return ports.create(deepFreeze(entry))
+              },
+              { concurrency: 1 }
+            ).pipe(
+              Effect.flatMap((results) =>
+                ports.captureSnapshot(input.ownerId).pipe(
+                  Effect.map((snapshot) =>
+                    deepFreeze({
+                      snapshot,
+                      addedCount: results.filter(
+                        ({ _tag }) => _tag === "Created"
+                      ).length,
+                      extractionFailed,
+                    })
+                  )
+                )
+              )
+            )
+          })
+        )
+      )
+    )

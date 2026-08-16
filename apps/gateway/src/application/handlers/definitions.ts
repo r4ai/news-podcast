@@ -1,5 +1,8 @@
 import { deepFreeze } from "@news-podcast/kernel"
-import { Effect, Option, Stream } from "effect"
+import { parseEpisodeJobAgUiEvent } from "@news-podcast/contracts/agui"
+import { Effect, Option, Schema, Stream } from "effect"
+import { HttpServerResponse } from "effect/unstable/http"
+import { EpisodeJobAgUiEventSchema } from "../../contract.js"
 import type { GatewayPorts } from "../ports.js"
 
 const freezeSuccess = <Success, Error, Requirements>(
@@ -20,10 +23,41 @@ const isTerminalEpisodeJob = (job: EpisodeJob) =>
   job.status === "failed" ||
   job.status === "canceled"
 
-const toEpisodeSseEvent = (job: EpisodeJob, sequence?: number) =>
+const toEpisodeJobState = (job: EpisodeJob) =>
   deepFreeze({
-    id: sequence === undefined ? undefined : String(sequence),
-    event: "STATE_SNAPSHOT" as const,
+    jobId: job.id,
+    status: job.status,
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    selectionMode:
+      job.articleIds === undefined
+        ? ("automatic" as const)
+        : ("manual" as const),
+    selectedArticles: (job.articleIds ?? []).map((articleId) => ({
+      articleId,
+    })),
+    ...(job.failure === undefined
+      ? {}
+      : {
+          failure: {
+            code: job.failure.code,
+            message: job.failure.message,
+            retryable: job.failure.retryable,
+          },
+        }),
+    ...(job.episodeId === undefined ? {} : { episodeId: job.episodeId }),
+  })
+
+type EpisodeSseEvent = Readonly<{
+  id: string | undefined
+  event: "message"
+  data: Schema.Schema.Type<typeof EpisodeJobAgUiEventSchema>
+}>
+
+const toSnapshotSseEvent = (job: EpisodeJob): EpisodeSseEvent =>
+  deepFreeze({
+    id: undefined,
+    event: "message",
     data: deepFreeze({
       type: "STATE_SNAPSHOT" as const,
       timestamp: Date.parse(
@@ -33,23 +67,17 @@ const toEpisodeSseEvent = (job: EpisodeJob, sequence?: number) =>
           job.nextAttemptAt ??
           job.createdAt
       ),
-      snapshot: {
-        jobId: job.id,
-        status: job.status,
-        attempt: job.attempt,
-        maxAttempts: job.maxAttempts,
-        adoptedArticles: [],
-        ...(job.failure === undefined
-          ? {}
-          : {
-              failure: {
-                code: job.failure.code,
-                message: job.failure.message,
-              },
-            }),
-        ...(job.episodeId === undefined ? {} : { episodeId: job.episodeId }),
-      },
+      snapshot: toEpisodeJobState(job),
     }),
+  })
+
+const toEpisodeSseEvent = (sequence: number, value: unknown): EpisodeSseEvent =>
+  deepFreeze({
+    id: String(sequence),
+    event: "message",
+    data: Schema.decodeUnknownSync(EpisodeJobAgUiEventSchema)(
+      parseEpisodeJobAgUiEvent(value)
+    ),
   })
 
 const latestSequence = (fallback: number, replay: EpisodeReplay) =>
@@ -60,7 +88,10 @@ const latestSequence = (fallback: number, replay: EpisodeReplay) =>
 
 export const makeGatewayHandlers = (
   ports: GatewayPorts,
-  options: { readonly episodeEventPollMillis?: number } = {}
+  options: {
+    readonly episodeEventPollMillis?: number
+    readonly fetcher?: typeof globalThis.fetch
+  } = {}
 ) =>
   deepFreeze({
     health: () => freezeSuccess(ports.health()),
@@ -85,13 +116,15 @@ export const makeGatewayHandlers = (
         Effect.map((initial) => {
           const initialHasMoreReplay = initial.events.length === 100
           const initialEvents = [
-            ...initial.events.map(({ sequence, job }) =>
-              toEpisodeSseEvent(job, sequence)
+            ...initial.events.map(({ sequence, event }) =>
+              toEpisodeSseEvent(sequence, event)
             ),
             // Do not place the current snapshot before a later replay page.
             ...(initialHasMoreReplay
               ? []
-              : [toEpisodeSseEvent(initial.snapshot)]),
+              : initial.events.length === 0
+                ? [toSnapshotSseEvent(initial.snapshot)]
+                : []),
           ]
           const initialSequence = latestSequence(input.afterSequence, initial)
           const initialIsComplete =
@@ -134,16 +167,18 @@ export const makeGatewayHandlers = (
                       replay
                     )
                     const fullReplayPage = replay.events.length === 100
-                    const replayFinished = state.replaying && !fullReplayPage
                     const terminalSnapshotWithoutEvent =
                       !state.replaying &&
                       replay.events.length === 0 &&
                       isTerminalEpisodeJob(replay.snapshot)
-                    const events = replay.events.map(({ sequence, job }) =>
-                      toEpisodeSseEvent(job, sequence)
+                    const events: Array<
+                      | ReturnType<typeof toEpisodeSseEvent>
+                      | ReturnType<typeof toSnapshotSseEvent>
+                    > = replay.events.map(({ sequence, event }) =>
+                      toEpisodeSseEvent(sequence, event)
                     )
-                    if (replayFinished || terminalSnapshotWithoutEvent) {
-                      events.push(toEpisodeSseEvent(replay.snapshot))
+                    if (terminalSnapshotWithoutEvent) {
+                      events.push(toSnapshotSseEvent(replay.snapshot))
                     }
                     const complete =
                       isTerminalEpisodeJob(replay.snapshot) && !fullReplayPage
@@ -167,9 +202,71 @@ export const makeGatewayHandlers = (
       freezeSuccess(ports.listEpisodes(deepFreeze(input))),
     getEpisode: (input: Parameters<GatewayPorts["getEpisode"]>[0]) =>
       freezeSuccess(ports.getEpisode(deepFreeze(input))),
-    createAudioAccess: (
-      input: Parameters<GatewayPorts["createAudioAccess"]>[0]
-    ) => freezeSuccess(ports.createAudioAccess(deepFreeze(input))),
+    streamEpisodeAudio: (input: {
+      readonly headers: Parameters<
+        GatewayPorts["createAudioAccess"]
+      >[0]["headers"] & {
+        readonly range?: string | undefined
+      }
+      readonly episodeId: Parameters<
+        GatewayPorts["createAudioAccess"]
+      >[0]["episodeId"]
+    }) => {
+      const { range, ...headers } = input.headers
+      if (range !== undefined && !/^bytes=(?:\d+-\d*|-\d+)$/.test(range)) {
+        return Effect.succeed(
+          HttpServerResponse.empty({
+            status: 416,
+            headers: { "cache-control": "private, no-store" },
+          })
+        )
+      }
+      return ports
+        .createAudioAccess(deepFreeze({ headers, episodeId: input.episodeId }))
+        .pipe(
+          Effect.flatMap((access) => {
+            return Effect.tryPromise({
+              try: async () => {
+                const upstream = await (options.fetcher ?? globalThis.fetch)(
+                  access.url,
+                  { headers: range === undefined ? {} : { range } }
+                )
+                if (![200, 206, 416].includes(upstream.status)) {
+                  await upstream.body?.cancel()
+                  throw new Error("audio upstream unavailable")
+                }
+                const headers = new Headers({
+                  "cache-control": "private, no-store",
+                  "content-disposition": "inline",
+                })
+                for (const name of [
+                  "accept-ranges",
+                  "content-length",
+                  "content-range",
+                  "content-type",
+                  "etag",
+                  "last-modified",
+                ]) {
+                  const value = upstream.headers.get(name)
+                  if (value !== null) headers.set(name, value)
+                }
+                return HttpServerResponse.fromWeb(
+                  new Response(upstream.body, {
+                    status: upstream.status,
+                    headers,
+                  })
+                )
+              },
+              catch: () => ({
+                type: "about:blank" as const,
+                title: "Unavailable" as const,
+                status: 503 as const,
+                code: "upstream_unavailable" as const,
+              }),
+            })
+          })
+        )
+    },
     addFeedSubscription: (
       input: Parameters<GatewayPorts["addFeedSubscription"]>[0]
     ) => freezeSuccess(ports.addFeedSubscription(deepFreeze(input))),
@@ -251,37 +348,6 @@ export const makeGatewayHandlers = (
     enrichResetDaily: (
       headers: Parameters<GatewayPorts["enrichResetDaily"]>[0]
     ) => freezeSuccess(ports.enrichResetDaily(deepFreeze(headers))),
-    listAgentInstances: (
-      headers: Parameters<GatewayPorts["listAgentInstances"]>[0]
-    ) => freezeSuccess(ports.listAgentInstances(deepFreeze(headers))),
-    getAgentRun: (input: Parameters<GatewayPorts["getAgentRun"]>[0]) =>
-      freezeSuccess(ports.getAgentRun(deepFreeze(input))),
-    streamAgentRunEvents: (
-      input: Parameters<GatewayPorts["replayAgentRunEvents"]>[0]
-    ) =>
-      ports.replayAgentRunEvents(deepFreeze(input)).pipe(
-        Effect.map((events) =>
-          Stream.fromIterable(
-            events.map((event) => ({
-              id: String(event.sequence),
-              event: event.type,
-              data: event,
-            }))
-          )
-        )
-      ),
-    listAgentMemories: (
-      input: Parameters<GatewayPorts["listAgentMemories"]>[0]
-    ) => freezeSuccess(ports.listAgentMemories(deepFreeze(input))),
-    createAgentMemory: (
-      input: Parameters<GatewayPorts["createAgentMemory"]>[0]
-    ) => freezeSuccess(ports.createAgentMemory(deepFreeze(input))),
-    approveAgentMemory: (
-      input: Parameters<GatewayPorts["approveAgentMemory"]>[0]
-    ) => freezeSuccess(ports.approveAgentMemory(deepFreeze(input))),
-    deleteAgentMemory: (
-      input: Parameters<GatewayPorts["deleteAgentMemory"]>[0]
-    ) => freezeSuccess(ports.deleteAgentMemory(deepFreeze(input))),
   })
 
 export type GatewayHandlers = ReturnType<typeof makeGatewayHandlers>

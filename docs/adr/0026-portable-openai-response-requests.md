@@ -4,7 +4,7 @@
 - Date: 2026-08-12
 - Decision owners: Product owner / Platform
 - Supersedes: ADR-0021の「関連度リクエストへ`temperature: 0`を指定する」方針
-- Superseded by: N/A
+- Superseded by: ADR-0057
 - Related: ADR-0021、`packages/adapters/src/ai-enrich/openai-responses.ts`、[OpenAI GPT-5.6ガイド](https://developers.openai.com/api/docs/guides/latest-model)
 
 ## コンテキストと変更契機

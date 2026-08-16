@@ -16,8 +16,8 @@ export const episodesGroup = (handlers: GatewayHandlers) =>
       .handle("getEpisode", ({ headers, params }) =>
         handlers.getEpisode({ headers, episodeId: params.episodeId })
       )
-      .handle("createAudioAccess", ({ headers, params }) =>
-        handlers.createAudioAccess({
+      .handle("streamEpisodeAudio", ({ headers, params }) =>
+        handlers.streamEpisodeAudio({
           headers,
           episodeId: params.episodeId,
         })

@@ -61,7 +61,7 @@ export function useGeneration() {
   const latestEpisode = episodes.items[0]
 
   // 進行中かどうかで絞らず、常に最新ジョブを購読する。終端済みのジョブでも
-  // サーバは履歴を全部リプレイして閉じるので、完成後もエージェントが何を
+  // サーバは履歴を全部リプレイして閉じるので、完成後も生成処理が何を
   // したかが残る。進行中だけを購読すると、完了と同時に作業ログが消える。
   const stream = useGenerationStream(latestJob?.id)
   streamConnected = stream.connected
@@ -98,8 +98,10 @@ export function useGeneration() {
     liveState?.status as JobStatus | undefined,
     latestJob?.status
   )
-  const stage = (liveState?.stage ?? latestJob?.stage) as JobStage | undefined
-  const stageProgress = liveState?.progress ?? latestJob?.stageProgress
+  const stage = (liveState?.currentStage ?? latestJob?.stage) as
+    | JobStage
+    | undefined
+  const stageProgress = latestJob?.stageProgress
   const failure = liveState?.failure ?? latestJob?.failure ?? undefined
   const recovery = failureRecovery(failure?.code)
 

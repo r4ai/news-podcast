@@ -16,7 +16,7 @@
   "dependencies": {
     "@news-podcast/kernel": "workspace:*",
     "drizzle-orm": "1.0.0-rc.4",
-    "effect": "4.0.0-beta.102"
+    "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
     "@types/node": "24.12.4",

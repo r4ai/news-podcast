@@ -4,7 +4,7 @@
 - Date: 2026-08-09
 - Decision owners: Product owner / API
 - Supersedes: N/A
-- Superseded by: ADR-0008（契約正本のみ）
+- Superseded by: ADR-0008（契約正本のみ）、[ADR-0055](0055-same-origin-web-and-audio-delivery.md)（音声配信契約のみ）
 - Related: `packages/contracts/openapi/openapi.json`
 
 ## コンテキストと変更契機

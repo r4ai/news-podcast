@@ -262,3 +262,35 @@ export type MaterializeArticlesReply = Schema.Schema.Type<
 export const parseMaterializeArticlesReply = parse(
   MaterializeArticlesReplySchema
 )
+
+export const PlanGenerationRequestSchema = Schema.Struct({
+  selection: Schema.Union([
+    Schema.TaggedStruct("Automatic", {}),
+    Schema.TaggedStruct("Manual", {
+      articleIds: Schema.NonEmptyArray(ArticleIdSchema).check(
+        Schema.isMaxLength(20),
+        Schema.makeFilter((ids: readonly string[]) =>
+          new Set(ids).size === ids.length ? true : "article IDs must be unique"
+        )
+      ),
+    }),
+  ]),
+})
+export const parsePlanGenerationRequest = parse(PlanGenerationRequestSchema)
+
+export const GenerationPlanDraftWireSchema = Schema.Struct({
+  interestProfile: Schema.Struct({
+    include: Schema.String.check(Schema.isMaxLength(2_000)),
+    exclude: Schema.String.check(Schema.isMaxLength(2_000)),
+  }),
+  selectedArticleIds: Schema.NonEmptyArray(ArticleIdSchema).check(
+    Schema.isMaxLength(20)
+  ),
+  model: bounded(200),
+})
+export const PlanGenerationReplySchema = Schema.Union([
+  Schema.TaggedStruct("Planned", { plan: GenerationPlanDraftWireSchema }),
+  Schema.TaggedStruct("NoCandidates", {}),
+  ContentKnowledgeRejectionSchema,
+])
+export const parsePlanGenerationReply = parse(PlanGenerationReplySchema)

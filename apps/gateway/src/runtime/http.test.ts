@@ -2,7 +2,7 @@ import { Effect, Layer, Schema, Tracer } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
-  AgentRunEventSchema,
+  AudioAccessSchema,
   ArticleSchema,
   EpisodeIdSchema,
   EpisodeJobSchema,
@@ -72,13 +72,6 @@ const ports: GatewayPorts = {
   getEnrichQueue: () => Effect.fail(unavailable),
   enrichReprocess: () => Effect.fail(unavailable),
   enrichResetDaily: () => Effect.fail(unavailable),
-  listAgentInstances: () => Effect.fail(unavailable),
-  getAgentRun: () => Effect.fail(unavailable),
-  replayAgentRunEvents: () => Effect.fail(unavailable),
-  listAgentMemories: () => Effect.fail(unavailable),
-  createAgentMemory: () => Effect.fail(unavailable),
-  approveAgentMemory: () => Effect.fail(unavailable),
-  deleteAgentMemory: () => Effect.fail(unavailable),
 }
 
 describe("Gateway HTTP runtime", () => {
@@ -263,7 +256,24 @@ describe("Gateway HTTP runtime", () => {
     const replayEpisodeJobEvents = vi.fn(() =>
       Effect.succeed({
         snapshot: job,
-        events: [{ sequence: 42, job }],
+        events: [
+          {
+            sequence: 42,
+            event: {
+              type: "STATE_SNAPSHOT",
+              timestamp: 1,
+              snapshot: {
+                jobId: job.id,
+                status: "succeeded",
+                attempt: 1,
+                maxAttempts: 4,
+                selectionMode: "automatic",
+                selectedArticles: [],
+                episodeId: episode.id,
+              },
+            },
+          },
+        ],
       })
     )
     const retryEpisodeJob = vi.fn(() => Effect.succeed(receipt))
@@ -324,9 +334,9 @@ describe("Gateway HTTP runtime", () => {
         "text/event-stream"
       )
       const stream = await replayed.text()
-      expect(stream).toContain("event: STATE_SNAPSHOT")
+      expect(stream).not.toContain("event:")
       expect(stream).toContain("id: 42")
-      expect(await queryResumed.text()).toContain("event: STATE_SNAPSHOT")
+      expect(await queryResumed.text()).not.toContain("event:")
       expect(retryEpisodeJob).toHaveBeenCalledWith(
         expect.objectContaining({
           jobId,
@@ -341,6 +351,89 @@ describe("Gateway HTTP runtime", () => {
         2,
         expect.objectContaining({ jobId, afterSequence: 7 })
       )
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("streams owned audio through the gateway without exposing its internal URL", async () => {
+    const episodeId = Schema.decodeUnknownSync(EpisodeIdSchema)(
+      "3c4d046c-b47b-4047-a562-66ac7e74e995"
+    )
+    const access = Schema.decodeUnknownSync(AudioAccessSchema)({
+      url: "http://seaweedfs:8333/news-podcast/private.wav?signature=secret",
+      expiresAt: "2026-08-12T00:05:00.000Z",
+    })
+    const fetcher = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        new Response(Uint8Array.from([82, 73, 70, 70]), {
+          status: 206,
+          headers: {
+            "accept-ranges": "bytes",
+            "content-length": "4",
+            "content-range": "bytes 0-3/44",
+            "content-type": "audio/wav",
+            "x-internal-object-url": access.url,
+          },
+        })
+      )
+    )
+    const createAudioAccess = vi.fn(() => Effect.succeed(access))
+    const runtime = makeGatewayWebHandler(
+      { ...ports, createAudioAccess },
+      Layer.empty,
+      { fetcher }
+    )
+
+    try {
+      const response = await runtime.handler(
+        new Request(`http://gateway.test/v1/episodes/${episodeId}/audio`, {
+          headers: { range: "bytes=0-3" },
+        })
+      )
+
+      expect(response.status).toBe(206)
+      expect(response.headers.get("content-type")).toBe("audio/wav")
+      expect(response.headers.get("content-range")).toBe("bytes 0-3/44")
+      expect(response.headers.get("cache-control")).toBe("private, no-store")
+      expect(response.headers.get("x-internal-object-url")).toBeNull()
+      expect(await response.arrayBuffer()).toEqual(
+        Uint8Array.from([82, 73, 70, 70]).buffer
+      )
+      expect(fetcher).toHaveBeenCalledWith(access.url, {
+        headers: { range: "bytes=0-3" },
+      })
+      expect(createAudioAccess).toHaveBeenCalledOnce()
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("rejects unsupported multi-range audio requests before contacting storage", async () => {
+    const access = Schema.decodeUnknownSync(AudioAccessSchema)({
+      url: "http://seaweedfs:8333/news-podcast/private.wav?signature=secret",
+      expiresAt: "2026-08-12T00:05:00.000Z",
+    })
+    const fetcher = vi.fn<typeof fetch>()
+    const createAudioAccess = vi.fn(() => Effect.succeed(access))
+    const runtime = makeGatewayWebHandler(
+      { ...ports, createAudioAccess },
+      Layer.empty,
+      { fetcher }
+    )
+
+    try {
+      const response = await runtime.handler(
+        new Request(
+          "http://gateway.test/v1/episodes/3c4d046c-b47b-4047-a562-66ac7e74e995/audio",
+          { headers: { range: "bytes=0-3,8-11" } }
+        )
+      )
+
+      expect(response.status).toBe(416)
+      expect(response.headers.get("cache-control")).toBe("private, no-store")
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(createAudioAccess).not.toHaveBeenCalled()
     } finally {
       await runtime.dispose()
     }
@@ -503,62 +596,6 @@ describe("Gateway HTTP runtime", () => {
       for (const request of requests)
         responses.push(await runtime.handler(request))
       expect(responses.map(({ status }) => status)).toEqual(Array(14).fill(503))
-    } finally {
-      await runtime.dispose()
-    }
-  })
-
-  it("serves bounded Agent event replay with header and query resumption", async () => {
-    const runId = "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80"
-    const replayAgentRunEvents = vi.fn(() =>
-      Effect.succeed([
-        Schema.decodeUnknownSync(AgentRunEventSchema)({
-          schemaVersion: 1 as const,
-          runId,
-          sequence: 8,
-          type: "run.updated",
-          occurredAt: "2026-08-12T00:00:00.000Z",
-          payload: { status: "running" },
-        }),
-      ])
-    )
-    const runtime = makeGatewayWebHandler({
-      ...ports,
-      replayAgentRunEvents,
-    })
-
-    try {
-      const resumedByHeader = await runtime.handler(
-        new Request(
-          `http://gateway.test/v1/me/agent-runs/${runId}/events?lastEventId=3`,
-          {
-            headers: {
-              authorization: "Bearer opaque",
-              cookie: "session=opaque",
-              traceparent:
-                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-              "last-event-id": "7",
-            },
-          }
-        )
-      )
-      const resumedByQuery = await runtime.handler(
-        new Request(
-          `http://gateway.test/v1/me/agent-runs/${runId}/events?lastEventId=3`
-        )
-      )
-
-      expect(resumedByHeader.status).toBe(200)
-      expect(await resumedByHeader.text()).toContain("event: run.updated")
-      expect(await resumedByQuery.text()).toContain("id: 8")
-      expect(replayAgentRunEvents).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({ runId, afterSequence: 7 })
-      )
-      expect(replayAgentRunEvents).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({ runId, afterSequence: 3 })
-      )
     } finally {
       await runtime.dispose()
     }

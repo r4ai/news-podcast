@@ -21,6 +21,7 @@ import {
   type EnrichmentSource,
 } from "../application/enrichment.js"
 import { createContentTaxonomy } from "../application/content-taxonomy.js"
+import { createGenerationPlanning } from "../application/generation-planning.js"
 import { createInterestProfileOperations } from "../application/interest-profile.js"
 import type { SubscriptionRepository } from "../application/ports/subscription.js"
 import type { FeedSyncQueueRepository } from "../application/feed-sync-queue.js"
@@ -57,6 +58,7 @@ import {
 } from "./enrichment.js"
 import { runEnrichmentWorkerLoop } from "./loops/enrichment-worker.js"
 import { makeFeedPollWakeup } from "./loops/feed-poll.js"
+import { makeOpenAiArticleSelector } from "../adapters/providers/generation-planning/openai/selector.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -132,7 +134,7 @@ export const NodeServiceConfigSchema = Schema.Struct({
     dailyLimit: DailyLimitSchema,
     provider: Schema.NullOr(
       Schema.Struct({
-        endpoint: HttpEndpointSchema,
+        apiUrl: HttpEndpointSchema,
         apiKey: S3TextSchema,
         model: S3TextSchema,
         requestTimeoutMillis: LoopDelaySchema,
@@ -388,11 +390,36 @@ export const runNodeService = (
                           ? unavailableEnrichmentProvider
                           : makeOpenAiEnrichmentProvider({
                               ...config.enrichment.provider,
-                              endpoint: new URL(
-                                config.enrichment.provider.endpoint
+                              apiUrl: new URL(
+                                config.enrichment.provider.apiUrl
                               ),
                             })),
                       dailyLimit: config.enrichment.dailyLimit,
+                    })
+                    const generationPlanning = createGenerationPlanning({
+                      catalog: runtime.articles,
+                      interestProfiles: runtime.interestProfiles,
+                      selector:
+                        config.enrichment.provider === null
+                          ? deepFreeze({
+                              model: "unavailable",
+                              select: () =>
+                                Effect.fail(
+                                  deepFreeze({
+                                    _tag: "ArticleSelectionFailed" as const,
+                                    reason: "ProviderFailure" as const,
+                                  })
+                                ),
+                            })
+                          : makeOpenAiArticleSelector({
+                              apiUrl: new URL(
+                                config.enrichment.provider.apiUrl
+                              ),
+                              apiKey: config.enrichment.provider.apiKey,
+                              model: config.enrichment.provider.model,
+                              requestTimeoutMillis:
+                                config.enrichment.provider.requestTimeoutMillis,
+                            }),
                     })
                     return Effect.all(
                       [
@@ -423,6 +450,7 @@ export const runNodeService = (
                             interestProfiles: runtime.interestProfiles,
                             enrichment,
                           },
+                          generationPlanning,
                           feedPollWakeup
                         ),
                         dependencies.runPoller(

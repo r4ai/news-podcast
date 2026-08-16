@@ -183,11 +183,16 @@ services:
     stop_grace_period: 15s
     build:
       context: .
-      dockerfile: infra/Dockerfile.node
+      dockerfile: infra/Dockerfile.web
       network: host
-    command: ["pnpm", "--filter", "web", "dev", "--host", "0.0.0.0"]
     environment:
-      VITE_API_PROXY_TARGET: http://gateway:4001
+      GATEWAY_ORIGIN: http://gateway:4001
+      NGINX_ENVSUBST_FILTER: "^GATEWAY_ORIGIN$"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /etc/nginx/conf.d
     ports:
       - "127.0.0.1:4173:4173"
     depends_on:
@@ -197,9 +202,11 @@ services:
       test:
         [
           "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:4173/').then(r=>{if(!r.ok)process.exit(1)})",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:4173/edge-health",
         ]
       interval: 5s
       timeout: 3s

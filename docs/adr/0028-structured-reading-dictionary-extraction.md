@@ -4,7 +4,7 @@
 - Date: 2026-08-12
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0056](0056-owner-safe-reading-replacement.md)
 - Related: `docs/design.md`§8、`apps/worker/src/reading-term-extractor.ts`、ADR-0031
 
 ## Context and change trigger

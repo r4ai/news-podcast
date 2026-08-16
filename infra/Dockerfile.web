@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.7
+FROM node:24-bookworm-slim AS build
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@11.16.0 --activate
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.json ./
+RUN --mount=type=cache,id=news-podcast-pnpm-store,target=/pnpm/store \
+    pnpm fetch --frozen-lockfile
+
+COPY apps/web/package.json apps/web/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/kernel/package.json packages/kernel/package.json
+COPY packages/observability/package.json packages/observability/package.json
+COPY packages/ui/package.json packages/ui/package.json
+RUN --network=none \
+    --mount=type=cache,id=news-podcast-pnpm-store,target=/pnpm/store \
+    pnpm install --offline --frozen-lockfile
+
+COPY apps/web apps/web
+COPY packages/contracts packages/contracts
+COPY packages/kernel packages/kernel
+COPY packages/observability packages/observability
+COPY packages/ui packages/ui
+RUN pnpm --filter web build
+
+FROM nginx:1.29.1-alpine
+COPY infra/nginx.web.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+EXPOSE 4173

@@ -12,6 +12,9 @@ export {
   MaterializedArticleSchema,
   MaterializeArticlesReplySchema,
   MaterializeArticlesRequestSchema,
+  GenerationPlanDraftWireSchema,
+  PlanGenerationReplySchema,
+  PlanGenerationRequestSchema,
   parseAddFeedSubscriptionRequest,
   parseAddFeedSubscriptionReply,
   parseDeleteFeedSubscriptionReply,
@@ -22,6 +25,8 @@ export {
   parseListFeedSubscriptionsReply,
   parseMaterializeArticlesReply,
   parseMaterializeArticlesRequest,
+  parsePlanGenerationReply,
+  parsePlanGenerationRequest,
   parseUpdateFeedSubscriptionRequest,
   parseUpdateFeedSubscriptionReply,
   parseListFeedCatalogRequest,
@@ -141,4 +146,3 @@ export {
 export { subjects, type Subject } from "./subjects.js"
 export * from "./personalization-rpc.js"
 export * from "./article-library-rpc.js"
-export * from "./agent-audit-rpc.js"

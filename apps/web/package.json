@@ -16,9 +16,11 @@
     "test:visual": "bash ../../scripts/run-visual.sh",
     "test": "vitest run",
     "test:markdown:coverage": "vitest run --config vitest.markdown-coverage.config.ts",
-    "test:e2e": "playwright test --config playwright.e2e.config.ts"
+    "test:e2e": "playwright test --config playwright.e2e.config.ts",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts"
   },
   "dependencies": {
+    "@ag-ui/core": "0.0.58",
     "@news-podcast/contracts": "workspace:*",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/api-logs": "0.221.0",

@@ -184,8 +184,16 @@ const makeSynthesizer = (
 const synthesize = (
   synthesizer: ReturnType<typeof makeSynthesizer>,
   text = "境界をテストします。",
-  signal?: AbortSignal
-) => synthesizer.synthesize({ text, ...(signal ? { signal } : {}) })
+  signal?: AbortSignal,
+  dictionarySnapshot?: Parameters<
+    ReturnType<typeof makeSynthesizer>["synthesize"]
+  >[0]["dictionarySnapshot"]
+) =>
+  synthesizer.synthesize({
+    text,
+    ...(signal ? { signal } : {}),
+    ...(dictionarySnapshot ? { dictionarySnapshot } : {}),
+  })
 
 describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
   it("resolves the configured style, posts a strict query, and returns WAV bytes", async () => {
@@ -207,6 +215,28 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
     )
     expect(fake.requests[2]!.url).toContain("speaker=1")
     expect(JSON.parse(fake.requests[2]!.body)).toEqual(audioQuery)
+  })
+
+  it("applies the immutable owner dictionary before creating the audio query", async () => {
+    const fake = await startServer()
+
+    await Effect.runPromise(
+      synthesize(makeSynthesizer(fake.baseUrl), "OpenAIのニュース", undefined, {
+        ownerId: "339cdfd2-349c-44ed-814c-3b3c387bd624" as never,
+        fingerprint: "a".repeat(64) as never,
+        entries: [
+          {
+            surface: "OpenAI" as never,
+            reading: "オープンエーアイ" as never,
+            accentType: 0 as never,
+          },
+        ],
+      })
+    )
+
+    expect(fake.requests[1]!.url).toContain(
+      `text=${encodeURIComponent("オープンエーアイのニュース")}`
+    )
   })
 
   it.each([
@@ -247,6 +277,7 @@ describe("VOICEVOX SpeechSynthesizer HTTP boundary", () => {
   it.each([
     ["missing RIFF/WAVE markers", new Uint8Array(44)],
     ["truncated chunk", wav().slice(0, 42)],
+    ["empty audio data", wav([])],
   ])("rejects an invalid WAV: %s", async (_kind, body) => {
     const fake = await startServer((request, response) => {
       const path = new URL(request.url!, "http://test").pathname

@@ -6,6 +6,7 @@ import {
   createReadingDictionaryEntry,
   deleteReadingDictionaryEntry,
   listReadingDictionaryEntries,
+  prepareReadingDictionary,
   updateReadingDictionaryEntry,
   type ReadingDictionaryRepository,
 } from "./reading-dictionary.js"
@@ -15,6 +16,7 @@ import {
   ReadingDictionaryEntrySchema,
   ReadingDictionarySnapshotSchema,
 } from "../domain/reading-dictionary.js"
+import type { ReadingTermExtractor } from "./ports/reading-term-extractor.js"
 
 const ownerId = Schema.decodeUnknownSync(OwnerIdSchema)("owner-a")
 const entry = Schema.decodeUnknownSync(ReadingDictionaryEntrySchema)({
@@ -180,5 +182,98 @@ describe("reading dictionary use cases", () => {
     )
     expect(invalid._tag).toBe("Failure")
     expect(update).toHaveBeenCalledTimes(1)
+  })
+
+  it("registers unique extracted terms for the owner before capturing a snapshot", async () => {
+    const automatic = Schema.decodeUnknownSync(ReadingDictionaryEntrySchema)({
+      id: "10000000-0000-4000-8000-000000000002",
+      ownerId,
+      surface: "OpenAI",
+      reading: "オープンエーアイ",
+      accentType: 0,
+      source: "ai_auto",
+      episodeJobId: "10e2d4e1-c127-479f-a124-2ea037bd9319",
+      createdAt: "2026-08-13T00:00:00.000Z",
+      updatedAt: "2026-08-13T00:00:00.000Z",
+    })
+    const extractor: ReadingTermExtractor = {
+      extract: () =>
+        Effect.succeed([
+          {
+            surface: automatic.surface,
+            reading: automatic.reading,
+            accentType: automatic.accentType,
+          },
+          {
+            surface: entry.surface,
+            reading: entry.reading,
+            accentType: entry.accentType,
+          },
+        ]),
+    }
+    const create = vi.fn<ReadingDictionaryRepository["create"]>((value) =>
+      Effect.succeed({ _tag: "Created", entry: value })
+    )
+    const snapshot = Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)({
+      ownerId,
+      fingerprint: "b".repeat(64),
+      entries: [
+        {
+          surface: automatic.surface,
+          reading: automatic.reading,
+          accentType: 0,
+        },
+      ],
+    })
+
+    const result = await Effect.runPromise(
+      prepareReadingDictionary(
+        {
+          extractor,
+          list: () => Effect.succeed([entry]),
+          create,
+          captureSnapshot: () => Effect.succeed(snapshot),
+          nextId: () => automatic.id,
+          now: () => automatic.createdAt,
+        },
+        {
+          ownerId,
+          episodeJobId: automatic.episodeJobId!,
+          script: "OpenAIとGPT-5のニュースです",
+        }
+      )
+    )
+
+    expect(result).toEqual({ snapshot, addedCount: 1, extractionFailed: false })
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId, surface: "OpenAI", source: "ai_auto" })
+    )
+  })
+
+  it("keeps generation available when automatic extraction fails", async () => {
+    const snapshot = Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)({
+      ownerId,
+      fingerprint: "c".repeat(64),
+      entries: [],
+    })
+    const result = await Effect.runPromise(
+      prepareReadingDictionary(
+        {
+          extractor: { extract: () => Effect.fail({ _tag: "Timeout" }) },
+          list: () => Effect.succeed([]),
+          create: () => Effect.die("must not create"),
+          captureSnapshot: () => Effect.succeed(snapshot),
+          nextId: () => entry.id,
+          now: () => entry.createdAt,
+        },
+        {
+          ownerId,
+          episodeJobId: "10e2d4e1-c127-479f-a124-2ea037bd9319" as never,
+          script: "台本",
+        }
+      )
+    )
+
+    expect(result).toEqual({ snapshot, addedCount: 0, extractionFailed: true })
   })
 })

@@ -11,6 +11,7 @@ import {
   newQueuedJob,
 } from "../domain/episode-job.js"
 import { ReadingDictionarySnapshotSchema } from "../domain/reading-dictionary.js"
+import type { GenerationPlan } from "../domain/generation-plan.js"
 import { executeEpisodeJob } from "./execute-job.js"
 import type {
   EpisodeExecutionCheckpoint,
@@ -48,10 +49,30 @@ const article = {
 
 const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
   let checkpoint: EpisodeExecutionCheckpoint | undefined
+  let generationPlan: GenerationPlan | undefined
   let dictionarySnapshot:
     | Schema.Schema.Type<typeof ReadingDictionarySnapshotSchema>
     | undefined
   const ports: EpisodeExecutionPorts = {
+    planning: {
+      create: vi.fn((input) =>
+        Effect.succeed({
+          jobId: input.jobId,
+          ownerId: input.ownerId,
+          selectionMode:
+            input.selection._tag === "Automatic"
+              ? ("automatic" as const)
+              : ("manual" as const),
+          interestProfile: { include: "AI", exclude: "広告" },
+          selectedArticleIds:
+            input.selection._tag === "Manual"
+              ? (input.selection.articleIds as never)
+              : ([article.articleId] as never),
+          model: "gpt-test",
+          createdAt: at("2026-08-12T00:00:02.000Z"),
+        })
+      ),
+    },
     articles: {
       materialize: vi.fn(() => Effect.succeed([article] as const)),
     },
@@ -79,7 +100,7 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
       remove: vi.fn(() => Effect.void),
     },
     dictionary: {
-      capture: vi.fn(() =>
+      prepare: vi.fn(() =>
         Effect.succeed(
           Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)({
             ownerId: running.request.ownerId,
@@ -90,9 +111,18 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
       ),
     },
     persistence: {
+      markStep: vi.fn(() => Effect.void),
+      recordSelectedArticles: vi.fn(() => Effect.void),
       renewLease: () => Effect.succeed("Applied"),
       assertLease: vi.fn(() => Effect.void),
       loadCheckpoint: vi.fn(() => Effect.succeed(checkpoint as never)),
+      loadGenerationPlan: vi.fn(() => Effect.succeed(generationPlan)),
+      saveGenerationPlan: vi.fn((input) =>
+        Effect.sync(() => {
+          generationPlan ??= input.plan
+          return generationPlan as GenerationPlan
+        })
+      ),
       loadDictionarySnapshot: vi.fn(() => Effect.succeed(dictionarySnapshot)),
       saveDictionarySnapshot: vi.fn((input) =>
         Effect.sync(() => {
@@ -129,8 +159,12 @@ describe("executeEpisodeJob", () => {
 
     await Effect.runPromise(executeEpisodeJob(first)({ job: running }))
 
-    expect(first.dictionary.capture).toHaveBeenCalledTimes(1)
-    expect(first.dictionary.capture).toHaveBeenCalledWith("owner-1")
+    expect(first.dictionary.prepare).toHaveBeenCalledTimes(1)
+    expect(first.dictionary.prepare).toHaveBeenCalledWith({
+      ownerId: "owner-1",
+      jobId: running.jobId,
+      script: "Script",
+    })
     expect(first.persistence.saveDictionarySnapshot).toHaveBeenCalledWith({
       jobId: running.jobId,
       leaseToken: running.lease.token,
@@ -148,7 +182,7 @@ describe("executeEpisodeJob", () => {
       .calls[0]![0].snapshot
     const resumed = makePorts({
       dictionary: {
-        capture: vi.fn(() => Effect.die("must use persisted snapshot")),
+        prepare: vi.fn(() => Effect.die("must use persisted snapshot")),
       },
       persistence: {
         ...first.persistence,
@@ -156,10 +190,10 @@ describe("executeEpisodeJob", () => {
       },
     })
     await Effect.runPromise(executeEpisodeJob(resumed)({ job: running }))
-    expect(resumed.dictionary.capture).not.toHaveBeenCalled()
+    expect(resumed.dictionary.prepare).not.toHaveBeenCalled()
   })
 
-  it("uses owner-scoped automatic materialization when no articles are selected", async () => {
+  it("plans automatic selection once, then materializes the frozen article IDs", async () => {
     const automaticJob = {
       ...running,
       request: { ...running.request, articleIds: undefined },
@@ -171,8 +205,14 @@ describe("executeEpisodeJob", () => {
     expect(ports.articles.materialize).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerId: "owner-1",
-        selection: { _tag: "Automatic" },
+        selection: {
+          _tag: "Selected",
+          articleIds: [article.articleId],
+        },
       })
+    )
+    expect(ports.planning.create).toHaveBeenCalledWith(
+      expect.objectContaining({ selection: { _tag: "Automatic" } })
     )
   })
 
@@ -187,6 +227,11 @@ describe("executeEpisodeJob", () => {
       expect.objectContaining({
         ownerId: "owner-1",
         selection: { _tag: "Selected", articleIds: running.request.articleIds },
+      })
+    )
+    expect(ports.script.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interestProfile: { include: "AI", exclude: "広告" },
       })
     )
     expect(ports.audio.put).toHaveBeenCalledWith(

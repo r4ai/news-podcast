@@ -1,7 +1,7 @@
 # RSSニュース・ポッドキャスト 設計書
 
 - 状態: 関数型マイクロサービス移行・旧実装削除完了
-- 更新日: 2026-08-13
+- 更新日: 2026-08-16
 - 契約の正本: `apps/gateway` のEffect HttpApi
 - Context間契約: `packages/protocols` のEffect Schemaとversion付きNATS subject
 - RPC返信: 共有payload schemaの`messageEnvelope`。producer/actor/correlation/causationを共通policyで照合
@@ -20,9 +20,9 @@ RSSからニュース項目を取得し、ownerが選択した版固定済み記
 - API: Effect HttpApi、code-first OpenAPI。
 - 認証: Better Authのアプリセッション。初期ログインはGoogle OIDCで、将来ほかのOIDCを追加可能にする。
 - ニュース源: RSSのみ。初期カタログはZenn、azukiazusaさんの技術ブログ、Hacker News。媒体カタログとユーザー購読は分離する。
-- 要約: OpenAI `gpt-5.6-luna` が既定。モデルIDは環境変数で差し替える。APIキーはユーザーが後で設定し、キーなしでビルド・テストできる。
+- AI: Effect AI + `@effect/ai-openai`のstrict structured outputを正本とする。OpenAI `gpt-5.6-luna` が既定で、base URLとモデルIDは環境変数で差し替える。キーなしでビルド・テストできる。
 - TTS: 外部VOICEVOX Engine。既定キャラクター名は「ずんだもん」。数値style IDは起動中Engineの `/speakers` から解決し、固定しない。
-- runtime: Docker Compose、service別SQLite、NATS JetStream、SeaweedFS、VOICEVOX。
+- runtime: Docker Compose、Nginx edge、service別SQLite、NATS JetStream、SeaweedFS、VOICEVOX。
 - Cloudflare runtimeは実装しない（ADR-0039）。
 - 非同期生成: `POST /v1/episode-jobs`、`202 Accepted`、`Location`、`Idempotency-Key`、状態 `queued/running/retrying/succeeded/failed/canceled`。
 
@@ -49,7 +49,7 @@ flowchart LR
 | ----------------- | ------------------------------ | -------------------------------------------------- |
 | IdentityAccess    | セッション主体、認可           | Better Auth、Google OIDC                           |
 | FeedManagement    | 媒体カタログ、所有者別購読     | FeedReader                                         |
-| EpisodeProduction | ジョブ、構造化生成、冪等性、出典、実行監査 | ScriptGenerator、SpeechSynthesizer、JobDispatcher |
+| EpisodeProduction | ジョブ、GenerationPlan、構造化生成、冪等性、出典、AG-UI進捗 | LanguageModel、SpeechSynthesizer、JobDispatcher |
 | EpisodeLibrary    | 所有者別一覧、音声アクセス       | ObjectStore、短期URL発行                              |
 
 ## 4. 非同期パイプライン
@@ -57,7 +57,7 @@ flowchart LR
 1. 認証済みユーザーが `Idempotency-Key` 付きで生成ジョブを作成する。
 2. APIは `owner + method + canonical route + key` を一意に保存し、同一request hashなら同じreceiptを返す。異なるhashなら409にする。
 3. Episode Productionはジョブをleaseして `queued -> running` へ遷移する。
-4. 受付時に固定した記事snapshotの取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にし、検証済み台本と音声checkpointから再開する。
+4. 実行開始時に最新InterestProfileと候補metadataから`GenerationPlan`をfirst-write-winsで固定し、その記事snapshot取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にする。
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 
@@ -73,16 +73,16 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
 - 401はセッション欠落/失効、403は認証済みだが許可されない操作。エラーはRFC 9457 Problem Details。
 - 一覧はopaque cursor、`limit` 1..100、安定順序、filterに束縛する。`totalCount`は初期契約に入れない。
   - 記事一覧`GET /v1/me/articles`は`cursor`クエリと`page.hasMore` / `page.nextCursor`で継続する。cursorは`(公開日時 ?? 発見日時, articleId)`のkeyset位置をbase64urlへ畳んだ不透明tokenで、Content Knowledgeだけが解釈する。OFFSETと違い、ページを跨いで記事が増減しても重複・欠落しない。復号できないcursorは不正要求として閉じる。
-- Episodeへ署名URLを保存しない。音声アクセス操作が短期URLを発行し、`Cache-Control: private, no-store`を返す。
+- Episodeへ署名URLを保存・公開しない。`GET /v1/episodes/{episodeId}/audio`はGatewayがowner認可後にprivate S3からRange streamし、`Cache-Control: private, no-store`を返す。
 - Better Authの `/api/auth/**` はBetter Auth側の生成契約を正本とし、アプリOpenAPIへ複製しない。Google tokenを `/v1` のbearer tokenとして扱わない。
 
-`POST /v1/episode-jobs` は手動生成を表し、1〜20件の`articleIds`を必須とする。定期生成はその時点の有効購読から対象記事IDを解決した後、同じapplication commandを`scheduled` triggerで呼ぶ。どちらもjobへ受付時の記事ID集合を保存する。`GET /v1/episode-jobs/{jobId}/events`は`Last-Event-ID`以降を追尾し、terminal状態までSSE接続を維持する。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
+`POST /v1/episode-jobs` は手動生成を表し、1〜20件の`articleIds`を必須とする。定期生成は記事IDなしの`automatic` jobを作成し、workerが最新InterestProfileを1回だけ読み、最大50候補から1〜20件を選定する。空profileではLLMを呼ばず媒体を跨ぐ決定論的fallbackを使う。`GET /v1/episode-jobs/{jobId}/events`はdurable AG-UI eventを100件ずつreplayし、`Last-Event-ID`以降をterminal状態まで追尾する。詳細は[進捗protocol](protocols/episode-job-ag-ui.md)を正本とする。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
 
 ## 6. 配備トポロジー
 
 | 能力 | supported Node self-host構成 |
 | --- | --- |
-| API / service | Effect Gateway + 4 Node Context services |
+| Web / API / service | Nginx static + same-origin reverse proxy / Effect Gateway + 4 Node Context services |
 | DB / messaging | service別SQLite + NATS JetStream |
 | Object / TTS | SeaweedFS S3 + VOICEVOX |
 | Auth | Better Auth + Identity SQLite、Gateway固定origin proxy |
@@ -202,8 +202,8 @@ flowchart LR
 | --- | --- | --- |
 | FeedManagement | 任意feed登録、購読、同期、記事状態 | FeedReader、FeedRepository |
 | ContentArchive | 安全な取得、snapshot、HTML replay、Markdown | ArticleFetcher、ArchiveBuilder、ObjectStore |
-| AgentAudit | owner/job/attempt lineage、memory lifecycle | AgentAuditRepository |
-| EpisodeProduction | 有界生成、draft検証、出典、TTS、完成処理 | ScriptGenerator、SpeechSynthesizer、EpisodeRepository |
+| GenerationPlanning | 最新InterestProfile、候補選定、first-write-wins plan | LanguageModel、GenerationPlanRepository |
+| EpisodeProduction | 有界生成、draft検証、出典、TTS、durable進捗、完成処理 | LanguageModel、SpeechSynthesizer、EpisodeRepository |
 
 構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後にFeedItemへ正規化する。記事HTMLはscript/resource無効の`jsdom`でDOM化し、共有Feature Ruleでcode/callout/embed/mathを保持してから、Site Profileの明示root、semantic `article`、Readabilityの順で本文を抽出する。その後`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。Profileはselectorと意味対応だけを所有し、汎用抽出・serializeを複製しない。XML/HTML/Markdownのタグ境界を正規表現で解釈せず、`pnpm parser:check`で依存境界を検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)、[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)）。
 
@@ -235,7 +235,7 @@ bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去�
 | owner選択済み記事の構成、語り口 | 入力snapshot、strict schema、deadline、byte上限 |
 | 記事間の説明順序 | 入力外source拒否、TTS可能性、retry分類 |
 
-台本完成後・音声合成前に、英略語・英数字技術語・固有名詞の読み候補をstrict JSON Schemaで最大30件抽出する。全角カタカナ・長さ・アクセントを検証し、ownerの既存辞書とNFKC正規化キーで重複を除いた候補だけをSQLiteとVOICEVOX辞書へ同期する。抽出失敗は`reading_dictionary.extraction_failed`として記録し、番組生成自体は継続する。詳細は[ADR-0028](adr/0028-structured-reading-dictionary-extraction.md)を正本とする。
+台本完成後・音声合成前に、英略語・英数字技術語・固有名詞の読み候補をstrict JSON Schemaで最大30件抽出する。全角カタカナ・長さ・アクセントを検証し、ownerの既存辞書とNFKC正規化キーで重複を除いた候補だけをSQLiteへ保存する。ジョブ固定snapshotを最長一致・非連鎖で台本へ適用し、VOICEVOXの共有辞書は変更しない。抽出失敗は`reading_dictionary.extraction_failed`として記録し、番組生成自体は継続する。詳細は[ADR-0056](adr/0056-owner-safe-reading-replacement.md)を正本とする。
 
 LLM応答はJSON Schemaの形だけでなく、要求集合との完全な対応を永続化前に検証する。バッチIDは入力と出力を1対1にし、選択記事は全件の読込と引用を要求する。HTTP 200後の空・不完全・不正応答はbounded retryへ、request 4xxとrefusalは終端へ、caller cancellationは理由を変換せず元の状態遷移へ渡す。任意成果物の失敗は主要成果物から隔離するが、正常な空集合へ偽装せず既存の失敗イベントへ記録する。詳細は[ADR-0031](adr/0031-complete-isolated-llm-response-boundaries.md)を正本とする。
 
@@ -243,24 +243,26 @@ hosted Web検索と一般Agent Harnessは本番経路へ接続しない。入力
 
 記事要約では本文を必須成果物、Mermaidを任意の補助成果物として分離する。Mermaidは保存前に検証して1回だけ修復し、それでも不正なら図だけを除去して本文を保存する。縮退は`article.enrich.summary.degraded`へ記録し、反復時にalertする。本文まで空になる場合だけ要約を失敗させる。詳細は[ADR-0030](adr/0030-degrade-invalid-summary-diagrams.md)を正本とする。
 
-6件以上の選択記事は1 sectionあたり最大6件へ分けて生成し、最後に1本の台本へ統合する。分類と統合はResponses APIのstrict JSON Schemaで拘束し、`output`の固定位置ではなく`output_text`判別子を探索してからapplication側でも検証する。分類の重複・未知IDは除外し、未割当記事は決定論的に補完する。統合処理は新しいsourceを生成せず、各sectionで検証済みのsourceだけを継承する。空・不完全応答はbounded retry、refusalとrequest 4xxは終端失敗とする。詳細は[ADR-0029](adr/0029-validated-sectional-response-boundary.md)を正本とする。
+6件以上の選択記事は1 sectionあたり最大6件へ分けて生成し、最後に1本の台本へ統合する。分類と統合はEffect AIの`LanguageModel.generateObject`と各Context所有のEffect Schemaで拘束し、SDKが検証済みobjectとtoken usageを返した後にapplication側でも出典集合を照合する。分類の重複・未知IDは拒否し、統合処理は新しいsourceを生成せず、各sectionで検証済みのsourceだけを継承する。schema不適合・空・不完全応答はbounded retry、refusalとrequest 4xxは終端失敗とする。詳細は[ADR-0029](adr/0029-validated-sectional-response-boundary.md)、[ADR-0057](adr/0057-effect-ai-as-llm-boundary.md)を正本とする。
 
-AG-UI timelineは`job.retrying`、`RUN_ERROR`、`RUN_FINISHED`で未完了step/toolを閉じる。retry時は次の`RUN_STARTED`と`STEP_STARTED`で同じstageを再開し、backendが停止中または終端済みなのにspinnerだけが動き続ける状態を許さない。
+AG-UI timelineは標準`RUN_ERROR`と`RUN_FINISHED`で未完了stepを閉じる。retry時は`STATE_SNAPSHOT retrying`の後、次attemptの`RUN_STARTED`と`STEP_STARTED`で再開する。`CUSTOM`、`STATE_DELTA`、tool/reasoning eventは使わない。
 
-### 8.4 Agent監査境界
+### 8.4 GenerationPlanとdurable進捗
 
-Episode Productionはrun/tool/memoryをowner・job・attemptで分離して監査するが、一般Agent、shell、workspace、Firecrackerは実行しない。credential、記事本文全体、chain-of-thoughtは保存しない。
+自動生成はContent Knowledgeが所有する最新InterestProfileと記事metadataから選定し、本文取得前にGenerationPlanを固定する。手動生成は指定記事を全件維持し、profileは台本の重点にだけ利用する。
 
 ```mermaid
 flowchart LR
-  Job["Episode job / attempt"] --> Audit["owner-scoped audit"]
-  Audit --> Event["run / tool summary"]
-  Audit --> Memory["validated memory lifecycle"]
-  Job --> Generate["bounded structured generation"]
-  Generate --> Verify["Source validation / TTS / commit"]
+  Profile["InterestProfile"] --> Select["Effect AI / deterministic fallback"]
+  Candidates["最大50件のmetadata"] --> Select
+  Select --> Plan[("GenerationPlan")]
+  Plan --> Materialize["版固定snapshot"]
+  Materialize --> Pipeline["Script / Pronunciation / TTS / Store"]
+  Pipeline -.-> Events[("durable AG-UI events")]
+  Events --> Web["SSE + Last-Event-ID"]
 ```
 
-過去のHarness判断はADR-0015に履歴として残すが、現行判断は[ADR-0038](adr/0038-bounded-structured-production-generation.md)がsupersedeする。
+旧Agent run/tool/memory監査は本番経路で使われないため、HTTP API、NATS subject、domain/application/adapters、5 tableを削除した。生成の再現性はGenerationPlan、checkpoint、完成outboxで、進捗監査はAG-UI event logで担う。詳細は[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)、[ADR-0059](adr/0059-latest-interest-profile-generation-plan.md)を正本とする。
 
 ## 9. 実装と変更の順序
 

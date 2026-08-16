@@ -629,14 +629,17 @@ test("development login to generated episode playback completes", async ({
     page.getByRole("heading", { name: "今日の開発ニュース" })
   ).toBeVisible()
   await page.getByRole("button", { name: "再生" }).click()
-  await expect(page.locator("audio")).toHaveAttribute("src", /\/v1\/audio\//)
+  await expect(page.locator("audio")).toHaveAttribute(
+    "src",
+    /\/v1\/episodes\/[^/]+\/audio$/
+  )
   await page.getByRole("button", { name: "出典を確認" }).click()
   await expect(
     page.getByRole("link", { name: "ローカルE2Eニュース" })
   ).toHaveAttribute("href", "https://example.com/local-news")
 })
 
-test("selecting articles generates an episode and streams the agent's work", async ({
+test("selecting articles generates an episode and streams its progress", async ({
   page,
 }) => {
   await page.goto("/")
@@ -673,11 +676,11 @@ test("selecting articles generates an episode and streams the agent's work", asy
   expect(body.trigger).toBe("manual")
   expect(body.articleIds).toHaveLength(2)
 
-  // SSEでエージェントの作業が実況され、採用記事が並ぶ。
+  // SSEで生成段階が実況され、採用記事が並ぶ。
   await expect(
-    page.getByRole("heading", { name: "エージェントの作業" })
+    page.getByRole("heading", { name: "Podcast生成の進捗" })
   ).toBeVisible()
-  await expect(page.getByText("記事を読む")).toBeVisible()
+  await expect(page.getByText("記事本文を固定中")).toBeVisible()
   await expect(page.getByText(/採用した記事 \d+件/)).toBeVisible()
 
   // 最後まで通って番組が完成する。

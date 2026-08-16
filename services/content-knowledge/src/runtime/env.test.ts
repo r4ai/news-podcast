@@ -122,7 +122,7 @@ describe("content-knowledge environment boundary", () => {
     )
 
     expect(config.enrichment.provider).toEqual({
-      endpoint: "https://api.openai.com/v1/responses",
+      apiUrl: "https://api.openai.com/v1",
       apiKey: "test-key",
       model: "gpt-test",
       requestTimeoutMillis: 60_000,

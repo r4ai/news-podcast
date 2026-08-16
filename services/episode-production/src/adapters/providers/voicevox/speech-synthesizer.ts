@@ -2,6 +2,7 @@ import { deepFreeze } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
 import { retryProvider } from "../../../application/retry-provider.js"
+import { applyReadingDictionary } from "../../../application/apply-reading-dictionary.js"
 import type { SpeechSynthesizer } from "../../../application/ports/speech-synthesizer.js"
 import type { ProviderFailure } from "../../../domain/provider-reliability.js"
 import { resolveStyleId, splitSpeech, synthesizeChunk } from "./api.js"
@@ -28,9 +29,13 @@ export const makeVoicevoxSpeechSynthesizer = (
 ): SpeechSynthesizer => {
   const fetcher = dependencies.fetcher ?? fetch
   const synthesize: SpeechSynthesizer["synthesize"] = (request) => {
+    const applied = applyReadingDictionary(
+      request.text,
+      request.dictionarySnapshot?.entries ?? []
+    )
     const operation = (): Effect.Effect<Uint8Array, ProviderFailure> => {
       const chunks = splitSpeech(
-        request.text,
+        applied.text,
         config.maximumTextCharactersPerRequest
       )
       if (chunks.length === 0) return Effect.fail(malformed())
@@ -67,8 +72,8 @@ export const makeVoicevoxSpeechSynthesizer = (
             request.dictionarySnapshot?.fingerprint ?? "none",
           "reading_dictionary.entry_count":
             request.dictionarySnapshot?.entries.length ?? 0,
-          // VOICEVOX user_dict is process-global; claiming per-owner application here is unsafe.
-          "reading_dictionary.provider_applied": false,
+          "reading_dictionary.replacement_count": applied.replacementCount,
+          "reading_dictionary.application_mode": "text_replacement",
         },
       })
     )

@@ -4,7 +4,7 @@
 - Date: 2026-08-13
 - Decision owners: Product owner / Architecture
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0059（嗜好と生成計画）
 - Related: ADR-0024、ADR-0028、ADR-0033、ADR-0034、`docs/functional-ddd-migration.md`
 
 ## コンテキストと変更契機
@@ -20,7 +20,7 @@ flowchart LR
   W["Web /v1/me/settings"] --> G["Gateway projection"]
   G --> I["Identity: timezone / schedule"]
   G --> C["Content: interest / tags / enrichment"]
-  G --> P["Production: reading dictionary / generation audit"]
+  G --> P["Production: reading dictionary / generation plan"]
   I --> S["scheduled job trigger"]
   C --> L["article selection / LLM context"]
   P --> T["immutable TTS input snapshot"]
@@ -31,7 +31,7 @@ flowchart LR
 | timezone・配信時刻・最終実行local date | Identity Access | ownerごとに1日1回。job作成成功後だけ完了日を進める |
 | interest profile・tag・suggestion・enrichment state | Content Knowledge | 記事状態との更新を同一DB transactionにする |
 | reading dictionary | Episode Production | 生成attempt開始時にsnapshot化し、実行中の編集を反映しない |
-| job/Agent run/tool call/memory approval | Episode Production | job/attempt/owner lineageを失わず監査可能にする |
+| generation plan・AG-UI event | Episode Production | profile/article snapshotとjob/attempt/owner lineageを固定する |
 
 - owner IDはGatewayが認証結果から注入し、HTTP bodyやqueryのownerを信用しない。
 - Context間でDBを直接参照しない。RPC replyまたはself-contained eventだけを使う。
@@ -75,7 +75,7 @@ flowchart LR
 | 設計書 | 個人設定の所有Contextを明示 | Done | 本ADR |
 | Identity | schedule domain、SQLite、due/complete | Done | `services/identity-access` tests |
 | Content | article state、tag/enrichment transaction | Done | `services/content-knowledge` tests |
-| Production | dictionary snapshot、Agent audit | Done | `services/episode-production` tests |
+| Production | dictionary snapshot、GenerationPlan、AG-UI event | Done | `services/episode-production` tests、ADR-0058/0059 |
 | Protocols/Gateway | ownerをactorから導出しprojectionを合成 | Done | protocol/Gateway tests |
 | OpenAPI/Web | 実装済み能力の外部shapeで新Gatewayへ切替 | Done | Gateway contract、Web E2E 13/13 |
 | Migration | owner別export/importと件数/hash照合 | Done | migration script/tests、recovery runbook |

@@ -144,11 +144,15 @@ const cases = [
   { template: "/v1/me/feed-sync-jobs", path: "/v1/me/feed-sync-jobs" },
   { template: "/v1/me/settings", path: "/v1/me/settings" },
   { template: "/v1/episodes", path: "/v1/episodes" },
+  {
+    template: "/v1/episodes/{episodeId}/audio",
+    path: "/v1/episodes/00000000-0000-4000-8000-000000000099/audio",
+  },
   { template: "/v1/episode-jobs", path: "/v1/episode-jobs" },
 ] as const
 
 async function get(path: string): Promise<Response> {
-  const api = createFakeApi({ webPort: 4173 })
+  const api = createFakeApi()
   return api.fetch(
     new Request(`http://127.0.0.1:4000${path}`, {
       headers: { cookie: fakeApiIdentifiers.sessionCookie },
@@ -167,6 +171,11 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
       response.headers.get("content-type"),
       `GET ${template} must answer with ${declaredType}`
     ).toContain(declaredType)
+
+    if (declaredType === "audio/wav") {
+      expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(44)
+      return
+    }
 
     const schema = media[declaredType!]?.schema
     if (schema !== undefined) {

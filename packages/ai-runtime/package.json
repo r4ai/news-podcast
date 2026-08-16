@@ -1,0 +1,26 @@
+{
+  "name": "@news-podcast/ai-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@effect/ai-openai": "4.0.0-rc.109",
+    "@news-podcast/kernel": "workspace:*",
+    "effect": "4.0.0-rc.109"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

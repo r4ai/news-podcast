@@ -7,6 +7,7 @@ import { subjects } from "@news-podcast/protocols"
 import { Effect } from "effect"
 
 import { materializeArticles } from "../../application/materialize-articles.js"
+import type { createGenerationPlanning } from "../../application/generation-planning.js"
 import type { MarkdownObjectReader } from "../../application/ports/article-catalog.js"
 import {
   currentCapturedAtUnsafe,
@@ -61,6 +62,7 @@ export const runNatsContentKnowledgeRpc = (
   dependencies: ContentKnowledgeRpcServerDependencies = defaultDependencies,
   articleLibrary?: ReturnType<typeof makeArticleLibraryHandler>,
   personalization?: Parameters<typeof makePersonalizationRpcHandler>[0],
+  generationPlanning?: ReturnType<typeof createGenerationPlanning>,
   pollerWakeup?: Pick<FeedPollWakeup, "notify">
 ): Effect.Effect<void, NodeRuntimeError> =>
   Effect.scoped(
@@ -78,6 +80,7 @@ export const runNatsContentKnowledgeRpc = (
               subjects.content.listFeedCatalog,
               subjects.content.listFeedSyncJobs,
               subjects.content.materializeArticles,
+              subjects.content.planGeneration,
               subjects.content.articleLibrary,
               subjects.content.personalization,
             ],
@@ -95,7 +98,8 @@ export const runNatsContentKnowledgeRpc = (
             ...dependencies,
             onSubscriptionAdded: pollerWakeup?.notify,
           },
-          runtime.feedSyncQueue
+          runtime.feedSyncQueue,
+          generationPlanning
         )
         const libraryHandler =
           articleLibrary === undefined

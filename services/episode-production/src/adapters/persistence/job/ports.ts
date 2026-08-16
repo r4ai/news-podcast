@@ -24,9 +24,9 @@ export type StoredCompletionOutboxRow = Readonly<{
   payload: string
 }>
 
-export type StoredJobStatusEventRow = Readonly<{
+export type StoredJobAgUiEventRow = Readonly<{
   readonly sequence: number
-  readonly document: string
+  readonly payload: string
 }>
 
 export type SqliteJobStatusSnapshot = Readonly<{
@@ -44,12 +44,35 @@ export type SqliteJobHandle = Readonly<{
   findOwned: (ownerId: string, jobId: string) => string | undefined
   listOwned: (ownerId: string, limit: number) => readonly string[]
   statusSnapshot: () => readonly SqliteJobStatusSnapshot[]
-  listOwnedStatusEvents: (input: {
+  listOwnedAgUiEvents: (input: {
     readonly ownerId: string
     readonly jobId: string
     readonly afterSequence: number
     readonly limit: number
-  }) => readonly StoredJobStatusEventRow[]
+  }) => readonly StoredJobAgUiEventRow[]
+  markStep: (input: {
+    readonly jobId: string
+    readonly leaseToken: string
+    readonly step:
+      | "selecting_articles"
+      | "materializing_articles"
+      | "generating_script"
+      | "preparing_pronunciation"
+      | "synthesizing_audio"
+      | "storing_episode"
+    readonly phase: "started" | "finished"
+    readonly occurredAt: string
+  }) => boolean
+  recordSelectedArticles: (input: {
+    readonly jobId: string
+    readonly leaseToken: string
+    readonly articles: readonly Readonly<{
+      articleId: string
+      title: string
+      sourceName: string
+    }>[]
+    readonly occurredAt: string
+  }) => boolean
   replaceOwnedActive: (input: {
     readonly ownerId: string
     readonly jobId: string
@@ -79,6 +102,14 @@ export type SqliteJobHandle = Readonly<{
     readonly leasedUntil: string
   }) => boolean
   loadCheckpoint: (jobId: string) => StoredCheckpointRow | undefined
+  loadGenerationPlan: (jobId: string) => string | undefined
+  saveGenerationPlan: (input: {
+    readonly jobId: string
+    readonly leaseToken: string
+    readonly plan: string
+  }) =>
+    | { readonly _tag: "Stored"; readonly plan: string }
+    | { readonly _tag: "StaleLease" }
   loadDictionarySnapshot: (jobId: string) => string | undefined
   saveDictionarySnapshot: (input: {
     readonly jobId: string

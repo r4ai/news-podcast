@@ -158,17 +158,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/episodes/{episodeId}/audio-access": {
+    "/v1/episodes/{episodeId}/audio": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Stream owned episode audio */
+        get: operations["streamEpisodeAudio"];
         put?: never;
-        /** Issue short-lived audio access */
-        post: operations["createAudioAccess"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -548,102 +548,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/me/agent-instances": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["agents.listAgentInstances"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/agent-runs/{runId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["agents.getAgentRun"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/agent-runs/{runId}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["agents.streamAgentRunEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/agent-instances/{agentInstanceId}/memories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["agents.listAgentMemories"];
-        put?: never;
-        post: operations["agents.createAgentMemory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["agents.approveAgentMemory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["agents.deleteAgentMemory"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -652,6 +556,8 @@ export interface components {
             /** @enum {string} */
             status: "ok";
         };
+        Union_: string | null;
+        Union_1: (string & unknown) | null;
         LoginMethods: {
             development: boolean;
             google: boolean;
@@ -672,7 +578,7 @@ export interface components {
             /** @enum {number} */
             status: 503;
             code: string & (unknown & unknown & unknown);
-            detail?: string | null;
+            detail?: components["schemas"]["Union_"];
         };
         CreateEpisodeJobRequest: {
             /** @enum {string} */
@@ -695,7 +601,7 @@ export interface components {
             /** @enum {number} */
             status: 400;
             code: string & (unknown & unknown & unknown);
-            detail?: string | null;
+            detail?: components["schemas"]["Union_"];
         };
         UnauthorizedProblem: {
             type: string;
@@ -703,7 +609,7 @@ export interface components {
             /** @enum {number} */
             status: 401;
             code: string & (unknown & unknown & unknown);
-            detail?: string | null;
+            detail?: components["schemas"]["Union_"];
         };
         ConflictProblem: {
             type: string;
@@ -711,7 +617,7 @@ export interface components {
             /** @enum {number} */
             status: 409;
             code: string & (unknown & unknown & unknown);
-            detail?: string | null;
+            detail?: components["schemas"]["Union_"];
         };
         UnprocessableProblem: {
             type: string;
@@ -719,10 +625,11 @@ export interface components {
             /** @enum {number} */
             status: 422;
             code: string & (unknown & unknown & unknown);
-            detail?: string | null;
+            detail?: components["schemas"]["Union_"];
         };
         /** @enum {string} */
-        JobStage: "researching_sources" | "fetching_sources" | "generating_script" | "synthesizing_audio" | "storing_episode";
+        JobStage: "selecting_articles" | "materializing_articles" | "generating_script" | "preparing_pronunciation" | "synthesizing_audio" | "storing_episode";
+        Union_2: string | null;
         EpisodeJob: {
             id: string & unknown;
             status: components["schemas"]["JobStatus"];
@@ -732,16 +639,16 @@ export interface components {
             /** @enum {number} */
             maxAttempts: 4;
             stage?: components["schemas"]["JobStage"] | null;
-            stageStartedAt?: string | null;
-            lastProgressAt?: string | null;
-            deadlineAt?: string | null;
+            stageStartedAt?: components["schemas"]["Union_2"];
+            lastProgressAt?: components["schemas"]["Union_2"];
+            deadlineAt?: components["schemas"]["Union_2"];
             stageProgress?: {
                 completed: number & unknown;
                 total: number & unknown;
             } | null;
-            startedAt?: string | null;
-            finishedAt?: string | null;
-            nextAttemptAt?: string | null;
+            startedAt?: components["schemas"]["Union_2"];
+            finishedAt?: components["schemas"]["Union_2"];
+            nextAttemptAt?: components["schemas"]["Union_2"];
             episodeId?: (string & unknown) | null;
             failure?: {
                 code: string & (unknown & unknown & unknown);
@@ -762,12 +669,12 @@ export interface components {
             /** @enum {number} */
             status: 404;
             code: string & (unknown & unknown & unknown);
-            detail?: string | null;
+            detail?: components["schemas"]["Union_"];
         };
         EpisodeSource: {
             url: string;
             title: string & (unknown & unknown & unknown);
-            publishedAt?: string | null;
+            publishedAt?: components["schemas"]["Union_2"];
             snapshotId?: (string & unknown) | null;
             sourceKind?: ("rss" | "web") | null;
         };
@@ -784,10 +691,6 @@ export interface components {
                 hasMore: boolean;
                 nextCursor?: (string & (unknown & unknown & unknown)) | null;
             };
-        };
-        AudioAccess: {
-            url: string;
-            expiresAt: string;
         };
         AddFeedSubscriptionRequest: {
             feedUrl: string & unknown;
@@ -811,12 +714,13 @@ export interface components {
                 hasMore: false;
             };
         };
+        /** @enum {string} */
+        Union_3: "queued" | "processing" | "succeeded" | "failed";
         FeedSyncJob: {
             jobId: string & unknown;
             feedId: string & unknown;
             feedUrl: string & unknown;
-            /** @enum {string} */
-            status: "queued" | "processing" | "succeeded" | "failed";
+            status: components["schemas"]["Union_3"];
             attempt: number & unknown;
             /** @enum {number} */
             maxAttempts: 4;
@@ -824,8 +728,8 @@ export interface components {
             archived: number & unknown;
             failed: number & unknown;
             createdAt: string;
-            startedAt?: string | null;
-            completedAt?: string | null;
+            startedAt?: components["schemas"]["Union_2"];
+            completedAt?: components["schemas"]["Union_2"];
             error?: (string & (unknown & unknown & unknown)) | null;
         };
         FeedSyncJobPage: {
@@ -839,8 +743,7 @@ export interface components {
             jobId: string & unknown;
             feedId: string & unknown;
             feedUrl: string & unknown;
-            /** @enum {string} */
-            status: "queued" | "processing" | "succeeded" | "failed";
+            status: components["schemas"]["Union_3"];
             attempt: number & unknown;
             /** @enum {number} */
             maxAttempts: 4;
@@ -848,8 +751,8 @@ export interface components {
             archived: number & unknown;
             failed: number & unknown;
             createdAt: string;
-            startedAt?: string | null;
-            completedAt?: string | null;
+            startedAt?: components["schemas"]["Union_2"];
+            completedAt?: components["schemas"]["Union_2"];
             error?: (string & (unknown & unknown & unknown)) | null;
         };
         UpdatedFeedSubscription: {
@@ -881,8 +784,8 @@ export interface components {
             sourceName: string & (unknown & unknown & unknown);
             title: string & (unknown & unknown & unknown);
             url: string;
-            publishedAt?: string | null;
-            summary?: string | null;
+            publishedAt?: components["schemas"]["Union_2"];
+            summary?: components["schemas"]["Union_"];
             discoveredAt: string;
             /** @enum {string} */
             archiveStatus: "pending" | "archiving" | "succeeded" | "failed";
@@ -891,12 +794,12 @@ export interface components {
             saved: boolean;
             readLater: boolean;
             hidden: boolean;
-            hiddenAt?: string | null;
-            archiveUrl?: string | null;
-            markdownUrl?: string | null;
-            aiSummary?: string | null;
+            hiddenAt?: components["schemas"]["Union_2"];
+            archiveUrl?: components["schemas"]["Union_"];
+            markdownUrl?: components["schemas"]["Union_"];
+            aiSummary?: components["schemas"]["Union_"];
             relevanceScore?: (number & unknown) | null;
-            relevanceReason?: string | null;
+            relevanceReason?: components["schemas"]["Union_"];
         };
         ArticlePage: {
             items: components["schemas"]["Article"][];
@@ -919,6 +822,7 @@ export interface components {
             }[];
             aiPending: number & unknown;
         };
+        Union_4: boolean | null;
         Objects_: {
             items: {
                 articleId: string & unknown;
@@ -1013,6 +917,7 @@ export interface components {
             createdAt: string;
             updatedAt: string;
         };
+        Union_5: (string & (unknown & unknown & unknown)) | null;
         EnrichQueueItem: {
             feedItemId: string & unknown;
             title: string;
@@ -1023,11 +928,11 @@ export interface components {
             /** @enum {string} */
             status: "queued" | "processing" | "succeeded" | "failed";
             attempt: number & unknown;
-            error?: string | null;
-            publishedAt?: string | null;
+            error?: components["schemas"]["Union_"];
+            publishedAt?: components["schemas"]["Union_2"];
             createdAt: string;
-            startedAt?: string | null;
-            completedAt?: string | null;
+            startedAt?: components["schemas"]["Union_2"];
+            completedAt?: components["schemas"]["Union_2"];
         };
         EnrichQueue: {
             processing: components["schemas"]["EnrichQueueItem"][];
@@ -1047,46 +952,6 @@ export interface components {
             reprocessable: {
                 count: number & unknown;
             };
-        };
-        AgentInstance: {
-            id: string & unknown;
-            agentKey: string & (unknown & unknown & unknown);
-            createdAt: string;
-            updatedAt: string;
-        };
-        AgentInstancePage: {
-            items: components["schemas"]["AgentInstance"][];
-        };
-        AgentRun: {
-            id: string & unknown;
-            jobId: string & unknown;
-            agentInstanceId: (string & unknown) | null;
-            model: string & (unknown & unknown & unknown);
-            /** @enum {string} */
-            status: "queued" | "running" | "waiting_approval" | "retrying" | "succeeded" | "failed" | "canceled";
-            policyHash: string & (unknown & unknown & unknown);
-            createdAt: string;
-            finishedAt: string | null;
-            failureCode: (string & (unknown & unknown & unknown)) | null;
-        };
-        Objects_3: {
-            [key: string]: null | boolean | (number | ("Infinity" | "-Infinity" | "NaN")) | string;
-        };
-        AgentMemory: {
-            id: string & unknown;
-            agentInstanceId: string & unknown;
-            /** @enum {string} */
-            kind: "preference" | "episode_history" | "working_note";
-            /** @enum {string} */
-            status: "proposed" | "active" | "rejected" | "deleted";
-            version: number;
-            content: components["schemas"]["Objects_3"];
-            expiresAt: string | null;
-            createdAt: string;
-            updatedAt: string;
-        };
-        AgentMemoryPage: {
-            items: components["schemas"]["AgentMemory"][];
         };
     };
     responses: never;
@@ -1121,9 +986,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -1156,9 +1021,9 @@ export interface operations {
                 limit?: string | null;
             };
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -1198,10 +1063,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                authorization?: string | null;
-                cookie?: string | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
                 "idempotency-key": string & (unknown & unknown & unknown);
-                traceparent?: (string & unknown) | null;
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -1272,9 +1137,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 jobId: string & unknown;
@@ -1325,9 +1190,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 jobId: string & unknown;
@@ -1387,10 +1252,10 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
                 "idempotency-key"?: (string & (unknown & unknown & unknown)) | null;
-                traceparent?: (string & unknown) | null;
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 jobId: string & unknown;
@@ -1452,10 +1317,10 @@ export interface operations {
                 lastEventId?: string | null;
             };
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                "last-event-id"?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                "last-event-id"?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 jobId: string & unknown;
@@ -1473,7 +1338,7 @@ export interface operations {
                     "text/event-stream": {
                         id: string | null;
                         /** @enum {string} */
-                        event: "STATE_SNAPSHOT";
+                        event: "message";
                         data: string;
                     };
                 };
@@ -1513,9 +1378,9 @@ export interface operations {
                 cursor?: (string & (unknown & unknown & unknown)) | null;
             };
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -1555,9 +1420,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 episodeId: string & unknown;
@@ -1604,13 +1469,14 @@ export interface operations {
             };
         };
     };
-    createAudioAccess: {
+    streamEpisodeAudio: {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+                range?: (string & unknown) | null;
             };
             path: {
                 episodeId: string & unknown;
@@ -1619,13 +1485,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description AudioAccess */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AudioAccess"];
+                    "audio/wav": string;
                 };
             };
             /** @description UnauthorizedProblem */
@@ -1661,9 +1527,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -1703,9 +1569,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -1767,9 +1633,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -1809,9 +1675,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 subscriptionId: string & unknown;
@@ -1871,9 +1737,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 subscriptionId: string & unknown;
@@ -1931,9 +1797,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 subscriptionId: string & unknown;
@@ -1992,9 +1858,9 @@ export interface operations {
                 q?: (string & (unknown & unknown & unknown)) | null;
             };
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2034,9 +1900,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2097,9 +1963,9 @@ export interface operations {
                 cursor?: (string & (unknown & unknown & unknown)) | null;
             };
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2143,9 +2009,9 @@ export interface operations {
                 q?: (string & (unknown & unknown & unknown)) | null;
             };
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2185,9 +2051,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 articleId: string & unknown;
@@ -2238,9 +2104,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 articleId: string & unknown;
@@ -2250,10 +2116,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    read?: boolean | null;
-                    saved?: boolean | null;
-                    readLater?: boolean | null;
-                    hidden?: boolean | null;
+                    read?: components["schemas"]["Union_4"];
+                    saved?: components["schemas"]["Union_4"];
+                    readLater?: components["schemas"]["Union_4"];
+                    hidden?: components["schemas"]["Union_4"];
                 };
             };
         };
@@ -2309,9 +2175,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 articleId: string & unknown;
@@ -2364,9 +2230,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2375,13 +2241,13 @@ export interface operations {
             content: {
                 "application/json": {
                     state?: ("all" | "unread" | "saved" | "later") | null;
-                    includeHidden?: boolean | null;
+                    includeHidden?: components["schemas"]["Union_4"];
                     feedIds?: (string & unknown)[] | null;
                     q?: (string & (unknown & unknown & unknown)) | null;
-                    read?: boolean | null;
-                    saved?: boolean | null;
-                    readLater?: boolean | null;
-                    hidden?: boolean | null;
+                    read?: components["schemas"]["Union_4"];
+                    saved?: components["schemas"]["Union_4"];
+                    readLater?: components["schemas"]["Union_4"];
+                    hidden?: components["schemas"]["Union_4"];
                 };
             };
         };
@@ -2430,9 +2296,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 articleId: string & unknown;
@@ -2486,9 +2352,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 articleId: string & unknown;
@@ -2539,9 +2405,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 articleId: string & unknown;
@@ -2607,9 +2473,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 articleId: string & unknown;
@@ -2669,9 +2535,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2711,9 +2577,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2766,9 +2632,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2808,9 +2674,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2854,9 +2720,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 tagId: string & unknown;
@@ -2905,9 +2771,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -2947,9 +2813,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -3002,9 +2868,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -3044,9 +2910,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -3103,9 +2969,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 id: string & unknown;
@@ -3116,15 +2982,15 @@ export interface operations {
             content: {
                 "application/json": {
                     surface: string & (unknown & unknown & unknown);
-                    reading?: (string & (unknown & unknown & unknown)) | null;
+                    reading?: components["schemas"]["Union_5"];
                     accentType?: (number & unknown) | null;
                 } | {
-                    surface?: (string & (unknown & unknown & unknown)) | null;
+                    surface?: components["schemas"]["Union_5"];
                     reading: string & (unknown & unknown & unknown);
                     accentType?: (number & unknown) | null;
                 } | {
-                    surface?: (string & (unknown & unknown & unknown)) | null;
-                    reading?: (string & (unknown & unknown & unknown)) | null;
+                    surface?: components["schemas"]["Union_5"];
+                    reading?: components["schemas"]["Union_5"];
                     accentType: number & unknown;
                 };
             };
@@ -3181,9 +3047,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path: {
                 id: string & unknown;
@@ -3232,9 +3098,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -3274,9 +3140,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -3316,9 +3182,9 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
             };
             path?: never;
             cookie?: never;
@@ -3344,400 +3210,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description UnavailableProblem */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnavailableProblem"];
-                };
-            };
-        };
-    };
-    "agents.listAgentInstances": {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description AgentInstancePage */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentInstancePage"];
-                };
-            };
-            /** @description UnauthorizedProblem */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description UnavailableProblem */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnavailableProblem"];
-                };
-            };
-        };
-    };
-    "agents.getAgentRun": {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
-            };
-            path: {
-                runId: string & unknown;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description AgentRun */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRun"];
-                };
-            };
-            /** @description UnauthorizedProblem */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description NotFoundProblem */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotFoundProblem"];
-                };
-            };
-            /** @description UnavailableProblem */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnavailableProblem"];
-                };
-            };
-        };
-    };
-    "agents.streamAgentRunEvents": {
-        parameters: {
-            query?: {
-                lastEventId?: string | null;
-            };
-            header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                "last-event-id"?: string | null;
-                traceparent?: (string & unknown) | null;
-            };
-            path: {
-                runId: string & unknown;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": {
-                        id: string;
-                        event: string & (unknown & unknown & unknown);
-                        data: string;
-                    };
-                };
-            };
-            /** @description UnauthorizedProblem */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description NotFoundProblem */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotFoundProblem"];
-                };
-            };
-            /** @description UnavailableProblem */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnavailableProblem"];
-                };
-            };
-        };
-    };
-    "agents.listAgentMemories": {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
-            };
-            path: {
-                agentInstanceId: string & unknown;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description AgentMemoryPage */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentMemoryPage"];
-                };
-            };
-            /** @description UnauthorizedProblem */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description NotFoundProblem */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotFoundProblem"];
-                };
-            };
-            /** @description UnavailableProblem */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnavailableProblem"];
-                };
-            };
-        };
-    };
-    "agents.createAgentMemory": {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
-            };
-            path: {
-                agentInstanceId: string & unknown;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    kind: "preference" | "working_note";
-                    content: components["schemas"]["Objects_3"];
-                    expiresAt?: string | null;
-                };
-            };
-        };
-        responses: {
-            /** @description AgentMemory */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentMemory"];
-                };
-            };
-            /** @description UnauthorizedProblem */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description NotFoundProblem */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotFoundProblem"];
-                };
-            };
-            /** @description UnavailableProblem */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnavailableProblem"];
-                };
-            };
-        };
-    };
-    "agents.approveAgentMemory": {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
-            };
-            path: {
-                agentInstanceId: string & unknown;
-                memoryId: string & unknown;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description AgentMemory */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentMemory"];
-                };
-            };
-            /** @description UnauthorizedProblem */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description NotFoundProblem */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotFoundProblem"];
-                };
-            };
-            /** @description ConflictProblem */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConflictProblem"];
-                };
-            };
-            /** @description UnavailableProblem */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnavailableProblem"];
-                };
-            };
-        };
-    };
-    "agents.deleteAgentMemory": {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                cookie?: string | null;
-                traceparent?: (string & unknown) | null;
-            };
-            path: {
-                agentInstanceId: string & unknown;
-                memoryId: string & unknown;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description <No Content> */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description UnauthorizedProblem */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnauthorizedProblem"];
-                };
-            };
-            /** @description NotFoundProblem */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotFoundProblem"];
-                };
-            };
-            /** @description ConflictProblem */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConflictProblem"];
                 };
             };
             /** @description UnavailableProblem */

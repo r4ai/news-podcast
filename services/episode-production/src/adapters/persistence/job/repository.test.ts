@@ -349,16 +349,16 @@ describe("SQLite job repository", () => {
           const leaseExit = yield* Effect.exit(
             execution.assertLease({ jobId: queued.jobId, leaseToken: token })
           )
-          const events = yield* repository.listOwnedStatusEvents({
+          const events = yield* repository.listOwnedAgUiEvents({
             ownerId: command.ownerId,
             jobId: queued.jobId,
             afterSequence: 0,
             limit: 100,
           })
-          const resumed = yield* repository.listOwnedStatusEvents({
+          const resumed = yield* repository.listOwnedAgUiEvents({
             ownerId: command.ownerId,
             jobId: queued.jobId,
-            afterSequence: events[1]!.sequence,
+            afterSequence: events[2]!.sequence,
             limit: 100,
           })
           return { hidden, canceled, terminal, leaseExit, events, resumed }
@@ -373,11 +373,17 @@ describe("SQLite job repository", () => {
     })
     expect(result.terminal).toEqual({ _tag: "Terminal" })
     expect(result.leaseExit._tag).toBe("Failure")
-    expect(result.events.map((event) => event.job._tag)).toEqual([
-      "Queued",
-      "Running",
-      "Canceled",
+    expect(
+      result.events.map((event) => (event.event as { type: string }).type)
+    ).toEqual([
+      "STATE_SNAPSHOT",
+      "RUN_STARTED",
+      "STATE_SNAPSHOT",
+      "RUN_ERROR",
+      "STATE_SNAPSHOT",
     ])
-    expect(result.resumed.map((event) => event.job._tag)).toEqual(["Canceled"])
+    expect(
+      result.resumed.map((event) => (event.event as { type: string }).type)
+    ).toEqual(["RUN_ERROR", "STATE_SNAPSHOT"])
   })
 })

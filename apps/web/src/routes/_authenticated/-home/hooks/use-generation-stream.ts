@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
-import type { AgUiEvent } from "@news-podcast/contracts/agui"
+import { parseEpisodeJobAgUiEvent } from "@news-podcast/contracts/agui"
 
 import { subscribeEventStream } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
@@ -20,6 +20,7 @@ import {
  */
 export function useGenerationStream(jobId: string | undefined) {
   const [stream, setStream] = useState<GenerationStream>(emptyGenerationStream)
+  const lastSequence = useRef(0)
 
   useEffect(() => {
     if (!jobId) {
@@ -28,6 +29,7 @@ export function useGenerationStream(jobId: string | undefined) {
     }
     // ジョブが変わったら状態を捨てる。前のジョブのタイムラインが混ざらない。
     setStream(emptyGenerationStream)
+    lastSequence.current = 0
     const controller = new AbortController()
 
     void subscribeEventStream(`/v1/episode-jobs/${jobId}/events`, {
@@ -37,13 +39,22 @@ export function useGenerationStream(jobId: string | undefined) {
         recordBrowserEvent("episode.stream_connected")
       },
       onFrame: (frame) => {
-        let event: AgUiEvent
+        const sequence = frame.id === undefined ? undefined : Number(frame.id)
+        if (
+          sequence !== undefined &&
+          (!Number.isSafeInteger(sequence) || sequence <= lastSequence.current)
+        ) {
+          return
+        }
         try {
-          event = JSON.parse(frame.data) as AgUiEvent
+          const event = parseEpisodeJobAgUiEvent(
+            JSON.parse(frame.data) as unknown
+          )
+          if (sequence !== undefined) lastSequence.current = sequence
+          setStream((current) => reduceGenerationStream(current, event))
         } catch {
           return
         }
-        setStream((current) => reduceGenerationStream(current, event))
       },
       onGiveUp: () => {
         setStream((current) => ({ ...current, connected: false }))

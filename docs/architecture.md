@@ -1,6 +1,6 @@
 # システムアーキテクチャ
 
-- 更新日: 2026-08-15
+- 更新日: 2026-08-16
 - 対象: 関数型マイクロサービス（旧実装削除済み）
 - 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
@@ -21,14 +21,15 @@
 
 ```mermaid
 flowchart LR
-  User["利用者"] --> Web["React Web"]
-  Web --> Gateway["Effect API Gateway"]
+  User["利用者"] --> Edge["Nginx same-origin edge"]
+  Edge --> Web["React assets"]
+  Edge --> Gateway["Effect API Gateway"]
   Gateway <-->|"NATS RPC"| Identity["Identity Access"]
   Gateway <-->|"NATS RPC"| Content["Content Knowledge"]
   Gateway <-->|"NATS RPC"| Production["Episode Production"]
   Gateway <-->|"NATS RPC"| Library["Episode Library"]
   Content --> RSS["RSS / Article origins"]
-  Production --> OpenAI["OpenAI Responses API"]
+  Production --> OpenAI["Effect AI / OpenAI"]
   Production --> Voicevox["VOICEVOX"]
   Content --> Objects[("SeaweedFS / S3")]
   Production --> Objects
@@ -49,17 +50,17 @@ flowchart LR
 | --- | --- | --- |
 | Identity & Access | ログイン、セッション、主体の特定 | Better Auth、Google OIDC、Actor |
 | Content Knowledge | RSS購読、記事snapshot、安全なreplay、Markdown | Feed、Subscription、ArticleSnapshot、ArchiveAsset |
-| Episode Production | 生成要求、構造化生成、実行監査、状態遷移 | EpisodeJob、AgentAudit、Script、Audio |
-| Episode Library | 完成番組、出典、所有者別アクセス | Episode、EpisodeSource、短期音声URL |
+| Episode Production | 生成要求、GenerationPlan、構造化生成、AG-UI進捗、状態遷移 | EpisodeJob、GenerationPlan、Script、Audio |
+| Episode Library | 完成番組、出典、所有者別アクセス | Episode、EpisodeSource、内部短期音声URL |
 
 重要な不変条件は以下である。
 
 - `ownerId` はセッションから導出し、URLやリクエスト本文から受け取らない。
 - ジョブ作成は `owner + route + Idempotency-Key` で一意。同じキーと異なる入力の組み合わせは競合とする。
-- 手動生成は選択記事IDを必須とし、定期生成は有効購読から記事IDを解決してからジョブを作る。生成入力は受付時のID集合へ固定し、処理中の購読・記事変更から切り離す。
+- 手動生成は選択記事IDを必須とする。定期生成は記事IDなしでjobを作り、worker開始時の最新InterestProfileから選定したGenerationPlanをfirst-write-winsで固定する。
 - 台本が返す出典URLは、ownerが選択しContentが版固定した入力記事だけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
-- 署名付き音声URLは永続化せず、アクセス要求ごとに短期発行する。
+- 署名付き音声URLは永続化・公開せず、Gatewayがアクセス要求ごとに内部発行してRange streamする。
 
 ## 3. レイヤー構成と依存方向
 
@@ -74,6 +75,7 @@ flowchart LR
 | `packages/kernel` | Shared Kernel | Context非依存のimmutable primitive |
 | `packages/protocols` | Integration Contract | version付きNATS RPC/event Schema |
 | `packages/contracts` | Published Contract | Gateway HttpApiから生成したOpenAPI JSONとTypeScript型 |
+| `packages/ai-runtime` | Cross-cutting AI Adapter | Effect AI OpenAI Layer、制限、redaction、失敗変換 |
 | `packages/ui` | Presentation Shared | shadcn/Base UIベースの共通UI部品とtoken |
 | `packages/observability` | Cross-cutting Adapter | OpenTelemetry契約、Node adapter、privacy filter |
 | `packages/service-runtime` | Cross-cutting Runtime | named health、signal/fatal error、期限付きgraceful shutdown |
@@ -92,6 +94,7 @@ flowchart LR
   Services["services/*"] --> Protocols
   Services --> Kernel["packages/kernel"]
   Services --> Observability
+  Services --> AiRuntime["packages/ai-runtime"]
   Watchdog["apps/watchdog"] --> Notify["SMTP / structured stderr"]
 ```
 
@@ -182,19 +185,19 @@ sequenceDiagram
   Gateway->>Production: owner付きNATS RPC
   Production->>Production: queued jobを冪等保存
   Gateway-->>Web: 202 Accepted + Location
-  loop 状態をpolling
-    Web->>Gateway: GET /v1/episode-jobs/{id}
-    Gateway->>Production: owner-scoped query
-    Gateway-->>Web: status / stage / attempt
-  end
   Production->>Production: token付きlease + heartbeat
-  Production->>Content: owner選択済みMarkdownをmaterialize
-  Production->>Providers: strict schema台本 → 音声合成
+  Production->>Content: GenerationPlan作成 / Markdownをmaterialize
+  Production-->>Gateway: durable AG-UI events
+  Gateway-->>Web: SSE + Last-Event-ID
+  Production->>Providers: Effect AI strict output → 音声合成
   Production->>Objects: WAVを保存
   Production->>Library: durable completion event
-  Web->>Gateway: POST /v1/episodes/{id}/audio-access
+  Web->>Gateway: GET /v1/episodes/{id}/audio<br/>Range: bytes=...
   Gateway->>Library: owner-scoped access RPC
-  Gateway-->>Web: 5分間の音声アクセスURL
+  Library-->>Gateway: 5分間の内部音声URL
+  Gateway->>Objects: Range GET
+  Objects-->>Gateway: 200 / 206 audio stream
+  Gateway-->>Web: same-origin audio stream
 ```
 
 定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はjob作成成功後だけ進める。
@@ -203,10 +206,12 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  Lease["Job lease"] --> Input["owner選択済み記事snapshot"]
-  Input --> Script["有界な構造化生成"]
+  Lease["Job lease"] --> Plan["latest InterestProfile → immutable plan"]
+  Plan --> Input["版固定記事snapshot"]
+  Input --> Script["Effect AI structured generation"]
   Script --> Verify["strict schema・入力出典・上限を検証"]
-  Verify --> TTS["VOICEVOXでWAV生成"]
+  Verify --> Dictionary["owner辞書抽出・job snapshot"]
+  Dictionary --> TTS["読み置換後にVOICEVOXでWAV生成"]
   TTS --> Store["音声を保存"]
   Store --> Commit["Episode・出典・Jobをcommit"]
 ```
@@ -233,7 +238,7 @@ stateDiagram-v2
   canceled --> [*]
 ```
 
-`running` 中のstageは`researching_sources`、`synthesizing_audio`、`storing_episode`に限定する。
+`running`中のstageは`selecting_articles`、`materializing_articles`、`generating_script`、`preparing_pronunciation`、`synthesizing_audio`、`storing_episode`に限定する。
 
 ## 5. データ設計
 
@@ -249,12 +254,12 @@ erDiagram
   FEED_ITEM ||--o{ ARTICLE_USER_STATE : has_state
   USER ||--o| USER_SETTINGS : configures
   USER ||--o{ EPISODE_JOB : requests
+  EPISODE_JOB ||--o| GENERATION_PLAN : freezes
   EPISODE_JOB ||--|{ EPISODE_JOB_ARTICLE : snapshots
   ARTICLE_SNAPSHOT ||--o{ EPISODE_JOB_ARTICLE : selected_as
   EPISODE_JOB o|--o| EPISODE : produces
   EPISODE ||--o{ EPISODE_SOURCE : cites
-  EPISODE_JOB ||--o{ AGENT_RUN : executes
-  AGENT_RUN ||--o{ AGENT_TOOL_CALL : audits
+  EPISODE_JOB ||--o{ AGUI_EVENT : reports
   EPISODE_JOB ||--o{ JOB_OUTBOX : dispatches
 ```
 
@@ -264,9 +269,9 @@ erDiagram
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果 |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_user_states` | ユーザーごとの既読・保存状態 |
-| `episode_jobs` / `episode_job_articles` | 状態、lease、retry、冪等性、受付時点に固定した記事ID集合 |
+| `episode_jobs` / `episode_generation_plans` / `episode_job_articles` | 状態、lease、retry、冪等性、初回実行時に固定した嗜好・記事集合 |
 | `episodes` / `episode_sources` | 台本・音声keyと、入力RSSへ遡れるprovenance |
-| `agent_runs` / `agent_tool_calls` | Agent実行結果と、思考過程を含めないtool監査要約 |
+| `episode_job_agui_events` | 公式AG-UI event envelopeを保存する再開可能な進捗ログ |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
 | `job_outbox` | Productionが完成eventをJetStreamへ確実に配信するtransactional outbox |
 | Better Auth tables | user、session、account、verification |
@@ -287,7 +292,7 @@ DBアクセスは全service で **Drizzle ORM** に統一する（[ADR-0043](adr
 
 drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`sqlite_master` を検査する `schema.test.ts` で固定する。
 
-`episode_jobs` はjob状態機械を実カラムへ正規化しており、状態eventの記録はtriggerではなく書き込み側が同一transactionで行う（[ADR-0044](adr/0044-normalized-episode-job-state.md)）。
+`episode_jobs`はjob状態機械を実カラムへ正規化しており、状態更新と`episode_job_agui_events`追記はtriggerではなく書き込み側が同一transactionで行う（[ADR-0044](adr/0044-normalized-episode-job-state.md)、[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)）。
 
 ## 6. 実行環境
 
@@ -295,7 +300,7 @@ supported runtimeはNode self-hostだけである（[ADR-0039](adr/0039-support-
 
 | 能力 | supported構成 |
 | --- | --- |
-| Web / Gateway | Vite React / Effect HttpApi on Node |
+| Web / Gateway | Nginx static + same-origin proxy / React / Effect HttpApi on Node |
 | 業務service | Identity、Content、Production、LibraryのNode process |
 | DB / messaging | service別SQLite / NATS JetStream |
 | object / TTS | SeaweedFS S3 / VOICEVOX |

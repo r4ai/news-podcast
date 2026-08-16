@@ -4,7 +4,7 @@
 - Date: 2026-08-15
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0058（状態イベントをdurable AG-UIへ置換）
 - Related: ADR-0016（観測可能な有界実行）、ADR-0036（永続的なサービス整合性）、ADR-0043
 
 ## コンテキストと変更契機
@@ -35,9 +35,10 @@
 状態ごとに揃うべき列はテーブルのCHECK制約として表明する
 （`Running` ならリース必須、`Succeeded` なら `episode_id` 必須、など）。
 
-`episode_job_status_events` は**イベントログなので payload JSON を残す**。
-イベントは不変であり、ストリーミング契約（`streamEpisodeJobEvents`）を
-バイト単位で維持できるため。併せて `status` / `occurred_at` を実カラムで持つ。
+イベントログはpayload JSONを残す。本ADRでは`episode_job_status_events`を
+前提としたが、ADR-0058で公式event envelopeを保存する
+`episode_job_agui_events`へ一括置換した。状態更新とevent追記を同じtransactionに
+置くという原則は維持する。
 
 ドメイン ↔ 行の変換は `adapters/persistence/job/state-columns.ts` に集約し、
 `EpisodeJobSchema` を唯一の正とする。

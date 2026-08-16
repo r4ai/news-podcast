@@ -12,6 +12,10 @@ export type ScriptSource = DeepReadonly<{
 
 export type ScriptGenerationRequest = DeepReadonly<{
   readonly sources: readonly ScriptSource[]
+  readonly interestProfile?: Readonly<{
+    readonly include: string
+    readonly exclude: string
+  }>
   readonly signal?: AbortSignal
 }>
 

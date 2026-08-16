@@ -106,19 +106,21 @@ describe("episode job-control NATS RPC", () => {
   it("replays durable state events strictly after the supplied cursor", async () => {
     const replies: string[] = []
     const findOwned = vi.fn(() => Effect.succeed(queued))
-    const listOwnedStatusEvents = vi.fn(() =>
-      Effect.succeed([{ sequence: 42, job: queued }])
+    const listOwnedAgUiEvents = vi.fn(() =>
+      Effect.succeed([
+        { sequence: 42, event: { type: "STATE_SNAPSHOT", snapshot: {} } },
+      ])
     )
 
     await Effect.runPromise(
       handleListJobEventsRpc({
         findOwned,
-        listOwnedStatusEvents,
+        listOwnedAgUiEvents,
         replyDependencies,
       })(delivery(envelope({ jobId, afterSequence: 41, limit: 20 }), replies))
     )
 
-    expect(listOwnedStatusEvents).toHaveBeenCalledWith({
+    expect(listOwnedAgUiEvents).toHaveBeenCalledWith({
       ownerId: command.ownerId,
       jobId,
       afterSequence: 41,
@@ -126,7 +128,9 @@ describe("episode job-control NATS RPC", () => {
     })
     expect(replyPayload(replies[0]!)).toMatchObject({
       _tag: "Events",
-      events: [{ sequence: 42, job: { status: "queued" } }],
+      events: [
+        { sequence: 42, event: { type: "STATE_SNAPSHOT", snapshot: {} } },
+      ],
     })
   })
 

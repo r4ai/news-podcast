@@ -7,6 +7,7 @@ import {
   ListFeedSubscriptionsReplySchema,
   ListFeedSyncJobsReplySchema,
   MaterializeArticlesReplySchema,
+  PlanGenerationReplySchema,
   SyncFeedSubscriptionReplySchema,
   UpdateFeedSubscriptionReplySchema,
   MessageEnvelopeSchema,
@@ -17,6 +18,7 @@ import {
   parseListFeedSubscriptionsRequest,
   parseListFeedSyncJobsRequest,
   parseMaterializeArticlesRequest,
+  parsePlanGenerationRequest,
   parseSyncFeedSubscriptionRequest,
   parseUpdateFeedSubscriptionRequest,
   parseMessageEnvelope,
@@ -28,6 +30,10 @@ import { Effect, Schema } from "effect"
 
 import type { SubscriptionRepository } from "../../application/ports/subscription.js"
 import type { FeedSyncQueueRepository } from "../../application/feed-sync-queue.js"
+import type {
+  GenerationPlanningResult,
+  GenerationPlanningSelection,
+} from "../../application/generation-planning.js"
 import type {
   MaterializeResult,
   MaterializeSelection,
@@ -63,6 +69,11 @@ type Materialize = (input: {
   readonly selection: MaterializeSelection
 }) => Effect.Effect<MaterializeResult, unknown>
 
+type PlanGeneration = (
+  ownerId: OwnerId,
+  selection: GenerationPlanningSelection
+) => Effect.Effect<GenerationPlanningResult, unknown>
+
 const rejection = (
   code: ContentKnowledgeRejection["code"]
 ): ContentKnowledgeRejection => deepFreeze({ _tag: "Rejected", code })
@@ -86,6 +97,8 @@ const replySchema = (subject: string) => {
       return SyncFeedSubscriptionReplySchema
     case subjects.content.materializeArticles:
       return MaterializeArticlesReplySchema
+    case subjects.content.planGeneration:
+      return PlanGenerationReplySchema
     default:
       return ContentKnowledgeRejectionSchema
   }
@@ -159,7 +172,8 @@ export const makeContentKnowledgeRpcHandler =
     subscriptions: SubscriptionRepository,
     materialize: Materialize,
     dependencies: ContentKnowledgeRpcDependencies,
-    feedSyncQueue?: FeedSyncQueueRepository
+    feedSyncQueue?: FeedSyncQueueRepository,
+    planGeneration?: PlanGeneration
   ) =>
   <ReplyError>(delivery: ContentKnowledgeRpcDelivery<ReplyError>) =>
     Effect.try({
@@ -178,7 +192,8 @@ export const makeContentKnowledgeRpcHandler =
           const reject = (code: ContentKnowledgeRejection["code"]) =>
             correlatedReply(delivery, request, rejection(code), dependencies)
           const requiredProducer =
-            delivery.subject === subjects.content.materializeArticles
+            delivery.subject === subjects.content.materializeArticles ||
+            delivery.subject === subjects.content.planGeneration
               ? "episode-production"
               : "gateway"
           if (request.actor._tag !== "User") return reject("UNAUTHENTICATED")
@@ -401,6 +416,41 @@ export const makeContentKnowledgeRpcHandler =
                         )
                   ),
                   Effect.map((result) => deepFreeze(result))
+                )
+              }
+              if (delivery.subject === subjects.content.planGeneration) {
+                if (planGeneration === undefined) {
+                  return Effect.fail(rejection("INTERNAL_ERROR"))
+                }
+                return parsePlanGenerationRequest(request.payload).pipe(
+                  Effect.mapError(() => rejection("INVALID_REQUEST")),
+                  Effect.flatMap((input) =>
+                    input.selection._tag === "Automatic"
+                      ? planGeneration(
+                          ownerId,
+                          deepFreeze({ _tag: "Automatic" })
+                        )
+                      : Effect.forEach(
+                          input.selection.articleIds,
+                          (articleId) => parse(ArticleIdSchema)(articleId),
+                          { concurrency: 1 }
+                        ).pipe(
+                          Effect.mapError(() => rejection("INVALID_REQUEST")),
+                          Effect.flatMap((articleIds) => {
+                            const [first, ...rest] = articleIds
+                            return first === undefined
+                              ? Effect.fail(rejection("INVALID_REQUEST"))
+                              : planGeneration(
+                                  ownerId,
+                                  deepFreeze({
+                                    _tag: "Manual",
+                                    articleIds: [first, ...rest],
+                                  })
+                                )
+                          })
+                        )
+                  ),
+                  Effect.map(deepFreeze)
                 )
               }
               return Effect.fail(rejection("INVALID_REQUEST"))

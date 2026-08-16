@@ -19,15 +19,17 @@
   "dependencies": {
     "@hono/node-server": "2.0.10",
     "@nats-io/transport-node": "3.4.0",
+    "@news-podcast/contracts": "workspace:*",
     "@news-podcast/kernel": "workspace:*",
     "@news-podcast/nats-runtime": "workspace:*",
     "@news-podcast/observability": "workspace:*",
     "@news-podcast/protocols": "workspace:*",
     "@news-podcast/service-runtime": "workspace:*",
     "@scalar/client-side-rendering": "0.3.4",
-    "effect": "4.0.0-beta.102"
+    "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
+    "@ag-ui/core": "0.0.58",
     "@types/node": "24.12.4",
     "tsx": "4.23.11",
     "typescript": "5.9.3",

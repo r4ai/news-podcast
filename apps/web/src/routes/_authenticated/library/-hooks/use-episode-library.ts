@@ -1,44 +1,25 @@
 import { useSuspenseQuery } from "@tanstack/react-query"
-import { useState, useTransition } from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { useState } from "react"
 
 import { episodesQueryOptions, type Episode } from "@/features/episodes"
-import { api } from "@/shared/api"
-import { recordBrowserEvent } from "@/shared/observability/events"
-
 export function useEpisodeLibrary() {
-  const { data } = useSuspenseQuery(episodesQueryOptions)
-  const access = api.useMutation(
-    "post",
-    "/v1/episodes/{episodeId}/audio-access"
-  )
+  // Production完了からLibraryのoutbox投影までの短いずれで、Homeが取得した
+  // 古い一覧を表示し続けない。Libraryへ入るたびにowner-scoped一覧を再確認する。
+  const { data } = useSuspenseQuery({
+    ...episodesQueryOptions,
+    refetchOnMount: "always",
+  })
   const [audioUrl, setAudioUrl] = useState<string>()
-  const [playingEpisodeId, setPlayingEpisodeId] = useState<string>()
-  const [pending, startTransition] = useTransition()
 
   function play(episodeId: string) {
-    setPlayingEpisodeId(episodeId)
-    startTransition(async () => {
-      try {
-        const result = await access.mutateAsync({
-          params: { path: { episodeId } },
-        })
-        setAudioUrl(result.url)
-      } catch {
-        recordBrowserEvent("audio.error", { result: "access-failed" })
-        toast.error("音声を再生できませんでした")
-        setAudioUrl(undefined)
-      } finally {
-        setPlayingEpisodeId(undefined)
-      }
-    })
+    setAudioUrl(`/v1/episodes/${encodeURIComponent(episodeId)}/audio`)
   }
 
   return {
     episodes: data.items as readonly Episode[],
     audioUrl,
-    playingEpisodeId,
-    pending,
+    playingEpisodeId: undefined,
+    pending: false,
     play,
   } as const
 }

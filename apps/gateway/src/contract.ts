@@ -119,6 +119,11 @@ export const SessionHeadersSchema = Schema.Struct({
   traceparent: Schema.optional(TraceparentSchema),
 }).annotate({ identifier: "SessionHeaders" })
 
+export const EpisodeAudioHeadersSchema = Schema.Struct({
+  ...SessionHeadersSchema.fields,
+  range: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+}).annotate({ identifier: "EpisodeAudioHeaders" })
+
 export const CreateEpisodeJobHeadersSchema = Schema.Struct({
   authorization: Schema.optional(Schema.String),
   cookie: Schema.optional(Schema.String),
@@ -144,9 +149,10 @@ export const JobStatusSchema = Schema.Literals([
 ]).annotate({ identifier: "JobStatus" })
 
 export const JobStageSchema = Schema.Literals([
-  "researching_sources",
-  "fetching_sources",
+  "selecting_articles",
+  "materializing_articles",
   "generating_script",
+  "preparing_pronunciation",
   "synthesizing_audio",
   "storing_episode",
 ]).annotate({ identifier: "JobStage" })
@@ -236,20 +242,62 @@ const EpisodeJobStateSchema = Schema.Struct({
   status: jobFields.status,
   attempt: jobFields.attempt,
   maxAttempts: Schema.Literal(4),
-  adoptedArticles: Schema.Array(Schema.Unknown),
+  selectionMode: Schema.Literals(["automatic", "manual"]),
+  selectedArticles: Schema.Array(
+    Schema.Struct({
+      articleId: ArticleIdSchema,
+      title: Schema.optional(boundedText(500)),
+      sourceName: Schema.optional(boundedText(500)),
+    })
+  ),
+  currentStage: Schema.optional(JobStageSchema),
   failure: Schema.optional(
-    Schema.Struct({ code: boundedText(200), message: boundedText(500) })
+    Schema.Struct({
+      code: boundedText(200),
+      message: boundedText(500),
+      retryable: Schema.Boolean,
+    })
   ),
   episodeId: Schema.optional(EpisodeIdSchema),
 })
-export const EpisodeJobAgUiEventSchema = Schema.Struct({
-  type: Schema.Literal("STATE_SNAPSHOT"),
-  timestamp: Schema.Number,
-  snapshot: EpisodeJobStateSchema,
-})
+const AgUiTimestampSchema = Schema.optional(Schema.Number)
+export const EpisodeJobAgUiEventSchema = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("STATE_SNAPSHOT"),
+    timestamp: AgUiTimestampSchema,
+    snapshot: EpisodeJobStateSchema,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("RUN_STARTED"),
+    timestamp: AgUiTimestampSchema,
+    threadId: Schema.String,
+    runId: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("RUN_FINISHED"),
+    timestamp: AgUiTimestampSchema,
+    threadId: Schema.String,
+    runId: Schema.String,
+    outcome: Schema.optional(
+      Schema.Struct({ type: Schema.Literal("success") })
+    ),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("RUN_ERROR"),
+    timestamp: AgUiTimestampSchema,
+    message: Schema.String,
+    code: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literals(["STEP_STARTED", "STEP_FINISHED"]),
+    timestamp: AgUiTimestampSchema,
+    stepName: JobStageSchema,
+  }),
+])
 const EpisodeJobSseEventSchema = Schema.Struct({
   id: Schema.UndefinedOr(Schema.String),
-  event: Schema.Literal("STATE_SNAPSHOT"),
+  // Effect's SSE encoder omits the wire field for the default "message" name.
+  event: Schema.Literal("message"),
   data: Schema.fromJsonString(EpisodeJobAgUiEventSchema),
 })
 export const EpisodeJobEventStreamSchema = HttpApiSchema.StreamSse({
@@ -836,13 +884,13 @@ export const getEpisodeEndpoint = HttpApiEndpoint.get(
   })
 )
 
-export const createAudioAccessEndpoint = HttpApiEndpoint.post(
-  "createAudioAccess",
-  "/v1/episodes/:episodeId/audio-access",
+export const streamEpisodeAudioEndpoint = HttpApiEndpoint.get(
+  "streamEpisodeAudio",
+  "/v1/episodes/:episodeId/audio",
   {
     params: { episodeId: EpisodeIdSchema },
-    headers: SessionHeadersSchema,
-    success: AudioAccessSchema,
+    headers: EpisodeAudioHeadersSchema,
+    success: HttpApiSchema.StreamUint8Array({ contentType: "audio/wav" }),
     error: [
       UnauthorizedProblemSchema,
       NotFoundProblemSchema,
@@ -851,8 +899,8 @@ export const createAudioAccessEndpoint = HttpApiEndpoint.post(
   }
 ).annotateMerge(
   OpenApi.annotations({
-    identifier: "createAudioAccess",
-    summary: "Issue short-lived audio access",
+    identifier: "streamEpisodeAudio",
+    summary: "Stream owned episode audio",
   })
 )
 
@@ -1294,180 +1342,6 @@ export const enrichResetDailyEndpoint = HttpApiEndpoint.post(
   }
 )
 
-export const AgentInstanceSchema = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID(4)),
-  agentKey: boundedText(100),
-  createdAt: UtcDateTimeStringSchema,
-  updatedAt: UtcDateTimeStringSchema,
-}).annotate({ identifier: "AgentInstance" })
-export const AgentInstancePageSchema = Schema.Struct({
-  items: Schema.Array(AgentInstanceSchema),
-}).annotate({ identifier: "AgentInstancePage" })
-export const AgentRunSchema = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID(4)),
-  jobId: Schema.String.check(Schema.isUUID(4)),
-  agentInstanceId: Schema.NullOr(Schema.String.check(Schema.isUUID(4))),
-  model: boundedText(100),
-  status: Schema.Literals([
-    "queued",
-    "running",
-    "waiting_approval",
-    "retrying",
-    "succeeded",
-    "failed",
-    "canceled",
-  ]),
-  policyHash: boundedText(128),
-  createdAt: UtcDateTimeStringSchema,
-  finishedAt: Schema.NullOr(UtcDateTimeStringSchema),
-  failureCode: Schema.NullOr(boundedText(100)),
-}).annotate({ identifier: "AgentRun" })
-const PublicAgentPayloadSchema = Schema.Record(
-  Schema.String,
-  Schema.Union([Schema.Null, Schema.Boolean, Schema.Number, Schema.String])
-)
-export const AgentMemorySchema = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID(4)),
-  agentInstanceId: Schema.String.check(Schema.isUUID(4)),
-  kind: Schema.Literals(["preference", "episode_history", "working_note"]),
-  status: Schema.Literals(["proposed", "active", "rejected", "deleted"]),
-  version: Schema.Int,
-  content: PublicAgentPayloadSchema,
-  expiresAt: Schema.NullOr(UtcDateTimeStringSchema),
-  createdAt: UtcDateTimeStringSchema,
-  updatedAt: UtcDateTimeStringSchema,
-}).annotate({ identifier: "AgentMemory" })
-export const AgentMemoryPageSchema = Schema.Struct({
-  items: Schema.Array(AgentMemorySchema),
-}).annotate({ identifier: "AgentMemoryPage" })
-export const CreateAgentMemorySchema = Schema.Struct({
-  kind: Schema.Literals(["preference", "working_note"]),
-  content: PublicAgentPayloadSchema,
-  expiresAt: Schema.optional(UtcDateTimeStringSchema),
-})
-const agentInstanceParams = Schema.Struct({
-  agentInstanceId: Schema.String.check(Schema.isUUID(4)),
-})
-const agentMemoryParams = Schema.Struct({
-  agentInstanceId: Schema.String.check(Schema.isUUID(4)),
-  memoryId: Schema.String.check(Schema.isUUID(4)),
-})
-const agentRunParams = Schema.Struct({
-  runId: Schema.String.check(Schema.isUUID(4)),
-})
-export const AgentRunEventSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
-  runId: Schema.String.check(Schema.isUUID(4)),
-  sequence: Schema.Natural,
-  type: boundedText(80),
-  occurredAt: UtcDateTimeStringSchema,
-  payload: PublicAgentPayloadSchema,
-})
-export const AgentRunEventStreamSchema = HttpApiSchema.StreamSse({
-  events: Schema.Struct({
-    id: Schema.String,
-    event: boundedText(80),
-    data: Schema.fromJsonString(AgentRunEventSchema),
-  }),
-})
-export const listAgentInstancesEndpoint = HttpApiEndpoint.get(
-  "listAgentInstances",
-  "/v1/me/agent-instances",
-  {
-    headers: SessionHeadersSchema,
-    success: AgentInstancePageSchema,
-    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
-  }
-)
-export const getAgentRunEndpoint = HttpApiEndpoint.get(
-  "getAgentRun",
-  "/v1/me/agent-runs/:runId",
-  {
-    headers: SessionHeadersSchema,
-    params: agentRunParams,
-    success: AgentRunSchema,
-    error: [
-      UnauthorizedProblemSchema,
-      NotFoundProblemSchema,
-      UnavailableProblemSchema,
-    ],
-  }
-)
-export const streamAgentRunEventsEndpoint = HttpApiEndpoint.get(
-  "streamAgentRunEvents",
-  "/v1/me/agent-runs/:runId/events",
-  {
-    headers: EpisodeJobEventsHeadersSchema,
-    params: agentRunParams,
-    query: EpisodeJobEventsQuerySchema,
-    success: AgentRunEventStreamSchema,
-    error: [
-      UnauthorizedProblemSchema,
-      NotFoundProblemSchema,
-      UnavailableProblemSchema,
-    ],
-  }
-)
-export const listAgentMemoriesEndpoint = HttpApiEndpoint.get(
-  "listAgentMemories",
-  "/v1/me/agent-instances/:agentInstanceId/memories",
-  {
-    headers: SessionHeadersSchema,
-    params: agentInstanceParams,
-    success: AgentMemoryPageSchema,
-    error: [
-      UnauthorizedProblemSchema,
-      NotFoundProblemSchema,
-      UnavailableProblemSchema,
-    ],
-  }
-)
-export const createAgentMemoryEndpoint = HttpApiEndpoint.post(
-  "createAgentMemory",
-  "/v1/me/agent-instances/:agentInstanceId/memories",
-  {
-    headers: SessionHeadersSchema,
-    params: agentInstanceParams,
-    payload: CreateAgentMemorySchema,
-    success: AgentMemorySchema,
-    error: [
-      UnauthorizedProblemSchema,
-      NotFoundProblemSchema,
-      UnavailableProblemSchema,
-    ],
-  }
-)
-export const approveAgentMemoryEndpoint = HttpApiEndpoint.post(
-  "approveAgentMemory",
-  "/v1/me/agent-instances/:agentInstanceId/memories/:memoryId/approve",
-  {
-    headers: SessionHeadersSchema,
-    params: agentMemoryParams,
-    success: AgentMemorySchema,
-    error: [
-      UnauthorizedProblemSchema,
-      NotFoundProblemSchema,
-      ConflictProblemSchema,
-      UnavailableProblemSchema,
-    ],
-  }
-)
-export const deleteAgentMemoryEndpoint = HttpApiEndpoint.delete(
-  "deleteAgentMemory",
-  "/v1/me/agent-instances/:agentInstanceId/memories/:memoryId",
-  {
-    headers: SessionHeadersSchema,
-    params: agentMemoryParams,
-    success: HttpApiSchema.NoContent,
-    error: [
-      UnauthorizedProblemSchema,
-      NotFoundProblemSchema,
-      ConflictProblemSchema,
-      UnavailableProblemSchema,
-    ],
-  }
-)
-
 const systemGroup = HttpApiGroup.make("system")
   .add(healthEndpoint)
   .annotateMerge(OpenApi.annotations({ title: "System" }))
@@ -1485,7 +1359,7 @@ const episodeJobsGroup = HttpApiGroup.make("episodeJobs")
   )
   .annotateMerge(OpenApi.annotations({ title: "Episode jobs" }))
 const episodesGroup = HttpApiGroup.make("episodes")
-  .add(listEpisodesEndpoint, getEpisodeEndpoint, createAudioAccessEndpoint)
+  .add(listEpisodesEndpoint, getEpisodeEndpoint, streamEpisodeAudioEndpoint)
   .annotateMerge(OpenApi.annotations({ title: "Episodes" }))
 const feedSubscriptionsGroup = HttpApiGroup.make("feedSubscriptions")
   .add(
@@ -1532,18 +1406,6 @@ const personalizationGroup = HttpApiGroup.make("personalization")
     enrichResetDailyEndpoint
   )
   .annotateMerge(OpenApi.annotations({ title: "Personalization" }))
-const agentsGroup = HttpApiGroup.make("agents")
-  .add(
-    listAgentInstancesEndpoint,
-    getAgentRunEndpoint,
-    streamAgentRunEventsEndpoint,
-    listAgentMemoriesEndpoint,
-    createAgentMemoryEndpoint,
-    approveAgentMemoryEndpoint,
-    deleteAgentMemoryEndpoint
-  )
-  .annotateMerge(OpenApi.annotations({ title: "Agents" }))
-
 export const gatewayApi = HttpApi.make("gateway")
   .add(
     systemGroup,
@@ -1553,8 +1415,7 @@ export const gatewayApi = HttpApi.make("gateway")
     feedSubscriptionsGroup,
     feedsGroup,
     articlesGroup,
-    personalizationGroup,
-    agentsGroup
+    personalizationGroup
   )
   .annotateMerge(
     OpenApi.annotations({

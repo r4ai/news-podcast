@@ -40,14 +40,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -55,14 +48,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -70,19 +56,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -124,14 +98,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -139,14 +106,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -173,19 +133,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -275,14 +223,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -290,14 +231,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -305,19 +239,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           },
@@ -398,14 +320,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -413,14 +328,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -428,19 +336,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -516,14 +412,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -531,14 +420,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -546,19 +428,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -644,14 +514,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -659,14 +522,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -700,19 +556,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -798,14 +642,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -813,14 +650,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -828,14 +658,7 @@
             "name": "last-event-id",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -843,19 +666,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           },
@@ -897,7 +708,7 @@
                     "event": {
                       "type": "string",
                       "enum": [
-                        "STATE_SNAPSHOT"
+                        "message"
                       ]
                     },
                     "data": {
@@ -1036,14 +847,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1051,14 +855,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1066,19 +863,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           },
@@ -1170,14 +955,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1185,14 +963,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1200,19 +971,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -1263,12 +1022,12 @@
         "summary": "Get a completed episode"
       }
     },
-    "/v1/episodes/{episodeId}/audio-access": {
-      "post": {
+    "/v1/episodes/{episodeId}/audio": {
+      "get": {
         "tags": [
           "Episodes"
         ],
-        "operationId": "createAudioAccess",
+        "operationId": "streamEpisodeAudio",
         "parameters": [
           {
             "name": "episodeId",
@@ -1288,14 +1047,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1303,14 +1055,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1318,12 +1063,20 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          },
+          {
+            "name": "range",
+            "in": "header",
+            "schema": {
               "anyOf": [
                 {
                   "type": "string",
                   "allOf": [
                     {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
+                      "maxLength": 100
                     }
                   ]
                 },
@@ -1338,11 +1091,15 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "AudioAccess",
+            "description": "Success",
             "content": {
-              "application/json": {
+              "audio/wav": {
                 "schema": {
-                  "$ref": "#/components/schemas/AudioAccess"
+                  "type": "string",
+                  "format": "binary"
+                },
+                "x-effect-stream": {
+                  "encoding": "uint8array"
                 }
               }
             }
@@ -1378,7 +1135,7 @@
             }
           }
         },
-        "summary": "Issue short-lived audio access"
+        "summary": "Stream owned episode audio"
       }
     },
     "/v1/me/feed-subscriptions": {
@@ -1392,14 +1149,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1407,14 +1157,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1422,19 +1165,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -1514,14 +1245,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1529,14 +1253,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1544,19 +1261,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -1608,14 +1313,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1623,14 +1321,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1638,19 +1329,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -1716,14 +1395,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1731,14 +1403,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1746,19 +1411,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -1844,14 +1497,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1859,14 +1505,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1874,19 +1513,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -1963,14 +1590,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1978,14 +1598,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -1993,19 +1606,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -2085,14 +1686,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2100,14 +1694,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2115,19 +1702,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           },
@@ -2202,14 +1777,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2217,14 +1785,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2232,19 +1793,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -2315,14 +1864,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2330,14 +1872,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2345,19 +1880,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           },
@@ -2563,14 +2086,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2578,14 +2094,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2593,19 +2102,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           },
@@ -2739,14 +2236,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2754,14 +2244,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2769,19 +2252,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -2854,14 +2325,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2869,14 +2333,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -2884,19 +2341,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -2961,44 +2406,16 @@
                 "type": "object",
                 "properties": {
                   "read": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "saved": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "readLater": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "hidden": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   }
                 },
                 "additionalProperties": false
@@ -3034,14 +2451,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3049,14 +2459,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3064,19 +2467,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -3151,14 +2542,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3166,14 +2550,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3181,19 +2558,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -3278,14 +2643,7 @@
                     ]
                   },
                   "includeHidden": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "feedIds": {
                     "anyOf": [
@@ -3328,44 +2686,16 @@
                     ]
                   },
                   "read": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "saved": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "readLater": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "hidden": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   }
                 },
                 "additionalProperties": false
@@ -3401,14 +2731,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3416,14 +2739,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3431,19 +2747,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -3531,14 +2835,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3546,14 +2843,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3561,19 +2851,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -3646,14 +2924,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3661,14 +2932,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3676,19 +2940,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -3806,14 +3058,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3821,14 +3066,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3836,19 +3074,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -3919,14 +3145,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3934,14 +3153,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -3949,19 +3161,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4010,14 +3210,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4025,14 +3218,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4040,19 +3226,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4123,14 +3297,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4138,14 +3305,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4153,19 +3313,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4214,14 +3362,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4229,14 +3370,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4244,19 +3378,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4331,14 +3453,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4346,14 +3461,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4361,19 +3469,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4427,14 +3523,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4442,14 +3531,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4457,19 +3539,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4520,14 +3590,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4535,14 +3598,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4550,19 +3606,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4633,14 +3677,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4648,14 +3685,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4663,19 +3693,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4724,14 +3742,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4739,14 +3750,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4754,19 +3758,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -4902,14 +3894,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4917,14 +3902,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -4932,19 +3910,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -5025,25 +3991,7 @@
                         ]
                       },
                       "reading": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "allOf": [
-                              {
-                                "minLength": 1
-                              },
-                              {
-                                "pattern": "\\S"
-                              },
-                              {
-                                "maxLength": 100
-                              }
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
+                        "$ref": "#/components/schemas/Union_5"
                       },
                       "accentType": {
                         "anyOf": [
@@ -5071,25 +4019,7 @@
                     "type": "object",
                     "properties": {
                       "surface": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "allOf": [
-                              {
-                                "minLength": 1
-                              },
-                              {
-                                "pattern": "\\S"
-                              },
-                              {
-                                "maxLength": 100
-                              }
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
+                        "$ref": "#/components/schemas/Union_5"
                       },
                       "reading": {
                         "type": "string",
@@ -5131,46 +4061,10 @@
                     "type": "object",
                     "properties": {
                       "surface": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "allOf": [
-                              {
-                                "minLength": 1
-                              },
-                              {
-                                "pattern": "\\S"
-                              },
-                              {
-                                "maxLength": 100
-                              }
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
+                        "$ref": "#/components/schemas/Union_5"
                       },
                       "reading": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "allOf": [
-                              {
-                                "minLength": 1
-                              },
-                              {
-                                "pattern": "\\S"
-                              },
-                              {
-                                "maxLength": 100
-                              }
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
+                        "$ref": "#/components/schemas/Union_5"
                       },
                       "accentType": {
                         "type": "integer",
@@ -5218,14 +4112,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5233,14 +4120,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5248,19 +4128,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -5314,14 +4182,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5329,14 +4190,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5344,19 +4198,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -5407,14 +4249,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5422,14 +4257,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5437,19 +4265,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -5500,14 +4316,7 @@
             "name": "authorization",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5515,14 +4324,7 @@
             "name": "cookie",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_"
             },
             "required": false
           },
@@ -5530,19 +4332,7 @@
             "name": "traceparent",
             "in": "header",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_1"
             },
             "required": false
           }
@@ -5593,1012 +4383,6 @@
           }
         }
       }
-    },
-    "/v1/me/agent-instances": {
-      "get": {
-        "tags": [
-          "Agents"
-        ],
-        "operationId": "agents.listAgentInstances",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "AgentInstancePage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentInstancePage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/me/agent-runs/{runId}": {
-      "get": {
-        "tags": [
-          "Agents"
-        ],
-        "operationId": "agents.getAgentRun",
-        "parameters": [
-          {
-            "name": "runId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "AgentRun",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentRun"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/me/agent-runs/{runId}/events": {
-      "get": {
-        "tags": [
-          "Agents"
-        ],
-        "operationId": "agents.streamAgentRunEvents",
-        "parameters": [
-          {
-            "name": "runId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "last-event-id",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "lastEventId",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "event": {
-                      "type": "string",
-                      "allOf": [
-                        {
-                          "minLength": 1
-                        },
-                        {
-                          "pattern": "\\S"
-                        },
-                        {
-                          "maxLength": 80
-                        }
-                      ]
-                    },
-                    "data": {
-                      "type": "string",
-                      "contentMediaType": "application/json"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "event",
-                    "data"
-                  ],
-                  "additionalProperties": false
-                },
-                "x-effect-stream": {
-                  "encoding": "sse",
-                  "causeSchema": {
-                    "type": "array",
-                    "items": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "_tag": {
-                              "type": "string",
-                              "enum": [
-                                "Fail"
-                              ]
-                            },
-                            "error": {
-                              "not": {}
-                            }
-                          },
-                          "required": [
-                            "_tag",
-                            "error"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "_tag": {
-                              "type": "string",
-                              "enum": [
-                                "Die"
-                              ]
-                            },
-                            "defect": {}
-                          },
-                          "required": [
-                            "_tag",
-                            "defect"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "_tag": {
-                              "type": "string",
-                              "enum": [
-                                "Interrupt"
-                              ]
-                            },
-                            "fiberId": {
-                              "anyOf": [
-                                {
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            }
-                          },
-                          "required": [
-                            "_tag",
-                            "fiberId"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    }
-                  },
-                  "errorSchema": {
-                    "not": {}
-                  },
-                  "failureEvent": "effect/httpapi/stream/failure"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/me/agent-instances/{agentInstanceId}/memories": {
-      "get": {
-        "tags": [
-          "Agents"
-        ],
-        "operationId": "agents.listAgentMemories",
-        "parameters": [
-          {
-            "name": "agentInstanceId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "AgentMemoryPage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentMemoryPage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Agents"
-        ],
-        "operationId": "agents.createAgentMemory",
-        "parameters": [
-          {
-            "name": "agentInstanceId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "AgentMemory",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentMemory"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "preference",
-                      "working_note"
-                    ]
-                  },
-                  "content": {
-                    "$ref": "#/components/schemas/Objects_3"
-                  },
-                  "expiresAt": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "content"
-                ],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}/approve": {
-      "post": {
-        "tags": [
-          "Agents"
-        ],
-        "operationId": "agents.approveAgentMemory",
-        "parameters": [
-          {
-            "name": "agentInstanceId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "memoryId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "AgentMemory",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentMemory"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ConflictProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}": {
-      "delete": {
-        "tags": [
-          "Agents"
-        ],
-        "operationId": "agents.deleteAgentMemory",
-        "parameters": [
-          {
-            "name": "agentInstanceId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "memoryId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ConflictProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
@@ -6617,6 +4401,31 @@
           "status"
         ],
         "additionalProperties": false
+      },
+      "Union_": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "Union_1": {
+        "anyOf": [
+          {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^(?!ff)[\\da-f]{2}-(?!0{32})[\\da-f]{32}-(?!0{16})[\\da-f]{16}-[\\da-f]{2}$"
+              }
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "LoginMethods": {
         "type": "object",
@@ -6732,14 +4541,7 @@
             ]
           },
           "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -6881,14 +4683,7 @@
             ]
           },
           "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -6940,14 +4735,7 @@
             ]
           },
           "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -6999,14 +4787,7 @@
             ]
           },
           "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -7058,14 +4839,7 @@
             ]
           },
           "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -7079,11 +4853,22 @@
       "JobStage": {
         "type": "string",
         "enum": [
-          "researching_sources",
-          "fetching_sources",
+          "selecting_articles",
+          "materializing_articles",
           "generating_script",
+          "preparing_pronunciation",
           "synthesizing_audio",
           "storing_episode"
+        ]
+      },
+      "Union_2": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
         ]
       },
       "EpisodeJob": {
@@ -7149,34 +4934,13 @@
             ]
           },
           "stageStartedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "lastProgressAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "deadlineAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "stageProgress": {
             "anyOf": [
@@ -7212,34 +4976,13 @@
             ]
           },
           "startedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "finishedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "nextAttemptAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "episodeId": {
             "anyOf": [
@@ -7388,14 +5131,7 @@
             ]
           },
           "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -7427,14 +5163,7 @@
             ]
           },
           "publishedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "snapshotId": {
             "anyOf": [
@@ -7586,22 +5315,6 @@
         ],
         "additionalProperties": false
       },
-      "AudioAccess": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "url",
-          "expiresAt"
-        ],
-        "additionalProperties": false
-      },
       "AddFeedSubscriptionRequest": {
         "type": "object",
         "properties": {
@@ -7722,6 +5435,15 @@
         ],
         "additionalProperties": false
       },
+      "Union_3": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "processing",
+          "succeeded",
+          "failed"
+        ]
+      },
       "FeedSyncJob": {
         "type": "object",
         "properties": {
@@ -7752,13 +5474,7 @@
             ]
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "processing",
-              "succeeded",
-              "failed"
-            ]
+            "$ref": "#/components/schemas/Union_3"
           },
           "attempt": {
             "type": "integer",
@@ -7803,24 +5519,10 @@
             "type": "string"
           },
           "startedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "completedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "error": {
             "anyOf": [
@@ -7919,13 +5621,7 @@
             ]
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "processing",
-              "succeeded",
-              "failed"
-            ]
+            "$ref": "#/components/schemas/Union_3"
           },
           "attempt": {
             "type": "integer",
@@ -7970,24 +5666,10 @@
             "type": "string"
           },
           "startedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "completedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "error": {
             "anyOf": [
@@ -8207,24 +5889,10 @@
             "type": "string"
           },
           "publishedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           },
           "discoveredAt": {
             "type": "string"
@@ -8267,44 +5935,16 @@
             "type": "boolean"
           },
           "hiddenAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "archiveUrl": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           },
           "markdownUrl": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           },
           "aiSummary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           },
           "relevanceScore": {
             "anyOf": [
@@ -8323,14 +5963,7 @@
             ]
           },
           "relevanceReason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -8504,6 +6137,16 @@
           "aiPending"
         ],
         "additionalProperties": false
+      },
+      "Union_4": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "Objects_": {
         "type": "object",
@@ -9151,6 +6794,27 @@
         ],
         "additionalProperties": false
       },
+      "Union_5": {
+        "anyOf": [
+          {
+            "type": "string",
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "\\S"
+              },
+              {
+                "maxLength": 100
+              }
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "EnrichQueueItem": {
         "type": "object",
         "properties": {
@@ -9202,47 +6866,19 @@
             ]
           },
           "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_"
           },
           "publishedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "createdAt": {
             "type": "string"
           },
           "startedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           },
           "completedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_2"
           }
         },
         "required": [
@@ -9373,307 +7009,6 @@
           "reprocessable"
         ],
         "additionalProperties": false
-      },
-      "AgentInstance": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                "format": "uuid"
-              }
-            ]
-          },
-          "agentKey": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
-            ]
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "agentKey",
-          "createdAt",
-          "updatedAt"
-        ],
-        "additionalProperties": false
-      },
-      "AgentInstancePage": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentInstance"
-            }
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "additionalProperties": false
-      },
-      "AgentRun": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                "format": "uuid"
-              }
-            ]
-          },
-          "jobId": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                "format": "uuid"
-              }
-            ]
-          },
-          "agentInstanceId": {
-            "anyOf": [
-              {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                    "format": "uuid"
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "model": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "running",
-              "waiting_approval",
-              "retrying",
-              "succeeded",
-              "failed",
-              "canceled"
-            ]
-          },
-          "policyHash": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 128
-              }
-            ]
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "finishedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "failureCode": {
-            "anyOf": [
-              {
-                "type": "string",
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "\\S"
-                  },
-                  {
-                    "maxLength": 100
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "jobId",
-          "agentInstanceId",
-          "model",
-          "status",
-          "policyHash",
-          "createdAt",
-          "finishedAt",
-          "failureCode"
-        ],
-        "additionalProperties": false
-      },
-      "Objects_3": {
-        "type": "object",
-        "additionalProperties": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "boolean"
-            },
-            {
-              "anyOf": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    "Infinity",
-                    "-Infinity",
-                    "NaN"
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "string"
-            }
-          ]
-        }
-      },
-      "AgentMemory": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                "format": "uuid"
-              }
-            ]
-          },
-          "agentInstanceId": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                "format": "uuid"
-              }
-            ]
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "preference",
-              "episode_history",
-              "working_note"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "proposed",
-              "active",
-              "rejected",
-              "deleted"
-            ]
-          },
-          "version": {
-            "type": "integer"
-          },
-          "content": {
-            "$ref": "#/components/schemas/Objects_3"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "agentInstanceId",
-          "kind",
-          "status",
-          "version",
-          "content",
-          "expiresAt",
-          "createdAt",
-          "updatedAt"
-        ],
-        "additionalProperties": false
-      },
-      "AgentMemoryPage": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentMemory"
-            }
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "additionalProperties": false
       }
     },
     "securitySchemes": {}
@@ -9703,9 +7038,6 @@
     },
     {
       "name": "Personalization"
-    },
-    {
-      "name": "Agents"
     }
   ]
 }

@@ -240,11 +240,7 @@ export const makeEpisodeJobPorts = (transport: Transport): EpisodeJobPorts => {
             snapshot: requireFoundJob(current),
             events:
               replay._tag === "Events"
-                ? Effect.forEach(replay.events, ({ sequence, job }) =>
-                    toEpisodeJob(job).pipe(
-                      Effect.map((projected) => ({ sequence, job: projected }))
-                    )
-                  )
+                ? Effect.succeed(replay.events)
                 : replay._tag === "NotFound"
                   ? Effect.fail(jobNotFound())
                   : Effect.fail(unavailable()),

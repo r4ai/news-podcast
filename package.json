@@ -28,6 +28,7 @@
     "parser:check": "node --test scripts/check-parser-boundaries.test.mjs && node scripts/check-parser-boundaries.mjs",
     "test:e2e": "pnpm --filter web test:e2e",
     "test:e2e:functional": "bash scripts/run-functional-e2e.sh",
+    "test:e2e:live": "pnpm --filter web test:e2e:live",
     "test:coverage:functional": "bash scripts/run-functional-coverage.sh",
     "test:coverage:reliability": "pnpm --filter @news-podcast/service-runtime test:coverage && pnpm --filter @news-podcast/nats-runtime test:coverage",
     "test:sqlite-state": "node --test scripts/sqlite-state.test.mjs",

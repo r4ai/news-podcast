@@ -13,6 +13,7 @@ import type {
   PipelineFailure,
 } from "../../application/ports/execution.js"
 import type { EpisodeId, JobId, OwnerId } from "../../domain/episode-job.js"
+import { parsePlayableWave } from "../../application/wave.js"
 
 export const MAX_WAV_BYTES = 128 * 1_024 * 1_024
 
@@ -82,21 +83,9 @@ const defaultDependencies: S3AudioObjectStoreDependencies = Object.freeze({
   keyFor: defaultKeyFor,
 })
 
-const ascii = (bytes: Uint8Array, offset: number, value: string): boolean =>
-  [...value].every(
-    (character, index) => bytes[offset + index] === character.charCodeAt(0)
-  )
-
 const isBoundedWav = (bytes: Uint8Array): boolean => {
   if (bytes.byteLength < 44 || bytes.byteLength > MAX_WAV_BYTES) return false
-  if (!ascii(bytes, 0, "RIFF") || !ascii(bytes, 8, "WAVE")) return false
-  return (
-    new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(
-      4,
-      true
-    ) ===
-    bytes.byteLength - 8
-  )
+  return parsePlayableWave(bytes) !== undefined
 }
 
 const SAFE_KEY =

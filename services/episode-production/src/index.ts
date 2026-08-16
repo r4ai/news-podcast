@@ -5,6 +5,12 @@ export {
   type OpenAiScriptGeneratorDependencies,
 } from "./adapters/providers/openai-script-generator.js"
 export {
+  makeNoopReadingTermExtractor,
+  makeOpenAiReadingTermExtractor,
+  type OpenAiReadingTermExtractorConfig,
+  type OpenAiReadingTermExtractorDependencies,
+} from "./adapters/providers/openai-reading-term-extractor.js"
+export {
   makeVoicevoxSpeechSynthesizer,
   type VoicevoxSpeechSynthesizerConfig,
   type VoicevoxSpeechSynthesizerDependencies,
@@ -32,10 +38,6 @@ export {
   type SqliteExecutionRepository,
 } from "./adapters/persistence/execution/repository.js"
 export {
-  agentAuditMemoryRepository,
-  type SqliteAgentAuditMemoryRepository,
-} from "./adapters/persistence/agent-audit/repository.js"
-export {
   readingDictionaryRepository,
   type SqliteReadingDictionaryRepository,
 } from "./adapters/persistence/reading-dictionary/repository.js"
@@ -48,27 +50,6 @@ export {
   type S3AudioObjectStoreResource,
 } from "./infrastructure/unsafe/s3-audio-object-store.js"
 export { createJob, type CreateJobPorts } from "./application/create-job.js"
-export {
-  appendAgentAuditEvent,
-  decideAgentMemory,
-  ensureAgentInstance,
-  getOwnedAgentRun,
-  listAgentInstances,
-  listAgentMemories,
-  proposeAgentMemory,
-  recordAgentRun,
-  replayAgentAuditEvents,
-  softDeleteAgentMemory,
-  transitionOwnedAgentRun,
-  type AgentAuditMemoryRepository,
-  type AgentAuditMemoryStoreError,
-  type AppendAgentAuditEventResult,
-  type DecideAgentMemoryResult,
-  type DeleteAgentMemoryResult,
-  type ListAgentMemoriesResult,
-  type RecordAgentRunResult,
-  type TransitionAgentRunResult,
-} from "./application/agent-audit-memory.js"
 export {
   cancelOwnedJob,
   getOwnedJob,
@@ -95,6 +76,7 @@ export {
   createReadingDictionaryEntry,
   deleteReadingDictionaryEntry,
   listReadingDictionaryEntries,
+  prepareReadingDictionary,
   updateReadingDictionaryEntry,
   type CreateReadingDictionaryResult,
   type DeleteReadingDictionaryResult,
@@ -103,6 +85,7 @@ export {
   type ReadingDictionaryStoreError,
   type UpdateReadingDictionaryResult,
 } from "./application/reading-dictionary.js"
+export * from "./application/ports/reading-term-extractor.js"
 export * from "./application/ports/script-generator.js"
 export * from "./application/ports/speech-synthesizer.js"
 export {
@@ -110,11 +93,6 @@ export {
   type ReadingDictionaryRpcDelivery,
   type ReadingDictionaryRpcDependencies,
 } from "./adapters/rpc/reading-dictionary.js"
-export {
-  makeAgentAuditRpcHandler,
-  type AgentAuditRpcDelivery,
-  type AgentAuditRpcDependencies,
-} from "./adapters/rpc/agent-audit.js"
 export { makeIdentityScheduleClient } from "./adapters/rpc/identity-schedule-client.js"
 export {
   runScheduledGenerationLoop,
@@ -124,7 +102,6 @@ export {
   type ScheduledGenerationPorts,
 } from "./application/scheduled-generation.js"
 export * from "./domain/episode-job.js"
-export * from "./domain/agent-audit-memory.js"
 export * from "./domain/provider-reliability.js"
 export * from "./domain/reading-dictionary.js"
 export {

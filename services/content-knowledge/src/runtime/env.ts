@@ -62,9 +62,7 @@ export const readContentKnowledgeConfig = (
       dailyLimit: decimalInteger(env.CONTENT_ENRICH_DAILY_LIMIT),
       provider: enrichmentProviderEnabled
         ? {
-            endpoint:
-              env.OPENAI_RESPONSES_URL?.trim() ||
-              "https://api.openai.com/v1/responses",
+            apiUrl: env.OPENAI_API_URL?.trim() || "https://api.openai.com/v1",
             apiKey: openAiApiKey,
             model: openAiModel,
             requestTimeoutMillis: decimalInteger(

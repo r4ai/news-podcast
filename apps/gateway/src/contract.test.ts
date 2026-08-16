@@ -32,14 +32,8 @@ describe("gateway HttpApi contract", () => {
       "/v1/episode-jobs/{jobId}/retry",
       "/v1/episodes",
       "/v1/episodes/{episodeId}",
-      "/v1/episodes/{episodeId}/audio-access",
+      "/v1/episodes/{episodeId}/audio",
       "/v1/feeds",
-      "/v1/me/agent-instances",
-      "/v1/me/agent-instances/{agentInstanceId}/memories",
-      "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}",
-      "/v1/me/agent-instances/{agentInstanceId}/memories/{memoryId}/approve",
-      "/v1/me/agent-runs/{runId}",
-      "/v1/me/agent-runs/{runId}/events",
       "/v1/me/articles",
       "/v1/me/articles/bulk-state",
       "/v1/me/articles/facets",
@@ -71,8 +65,7 @@ describe("gateway HttpApi contract", () => {
       specification.paths["/v1/episode-jobs"]?.post?.responses
     ).toHaveProperty("202")
     expect(
-      specification.paths["/v1/episodes/{episodeId}/audio-access"]?.post
-        ?.responses
+      specification.paths["/v1/episodes/{episodeId}/audio"]?.get?.responses
     ).toHaveProperty("404")
     expect(
       specification.paths["/v1/me/feed-subscriptions"]?.post?.responses

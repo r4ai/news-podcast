@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import type { AgUiEvent, EpisodeJobState } from "@news-podcast/contracts/agui"
+import type {
+  EpisodeJobAgUiEvent,
+  EpisodeJobState,
+} from "@news-podcast/contracts/agui"
 
 import {
   emptyGenerationStream,
@@ -8,7 +11,6 @@ import {
   reduceGenerationStream,
   resolvedJobStatus,
   selectionLabel,
-  toolLabel,
   type GenerationStream,
 } from "./model"
 
@@ -17,232 +19,125 @@ const snapshot: EpisodeJobState = {
   status: "running",
   attempt: 1,
   maxAttempts: 4,
-  adoptedArticles: [],
+  selectionMode: "automatic",
+  selectedArticles: [],
 }
 
-function reduceAll(events: readonly AgUiEvent[]): GenerationStream {
-  return events.reduce(reduceGenerationStream, emptyGenerationStream)
-}
-
-const at = (timestamp = 1) => ({ timestamp })
+const reduceAll = (events: readonly EpisodeJobAgUiEvent[]): GenerationStream =>
+  events.reduce(reduceGenerationStream, emptyGenerationStream)
 
 describe("reduceGenerationStream", () => {
-  it("builds the timeline from a full run", () => {
+  it("builds a stage timeline from standard AG-UI events", () => {
     const result = reduceAll([
-      { ...at(), type: "STATE_SNAPSHOT", snapshot },
-      { ...at(), type: "RUN_STARTED", threadId: "job-1", runId: "job-1" },
-      { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
+      { type: "STATE_SNAPSHOT", timestamp: 1, snapshot },
       {
-        ...at(),
-        type: "TOOL_CALL_START",
-        toolCallId: "t1",
-        toolCallName: "read_article",
+        type: "RUN_STARTED",
+        timestamp: 2,
+        threadId: "job-1",
+        runId: "job-1:attempt:1",
       },
-      { ...at(), type: "TOOL_CALL_ARGS", toolCallId: "t1", delta: '{"id":1}' },
       {
-        ...at(),
-        type: "TOOL_CALL_RESULT",
-        messageId: "t1",
-        toolCallId: "t1",
-        content: '{"title":"記事"}',
+        type: "STEP_STARTED",
+        timestamp: 3,
+        stepName: "selecting_articles",
       },
-      { ...at(), type: "STEP_FINISHED", stepName: "researching_sources" },
+      {
+        type: "STEP_FINISHED",
+        timestamp: 4,
+        stepName: "selecting_articles",
+      },
     ])
 
     expect(result.timeline).toEqual([
       {
         kind: "step",
-        stepName: "researching_sources",
-        label: "記事を調査中",
-        done: true,
-      },
-      {
-        kind: "tool",
-        toolCallId: "t1",
-        name: "read_article",
-        label: "記事を読む",
-        args: '{"id":1}',
-        result: '{"title":"記事"}',
+        stepName: "selecting_articles",
+        label: "記事を選定中",
         done: true,
       },
     ])
-    expect(result.finished).toBe(false)
   })
 
-  it("accumulates adopted articles from state deltas and ignores repeats", () => {
-    const adopt = (articleId: string): AgUiEvent => ({
-      ...at(),
-      type: "STATE_DELTA",
-      delta: [
-        {
-          op: "add",
-          path: "/adoptedArticles/-",
-          value: {
-            articleId,
-            title: `記事 ${articleId}`,
-            url: `https://example.com/${articleId}`,
-            sourceName: "テスト",
+  it("replaces selected articles from a state snapshot", () => {
+    const result = reduceAll([
+      {
+        type: "STATE_SNAPSHOT",
+        snapshot: {
+          ...snapshot,
+          selectedArticles: [
+            { articleId: "a", title: "記事 a", sourceName: "Zenn" },
+          ],
+        },
+      },
+    ])
+    expect(result.adoptedArticles).toEqual([
+      { articleId: "a", title: "記事 a", sourceName: "Zenn" },
+    ])
+  })
+
+  it("closes unfinished stages on retry errors and resumes the next run", () => {
+    const errored = reduceAll([
+      { type: "STATE_SNAPSHOT", snapshot },
+      { type: "STEP_STARTED", stepName: "generating_script" },
+      {
+        type: "RUN_ERROR",
+        message: "Episode generation will be retried",
+        code: "script_unavailable",
+      },
+      {
+        type: "STATE_SNAPSHOT",
+        snapshot: {
+          ...snapshot,
+          status: "retrying",
+          failure: {
+            code: "script_unavailable",
+            message: "Episode generation will be retried",
+            retryable: true,
           },
         },
-      ],
+      },
+    ])
+    expect(errored.timeline.every((entry) => entry.done)).toBe(true)
+    expect(errored.state?.status).toBe("retrying")
+
+    const resumed = reduceGenerationStream(errored, {
+      type: "RUN_STARTED",
+      threadId: "job-1",
+      runId: "job-1:attempt:2",
     })
-
-    // 同じイベントを2回受けても重複しない（リプレイ後の重複配信に耐える）。
-    const result = reduceAll([adopt("a"), adopt("b"), adopt("a")])
-
-    expect(result.adoptedArticles.map((it) => it.articleId)).toEqual(["a", "b"])
-  })
-
-  it("tracks TTS progress through replace deltas", () => {
-    const result = reduceAll([
-      { ...at(), type: "STATE_SNAPSHOT", snapshot },
-      {
-        ...at(),
-        type: "STATE_DELTA",
-        delta: [
-          {
-            op: "replace",
-            path: "/progress",
-            value: { completed: 1, total: 4 },
-          },
-        ],
-      },
-      {
-        ...at(),
-        type: "STATE_DELTA",
-        delta: [
-          {
-            op: "replace",
-            path: "/progress",
-            value: { completed: 3, total: 4 },
-          },
-        ],
-      },
-    ])
-
-    expect(result.state?.progress).toEqual({ completed: 3, total: 4 })
-  })
-
-  it("marks the run finished on RUN_FINISHED", () => {
-    const result = reduceAll([
-      { ...at(), type: "STATE_SNAPSHOT", snapshot },
-      { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
-      { ...at(), type: "RUN_FINISHED", threadId: "job-1", runId: "job-1" },
-    ])
-
-    expect(result.finished).toBe(true)
-    expect(result.state?.status).toBe("succeeded")
-    expect(result.timeline.every((entry) => entry.done)).toBe(true)
-  })
-
-  it("records a failure from RUN_ERROR", () => {
-    const result = reduceAll([
-      { ...at(), type: "STATE_SNAPSHOT", snapshot },
-      { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
-      {
-        ...at(),
-        type: "TOOL_CALL_START",
-        toolCallId: "t1",
-        toolCallName: "read_article",
-      },
-      {
-        ...at(),
-        type: "RUN_ERROR",
-        message: "timeout",
-        code: "provider-timeout",
-      },
-    ])
-
-    expect(result.state?.status).toBe("failed")
-    expect(result.state?.failure).toEqual({
-      code: "provider-timeout",
-      message: "timeout",
-    })
-    expect(result.timeline.every((entry) => entry.done)).toBe(true)
-  })
-
-  it("distinguishes cancellation from failure", () => {
-    const result = reduceAll([
-      { ...at(), type: "STATE_SNAPSHOT", snapshot },
-      { ...at(), type: "RUN_ERROR", message: "Canceled", code: "canceled" },
-    ])
-
-    expect(result.state?.status).toBe("canceled")
-  })
-
-  it("does not duplicate a step when STEP_STARTED arrives twice", () => {
-    const result = reduceAll([
-      { ...at(), type: "STEP_STARTED", stepName: "synthesizing_audio" },
-      { ...at(), type: "STEP_STARTED", stepName: "synthesizing_audio" },
-    ])
-
-    expect(result.timeline).toHaveLength(1)
-  })
-
-  it("stops active work while retrying and resumes it on the next attempt", () => {
-    const result = reduceAll([
-      { ...at(), type: "STATE_SNAPSHOT", snapshot },
-      { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
-      {
-        ...at(),
-        type: "CUSTOM",
-        name: "job.retrying",
-        value: { nextAttemptAt: "2026-08-12T01:00:00.000Z" },
-      },
-    ])
-
-    expect(result.state?.status).toBe("retrying")
-    expect(result.timeline.every((entry) => entry.done)).toBe(true)
-
-    const resumed = (
-      [
-        { ...at(), type: "RUN_STARTED", threadId: "job-1", runId: "job-1" },
-        { ...at(), type: "STEP_STARTED", stepName: "researching_sources" },
-      ] satisfies AgUiEvent[]
-    ).reduce(reduceGenerationStream, result)
     expect(resumed.state?.status).toBe("running")
-    expect(resumed.timeline.at(-1)?.done).toBe(false)
   })
 
-  it("keeps unknown events from breaking the stream", () => {
+  it("finishes the run and any unfinished stage", () => {
     const result = reduceAll([
-      { ...at(), type: "CUSTOM", name: "job.retrying", value: {} },
+      { type: "STATE_SNAPSHOT", snapshot },
+      { type: "STEP_STARTED", stepName: "storing_episode" },
+      {
+        type: "RUN_FINISHED",
+        threadId: "job-1",
+        runId: "job-1:attempt:1",
+        outcome: { type: "success" },
+      },
     ])
-
-    expect(result).toEqual(emptyGenerationStream)
+    expect(result.finished).toBe(true)
+    expect(result.timeline.every((entry) => entry.done)).toBe(true)
   })
 })
 
-describe("failureRecovery", () => {
+describe("view model helpers", () => {
   it.each([
     ["content_materialization_invalid", "reselect"],
     ["script_unavailable", "retry"],
     ["speech_malformed_response", "admin"],
-    ["script_client_error", "admin"],
-    ["script_refusal", "admin"],
-    ["speech_unexpected_status", "admin"],
-    ["provider_malformedresponse", "retry"],
     ["checkpoint_corruption", "admin"],
-    ["audio_storage_failure", "admin"],
     ["invalid_script_sources", "new"],
   ] as const)("maps %s to %s", (code, expected) => {
     expect(failureRecovery(code)).toBe(expected)
   })
-})
 
-describe("labels", () => {
-  it("uses the terminal SSE status before the polling response catches up", () => {
+  it("prefers terminal streamed state and formats selection counts", () => {
     expect(resolvedJobStatus("succeeded", "running")).toBe("succeeded")
     expect(resolvedJobStatus(undefined, "running")).toBe("running")
-    expect(resolvedJobStatus(undefined, undefined)).toBe("ready")
-  })
-
-  it("falls back to the raw tool name when unmapped", () => {
-    expect(toolLabel("web_search")).toBe("Webで裏取り")
-    expect(toolLabel("mystery_tool")).toBe("mystery_tool")
-  })
-
-  it("prompts for a selection when nothing is chosen", () => {
     expect(selectionLabel(0)).toBe("記事を選択してください")
     expect(selectionLabel(3)).toBe("3/20件を選択中")
   })

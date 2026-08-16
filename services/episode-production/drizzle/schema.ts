@@ -56,6 +56,16 @@ export const episodeJobs = sqliteTable(
     cancelReason: text("cancel_reason", {
       enum: ["requested_by_user", "service_shutdown"],
     }),
+    currentStage: text("current_stage", {
+      enum: [
+        "selecting_articles",
+        "materializing_articles",
+        "generating_script",
+        "preparing_pronunciation",
+        "synthesizing_audio",
+        "storing_episode",
+      ],
+    }),
   },
   (table) => [
     unique("episode_jobs_owner_idempotency").on(
@@ -118,28 +128,60 @@ export const episodeJobArticles = sqliteTable(
   ]
 )
 
-/**
- * 状態遷移の記録。以前は episode_jobs のトリガが materialize していたが、
- * 遷移を書く側が同一トランザクションで明示的に積む。
- * イベントは不変なので、その時点の姿を payload として保持する。
- */
-export const episodeJobStatusEvents = sqliteTable(
-  "episode_job_status_events",
+/** Latest preferences and ordered articles are frozen once, before materialization. */
+export const episodeGenerationPlans = sqliteTable(
+  "episode_generation_plans",
+  {
+    jobId: text("job_id")
+      .primaryKey()
+      .references(() => episodeJobs.jobId, { onDelete: "cascade" }),
+    ownerId: text("owner_id").notNull(),
+    selectionMode: text("selection_mode", {
+      enum: ["automatic", "manual"],
+    }).notNull(),
+    profileInclude: text("profile_include").notNull(),
+    profileExclude: text("profile_exclude").notNull(),
+    selectedArticleIds: text("selected_article_ids").notNull(),
+    selectedArticles: text("selected_articles").notNull().default("[]"),
+    model: text("model").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "episode_generation_plans_selection_mode_check",
+      sql`${table.selectionMode} IN ('automatic', 'manual')`
+    ),
+    check(
+      "episode_generation_plans_article_ids_json_check",
+      sql`json_valid(${table.selectedArticleIds}) AND json_array_length(${table.selectedArticleIds}) BETWEEN 1 AND 20`
+    ),
+  ]
+)
+
+/** Durable, replayable AG-UI wire events. */
+export const episodeJobAguiEvents = sqliteTable(
+  "episode_job_agui_events",
   {
     sequence: integer("sequence").primaryKey({ autoIncrement: true }),
     jobId: text("job_id")
       .notNull()
       .references(() => episodeJobs.jobId, { onDelete: "cascade" }),
     ownerId: text("owner_id").notNull(),
-    status: text("status", { enum: JOB_STATUSES }).notNull(),
+    runId: text("run_id").notNull(),
+    eventType: text("event_type").notNull(),
     occurredAt: text("occurred_at").notNull(),
-    document: text("document").notNull(),
+    payload: text("payload").notNull(),
+    eventKey: text("event_key").notNull().unique(),
   },
   (table) => [
-    index("episode_job_status_events_owner_cursor").on(
+    index("episode_job_agui_events_owner_cursor").on(
       table.ownerId,
       table.jobId,
       table.sequence
+    ),
+    check(
+      "episode_job_agui_events_payload_check",
+      sql`json_valid(${table.payload})`
     ),
   ]
 )
@@ -218,159 +260,6 @@ export const readingDictionary = sqliteTable(
     check(
       "reading_dictionary_source_check",
       sql`${table.source} IN ('manual', 'ai_auto')`
-    ),
-  ]
-)
-
-// ---------------------------------------------------------------------------
-// エージェント監査
-// ---------------------------------------------------------------------------
-
-export const productionAgentInstances = sqliteTable(
-  "production_agent_instances",
-  {
-    id: text("id").primaryKey(),
-    ownerId: text("owner_id").notNull(),
-    agentKey: text("agent_key").notNull(),
-    createdAt: text("created_at").notNull(),
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    unique("production_agent_instances_owner_key").on(
-      table.ownerId,
-      table.agentKey
-    ),
-  ]
-)
-
-export const productionAgentRuns = sqliteTable(
-  "production_agent_runs",
-  {
-    id: text("id").primaryKey(),
-    jobId: text("job_id")
-      .notNull()
-      .references(() => episodeJobs.jobId, { onDelete: "cascade" }),
-    ownerId: text("owner_id").notNull(),
-    agentInstanceId: text("agent_instance_id").references(
-      () => productionAgentInstances.id,
-      { onDelete: "set null" }
-    ),
-    model: text("model").notNull(),
-    status: text("status", {
-      enum: [
-        "queued",
-        "running",
-        "waiting_approval",
-        "retrying",
-        "succeeded",
-        "failed",
-        "canceled",
-      ],
-    }).notNull(),
-    policyHash: text("policy_hash").notNull(),
-    createdAt: text("created_at").notNull(),
-    finishedAt: text("finished_at"),
-    failureCode: text("failure_code"),
-  },
-  (table) => [
-    index("production_agent_runs_owner_status").on(
-      table.ownerId,
-      table.status,
-      sql`${table.createdAt} DESC`,
-      table.id
-    ),
-    check(
-      "production_agent_runs_status_check",
-      sql`${table.status} IN ('queued', 'running', 'waiting_approval', 'retrying', 'succeeded', 'failed', 'canceled')`
-    ),
-  ]
-)
-
-export const productionAgentEvents = sqliteTable(
-  "production_agent_events",
-  {
-    runId: text("run_id")
-      .notNull()
-      .references(() => productionAgentRuns.id, { onDelete: "cascade" }),
-    sequence: integer("sequence").notNull(),
-    eventType: text("event_type").notNull(),
-    payloadJson: text("payload_json").notNull(),
-    occurredAt: text("occurred_at").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.runId, table.sequence] }),
-    check(
-      "production_agent_events_sequence_check",
-      sql`${table.sequence} >= 0`
-    ),
-    check(
-      "production_agent_events_payload_check",
-      sql`json_valid(${table.payloadJson})`
-    ),
-  ]
-)
-
-export const productionAgentMemories = sqliteTable(
-  "production_agent_memories",
-  {
-    id: text("id").primaryKey(),
-    ownerId: text("owner_id").notNull(),
-    agentInstanceId: text("agent_instance_id")
-      .notNull()
-      .references(() => productionAgentInstances.id, { onDelete: "cascade" }),
-    kind: text("kind", {
-      enum: ["preference", "episode_history", "working_note"],
-    }).notNull(),
-    status: text("status", {
-      enum: ["proposed", "active", "rejected", "deleted"],
-    }).notNull(),
-    currentVersion: integer("current_version").notNull(),
-    expiresAt: text("expires_at"),
-    createdAt: text("created_at").notNull(),
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("production_agent_memories_scope").on(
-      table.ownerId,
-      table.agentInstanceId,
-      table.status,
-      table.kind,
-      table.id
-    ),
-    check(
-      "production_agent_memories_kind_check",
-      sql`${table.kind} IN ('preference', 'episode_history', 'working_note')`
-    ),
-    check(
-      "production_agent_memories_status_check",
-      sql`${table.status} IN ('proposed', 'active', 'rejected', 'deleted')`
-    ),
-    check(
-      "production_agent_memories_version_check",
-      sql`${table.currentVersion} >= 1`
-    ),
-  ]
-)
-
-export const productionAgentMemoryVersions = sqliteTable(
-  "production_agent_memory_versions",
-  {
-    memoryId: text("memory_id")
-      .notNull()
-      .references(() => productionAgentMemories.id, { onDelete: "cascade" }),
-    version: integer("version").notNull(),
-    contentJson: text("content_json").notNull(),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.memoryId, table.version] }),
-    check(
-      "production_agent_memory_versions_version_check",
-      sql`${table.version} >= 1`
-    ),
-    check(
-      "production_agent_memory_versions_content_check",
-      sql`json_valid(${table.contentJson})`
     ),
   ]
 )

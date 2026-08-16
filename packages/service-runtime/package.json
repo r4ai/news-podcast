@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@news-podcast/kernel": "workspace:*",
-    "effect": "4.0.0-beta.102"
+    "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
     "@types/node": "24.12.4",

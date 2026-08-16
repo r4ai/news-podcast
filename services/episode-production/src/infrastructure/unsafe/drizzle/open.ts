@@ -28,8 +28,8 @@ const migrationsFolder = join(
 /**
  * 接続確立とマイグレーション適用をまとめた唯一の入口。
  *
- * 以前は1プロセスで同じDBファイルへ6本の接続を開いており、
- * production_agent_runs → episode_jobs の外部キーが接続をまたいでいた。
+ * 以前は1プロセスで同じDBファイルへ6本の接続を開いていたため、
+ * foreign keyとtransactionの境界が接続をまたいでいた。
  * サービスプロセスにつき1本へ集約する。
  */
 export const openProductionDatabaseUnsafe = (

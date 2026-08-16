@@ -23,6 +23,7 @@ describe("versioned NATS subjects", () => {
         listFeedCatalog: "content.list-feed-catalog.v1",
         listFeedSyncJobs: "content.list-feed-sync-jobs.v1",
         materializeArticles: "content.materialize-articles.v1",
+        planGeneration: "content.plan-generation.v1",
         personalization: "content.personalization.v1",
       },
       production: {
@@ -33,7 +34,6 @@ describe("versioned NATS subjects", () => {
         cancelJob: "production.cancel-job.v1",
         retryJob: "production.retry-job.v1",
         readingDictionary: "production.reading-dictionary.v1",
-        agentAuditMemory: "production.agent-audit-memory.v1",
         jobCompleted: "production.job-completed.v1",
         jobCompletedV2: "production.job-completed.v2",
       },

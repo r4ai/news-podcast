@@ -115,11 +115,7 @@ export type FakeApi = {
  * 検知できなくなる(実際に本文Markdownで起きた)。`fake-api.contract.test.ts`
  * がOpenAPIとの一致を検査するので、応答を変える時はそちらも通すこと。
  */
-export function createFakeApi({
-  webPort,
-}: {
-  readonly webPort: number
-}): FakeApi {
+export function createFakeApi(): FakeApi {
   const articles = seedArticles()
   const state = {
     subscription: { id: subscriptionId, feedId, enabled: true, createdAt },
@@ -290,16 +286,13 @@ export function createFakeApi({
     if (path === "/v1/episodes") {
       return json({ items: state.episodes, page: { hasMore: false } })
     }
-    const audioMatch = path.match(/^\/v1\/episodes\/([^/]+)\/audio-access$/)
-    if (audioMatch && request.method === "POST") {
-      return json({
-        url: `http://127.0.0.1:${webPort}/v1/audio/e2e-token`,
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      })
-    }
-    if (path === "/v1/audio/e2e-token") {
+    const audioMatch = path.match(/^\/v1\/episodes\/([^/]+)\/audio$/)
+    if (audioMatch && request.method === "GET") {
       return new Response(silentWave(), {
-        headers: { "Content-Type": "audio/wav" },
+        headers: {
+          "Accept-Ranges": "bytes",
+          "Content-Type": "audio/wav",
+        },
       })
     }
 
@@ -313,11 +306,50 @@ function eventStream(job: Job, articles: FakeApi["articles"]): Response {
   const adopted = {
     articleId: job.articleIds[0] ?? articles[0]!.id,
     title: "ローカルE2Eニュース",
-    url: "https://example.com/local-news",
     sourceName: "開発ニュース",
   }
   const now = Date.now()
+  const runId = `${job.id}:attempt:1`
   const events = [
+    {
+      type: "STATE_SNAPSHOT",
+      timestamp: now,
+      snapshot: {
+        jobId: job.id,
+        status: "running",
+        attempt: 1,
+        maxAttempts: 4,
+        selectionMode: "manual",
+        selectedArticles: [adopted],
+        currentStage: "selecting_articles",
+      },
+    },
+    {
+      type: "RUN_STARTED",
+      timestamp: now,
+      threadId: job.id,
+      runId,
+    },
+    {
+      type: "STEP_STARTED",
+      timestamp: now,
+      stepName: "selecting_articles",
+    },
+    {
+      type: "STEP_FINISHED",
+      timestamp: now,
+      stepName: "selecting_articles",
+    },
+    {
+      type: "STEP_STARTED",
+      timestamp: now,
+      stepName: "materializing_articles",
+    },
+    {
+      type: "STEP_FINISHED",
+      timestamp: now,
+      stepName: "materializing_articles",
+    },
     {
       type: "STATE_SNAPSHOT",
       timestamp: now,
@@ -326,32 +358,22 @@ function eventStream(job: Job, articles: FakeApi["articles"]): Response {
         status: "succeeded",
         attempt: 1,
         maxAttempts: 4,
-        adoptedArticles: [adopted],
+        selectionMode: "manual",
+        selectedArticles: [adopted],
         episodeId: job.episodeId,
       },
     },
     {
-      type: "TOOL_CALL_START",
+      type: "RUN_FINISHED",
       timestamp: now,
-      toolCallId: "read-article",
-      toolCallName: "read_article",
+      threadId: job.id,
+      runId,
+      outcome: { type: "success" },
     },
-    {
-      type: "STATE_DELTA",
-      timestamp: now,
-      delta: [{ op: "add", path: "/adoptedArticles/-", value: adopted }],
-    },
-    {
-      type: "TOOL_CALL_END",
-      timestamp: now,
-      toolCallId: "read-article",
-    },
-    { type: "RUN_FINISHED", timestamp: now, threadId: job.id, runId: job.id },
   ]
   const body = events
     .map(
-      (event, index) =>
-        `id: ${index + 1}\nevent: message\ndata: ${JSON.stringify(event)}\n\n`
+      (event, index) => `id: ${index + 1}\ndata: ${JSON.stringify(event)}\n\n`
     )
     .join("")
   return new Response(body, {
@@ -381,8 +403,8 @@ function json(
 // バッファ型が確定する`new Uint8Array`で作る。
 function silentWave(): Uint8Array<ArrayBuffer> {
   return new Uint8Array([
-    82, 73, 70, 70, 36, 0, 0, 0, 87, 65, 86, 69, 102, 109, 116, 32, 16, 0, 0, 0,
+    82, 73, 70, 70, 38, 0, 0, 0, 87, 65, 86, 69, 102, 109, 116, 32, 16, 0, 0, 0,
     1, 0, 1, 0, 68, 172, 0, 0, 136, 88, 1, 0, 2, 0, 16, 0, 100, 97, 116, 97, 0,
-    0, 0, 0,
+    2, 0, 0, 0, 0, 0,
   ])
 }

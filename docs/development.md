@@ -44,8 +44,9 @@ pnpm dev:down
 
 ```mermaid
 flowchart LR
-  Browser["Browser :4173"] --> Web["Vite Web"]
-  Web --> Gateway["Effect Gateway :4001"]
+  Browser["Browser :4173"] --> Edge["Nginx static + reverse proxy"]
+  Edge --> Web["React assets"]
+  Edge --> Gateway["Effect Gateway :4001"]
   Gateway -->|"auth HTTP proxy"| Identity["Identity Access"]
   Gateway <-->|"versioned NATS RPC"| Identity
   Gateway <-->|"versioned NATS RPC"| Content["Content Knowledge"]
@@ -55,7 +56,8 @@ flowchart LR
   Content --> S3[("SeaweedFS S3")]
   Production --> S3
   Library --> S3
-  Production --> OpenAI["OpenAI"]
+  Content --> OpenAI["OpenAI via Effect AI"]
+  Production --> OpenAI
   Production --> Voicevox["VOICEVOX"]
 ```
 
@@ -115,7 +117,18 @@ pnpm dev:up:observed # 同じlive providerをGrafanaで観測
 
 VOICEVOXへの長文入力は、音声推論のpeak memoryを抑えるため既定で200文字ごとに逐次合成する。`VOICEVOX_MAXIMUM_TEXT_CHARACTERS`を増やす場合は、実際の台本長でVOICEVOXコンテナのpeak memoryを確認すること。VOICEVOXは一時的なprocess停止やOOM後にComposeが再起動し、Episode Productionの有界retryが回復後の処理を引き継ぐ。
 
-本番生成はownerが選択しContentが版固定した記事だけを入力にする。Episode ProductionはOpenAI Responses APIへstrict JSON schema、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0038](adr/0038-bounded-structured-production-generation.md)）。
+本番生成はownerが選択しContentが版固定した記事だけを入力にする。Content KnowledgeとEpisode Productionは共通の`packages/ai-runtime`を通じてEffect AIの`LanguageModel.generateObject`を使い、strict structured output、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0057](adr/0057-effect-ai-as-llm-boundary.md)）。
+
+起動済みlive stackをOpenAPIからブラウザ操作し、実際の記事選択、OpenAI台本生成、VOICEVOX音声合成、durable AG-UI replay、Libraryでの再生まで検証する場合は、明示的に環境変数を読み込んで次を実行する。これはOpenAIへの課金requestを発生させる。
+
+```bash
+set -a
+. ./.env
+set +a
+pnpm test:e2e:live
+```
+
+進捗wire契約、`Last-Event-ID`、標準eventとtransport拡張の境界は[Episode Job進捗プロトコル](protocols/episode-job-ag-ui.md)を正本とする。
 
 ## OpenAPI契約
 
@@ -136,7 +149,7 @@ pnpm contract:check
 pnpm contract:lint
 ```
 
-`pnpm dev:up`または`pnpm dev:up:observed`の起動後、Scalarは <http://localhost:4001/docs>、OpenAPI JSONは <http://localhost:4001/openapi.json> で確認できる。Web開発サーバー経由では <http://localhost:4173/docs> も利用できる。
+`pnpm dev:up`または`pnpm dev:up:observed`の起動後、ブラウザ向けの正規入口は <http://localhost:4173> だけである。Scalarは <http://localhost:4173/docs>、OpenAPI JSONは <http://localhost:4173/openapi.json> で確認できる。`4001`はGateway単体診断用にlocalhostへ限定公開する。
 
 契約変更では生成物を同じ変更に含め、`contract:check`で差分がないことを確認する。Better Authの`/api/auth/**`は認証provider側の契約で、アプリOpenAPIへ複製しない。
 
@@ -169,6 +182,7 @@ pnpm audit --audit-level=high
 | `pnpm test:coverage:functional` | 8 functional packagesのlines 75% / branches 60% |
 | `pnpm test:coverage:reliability` | 共通Supervisor/NATS loopのlines/branches 90%以上 |
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
+| `pnpm test:e2e:live` | 起動済みlive stackのOpenAPI・画面生成・AG-UI再開・音声再生（課金あり） |
 | `pnpm provider-contract:check` | 匿名化した外部契約fixtureのoffline検査 |
 | `pnpm test:e2e` | Web主要journey |
 | `pnpm test:sqlite-state` | service別backup/restore拒否規則 |

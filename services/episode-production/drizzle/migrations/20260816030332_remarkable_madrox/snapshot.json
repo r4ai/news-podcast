@@ -1,0 +1,1522 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "8d201b9d-e995-40b5-85b7-0ff626582aa0",
+  "prevIds": ["5063d18e-8b60-453f-b794-db4d7a238f72"],
+  "ddl": [
+    {
+      "name": "episode_completion_outbox",
+      "entityType": "tables"
+    },
+    {
+      "name": "episode_dictionary_snapshots",
+      "entityType": "tables"
+    },
+    {
+      "name": "episode_execution_checkpoints",
+      "entityType": "tables"
+    },
+    {
+      "name": "episode_generation_plans",
+      "entityType": "tables"
+    },
+    {
+      "name": "episode_job_agui_events",
+      "entityType": "tables"
+    },
+    {
+      "name": "episode_job_articles",
+      "entityType": "tables"
+    },
+    {
+      "name": "episode_jobs",
+      "entityType": "tables"
+    },
+    {
+      "name": "production_agent_events",
+      "entityType": "tables"
+    },
+    {
+      "name": "production_agent_instances",
+      "entityType": "tables"
+    },
+    {
+      "name": "production_agent_memories",
+      "entityType": "tables"
+    },
+    {
+      "name": "production_agent_memory_versions",
+      "entityType": "tables"
+    },
+    {
+      "name": "production_agent_runs",
+      "entityType": "tables"
+    },
+    {
+      "name": "reading_dictionary",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "episode_id",
+      "entityType": "columns",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload",
+      "entityType": "columns",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "published_at",
+      "entityType": "columns",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "episode_dictionary_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot",
+      "entityType": "columns",
+      "table": "episode_dictionary_snapshots"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "episode_execution_checkpoints"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "script",
+      "entityType": "columns",
+      "table": "episode_execution_checkpoints"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "audio",
+      "entityType": "columns",
+      "table": "episode_execution_checkpoints"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "selection_mode",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "profile_include",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "profile_exclude",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "selected_article_ids",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "selected_articles",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "model",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "episode_generation_plans"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "sequence",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "run_id",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "occurred_at",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "event_key",
+      "entityType": "columns",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "episode_job_articles"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "episode_job_articles"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "episode_job_articles"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "idempotency_key",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "request_fingerprint",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "trigger",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attempt",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "enqueued_at",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retry_at",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "failed_at",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "canceled_at",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lease_token",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "leased_until",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "failure_code",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "failure_retryable",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "episode_id",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cancel_reason",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "current_stage",
+      "entityType": "columns",
+      "table": "episode_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "run_id",
+      "entityType": "columns",
+      "table": "production_agent_events"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sequence",
+      "entityType": "columns",
+      "table": "production_agent_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "table": "production_agent_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload_json",
+      "entityType": "columns",
+      "table": "production_agent_events"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "occurred_at",
+      "entityType": "columns",
+      "table": "production_agent_events"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "production_agent_instances"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "production_agent_instances"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent_key",
+      "entityType": "columns",
+      "table": "production_agent_instances"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "production_agent_instances"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "production_agent_instances"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent_instance_id",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "current_version",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "production_agent_memories"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "memory_id",
+      "entityType": "columns",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content_json",
+      "entityType": "columns",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent_instance_id",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "model",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "policy_hash",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "finished_at",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "failure_code",
+      "entityType": "columns",
+      "table": "production_agent_runs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "surface",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reading",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "accent_type",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "episode_job_id",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "reading_dictionary"
+    },
+    {
+      "columns": ["job_id"],
+      "tableTo": "episode_jobs",
+      "columnsTo": ["job_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_episode_completion_outbox_job_id_episode_jobs_job_id_fk",
+      "entityType": "fks",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "columns": ["job_id"],
+      "tableTo": "episode_jobs",
+      "columnsTo": ["job_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_episode_dictionary_snapshots_job_id_episode_jobs_job_id_fk",
+      "entityType": "fks",
+      "table": "episode_dictionary_snapshots"
+    },
+    {
+      "columns": ["job_id"],
+      "tableTo": "episode_jobs",
+      "columnsTo": ["job_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_episode_execution_checkpoints_job_id_episode_jobs_job_id_fk",
+      "entityType": "fks",
+      "table": "episode_execution_checkpoints"
+    },
+    {
+      "columns": ["job_id"],
+      "tableTo": "episode_jobs",
+      "columnsTo": ["job_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_episode_generation_plans_job_id_episode_jobs_job_id_fk",
+      "entityType": "fks",
+      "table": "episode_generation_plans"
+    },
+    {
+      "columns": ["job_id"],
+      "tableTo": "episode_jobs",
+      "columnsTo": ["job_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_episode_job_agui_events_job_id_episode_jobs_job_id_fk",
+      "entityType": "fks",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "columns": ["job_id"],
+      "tableTo": "episode_jobs",
+      "columnsTo": ["job_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_episode_job_articles_job_id_episode_jobs_job_id_fk",
+      "entityType": "fks",
+      "table": "episode_job_articles"
+    },
+    {
+      "columns": ["run_id"],
+      "tableTo": "production_agent_runs",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_production_agent_events_run_id_production_agent_runs_id_fk",
+      "entityType": "fks",
+      "table": "production_agent_events"
+    },
+    {
+      "columns": ["agent_instance_id"],
+      "tableTo": "production_agent_instances",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_production_agent_memories_agent_instance_id_production_agent_instances_id_fk",
+      "entityType": "fks",
+      "table": "production_agent_memories"
+    },
+    {
+      "columns": ["memory_id"],
+      "tableTo": "production_agent_memories",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_production_agent_memory_versions_memory_id_production_agent_memories_id_fk",
+      "entityType": "fks",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "columns": ["job_id"],
+      "tableTo": "episode_jobs",
+      "columnsTo": ["job_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_production_agent_runs_job_id_episode_jobs_job_id_fk",
+      "entityType": "fks",
+      "table": "production_agent_runs"
+    },
+    {
+      "columns": ["agent_instance_id"],
+      "tableTo": "production_agent_instances",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "fk_production_agent_runs_agent_instance_id_production_agent_instances_id_fk",
+      "entityType": "fks",
+      "table": "production_agent_runs"
+    },
+    {
+      "columns": ["job_id", "position"],
+      "nameExplicit": false,
+      "name": "episode_job_articles_pk",
+      "entityType": "pks",
+      "table": "episode_job_articles"
+    },
+    {
+      "columns": ["run_id", "sequence"],
+      "nameExplicit": false,
+      "name": "production_agent_events_pk",
+      "entityType": "pks",
+      "table": "production_agent_events"
+    },
+    {
+      "columns": ["memory_id", "version"],
+      "nameExplicit": false,
+      "name": "production_agent_memory_versions_pk",
+      "entityType": "pks",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "columns": ["job_id"],
+      "nameExplicit": false,
+      "name": "episode_completion_outbox_pk",
+      "table": "episode_completion_outbox",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["job_id"],
+      "nameExplicit": false,
+      "name": "episode_dictionary_snapshots_pk",
+      "table": "episode_dictionary_snapshots",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["job_id"],
+      "nameExplicit": false,
+      "name": "episode_execution_checkpoints_pk",
+      "table": "episode_execution_checkpoints",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["job_id"],
+      "nameExplicit": false,
+      "name": "episode_generation_plans_pk",
+      "table": "episode_generation_plans",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["sequence"],
+      "nameExplicit": false,
+      "name": "episode_job_agui_events_pk",
+      "table": "episode_job_agui_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["job_id"],
+      "nameExplicit": false,
+      "name": "episode_jobs_pk",
+      "table": "episode_jobs",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "production_agent_instances_pk",
+      "table": "production_agent_instances",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "production_agent_memories_pk",
+      "table": "production_agent_memories",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "production_agent_runs_pk",
+      "table": "production_agent_runs",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "reading_dictionary_pk",
+      "table": "reading_dictionary",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "published_at",
+          "isExpression": false
+        },
+        {
+          "value": "created_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "episode_completion_outbox_pending",
+      "entityType": "indexes",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "job_id",
+          "isExpression": false
+        },
+        {
+          "value": "sequence",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "episode_job_agui_events_owner_cursor",
+      "entityType": "indexes",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "job_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "episode_jobs_execution_state",
+      "entityType": "indexes",
+      "table": "episode_jobs"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "\"created_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"job_id\" DESC",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "episode_jobs_owner_recent",
+      "entityType": "indexes",
+      "table": "episode_jobs"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "agent_instance_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "kind",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "production_agent_memories_scope",
+      "entityType": "indexes",
+      "table": "production_agent_memories"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        },
+        {
+          "value": "\"created_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "production_agent_runs_owner_status",
+      "entityType": "indexes",
+      "table": "production_agent_runs"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "surface",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "reading_dictionary_owner_surface",
+      "entityType": "indexes",
+      "table": "reading_dictionary"
+    },
+    {
+      "columns": ["owner_id", "idempotency_key"],
+      "nameExplicit": true,
+      "name": "episode_jobs_owner_idempotency",
+      "entityType": "uniques",
+      "table": "episode_jobs"
+    },
+    {
+      "columns": ["owner_id", "agent_key"],
+      "nameExplicit": true,
+      "name": "production_agent_instances_owner_key",
+      "entityType": "uniques",
+      "table": "production_agent_instances"
+    },
+    {
+      "columns": ["owner_id", "surface"],
+      "nameExplicit": true,
+      "name": "reading_dictionary_owner_surface_unique",
+      "entityType": "uniques",
+      "table": "reading_dictionary"
+    },
+    {
+      "columns": ["episode_id"],
+      "nameExplicit": false,
+      "name": "episode_completion_outbox_episode_id_unique",
+      "entityType": "uniques",
+      "table": "episode_completion_outbox"
+    },
+    {
+      "columns": ["event_key"],
+      "nameExplicit": false,
+      "name": "episode_job_agui_events_event_key_unique",
+      "entityType": "uniques",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "value": "\"selection_mode\" IN ('automatic', 'manual')",
+      "name": "episode_generation_plans_selection_mode_check",
+      "entityType": "checks",
+      "table": "episode_generation_plans"
+    },
+    {
+      "value": "json_valid(\"selected_article_ids\") AND json_array_length(\"selected_article_ids\") BETWEEN 1 AND 20",
+      "name": "episode_generation_plans_article_ids_json_check",
+      "entityType": "checks",
+      "table": "episode_generation_plans"
+    },
+    {
+      "value": "json_valid(\"payload\")",
+      "name": "episode_job_agui_events_payload_check",
+      "entityType": "checks",
+      "table": "episode_job_agui_events"
+    },
+    {
+      "value": "\"position\" >= 0",
+      "name": "episode_job_articles_position_check",
+      "entityType": "checks",
+      "table": "episode_job_articles"
+    },
+    {
+      "value": "\"status\" IN ('Queued', 'Running', 'Retrying', 'Succeeded', 'Failed', 'Canceled')",
+      "name": "episode_jobs_status_check",
+      "entityType": "checks",
+      "table": "episode_jobs"
+    },
+    {
+      "value": "\"attempt\" >= 0 AND \"attempt\" <= 4",
+      "name": "episode_jobs_attempt_check",
+      "entityType": "checks",
+      "table": "episode_jobs"
+    },
+    {
+      "value": "\"status\" <> 'Running' OR (\"lease_token\" IS NOT NULL AND \"leased_until\" IS NOT NULL AND \"started_at\" IS NOT NULL)",
+      "name": "episode_jobs_running_lease_check",
+      "entityType": "checks",
+      "table": "episode_jobs"
+    },
+    {
+      "value": "\"status\" <> 'Succeeded' OR (\"episode_id\" IS NOT NULL AND \"completed_at\" IS NOT NULL)",
+      "name": "episode_jobs_succeeded_check",
+      "entityType": "checks",
+      "table": "episode_jobs"
+    },
+    {
+      "value": "\"status\" <> 'Failed' OR (\"failure_code\" IS NOT NULL AND \"failed_at\" IS NOT NULL)",
+      "name": "episode_jobs_failed_check",
+      "entityType": "checks",
+      "table": "episode_jobs"
+    },
+    {
+      "value": "\"status\" <> 'Retrying' OR (\"failure_code\" IS NOT NULL AND \"retry_at\" IS NOT NULL)",
+      "name": "episode_jobs_retrying_check",
+      "entityType": "checks",
+      "table": "episode_jobs"
+    },
+    {
+      "value": "\"status\" <> 'Canceled' OR (\"canceled_at\" IS NOT NULL AND \"cancel_reason\" IS NOT NULL)",
+      "name": "episode_jobs_canceled_check",
+      "entityType": "checks",
+      "table": "episode_jobs"
+    },
+    {
+      "value": "\"sequence\" >= 0",
+      "name": "production_agent_events_sequence_check",
+      "entityType": "checks",
+      "table": "production_agent_events"
+    },
+    {
+      "value": "json_valid(\"payload_json\")",
+      "name": "production_agent_events_payload_check",
+      "entityType": "checks",
+      "table": "production_agent_events"
+    },
+    {
+      "value": "\"kind\" IN ('preference', 'episode_history', 'working_note')",
+      "name": "production_agent_memories_kind_check",
+      "entityType": "checks",
+      "table": "production_agent_memories"
+    },
+    {
+      "value": "\"status\" IN ('proposed', 'active', 'rejected', 'deleted')",
+      "name": "production_agent_memories_status_check",
+      "entityType": "checks",
+      "table": "production_agent_memories"
+    },
+    {
+      "value": "\"current_version\" >= 1",
+      "name": "production_agent_memories_version_check",
+      "entityType": "checks",
+      "table": "production_agent_memories"
+    },
+    {
+      "value": "\"version\" >= 1",
+      "name": "production_agent_memory_versions_version_check",
+      "entityType": "checks",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "value": "json_valid(\"content_json\")",
+      "name": "production_agent_memory_versions_content_check",
+      "entityType": "checks",
+      "table": "production_agent_memory_versions"
+    },
+    {
+      "value": "\"status\" IN ('queued', 'running', 'waiting_approval', 'retrying', 'succeeded', 'failed', 'canceled')",
+      "name": "production_agent_runs_status_check",
+      "entityType": "checks",
+      "table": "production_agent_runs"
+    },
+    {
+      "value": "\"accent_type\" BETWEEN 0 AND 100",
+      "name": "reading_dictionary_accent_type_check",
+      "entityType": "checks",
+      "table": "reading_dictionary"
+    },
+    {
+      "value": "\"source\" IN ('manual', 'ai_auto')",
+      "name": "reading_dictionary_source_check",
+      "entityType": "checks",
+      "table": "reading_dictionary"
+    }
+  ],
+  "renames": []
+}

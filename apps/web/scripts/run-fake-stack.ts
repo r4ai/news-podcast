@@ -8,7 +8,7 @@ import { createFakeApi } from "./fake-api"
 const apiPort = Number(process.env.E2E_API_PORT ?? 4000)
 const webPort = Number(process.env.E2E_WEB_PORT ?? 4173)
 
-const fakeApi = createFakeApi({ webPort })
+const fakeApi = createFakeApi()
 const apiServer = serve({ fetch: fakeApi.fetch, port: apiPort })
 process.env.VITE_API_PROXY_TARGET = `http://127.0.0.1:${apiPort}`
 const vite = await createServer({

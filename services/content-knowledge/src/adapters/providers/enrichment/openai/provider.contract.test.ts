@@ -59,9 +59,8 @@ describe.runIf(live)("OpenAI enrichment live contract", () => {
     }
     const provider = makeOpenAiEnrichmentProvider(
       {
-        endpoint: new URL(
-          process.env.OPENAI_RESPONSES_URL?.trim() ||
-            "https://api.openai.com/v1/responses"
+        apiUrl: new URL(
+          process.env.OPENAI_API_URL?.trim() || "https://api.openai.com/v1"
         ),
         apiKey,
         model,

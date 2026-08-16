@@ -1,11 +1,12 @@
-import type { Effect } from "effect"
+import type { Effect, Layer } from "effect"
+import type { LanguageModel } from "effect/unstable/ai"
 
 /**
  * OpenAI互換の補完プロバイダが依存する設定と、差し替え可能な実行環境。
  */
 
 export type OpenAiEnrichmentProviderConfig = Readonly<{
-  readonly endpoint: URL
+  readonly apiUrl: URL
   readonly apiKey: string
   readonly model: string
   readonly requestTimeoutMillis: number
@@ -15,6 +16,7 @@ export type OpenAiEnrichmentProviderConfig = Readonly<{
 }>
 
 export type OpenAiEnrichmentProviderDependencies = Readonly<{
+  readonly languageModelLayer?: Layer.Layer<LanguageModel.LanguageModel>
   readonly fetcher?: typeof fetch
   readonly nowMillis?: () => Effect.Effect<number>
   readonly sleep?: (milliseconds: number) => Effect.Effect<void>

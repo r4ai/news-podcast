@@ -36,6 +36,14 @@ export type EpisodeJobRow = {
   failureRetryable: number | null
   episodeId: string | null
   cancelReason: "requested_by_user" | "service_shutdown" | null
+  currentStage?:
+    | "selecting_articles"
+    | "materializing_articles"
+    | "generating_script"
+    | "preparing_pronunciation"
+    | "synthesizing_audio"
+    | "storing_episode"
+    | null
 }
 
 const encodeJob = Schema.encodeSync(EpisodeJobSchema)

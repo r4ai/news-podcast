@@ -10,9 +10,14 @@ import { DateTime, Effect, Schema } from "effect"
 
 import { makeCompletionPublisher } from "../adapters/messaging/completion-publisher.js"
 import { makeContentArticleMaterializer } from "../adapters/rpc/content-article-materializer.js"
+import { makeContentGenerationPlanner } from "../adapters/rpc/content-generation-planner.js"
 import { makeFakeScriptGenerator } from "../adapters/providers/fake-script-generator.js"
 import { makeIdentityScheduleClient } from "../adapters/rpc/identity-schedule-client.js"
 import { makeOpenAiScriptGenerator } from "../adapters/providers/openai-script-generator.js"
+import {
+  makeNoopReadingTermExtractor,
+  makeOpenAiReadingTermExtractor,
+} from "../adapters/providers/openai-reading-term-extractor.js"
 import { executionRepository } from "../adapters/persistence/execution/repository.js"
 import { jobRepository } from "../adapters/persistence/job/repository.js"
 import { readingDictionaryRepository } from "../adapters/persistence/reading-dictionary/repository.js"
@@ -20,12 +25,9 @@ import { makeVoicevoxSpeechSynthesizer } from "../adapters/providers/voicevox/sp
 import { relayCompletionOutbox } from "../application/completion-outbox.js"
 import { createJob } from "../application/create-job.js"
 import { executeEpisodeJob } from "../application/execute-job.js"
+import { prepareReadingDictionary } from "../application/reading-dictionary.js"
 import { runScheduledGenerationLoop } from "../application/scheduled-generation.js"
-import {
-  ArticleIdSchema,
-  IdempotencyKeySchema,
-  OwnerIdSchema,
-} from "../domain/episode-job.js"
+import { IdempotencyKeySchema, OwnerIdSchema } from "../domain/episode-job.js"
 import { connectProductionJetStreamUnsafe } from "../infrastructure/unsafe/nats-jetstream.js"
 import { connectNatsRequestUnsafe } from "../infrastructure/unsafe/nats-request.js"
 import { s3AudioObjectStoreScoped } from "../infrastructure/unsafe/s3-audio-object-store.js"
@@ -34,6 +36,7 @@ import {
   randomEpisodeIdUnsafe,
   randomJobIdUnsafe,
   randomLeaseTokenUnsafe,
+  randomReadingDictionaryIdUnsafe,
 } from "../infrastructure/unsafe/identity.js"
 import { runCompletionRelayLoop } from "./loops/completion-relay.js"
 import {
@@ -76,7 +79,7 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
   contentRequestTimeoutMillis: positive(30_000),
   providerMode: Schema.Union([Schema.Literal("fake"), Schema.Literal("live")]),
   openAi: Schema.Struct({
-    endpoint: httpUrl,
+    apiUrl: httpUrl,
     apiKey: Schema.String.check(Schema.isMaxLength(4_096)),
     model: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
     requestTimeoutMillis: positive(300_000),
@@ -215,29 +218,72 @@ export const runNodeEpisodeProductionService = (
             now: () => DateTime.formatIso(now()),
             timeoutMillis: config.contentRequestTimeoutMillis,
           })
+          const planning = makeContentGenerationPlanner(content, {
+            newMessageId: randomUUID,
+            now: () => DateTime.formatIso(now()),
+            timeoutMillis: config.contentRequestTimeoutMillis,
+          })
           const script =
             config.providerMode === "fake"
               ? makeFakeScriptGenerator()
               : makeOpenAiScriptGenerator({
                   ...config.openAi,
-                  endpoint: new URL(config.openAi.endpoint),
+                  apiUrl: new URL(config.openAi.apiUrl),
+                })
+          const readingTerms =
+            config.providerMode === "fake"
+              ? makeNoopReadingTermExtractor()
+              : makeOpenAiReadingTermExtractor({
+                  ...config.openAi,
+                  apiUrl: new URL(config.openAi.apiUrl),
                 })
           const speech = makeVoicevoxSpeechSynthesizer({
             ...config.voicevox,
             baseUrl: new URL(config.voicevox.baseUrl),
           })
           const execute = executeEpisodeJob({
+            planning,
             articles,
             script,
             speech,
             audio,
             dictionary: {
-              capture: (ownerId) =>
-                dictionary.captureSnapshot(ownerId).pipe(
+              prepare: (input) =>
+                prepareReadingDictionary(
+                  {
+                    ...dictionary,
+                    extractor: readingTerms,
+                    nextId: randomReadingDictionaryIdUnsafe,
+                    now,
+                  },
+                  {
+                    ownerId: input.ownerId,
+                    episodeJobId: input.jobId,
+                    script: input.script,
+                    ...(input.signal === undefined
+                      ? {}
+                      : { signal: input.signal }),
+                  }
+                ).pipe(
+                  Effect.tap((result) =>
+                    Effect.sync(() => {
+                      if (result.addedCount > 0)
+                        observability.log({
+                          name: "reading_dictionary.term_added",
+                          attributes: { count: result.addedCount },
+                        })
+                      if (result.extractionFailed)
+                        observability.log({
+                          name: "reading_dictionary.extraction_failed",
+                          level: "warn",
+                        })
+                    })
+                  ),
+                  Effect.map(({ snapshot }) => snapshot),
                   Effect.mapError(() =>
                     deepFreeze({
                       _tag: "PipelineFailure" as const,
-                      code: "sqlite_dictionary_snapshot",
+                      code: "sqlite_dictionary_prepare",
                       retryable: true,
                     })
                   )
@@ -332,28 +378,7 @@ export const runNodeEpisodeProductionService = (
           const scheduler = runScheduledGenerationLoop(
             {
               discoverDue: identitySchedule.discoverDue,
-              resolveArticleIds: (ownerId) =>
-                parse(OwnerIdSchema)(ownerId).pipe(
-                  Effect.flatMap((parsedOwnerId) =>
-                    articles.materialize({
-                      ownerId: parsedOwnerId,
-                      selection: { _tag: "Automatic" },
-                    })
-                  ),
-                  Effect.flatMap((materialized) =>
-                    Effect.forEach(materialized, (article) =>
-                      parse(ArticleIdSchema)(article.articleId)
-                    )
-                  ),
-                  Effect.map(
-                    (articleIds) =>
-                      articleIds as [
-                        (typeof articleIds)[number],
-                        ...(typeof articleIds)[number][],
-                      ]
-                  )
-                ),
-              create: (ownerId, idempotencyKey, articleIds) =>
+              create: (ownerId, idempotencyKey) =>
                 Effect.all([
                   parse(OwnerIdSchema)(ownerId),
                   parse(IdempotencyKeySchema)(idempotencyKey),
@@ -363,7 +388,6 @@ export const runNodeEpisodeProductionService = (
                       ownerId: parsedOwnerId,
                       idempotencyKey: parsedIdempotencyKey,
                       trigger: "scheduled",
-                      articleIds,
                     })
                   ),
                   Effect.asVoid

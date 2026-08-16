@@ -38,6 +38,7 @@ describe("Content Knowledge NATS RPC runtime", () => {
         "content.list-feed-catalog.v1",
         "content.list-feed-sync-jobs.v1",
         "content.materialize-articles.v1",
+        "content.plan-generation.v1",
         "content.article-library.v1",
         "content.personalization.v1",
       ],

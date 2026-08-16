@@ -2,10 +2,8 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
-  AudioAccessSchema,
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
-  EpisodeIdSchema,
   EpisodeJobSchema,
   FeedSubscriptionSchema,
   JobReceiptSchema,
@@ -26,10 +24,35 @@ const jobReceipt = Schema.decodeUnknownSync(JobReceiptSchema)({
   attempt: 0,
   maxAttempts: 4,
 })
-const audioAccess = Schema.decodeUnknownSync(AudioAccessSchema)({
-  url: "https://audio.example.test/episode.mp3?token=secret",
-  expiresAt: "2026-08-12T00:05:00.000Z",
+const snapshotEvent = (job: {
+  readonly id: string
+  readonly status:
+    | "queued"
+    | "running"
+    | "retrying"
+    | "succeeded"
+    | "failed"
+    | "canceled"
+  readonly attempt: number
+  readonly maxAttempts: 4
+  readonly episodeId?: string | undefined
+}) => ({
+  type: "STATE_SNAPSHOT" as const,
+  timestamp: 1,
+  snapshot: {
+    jobId: job.id,
+    status: job.status,
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    selectionMode: "automatic" as const,
+    selectedArticles: [],
+    ...(job.episodeId === undefined ? {} : { episodeId: job.episodeId }),
+  },
 })
+const audioAccess = {
+  url: "https://audio.example.test/episode.mp3?token=secret" as never,
+  expiresAt: "2026-08-12T00:05:00.000Z" as never,
+}
 const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
   id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
   feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
@@ -119,13 +142,6 @@ const makePorts = (): GatewayPorts => ({
   getEnrichQueue: () => Effect.fail(unavailable),
   enrichReprocess: () => Effect.fail(unavailable),
   enrichResetDaily: () => Effect.fail(unavailable),
-  listAgentInstances: () => Effect.fail(unavailable),
-  getAgentRun: () => Effect.fail(unavailable),
-  replayAgentRunEvents: () => Effect.fail(unavailable),
-  listAgentMemories: () => Effect.fail(unavailable),
-  createAgentMemory: () => Effect.fail(unavailable),
-  approveAgentMemory: () => Effect.fail(unavailable),
-  deleteAgentMemory: () => Effect.fail(unavailable),
 })
 
 describe("gateway port handlers", () => {
@@ -179,15 +195,11 @@ describe("gateway port handlers", () => {
   it("deep-freezes every successful port result", async () => {
     const handlers = makeGatewayHandlers(makePorts())
     const headers = Schema.decodeUnknownSync(SessionHeadersSchema)({})
-    const episodeId = Schema.decodeUnknownSync(EpisodeIdSchema)(
-      "3c4d046c-b47b-4047-a562-66ac7e74e995"
-    )
     const results = await Effect.runPromise(
       Effect.all([
         handlers.health(),
         handlers.resolveSession(headers),
         handlers.listEpisodes({ headers }),
-        handlers.createAudioAccess({ headers, episodeId }),
         handlers.listFeedSubscriptions(headers),
       ])
     )
@@ -252,13 +264,13 @@ describe("gateway port handlers", () => {
       .mockReturnValueOnce(
         Effect.succeed({
           snapshot: running,
-          events: [{ sequence: 1, job: jobReceipt }],
+          events: [{ sequence: 1, event: snapshotEvent(jobReceipt) }],
         })
       )
       .mockReturnValueOnce(
         Effect.succeed({
           snapshot: succeeded,
-          events: [{ sequence: 2, job: succeeded }],
+          events: [{ sequence: 2, event: snapshotEvent(succeeded) }],
         })
       )
     const handlers = makeGatewayHandlers(
@@ -277,12 +289,12 @@ describe("gateway port handlers", () => {
         .pipe(Effect.flatMap(Stream.runCollect))
     )
 
-    expect(events.map(({ id }) => id)).toEqual(["1", undefined, "2"])
-    expect(events.map(({ data }) => data.snapshot.status)).toEqual([
-      "queued",
-      "running",
-      "succeeded",
-    ])
+    expect(events.map(({ id }) => id)).toEqual(["1", "2"])
+    expect(
+      events.map(({ data }) =>
+        data.type === "STATE_SNAPSHOT" ? data.snapshot.status : data.type
+      )
+    ).toEqual(["queued", "succeeded"])
     expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ afterSequence: 0 })
@@ -310,14 +322,14 @@ describe("gateway port handlers", () => {
           snapshot: succeeded,
           events: Array.from({ length: 100 }, (_, index) => ({
             sequence: index + 1,
-            job: jobReceipt,
+            event: snapshotEvent(jobReceipt),
           })),
         })
       )
       .mockReturnValueOnce(
         Effect.succeed({
           snapshot: succeeded,
-          events: [{ sequence: 101, job: succeeded }],
+          events: [{ sequence: 101, event: snapshotEvent(succeeded) }],
         })
       )
     const handlers = makeGatewayHandlers(
@@ -335,10 +347,9 @@ describe("gateway port handlers", () => {
         .pipe(Effect.flatMap(Stream.runCollect))
     )
 
-    expect(events).toHaveLength(102)
+    expect(events).toHaveLength(101)
     expect(events[100]?.id).toBe("101")
-    expect(events[101]?.id).toBeUndefined()
-    expect(events[101]?.data.snapshot.status).toBe("succeeded")
+    expect(events[100]?.data.type).toBe("STATE_SNAPSHOT")
     expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ afterSequence: 100 })

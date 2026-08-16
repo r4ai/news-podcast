@@ -57,7 +57,7 @@ services:
     environment:
       PROVIDER_MODE: live
       OPENAI_API_KEY: loadtest-fake-key
-      OPENAI_RESPONSES_URL: http://fake-openai:8080/v1/responses
+      OPENAI_API_URL: http://fake-openai:8080/v1
       OPENAI_REQUEST_TIMEOUT_MS: ${LOADTEST_OPENAI_TIMEOUT_MS:-2000}
       VOICEVOX_BASE_URL: http://fake-voicevox:8081
       VOICEVOX_REQUEST_TIMEOUT_MS: ${LOADTEST_VOICEVOX_TIMEOUT_MS:-2000}
@@ -75,5 +75,5 @@ services:
       # Content enrichment is outside this load-test scope. An explicit empty
       # key prevents inherited .env credentials from reaching OpenAI.
       OPENAI_API_KEY: ""
-      OPENAI_RESPONSES_URL: ""
+      OPENAI_API_URL: ""
       OPENAI_MODEL: ""

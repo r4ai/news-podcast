@@ -62,7 +62,7 @@ describe("useArticlePicker", () => {
     const { result } = renderHookWithProviders(() => useArticlePicker(true))
 
     await waitFor(() => expect(result.current.articles).toHaveLength(1))
-    // エージェントが読めるのはアーカイブ済みだけなので、候補側で除外する。
+    // 生成処理が読めるのはアーカイブ済みだけなので、候補側で除外する。
     expect(result.current.articles[0]?.id).toBe("ready")
     expect(calls[0]?.url).toBe("/v1/me/articles")
     expect(calls[0]?.search.get("limit")).toBe("30")

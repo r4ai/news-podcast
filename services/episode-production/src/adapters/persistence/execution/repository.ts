@@ -12,6 +12,10 @@ import type {
 } from "../../../application/ports/execution.js"
 import type { GeneratedScript } from "../../../application/ports/script-generator.js"
 import {
+  GenerationPlanSchema,
+  type GenerationPlan,
+} from "../../../domain/generation-plan.js"
+import {
   EpisodeIdSchema,
   EpisodeJobSchema,
   OwnerIdSchema,
@@ -83,6 +87,17 @@ const tryPersistence = <Value>(operation: string, run: () => Value) =>
     catch: () => pipelineFailure(`sqlite_${operation}`),
   })
 
+const decodeGenerationPlan = (
+  document: string
+): Effect.Effect<GenerationPlan, PipelineFailure> =>
+  tryPersistence("decode_generation_plan", () =>
+    deepFreeze(
+      Schema.decodeUnknownSync(GenerationPlanSchema)(
+        parseJson(document)
+      ) as GenerationPlan
+    )
+  )
+
 const leaseDocument = (input: LeaseNextInput, document: string) => {
   const job = decodeJob(parseJson(document))
   const lease = {
@@ -104,6 +119,28 @@ const leaseDocument = (input: LeaseNextInput, document: string) => {
 
 const repositoryFromHandle = (handle: SqliteJobHandle) => {
   const persistence: EpisodeExecutionPorts["persistence"] = {
+    markStep: (input) =>
+      tryPersistence("mark_step", () =>
+        handle.markStep({
+          ...input,
+          occurredAt: encodeTimestamp(input.occurredAt),
+        })
+      ).pipe(
+        Effect.flatMap((applied) =>
+          applied ? Effect.void : Effect.fail(staleLease())
+        )
+      ),
+    recordSelectedArticles: (input) =>
+      tryPersistence("record_selected_articles", () =>
+        handle.recordSelectedArticles({
+          ...input,
+          occurredAt: encodeTimestamp(input.occurredAt),
+        })
+      ).pipe(
+        Effect.flatMap((applied) =>
+          applied ? Effect.void : Effect.fail(staleLease())
+        )
+      ),
     renewLease: (input) =>
       tryPersistence("renew_lease", () =>
         handle.renewLease({
@@ -145,6 +182,38 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
           )
         })
       ),
+    loadGenerationPlan: (jobId) =>
+      tryPersistence("load_generation_plan", () =>
+        handle.loadGenerationPlan(jobId)
+      ).pipe(
+        Effect.flatMap((document) =>
+          document === undefined
+            ? Effect.succeed(undefined)
+            : decodeGenerationPlan(document)
+        )
+      ),
+    saveGenerationPlan: (input) =>
+      input.plan.jobId !== input.jobId
+        ? Effect.fail(pipelineFailure("invalid_generation_plan", false))
+        : tryPersistence("save_generation_plan", () =>
+            handle.saveGenerationPlan({
+              jobId: input.jobId,
+              leaseToken: input.leaseToken,
+              plan: stringify(input.plan),
+            })
+          ).pipe(
+            Effect.flatMap(
+              (
+                result
+              ): Effect.Effect<
+                GenerationPlan,
+                PipelineFailure | LeaseFailure
+              > =>
+                result._tag === "StaleLease"
+                  ? Effect.fail(staleLease())
+                  : decodeGenerationPlan(result.plan)
+            )
+          ),
     loadDictionarySnapshot: (jobId) =>
       tryPersistence("load_dictionary_snapshot", () =>
         handle.loadDictionarySnapshot(jobId)

@@ -726,7 +726,25 @@ describe("NATS GatewayPorts adapter", () => {
         request.subject === subjects.production.listJobs
           ? { _tag: "Listed", jobs: [queued] }
           : request.subject === subjects.production.listJobEvents
-            ? { _tag: "Events", events: [{ sequence: 2, job: queued }] }
+            ? {
+                _tag: "Events",
+                events: [
+                  {
+                    sequence: 2,
+                    event: {
+                      type: "STATE_SNAPSHOT",
+                      snapshot: {
+                        jobId: queued.jobId,
+                        status: "queued",
+                        attempt: 0,
+                        maxAttempts: 4,
+                        selectionMode: "automatic",
+                        selectedArticles: [],
+                      },
+                    },
+                  },
+                ],
+              }
             : request.subject === subjects.production.cancelJob
               ? {
                   _tag: "Canceled",

@@ -53,12 +53,6 @@ import {
   UnauthorizedProblemSchema,
   UnavailableProblemSchema,
   UnprocessableProblemSchema,
-  AgentInstancePageSchema,
-  AgentRunSchema,
-  AgentMemorySchema,
-  AgentMemoryPageSchema,
-  CreateAgentMemorySchema,
-  AgentRunEventSchema,
 } from "../contract.js"
 
 type TypeOf<S extends Schema.Top> = Schema.Schema.Type<S>
@@ -129,7 +123,7 @@ export type GatewayPorts = Readonly<{
       snapshot: TypeOf<typeof EpisodeJobSchema>
       events: readonly Readonly<{
         sequence: number
-        job: TypeOf<typeof EpisodeJobSchema>
+        event: unknown
       }>[]
     }>,
     | TypeOf<typeof UnauthorizedProblemSchema>
@@ -449,73 +443,6 @@ export type GatewayPorts = Readonly<{
   ) => Effect.Effect<
     { readonly message: "Daily enrichment usage reset" },
     | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof UnavailableProblemSchema>
-  >
-  listAgentInstances: (
-    headers: TypeOf<typeof SessionHeadersSchema>
-  ) => Effect.Effect<
-    TypeOf<typeof AgentInstancePageSchema>,
-    | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof UnavailableProblemSchema>
-  >
-  getAgentRun: (input: {
-    headers: TypeOf<typeof SessionHeadersSchema>
-    runId: string
-  }) => Effect.Effect<
-    TypeOf<typeof AgentRunSchema>,
-    | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof NotFoundProblemSchema>
-    | TypeOf<typeof UnavailableProblemSchema>
-  >
-  replayAgentRunEvents: (input: {
-    headers: TypeOf<typeof SessionHeadersSchema>
-    runId: string
-    afterSequence: number
-  }) => Effect.Effect<
-    readonly TypeOf<typeof AgentRunEventSchema>[],
-    | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof NotFoundProblemSchema>
-    | TypeOf<typeof UnavailableProblemSchema>
-  >
-  listAgentMemories: (input: {
-    headers: TypeOf<typeof SessionHeadersSchema>
-    agentInstanceId: string
-  }) => Effect.Effect<
-    TypeOf<typeof AgentMemoryPageSchema>,
-    | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof NotFoundProblemSchema>
-    | TypeOf<typeof UnavailableProblemSchema>
-  >
-  createAgentMemory: (input: {
-    headers: TypeOf<typeof SessionHeadersSchema>
-    agentInstanceId: string
-    payload: TypeOf<typeof CreateAgentMemorySchema>
-  }) => Effect.Effect<
-    TypeOf<typeof AgentMemorySchema>,
-    | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof NotFoundProblemSchema>
-    | TypeOf<typeof UnavailableProblemSchema>
-  >
-  approveAgentMemory: (input: {
-    headers: TypeOf<typeof SessionHeadersSchema>
-    agentInstanceId: string
-    memoryId: string
-  }) => Effect.Effect<
-    TypeOf<typeof AgentMemorySchema>,
-    | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof NotFoundProblemSchema>
-    | TypeOf<typeof ConflictProblemSchema>
-    | TypeOf<typeof UnavailableProblemSchema>
-  >
-  deleteAgentMemory: (input: {
-    headers: TypeOf<typeof SessionHeadersSchema>
-    agentInstanceId: string
-    memoryId: string
-  }) => Effect.Effect<
-    void,
-    | TypeOf<typeof UnauthorizedProblemSchema>
-    | TypeOf<typeof NotFoundProblemSchema>
-    | TypeOf<typeof ConflictProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
 }>

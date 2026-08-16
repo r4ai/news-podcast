@@ -5,10 +5,6 @@ import { Effect, Schema } from "effect"
 
 import { handleCreateJobRpc } from "../adapters/rpc/create-job.js"
 import {
-  makeAgentAuditRpcHandler,
-  type AgentAuditRpcDelivery,
-} from "../adapters/rpc/agent-audit.js"
-import {
   handleCancelJobRpc,
   handleGetJobRpc,
   handleListJobsRpc,
@@ -18,7 +14,6 @@ import {
 } from "../adapters/rpc/job-control.js"
 import { retryFailedJob } from "../application/job-control.js"
 import { jobRepository } from "../adapters/persistence/job/repository.js"
-import { agentAuditMemoryRepository } from "../adapters/persistence/agent-audit/repository.js"
 import { readingDictionaryRepository } from "../adapters/persistence/reading-dictionary/repository.js"
 import {
   makeReadingDictionaryRpcHandler,
@@ -30,7 +25,6 @@ import {
   type UtcTimestamp,
 } from "../domain/episode-job.js"
 import { ReadingDictionaryIdSchema } from "../domain/reading-dictionary.js"
-import { AgentMemoryIdSchema } from "../domain/agent-audit-memory.js"
 import {
   currentUtcTimestampUnsafe,
   randomJobIdUnsafe,
@@ -153,7 +147,6 @@ type RpcHandler = (
   delivery:
     | JobControlRpcDelivery<NodeCreateJobRpcError>
     | ReadingDictionaryRpcDelivery<NodeCreateJobRpcError>
-    | AgentAuditRpcDelivery<NodeCreateJobRpcError>
 ) => Effect.Effect<void, unknown, never>
 
 /** Runs the complete versioned Episode Production command/query RPC surface. */
@@ -178,9 +171,6 @@ export const runNodeProductionRpc = (
             Effect.mapError(() => runtimeError("Sqlite"))
           )
           const dictionary = yield* readingDictionaryRepository(
-            database.database
-          ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
-          const agentAudit = yield* agentAuditMemoryRepository(
             database.database
           ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
           const now = Effect.sync(dependencies.now)
@@ -216,7 +206,7 @@ export const runNodeProductionRpc = (
               subjects.production.listJobEvents,
               handleListJobEventsRpc({
                 findOwned: repository.findOwned,
-                listOwnedStatusEvents: repository.listOwnedStatusEvents,
+                listOwnedAgUiEvents: repository.listOwnedAgUiEvents,
                 replyDependencies,
               }),
             ],
@@ -255,20 +245,6 @@ export const runNodeProductionRpc = (
                   ),
                 newMessageId: dependencies.newJobId,
                 now: dependencies.now,
-              }),
-            ],
-            [
-              subjects.production.agentAuditMemory,
-              makeAgentAuditRpcHandler(agentAudit, {
-                newMessageId: dependencies.newJobId,
-                nextMemoryId: Effect.sync(() =>
-                  Schema.decodeUnknownSync(AgentMemoryIdSchema)(
-                    dependencies.newJobId()
-                  )
-                ),
-                now,
-                nowString: () =>
-                  Schema.encodeSync(UtcTimestampSchema)(dependencies.now()),
               }),
             ],
           ]

@@ -60,9 +60,7 @@ export const readEpisodeProductionServiceConfig = (
         ),
         providerMode: env.PROVIDER_MODE?.trim() === "live" ? "live" : "fake",
         openAi: {
-          endpoint:
-            env.OPENAI_RESPONSES_URL?.trim() ||
-            "https://api.openai.com/v1/responses",
+          apiUrl: env.OPENAI_API_URL?.trim() || "https://api.openai.com/v1",
           apiKey: env.OPENAI_API_KEY ?? "",
           model: env.OPENAI_MODEL?.trim() || "fake",
           requestTimeoutMillis: integer(env.OPENAI_REQUEST_TIMEOUT_MS, 120_000),

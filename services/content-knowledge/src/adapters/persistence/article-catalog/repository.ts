@@ -5,6 +5,9 @@ import { Effect, Schema } from "effect"
 import {
   articleOwnerStates,
   articleSnapshots,
+  contentArticleTags,
+  contentEnrichmentResults,
+  contentTags,
   feedItems,
   feedSubscriptions,
 } from "../../../../drizzle/schema.js"
@@ -12,6 +15,7 @@ import type {
   ArticleCatalog,
   ArticleCatalogError,
   CatalogArticle,
+  GenerationCandidate,
 } from "../../../application/ports/article-catalog.js"
 import { ArticleSnapshotSchema } from "../../../domain/article.js"
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
@@ -173,5 +177,84 @@ export const createArticleCatalog = (
       )
     }
 
-    return deepFreeze({ upsert, findAutomatic, findSelected })
+    const listGenerationCandidates: ArticleCatalog["listGenerationCandidates"] =
+      (ownerId, limit) =>
+        findAutomatic(ownerId, limit).pipe(
+          Effect.flatMap((articles) => {
+            if (articles.length === 0) return Effect.succeed([])
+            const ids = articles.map((article) => article.articleId)
+            return Effect.try({
+              try: () => {
+                const summaries = database
+                  .select({
+                    articleId: contentEnrichmentResults.articleId,
+                    summary: contentEnrichmentResults.summary,
+                  })
+                  .from(contentEnrichmentResults)
+                  .where(
+                    and(
+                      eq(contentEnrichmentResults.ownerId, ownerId),
+                      eq(contentEnrichmentResults.status, "Succeeded"),
+                      inArray(contentEnrichmentResults.articleId, [...ids])
+                    )
+                  )
+                  .all()
+                const tagRows = database
+                  .select({
+                    articleId: contentArticleTags.articleId,
+                    name: contentTags.name,
+                  })
+                  .from(contentArticleTags)
+                  .innerJoin(
+                    contentTags,
+                    and(
+                      eq(contentTags.ownerId, contentArticleTags.ownerId),
+                      eq(contentTags.tagId, contentArticleTags.tagId)
+                    )
+                  )
+                  .where(
+                    and(
+                      eq(contentArticleTags.ownerId, ownerId),
+                      inArray(contentArticleTags.articleId, [...ids])
+                    )
+                  )
+                  .all()
+                const summaryById = new Map(
+                  summaries.flatMap((row) =>
+                    row.summary === null ? [] : [[row.articleId, row.summary]]
+                  )
+                )
+                const tagsById = new Map<string, string[]>()
+                for (const row of tagRows) {
+                  const tags = tagsById.get(row.articleId) ?? []
+                  tags.push(row.name)
+                  tagsById.set(row.articleId, tags)
+                }
+                return articles.map((article): GenerationCandidate => {
+                  const sourceName = new URL(article.sourceUrl).hostname
+                  const summary = summaryById.get(article.articleId)
+                  return deepFreeze({
+                    articleId: article.articleId,
+                    title: article.title,
+                    sourceName,
+                    ...(article.publishedAt === undefined
+                      ? {}
+                      : { publishedAt: article.publishedAt }),
+                    ...(summary === undefined ? {} : { summary }),
+                    tags: [...(tagsById.get(article.articleId) ?? [])].sort(),
+                  })
+                })
+              },
+              catch: () => failure("Find"),
+            })
+          }),
+          Effect.map(deepFreeze)
+        )
+
+    return deepFreeze({
+      upsert,
+      findAutomatic,
+      findSelected,
+      listGenerationCandidates,
+    })
   })

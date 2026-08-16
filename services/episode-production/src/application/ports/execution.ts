@@ -12,6 +12,8 @@ import type {
   UtcTimestamp,
 } from "../../domain/episode-job.js"
 import type { ReadingDictionarySnapshot } from "../../domain/reading-dictionary.js"
+import type { GenerationPlan } from "../../domain/generation-plan.js"
+import type { EpisodeJobStep } from "../progress/model.js"
 import type { GeneratedScript, ScriptGenerator } from "./script-generator.js"
 import type { SpeechSynthesizer } from "./speech-synthesizer.js"
 import type { Schema } from "effect"
@@ -113,6 +115,16 @@ export type AudioObjectStore = DeepReadonly<{
 }>
 
 export type EpisodeExecutionPorts = DeepReadonly<{
+  planning: {
+    create: (input: {
+      jobId: JobId
+      ownerId: OwnerId
+      selection:
+        | { readonly _tag: "Automatic" }
+        | { readonly _tag: "Manual"; readonly articleIds: readonly ArticleId[] }
+      signal?: AbortSignal
+    }) => Effect.Effect<GenerationPlan, PipelineFailure>
+  }
   articles: {
     materialize: (input: {
       ownerId: OwnerId
@@ -127,12 +139,32 @@ export type EpisodeExecutionPorts = DeepReadonly<{
   speech: SpeechSynthesizer
   audio: AudioObjectStore
   dictionary: {
-    /** Captures the complete owner lexicon; the execution persists it before generation. */
-    capture: (
+    /** Adds inferred terms and captures the complete owner lexicon for this job. */
+    prepare: (input: {
       ownerId: OwnerId
-    ) => Effect.Effect<ReadingDictionarySnapshot, PipelineFailure>
+      jobId: JobId
+      script: string
+      signal?: AbortSignal
+    }) => Effect.Effect<ReadingDictionarySnapshot, PipelineFailure>
   }
   persistence: {
+    markStep: (input: {
+      jobId: JobId
+      leaseToken: LeaseToken
+      step: EpisodeJobStep
+      phase: "started" | "finished"
+      occurredAt: UtcTimestamp
+    }) => Effect.Effect<void, PipelineFailure | LeaseFailure>
+    recordSelectedArticles: (input: {
+      jobId: JobId
+      leaseToken: LeaseToken
+      articles: readonly Readonly<{
+        articleId: string
+        title: string
+        sourceName: string
+      }>[]
+      occurredAt: UtcTimestamp
+    }) => Effect.Effect<void, PipelineFailure | LeaseFailure>
     /** Extends only the current, still-live fencing token. */
     renewLease: (
       input: RenewLeaseInput
@@ -144,6 +176,15 @@ export type EpisodeExecutionPorts = DeepReadonly<{
     loadCheckpoint: (
       jobId: JobId
     ) => Effect.Effect<EpisodeExecutionCheckpoint | undefined, PipelineFailure>
+    loadGenerationPlan: (
+      jobId: JobId
+    ) => Effect.Effect<GenerationPlan | undefined, PipelineFailure>
+    /** First write wins; returns the persisted winner on concurrent recovery. */
+    saveGenerationPlan: (input: {
+      jobId: JobId
+      leaseToken: LeaseToken
+      plan: GenerationPlan
+    }) => Effect.Effect<GenerationPlan, PipelineFailure | LeaseFailure>
     loadDictionarySnapshot: (
       jobId: JobId
     ) => Effect.Effect<ReadingDictionarySnapshot | undefined, PipelineFailure>

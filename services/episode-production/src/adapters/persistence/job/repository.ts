@@ -137,25 +137,25 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
         try: () => handle.statusSnapshot(),
         catch: (cause) => persistenceError("status-snapshot", cause),
       }),
-    listOwnedStatusEvents: (input: {
+    listOwnedAgUiEvents: (input: {
       readonly ownerId: OwnerId
       readonly jobId: JobId
       readonly afterSequence: number
       readonly limit: number
     }) =>
       Effect.try({
-        try: () => handle.listOwnedStatusEvents(input),
+        try: () => handle.listOwnedAgUiEvents(input),
         catch: (cause) => persistenceError("list-owned-job-events", cause),
       }).pipe(
         Effect.flatMap((rows) =>
-          Effect.all(
-            rows.map((row) =>
-              decodeDocument(row.document).pipe(
-                Effect.map((job) => ({ sequence: row.sequence, job }))
-              )
-            ),
-            { concurrency: 1 }
-          )
+          Effect.try({
+            try: () =>
+              rows.map((row) => ({
+                sequence: row.sequence,
+                event: JSON.parse(row.payload) as unknown,
+              })),
+            catch: (cause) => persistenceError("decode-agui-event", cause),
+          })
         )
       ),
     cancelOwned: (ownerId: OwnerId, jobId: JobId, canceledAt: UtcTimestamp) =>

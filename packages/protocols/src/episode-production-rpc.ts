@@ -171,7 +171,7 @@ export const EpisodeJobControlReplySchema = Schema.Union([
     events: Schema.Array(
       Schema.Struct({
         sequence: Schema.Int.check(Schema.isGreaterThan(0)),
-        job: ProductionEpisodeJobSchema,
+        event: Schema.Unknown,
       })
     ).check(Schema.isMaxLength(100)),
   }),

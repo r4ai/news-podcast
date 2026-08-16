@@ -37,7 +37,7 @@ import { Spinner } from "@workspace/ui/components/spinner"
 import { PageHeader } from "@/shared/layouts/page-header"
 
 import type { AdoptedArticle, TimelineEntry } from "../model"
-import { AgentTimeline } from "./agent-timeline"
+import { GenerationTimeline } from "./generation-timeline"
 
 export type DashboardState =
   | "ready"
@@ -445,7 +445,7 @@ export function PodcastDashboard(props: PodcastDashboardProps) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.8fr)] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">
           <GenerationStatus {...props} />
-          <AgentTimeline
+          <GenerationTimeline
             adoptedArticles={props.adoptedArticles ?? []}
             streaming={props.streaming}
             timeline={props.timeline ?? []}

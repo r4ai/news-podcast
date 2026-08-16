@@ -57,9 +57,8 @@ describe.runIf(live)("OpenAI script generator live contract", () => {
     }
     const generator = makeOpenAiScriptGenerator(
       {
-        endpoint: new URL(
-          process.env.OPENAI_RESPONSES_URL?.trim() ||
-            "https://api.openai.com/v1/responses"
+        apiUrl: new URL(
+          process.env.OPENAI_API_URL?.trim() || "https://api.openai.com/v1"
         ),
         apiKey,
         model,

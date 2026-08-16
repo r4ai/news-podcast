@@ -10,10 +10,11 @@ import { routeApiDocs } from "./api-docs.js"
 /** Builds the transport-neutral HTTP boundary; the OS server stays outside. */
 export const makeGatewayWebHandler = (
   ports: GatewayPorts,
-  telemetry: Layer.Layer<never, never, never> = Layer.empty
+  telemetry: Layer.Layer<never, never, never> = Layer.empty,
+  options: { readonly fetcher?: typeof globalThis.fetch } = {}
 ) => {
   const apiLayer = HttpApiBuilder.layer(gatewayApi).pipe(
-    Layer.provide(makeGatewayHandlerLayer(ports)),
+    Layer.provide(makeGatewayHandlerLayer(ports, options)),
     Layer.provide(HttpServer.layerServices),
     Layer.provideMerge(telemetry)
   )

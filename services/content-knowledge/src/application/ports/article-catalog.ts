@@ -43,6 +43,15 @@ export type CatalogArticle = DeepReadonly<{
   readonly publishedAt?: string
 }>
 
+export type GenerationCandidate = DeepReadonly<{
+  readonly articleId: ArticleId
+  readonly title: ArticleTitle
+  readonly sourceName: string
+  readonly publishedAt?: string
+  readonly summary?: string
+  readonly tags: readonly string[]
+}>
+
 export type ArticleCatalogError = DeepReadonly<{
   readonly _tag: "ArticleCatalogFailed"
   readonly operation: "Find" | "Upsert"
@@ -67,6 +76,10 @@ export type ArticleCatalog = DeepReadonly<{
     ownerId: OwnerId,
     articleIds: readonly ArticleId[]
   ) => Effect.Effect<readonly CatalogArticle[], ArticleCatalogError>
+  readonly listGenerationCandidates: (
+    ownerId: OwnerId,
+    limit: number
+  ) => Effect.Effect<readonly GenerationCandidate[], ArticleCatalogError>
 }>
 
 export type MarkdownObjectError = DeepReadonly<{

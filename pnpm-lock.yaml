@@ -41,6 +41,9 @@ importers:
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
+      '@news-podcast/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -60,9 +63,12 @@ importers:
         specifier: 0.3.4
         version: 0.3.4
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
+      '@ag-ui/core':
+        specifier: 0.0.58
+        version: 0.0.58
       '@types/node':
         specifier: 24.12.4
         version: 24.12.4
@@ -100,6 +106,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ag-ui/core':
+        specifier: 0.0.58
+        version: 0.0.58
       '@news-podcast/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -159,7 +168,7 @@ importers:
         version: link:../../packages/ui
       better-auth:
         specifier: 1.6.26
-        version: 1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10)
+        version: 1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10)
       hast-util-sanitize:
         specifier: 5.0.2
         version: 5.0.2
@@ -315,8 +324,33 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
 
+  packages/ai-runtime:
+    dependencies:
+      '@effect/ai-openai':
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109(effect@4.0.0-rc.109)
+      '@news-podcast/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      effect:
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.4
+        version: 24.12.4
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
+
   packages/contracts:
     devDependencies:
+      '@ag-ui/core':
+        specifier: 0.0.58
+        version: 0.0.58
       '@stoplight/spectral-cli':
         specifier: 6.16.3
         version: 6.16.3
@@ -336,8 +370,8 @@ importers:
   packages/kernel:
     dependencies:
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -355,8 +389,8 @@ importers:
         specifier: workspace:*
         version: link:../kernel
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -416,8 +450,8 @@ importers:
         specifier: 1.43.0
         version: 1.43.0
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -436,10 +470,10 @@ importers:
         version: link:../kernel
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3)
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -460,8 +494,8 @@ importers:
         specifier: workspace:*
         version: link:../kernel
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -482,8 +516,8 @@ importers:
         specifier: workspace:*
         version: link:../protocols
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -501,8 +535,8 @@ importers:
         specifier: workspace:*
         version: link:../kernel
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -595,6 +629,9 @@ importers:
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
+      '@news-podcast/ai-runtime':
+        specifier: workspace:*
+        version: link:../../packages/ai-runtime
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -618,10 +655,10 @@ importers:
         version: 1.0.23
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3)
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
       fast-xml-parser:
         specifier: 5.10.1
         version: 5.10.1
@@ -727,10 +764,10 @@ importers:
         version: link:../../packages/service-runtime
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3)
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -759,6 +796,9 @@ importers:
       '@nats-io/transport-node':
         specifier: 3.4.0
         version: 3.4.0
+      '@news-podcast/ai-runtime':
+        specifier: workspace:*
+        version: link:../../packages/ai-runtime
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -779,10 +819,10 @@ importers:
         version: link:../../packages/service-runtime
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3)
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -828,13 +868,13 @@ importers:
         version: link:../../packages/service-runtime
       better-auth:
         specifier: 1.6.26
-        version: 1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10)
+        version: 1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10)
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3)
       effect:
-        specifier: 4.0.0-beta.102
-        version: 4.0.0-beta.102
+        specifier: 4.0.0-rc.109
+        version: 4.0.0-rc.109
     devDependencies:
       '@types/node':
         specifier: 24.12.4
@@ -856,6 +896,9 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
+
+  '@ag-ui/core@0.0.58':
+    resolution: {integrity: sha512-XgGb7YmhV+yMBaEmlrpsd5S+nUxq0JgSegss2t4gIFR1j7w3w0ibtKfRgcQHWeMvwZxcT5S28VEEarqtgxYYHw==}
 
   '@antfu/install-pkg@1.1.0':
     resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
@@ -1305,6 +1348,11 @@ packages:
 
   '@drizzle-team/brocli@0.12.0':
     resolution: {integrity: sha512-mlUE+rZ8CatQekLhnaiN91Iemdd+e2gFKooGlnRB3oPTL3VghLfX24dx7HrzMNeC1JrIB/0kpsfyty3f5HNfxQ==}
+
+  '@effect/ai-openai@4.0.0-rc.109':
+    resolution: {integrity: sha512-S0lPmZROva8G6CDVAPYVAbztMnTQe+WO/TY9hXDdN4w/OdhcFN1YMVCX70gV8CrqHMZU7XPkghE9ZkA5Dw+4GA==}
+    peerDependencies:
+      effect: ^4.0.0-rc.109
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -4525,8 +4573,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  effect@4.0.0-beta.102:
-    resolution: {integrity: sha512-z8Y+Q76Hh/kjLFZrXu8tGn6e+tDsg45R+UHhxd190pXxD53OGwf/G/zDxXTkse4HJ5mobNZfitLfUCp4fMvu6w==}
+  effect@4.0.0-rc.109:
+    resolution: {integrity: sha512-6ubcOCtfdbmFO5+vgcT2HsTw5s+n3aMUj4eAIbVpUxP7+VYCwXxxcBHgiWgizOrGO1eGmuOBFek3mM0dFcwaWA==}
 
   electron-to-chromium@1.5.362:
     resolution: {integrity: sha512-PUY2DrLvkjkUuWqq+KPL2iWshrJsZOcIojzRQ7eXFacc9dWga7MGMJAa15VbiejSZB1PAXaRLAiKgruHP8LB1w==}
@@ -4740,9 +4788,6 @@ packages:
   finalhandler@2.1.1:
     resolution: {integrity: sha512-S8KoZgRZN+a5rNwqTxlZZePjT/4cnm0ROV70LedRHZ0p8u9fRID0hJUZQpkKLzro8LfmC8sx23bY6tVNxv8pQA==}
     engines: {node: '>= 18.0.0'}
-
-  find-my-way-ts@0.1.6:
-    resolution: {integrity: sha512-a85L9ZoXtNAey3Y6Z+eBWW658kO/MwR7zIafkIUPUMf3isZG0NCs2pjW2wtjxAKuJPxMAsHUIP4ZPGv0o5gyTA==}
 
   find-up@3.0.0:
     resolution: {integrity: sha512-1yD6RmLI1XBfxugvORwlck6f75tYL+iR0jqwsOrOxMZyGYqUuDhJ0l4AXdO1iX/FTs9cBAMEk1gWSEx1kSbylg==}
@@ -5033,10 +5078,6 @@ packages:
 
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
-
-  ini@7.0.0:
-    resolution: {integrity: sha512-ifK0CgjALofS5bkrcTy4RaQ9Vx2Knf/eLeIO+NaswQEpH1UblrtTSCIvN71qQDMq0PeQ/SSPojvEJp9vvvfr+w==}
-    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
   inline-style-parser@0.2.7:
     resolution: {integrity: sha512-Nb2ctOyNR8DqQoR0OwRG95uNWIC0C1lCgf5Naz5H6Ji72KZ8OcFZLz2P5sNgwlyoJ8Yif11oMuYs5pBQa86csA==}
@@ -5379,9 +5420,6 @@ packages:
   kleur@4.1.5:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
     engines: {node: '>=6'}
-
-  kubernetes-types@1.30.0:
-    resolution: {integrity: sha512-Dew1okvhM/SQcIa2rcgujNndZwU8VnSapDgdxlYoB84ZlpAD43U6KLAFqYo17ykSFGHNPrg0qry0bP+GJd9v7Q==}
 
   kysely@0.29.4:
     resolution: {integrity: sha512-y5mVgQNkMbs1eK9Xyc0pmNdabN2wHhRYY/5r4W5HrUT1rYCEPeVNSj1RUJeSDKT3U0p+mXCvLgkrFuIafYI6BA==}
@@ -5761,9 +5799,6 @@ packages:
 
   msgpackr@2.0.5:
     resolution: {integrity: sha512-cef05H/dSYpLpqp3sj/qyZh5vhUYCalnaLO7j1yOmpsR0y/XwLVtK7r5gn+U/F7CTEfMowcGhlUQJDLcLf7jcA==}
-
-  multipasta@0.2.8:
-    resolution: {integrity: sha512-ZPWuMKyv0cSO29f7hozp+k6+crZbQijV8ipMvxNxRf2SwtYGTX1ZX89Kd20VV4H9Znonx+EQn+iy1wGQsJ+b+Q==}
 
   mute-stream@2.0.0:
     resolution: {integrity: sha512-WWdIxpyjEn+FhQJQQv9aQAYlHoNVdzIzUySNV1gHUPDSdZJ3yZn7pAAbQcV7B56Mvu881q9FZV+0Vx2xC44VWA==}
@@ -6620,10 +6655,6 @@ packages:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
 
-  toml@4.3.0:
-    resolution: {integrity: sha512-lVb8X9BsPVuH0M4BKeS91tXAmJvCjQ5UIyAbQFaxkKGyUFK2RPkhwaFSQH8vbpl1d23eu/IBH+dwVMHWaq9A5A==}
-    engines: {node: '>=20'}
-
   tough-cookie@6.0.2:
     resolution: {integrity: sha512-exgYmnmL/sJpR3upZfXG5PoatXQii55xAiXGXzY+sROLZ/Y+SLcp9PgJNI9Vz37HpQ74WvDcLT8eqm+kV3FzrA==}
     engines: {node: '>=16'}
@@ -7089,6 +7120,10 @@ packages:
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
+
+  '@ag-ui/core@0.0.58':
+    dependencies:
+      zod: 3.25.76
 
   '@antfu/install-pkg@1.1.0':
     dependencies:
@@ -7597,12 +7632,12 @@ snapshots:
       '@cloudflare/workers-types': 5.20260809.1
       '@opentelemetry/api': 1.9.1
 
-  '@better-auth/drizzle-adapter@1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3))':
+  '@better-auth/drizzle-adapter@1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3))':
     dependencies:
       '@better-auth/core': 1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
-      drizzle-orm: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3)
+      drizzle-orm: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3)
 
   '@better-auth/kysely-adapter@1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)':
     dependencies:
@@ -7695,6 +7730,10 @@ snapshots:
   '@dotenvx/primitives@0.8.0': {}
 
   '@drizzle-team/brocli@0.12.0': {}
+
+  '@effect/ai-openai@4.0.0-rc.109(effect@4.0.0-rc.109)':
+    dependencies:
+      effect: 4.0.0-rc.109
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -9993,10 +10032,10 @@ snapshots:
 
   baseline-browser-mapping@2.10.32: {}
 
-  better-auth@1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10):
+  better-auth@1.6.26(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.10):
     dependencies:
       '@better-auth/core': 1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2)
-      '@better-auth/drizzle-adapter': 1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3))
+      '@better-auth/drizzle-adapter': 1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3))
       '@better-auth/kysely-adapter': 1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)
       '@better-auth/memory-adapter': 1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
       '@better-auth/mongo-adapter': 1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
@@ -10014,7 +10053,7 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       drizzle-kit: 1.0.0-rc.4
-      drizzle-orm: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3)
+      drizzle-orm: 1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3)
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
       vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
@@ -10564,11 +10603,11 @@ snapshots:
       get-tsconfig: 4.14.2
       jiti: 2.7.0
 
-  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-beta.102)(zod@4.4.3):
+  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260809.1)(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.109)(zod@4.4.3):
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260809.1
       '@opentelemetry/api': 1.9.1
-      effect: 4.0.0-beta.102
+      effect: 4.0.0-rc.109
       zod: 4.4.3
 
   dunder-proto@1.0.1:
@@ -10579,18 +10618,11 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.0.0-beta.102:
+  effect@4.0.0-rc.109:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.9.0
-      find-my-way-ts: 0.1.6
-      ini: 7.0.0
-      kubernetes-types: 1.30.0
       msgpackr: 2.0.5
-      multipasta: 0.2.8
-      toml: 4.3.0
-      uuid: 14.0.1
-      yaml: 2.9.0
 
   electron-to-chromium@1.5.362: {}
 
@@ -10951,8 +10983,6 @@ snapshots:
       statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
-
-  find-my-way-ts@0.1.6: {}
 
   find-up@3.0.0:
     dependencies:
@@ -11353,8 +11383,6 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ini@7.0.0: {}
-
   inline-style-parser@0.2.7: {}
 
   internal-slot@1.1.0:
@@ -11652,8 +11680,6 @@ snapshots:
   kleur@3.0.3: {}
 
   kleur@4.1.5: {}
-
-  kubernetes-types@1.30.0: {}
 
   kysely@0.29.4: {}
 
@@ -12230,8 +12256,6 @@ snapshots:
   msgpackr@2.0.5:
     optionalDependencies:
       msgpackr-extract: 3.0.4
-
-  multipasta@0.2.8: {}
 
   mute-stream@2.0.0: {}
 
@@ -13288,8 +13312,6 @@ snapshots:
       is-number: 7.0.0
 
   toidentifier@1.0.1: {}
-
-  toml@4.3.0: {}
 
   tough-cookie@6.0.2:
     dependencies:

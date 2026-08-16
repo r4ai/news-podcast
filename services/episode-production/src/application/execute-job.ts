@@ -213,10 +213,60 @@ export const executeEpisodeJob =
           })
         )
       )
+    const markStep = (
+      step: Parameters<
+        EpisodeExecutionPorts["persistence"]["markStep"]
+      >[0]["step"],
+      phase: "started" | "finished"
+    ) =>
+      ports.persistence.markStep({
+        jobId: job.jobId,
+        leaseToken: job.lease.token,
+        step,
+        phase,
+        occurredAt: ports.now(),
+      })
 
     const run = Effect.gen(function* () {
       yield* assertLease()
       const checkpoint = yield* ports.persistence.loadCheckpoint(job.jobId)
+      yield* markStep("selecting_articles", "started")
+      let generationPlan = yield* ports.persistence.loadGenerationPlan(
+        job.jobId
+      )
+      if (generationPlan === undefined) {
+        generationPlan = yield* ports.planning.create({
+          jobId: job.jobId,
+          ownerId: job.request.ownerId,
+          selection:
+            job.request.articleIds === undefined
+              ? deepFreeze({ _tag: "Automatic" as const })
+              : deepFreeze({
+                  _tag: "Manual" as const,
+                  articleIds: job.request.articleIds,
+                }),
+          ...(signal === undefined ? {} : { signal }),
+        })
+        yield* assertLease()
+        generationPlan = yield* ports.persistence.saveGenerationPlan({
+          jobId: job.jobId,
+          leaseToken: job.lease.token,
+          plan: generationPlan,
+        })
+      }
+      if (
+        generationPlan.jobId !== job.jobId ||
+        generationPlan.ownerId !== job.request.ownerId
+      ) {
+        return yield* Effect.fail<PipelineFailure>(
+          deepFreeze({
+            _tag: "PipelineFailure",
+            code: "generation_plan_owner_mismatch",
+            retryable: false,
+          })
+        )
+      }
+      yield* markStep("selecting_articles", "finished")
       let dictionarySnapshot = yield* ports.persistence.loadDictionarySnapshot(
         job.jobId
       )
@@ -232,8 +282,59 @@ export const executeEpisodeJob =
           })
         )
       }
+      yield* markStep("materializing_articles", "started")
+      const articles = yield* ports.articles.materialize({
+        ownerId: job.request.ownerId,
+        selection: deepFreeze({
+          _tag: "Selected" as const,
+          articleIds: generationPlan.selectedArticleIds,
+        }),
+        ...(signal === undefined ? {} : { signal }),
+      })
+      yield* ports.persistence.recordSelectedArticles({
+        jobId: job.jobId,
+        leaseToken: job.lease.token,
+        articles: articles.map((article) => ({
+          articleId: article.articleId,
+          title: article.title,
+          sourceName: new URL(article.url).hostname,
+        })),
+        occurredAt: ports.now(),
+      })
+      yield* markStep("materializing_articles", "finished")
+
+      let script = checkpoint?.script
+      if (script === undefined) {
+        yield* markStep("generating_script", "started")
+        yield* assertLease()
+        script = yield* ports.script
+          .generate({
+            sources: articles.map(({ title, url, markdown }) => ({
+              title,
+              url,
+              markdown,
+            })),
+            interestProfile: generationPlan.interestProfile,
+            ...(signal === undefined ? {} : { signal }),
+          })
+          .pipe(Effect.mapError(withProviderStage("script")))
+        yield* assertLease()
+        yield* ports.persistence.saveScriptCheckpoint({
+          jobId: job.jobId,
+          leaseToken: job.lease.token,
+          script,
+        })
+        yield* markStep("generating_script", "finished")
+      }
+
       if (dictionarySnapshot === undefined) {
-        const dictionary = yield* ports.dictionary.capture(job.request.ownerId)
+        yield* markStep("preparing_pronunciation", "started")
+        const dictionary = yield* ports.dictionary.prepare({
+          ownerId: job.request.ownerId,
+          jobId: job.jobId,
+          script: script.script,
+          ...(signal === undefined ? {} : { signal }),
+        })
         if (dictionary.ownerId !== job.request.ownerId) {
           return yield* Effect.fail<PipelineFailure>(
             deepFreeze({
@@ -250,39 +351,7 @@ export const executeEpisodeJob =
           snapshot: dictionary,
         })
         dictionarySnapshot = dictionary
-      }
-      const selection =
-        job.request.articleIds === undefined
-          ? deepFreeze({ _tag: "Automatic" as const })
-          : deepFreeze({
-              _tag: "Selected" as const,
-              articleIds: job.request.articleIds,
-            })
-      const articles = yield* ports.articles.materialize({
-        ownerId: job.request.ownerId,
-        selection,
-        ...(signal === undefined ? {} : { signal }),
-      })
-
-      let script = checkpoint?.script
-      if (script === undefined) {
-        yield* assertLease()
-        script = yield* ports.script
-          .generate({
-            sources: articles.map(({ title, url, markdown }) => ({
-              title,
-              url,
-              markdown,
-            })),
-            ...(signal === undefined ? {} : { signal }),
-          })
-          .pipe(Effect.mapError(withProviderStage("script")))
-        yield* assertLease()
-        yield* ports.persistence.saveScriptCheckpoint({
-          jobId: job.jobId,
-          leaseToken: job.lease.token,
-          script,
-        })
+        yield* markStep("preparing_pronunciation", "finished")
       }
 
       const used = script.sourceUrls.map((url) =>
@@ -300,6 +369,7 @@ export const executeEpisodeJob =
 
       let audio = checkpoint?.audio
       if (audio === undefined) {
+        yield* markStep("synthesizing_audio", "started")
         yield* assertLease()
         const bytes = yield* ports.speech
           .synthesize({
@@ -308,6 +378,8 @@ export const executeEpisodeJob =
             ...(signal === undefined ? {} : { signal }),
           })
           .pipe(Effect.mapError(withProviderStage("speech")))
+        yield* markStep("synthesizing_audio", "finished")
+        yield* markStep("storing_episode", "started")
         yield* assertLease()
         const uploaded = yield* ports.audio.put({
           ownerId: job.request.ownerId,
@@ -341,6 +413,7 @@ export const executeEpisodeJob =
             onSuccess: Effect.succeed,
           })
         )
+        yield* markStep("storing_episode", "finished")
       }
       const completedAt = ports.now()
       const span = yield* Effect.orDie(Effect.currentSpan)

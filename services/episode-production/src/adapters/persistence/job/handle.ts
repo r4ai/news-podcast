@@ -1,12 +1,25 @@
 import { and, asc, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm"
 
 import {
+  runErrorEvent,
+  runFinishedEvent,
+  runStartedEvent,
+  stateSnapshotEvent,
+  stepFinishedEvent,
+  stepStartedEvent,
+} from "../../../application/progress/events.js"
+import type {
+  DurableAgUiEvent,
+  ProgressState,
+} from "../../../application/progress/model.js"
+import {
   episodeCompletionOutbox,
   episodeDictionarySnapshots,
   episodeExecutionCheckpoints,
+  episodeGenerationPlans,
   episodeJobArticles,
   episodeJobs,
-  episodeJobStatusEvents,
+  episodeJobAguiEvents,
 } from "../../../../drizzle/schema.js"
 import type {
   ProductionDatabase,
@@ -25,7 +38,7 @@ import type {
   StoredCheckpointRow,
   StoredCompletionOutboxRow,
   StoredJobRow,
-  StoredJobStatusEventRow,
+  StoredJobAgUiEventRow,
 } from "./ports.js"
 
 /** 実行が進行しうる状態。ここに無い状態は終端で、もう遷移しない。 */
@@ -45,6 +58,128 @@ const articleIdsOf = (runner: QueryRunner, jobId: string): readonly string[] =>
 const documentOfJob = (runner: QueryRunner, row: EpisodeJobRow): string =>
   rowToDocument(row, articleIdsOf(runner, row.jobId))
 
+const occurredAtOf = (row: EpisodeJobRow): string =>
+  row.enqueuedAt ??
+  row.startedAt ??
+  row.retryAt ??
+  row.completedAt ??
+  row.failedAt ??
+  row.canceledAt ??
+  row.createdAt
+
+const progressStateOf = (
+  runner: QueryRunner,
+  row: EpisodeJobRow
+): ProgressState => {
+  const plan = runner
+    .select({
+      selectionMode: episodeGenerationPlans.selectionMode,
+      selectedArticleIds: episodeGenerationPlans.selectedArticleIds,
+      selectedArticles: episodeGenerationPlans.selectedArticles,
+    })
+    .from(episodeGenerationPlans)
+    .where(eq(episodeGenerationPlans.jobId, row.jobId))
+    .get()
+  const requestedIds = articleIdsOf(runner, row.jobId)
+  const plannedArticles =
+    plan === undefined
+      ? requestedIds.map((articleId) => ({ articleId }))
+      : (JSON.parse(plan.selectedArticles) as readonly Readonly<{
+          articleId: string
+          title: string
+          sourceName: string
+        }>[])
+  const selectedArticles =
+    plannedArticles.length > 0
+      ? plannedArticles
+      : (JSON.parse(plan?.selectedArticleIds ?? "[]") as readonly string[]).map(
+          (articleId) => ({ articleId })
+        )
+  const status = row.status.toLowerCase() as ProgressState["status"]
+  return {
+    jobId: row.jobId,
+    status,
+    attempt: row.attempt,
+    maxAttempts: 4,
+    selectionMode:
+      plan?.selectionMode ?? (requestedIds.length > 0 ? "manual" : "automatic"),
+    selectedArticles,
+    ...(row.currentStage == null ? {} : { currentStage: row.currentStage }),
+    ...(row.failureCode === null
+      ? {}
+      : {
+          failure: {
+            code: row.failureCode,
+            message:
+              row.failureRetryable === 1
+                ? "Episode generation will be retried"
+                : "Episode generation failed",
+            retryable: row.failureRetryable === 1,
+          },
+        }),
+    ...(row.episodeId === null ? {} : { episodeId: row.episodeId }),
+  }
+}
+
+const appendAgUiEvent = (
+  runner: QueryRunner,
+  row: EpisodeJobRow,
+  event: DurableAgUiEvent
+): void => {
+  runner
+    .insert(episodeJobAguiEvents)
+    .values({
+      jobId: row.jobId,
+      ownerId: row.ownerId,
+      runId: event.runId,
+      eventType: event.eventType,
+      occurredAt: event.occurredAt,
+      payload: event.payload,
+      eventKey: event.eventKey,
+    })
+    .onConflictDoNothing({ target: episodeJobAguiEvents.eventKey })
+    .run()
+}
+
+const appendTransitionEvents = (
+  runner: QueryRunner,
+  row: EpisodeJobRow,
+  previousStatus?: EpisodeJobRow["status"]
+): void => {
+  if (previousStatus === row.status) return
+  const at = occurredAtOf(row)
+  const state = progressStateOf(runner, row)
+  if (row.status === "Running")
+    appendAgUiEvent(runner, row, runStartedEvent(state, at))
+  if (
+    row.status === "Retrying" ||
+    row.status === "Failed" ||
+    row.status === "Canceled"
+  ) {
+    appendAgUiEvent(
+      runner,
+      row,
+      runErrorEvent(state, at, {
+        code:
+          row.failureCode ??
+          (row.status === "Canceled" ? "canceled" : "unknown"),
+        retryable: row.status === "Retrying",
+      })
+    )
+  }
+  appendAgUiEvent(
+    runner,
+    row,
+    stateSnapshotEvent(
+      state,
+      at,
+      `${row.jobId}:state:${row.status}:${row.attempt}`
+    )
+  )
+  if (row.status === "Succeeded")
+    appendAgUiEvent(runner, row, runFinishedEvent(state, at))
+}
+
 /**
  * 状態遷移を書き込むと同時に、状態イベントを積む。
  * 以前はトリガが担っていたが、書く側が明示的に責任を持つ。
@@ -56,7 +191,7 @@ const writeJobDocument = (
 ): void => {
   const row = documentToRow(document)
   const previous = runner
-    .select({ status: episodeJobs.status })
+    .select()
     .from(episodeJobs)
     .where(eq(episodeJobs.jobId, jobId))
     .get()
@@ -78,38 +213,15 @@ const writeJobDocument = (
       failureRetryable: row.failureRetryable,
       episodeId: row.episodeId,
       cancelReason: row.cancelReason,
+      currentStage:
+        row.status === "Running" ? (previous?.currentStage ?? null) : null,
     })
     .where(eq(episodeJobs.jobId, jobId))
     .run()
 
-  // 状態が変わったときだけ記録する。トリガのWHEN句と同じ条件。
-  if (previous !== undefined && previous.status !== row.status) {
-    appendStatusEvent(runner, row, document)
-  }
-}
-
-const appendStatusEvent = (
-  runner: QueryRunner,
-  row: EpisodeJobRow,
-  document: string
-): void => {
-  runner
-    .insert(episodeJobStatusEvents)
-    .values({
-      jobId: row.jobId,
-      ownerId: row.ownerId,
-      status: row.status,
-      occurredAt:
-        row.enqueuedAt ??
-        row.startedAt ??
-        row.retryAt ??
-        row.completedAt ??
-        row.failedAt ??
-        row.canceledAt ??
-        row.createdAt,
-      document,
-    })
-    .run()
+  const updated = selectJob(runner).where(eq(episodeJobs.jobId, jobId)).get()
+  if (updated !== undefined)
+    appendTransitionEvents(runner, updated, previous?.status)
 }
 
 const leaseHolder = (runner: QueryRunner, jobId: string, leaseToken: string) =>
@@ -180,23 +292,91 @@ export const makeJobHandle = (
             : { oldestActiveAt: row.oldestActiveAt }),
         })),
 
-    listOwnedStatusEvents: (input): readonly StoredJobStatusEventRow[] =>
+    listOwnedAgUiEvents: (input): readonly StoredJobAgUiEventRow[] =>
       database
         .select({
-          sequence: episodeJobStatusEvents.sequence,
-          document: episodeJobStatusEvents.document,
+          sequence: episodeJobAguiEvents.sequence,
+          payload: episodeJobAguiEvents.payload,
         })
-        .from(episodeJobStatusEvents)
+        .from(episodeJobAguiEvents)
         .where(
           and(
-            eq(episodeJobStatusEvents.ownerId, input.ownerId),
-            eq(episodeJobStatusEvents.jobId, input.jobId),
-            gt(episodeJobStatusEvents.sequence, input.afterSequence)
+            eq(episodeJobAguiEvents.ownerId, input.ownerId),
+            eq(episodeJobAguiEvents.jobId, input.jobId),
+            gt(episodeJobAguiEvents.sequence, input.afterSequence)
           )
         )
-        .orderBy(asc(episodeJobStatusEvents.sequence))
+        .orderBy(asc(episodeJobAguiEvents.sequence))
         .limit(input.limit)
         .all(),
+
+    markStep: (input) =>
+      database.transaction((tx) => {
+        const row = selectJob(tx)
+          .where(
+            and(
+              eq(episodeJobs.jobId, input.jobId),
+              eq(episodeJobs.status, "Running"),
+              eq(episodeJobs.leaseToken, input.leaseToken)
+            )
+          )
+          .get()
+        if (row === undefined) return false
+        const currentStage = input.phase === "started" ? input.step : null
+        tx.update(episodeJobs)
+          .set({ currentStage })
+          .where(eq(episodeJobs.jobId, input.jobId))
+          .run()
+        const updated = { ...row, currentStage }
+        const state = progressStateOf(tx, updated)
+        appendAgUiEvent(
+          tx,
+          updated,
+          input.phase === "started"
+            ? stepStartedEvent(state, input.step, input.occurredAt)
+            : stepFinishedEvent(state, input.step, input.occurredAt)
+        )
+        appendAgUiEvent(
+          tx,
+          updated,
+          stateSnapshotEvent(
+            state,
+            input.occurredAt,
+            `${input.jobId}:run:${row.attempt}:step:${input.step}:${input.phase}:state`
+          )
+        )
+        return true
+      }),
+
+    recordSelectedArticles: (input) =>
+      database.transaction((tx) => {
+        const row = selectJob(tx)
+          .where(
+            and(
+              eq(episodeJobs.jobId, input.jobId),
+              eq(episodeJobs.status, "Running"),
+              eq(episodeJobs.leaseToken, input.leaseToken)
+            )
+          )
+          .get()
+        if (row === undefined) return false
+        const changed = tx
+          .update(episodeGenerationPlans)
+          .set({ selectedArticles: JSON.stringify(input.articles) })
+          .where(eq(episodeGenerationPlans.jobId, input.jobId))
+          .run().changes
+        if (Number(changed) !== 1) return false
+        appendAgUiEvent(
+          tx,
+          row,
+          stateSnapshotEvent(
+            progressStateOf(tx, row),
+            input.occurredAt,
+            `${input.jobId}:run:${row.attempt}:articles:materialized`
+          )
+        )
+        return true
+      }),
 
     replaceOwnedActive: (input) =>
       database.transaction((tx) => {
@@ -252,8 +432,7 @@ export const makeJobHandle = (
             .run()
         }
 
-        // 生成直後の状態も遷移の一部として記録する。
-        appendStatusEvent(database, row, input.document)
+        appendTransitionEvents(database, row)
         return { _tag: "Inserted" as const }
       }),
 
@@ -289,6 +468,25 @@ export const makeJobHandle = (
         const recovered = candidate.status === "Running"
         const next = input.replace(documentOfJob(tx, candidate))
         writeJobDocument(tx, candidate.jobId, next)
+        if (recovered) {
+          const recoveredRow = selectJob(tx)
+            .where(eq(episodeJobs.jobId, candidate.jobId))
+            .get()
+          if (recoveredRow !== undefined) {
+            const at = occurredAtOf(recoveredRow)
+            const state = progressStateOf(tx, recoveredRow)
+            appendAgUiEvent(tx, recoveredRow, runStartedEvent(state, at))
+            appendAgUiEvent(
+              tx,
+              recoveredRow,
+              stateSnapshotEvent(
+                state,
+                at,
+                `${candidate.jobId}:run:${recoveredRow.attempt}:recovered:${at}:state`
+              )
+            )
+          }
+        }
         return { document: next, recovered }
       }),
 
@@ -324,6 +522,79 @@ export const makeJobHandle = (
             ...(row.audio === null ? {} : { audio: row.audio }),
           }
     },
+
+    loadGenerationPlan: (jobId) => {
+      const row = database
+        .select()
+        .from(episodeGenerationPlans)
+        .where(eq(episodeGenerationPlans.jobId, jobId))
+        .get()
+      return row === undefined
+        ? undefined
+        : JSON.stringify({
+            jobId: row.jobId,
+            ownerId: row.ownerId,
+            selectionMode: row.selectionMode,
+            interestProfile: {
+              include: row.profileInclude,
+              exclude: row.profileExclude,
+            },
+            selectedArticleIds: JSON.parse(row.selectedArticleIds) as unknown,
+            model: row.model,
+            createdAt: row.createdAt,
+          })
+    },
+
+    saveGenerationPlan: (input) =>
+      database.transaction((tx) => {
+        if (leaseHolder(tx, input.jobId, input.leaseToken) === undefined) {
+          return { _tag: "StaleLease" as const }
+        }
+        const plan = JSON.parse(input.plan) as {
+          ownerId: string
+          selectionMode: "automatic" | "manual"
+          interestProfile: { include: string; exclude: string }
+          selectedArticleIds: readonly string[]
+          model: string
+          createdAt: string
+        }
+        tx.insert(episodeGenerationPlans)
+          .values({
+            jobId: input.jobId,
+            ownerId: plan.ownerId,
+            selectionMode: plan.selectionMode,
+            profileInclude: plan.interestProfile.include,
+            profileExclude: plan.interestProfile.exclude,
+            selectedArticleIds: JSON.stringify(plan.selectedArticleIds),
+            model: plan.model,
+            createdAt: plan.createdAt,
+          })
+          .onConflictDoNothing({ target: episodeGenerationPlans.jobId })
+          .run()
+        const stored = tx
+          .select()
+          .from(episodeGenerationPlans)
+          .where(eq(episodeGenerationPlans.jobId, input.jobId))
+          .get()
+        if (stored === undefined) throw new Error("generation plan missing")
+        return {
+          _tag: "Stored" as const,
+          plan: JSON.stringify({
+            jobId: stored.jobId,
+            ownerId: stored.ownerId,
+            selectionMode: stored.selectionMode,
+            interestProfile: {
+              include: stored.profileInclude,
+              exclude: stored.profileExclude,
+            },
+            selectedArticleIds: JSON.parse(
+              stored.selectedArticleIds
+            ) as unknown,
+            model: stored.model,
+            createdAt: stored.createdAt,
+          }),
+        }
+      }),
 
     loadDictionarySnapshot: (jobId) =>
       database

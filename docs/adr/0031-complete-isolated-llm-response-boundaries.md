@@ -4,7 +4,7 @@
 - Date: 2026-08-12
 - Decision owners: Platform / Editorial
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0057（provider境界）、ADR-0058（進捗監査）
 - Related: ADR-0021、ADR-0028、ADR-0029、ADR-0030、`docs/design.md` §8.3
 
 ## Context and change trigger
@@ -17,7 +17,7 @@ SigNoz MCPの7日ログでは、`episode.failed` 18件のうち詳細が残る�
 
 ## Decision
 
-LLM応答は「JSONとして妥当」だけでなく、要求した成果物の完全性と副作用範囲までapplication境界で検証する。
+LLM応答は「JSONとして妥当」だけでなく、要求した成果物の完全性と副作用範囲までapplication境界で検証する。2026-08-16以降、schema decodeとprovider failure分類はADR-0057のEffect AI境界、進捗監査はADR-0058のdurable AG-UI eventが担い、本ADRの業務完全性・失敗隔離規則だけを継続する。
 
 ```mermaid
 flowchart LR

@@ -28,11 +28,28 @@ const ids = {
 }
 
 const wav = (): Uint8Array => {
-  const bytes = new Uint8Array(45)
+  const bytes = new Uint8Array(46)
   bytes.set(Buffer.from("RIFF"), 0)
   new DataView(bytes.buffer).setUint32(4, bytes.length - 8, true)
   bytes.set(Buffer.from("WAVEfmt "), 8)
+  new DataView(bytes.buffer).setUint32(16, 16, true)
+  new DataView(bytes.buffer).setUint16(20, 1, true)
+  new DataView(bytes.buffer).setUint16(22, 1, true)
+  new DataView(bytes.buffer).setUint32(24, 24_000, true)
+  new DataView(bytes.buffer).setUint32(28, 48_000, true)
+  new DataView(bytes.buffer).setUint16(32, 2, true)
+  new DataView(bytes.buffer).setUint16(34, 16, true)
   bytes.set(Buffer.from("data"), 36)
+  new DataView(bytes.buffer).setUint32(40, 2, true)
+  bytes[44] = 1
+  bytes[45] = 2
+  return bytes
+}
+
+const zeroDurationWav = (): Uint8Array => {
+  const bytes = wav().slice(0, 44)
+  new DataView(bytes.buffer).setUint32(4, bytes.length - 8, true)
+  new DataView(bytes.buffer).setUint32(40, 0, true)
   return bytes
 }
 
@@ -204,6 +221,7 @@ describe("S3 audio object store", () => {
   it.each([
     ["empty", new Uint8Array()],
     ["non-WAV", new Uint8Array(44)],
+    ["zero-duration WAV", zeroDurationWav()],
     ["oversize", new Uint8Array(MAX_WAV_BYTES + 1)],
   ])("rejects %s audio before opening an SDK request", async (_case, bytes) => {
     const send = vi.fn()
