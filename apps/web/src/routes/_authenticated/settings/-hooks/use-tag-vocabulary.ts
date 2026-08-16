@@ -1,8 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { useState, useTransition } from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { useStore } from "jotai"
+import { useTransition } from "react"
+import { toast } from "@/shared/ui/toast"
 
 import { api } from "@/shared/api"
+import { tagNameDraftAtom } from "../-atoms"
 
 const TAGS_KEY = ["get", "/v1/me/tags"] as const
 const SUGGESTIONS_KEY = ["get", "/v1/me/tag-suggestions"] as const
@@ -22,7 +24,8 @@ export function useTagVocabulary() {
     "post",
     "/v1/me/tag-suggestions/promote"
   )
-  const [name, setName] = useState("")
+  // 下書きは購読せずに読む。購読すると打鍵のたびに一覧まで描き直される。
+  const store = useStore()
   const [pending, startTransition] = useTransition()
 
   async function invalidate() {
@@ -33,12 +36,12 @@ export function useTagVocabulary() {
   }
 
   function createTag() {
-    const trimmed = name.trim()
+    const trimmed = store.get(tagNameDraftAtom).trim()
     if (!trimmed) return
     startTransition(async () => {
       try {
         await createMutation.mutateAsync({ body: { name: trimmed } })
-        setName("")
+        store.set(tagNameDraftAtom, "")
         await invalidate()
         toast.success(`タグ「${trimmed}」を追加しました`)
       } catch {
@@ -76,8 +79,6 @@ export function useTagVocabulary() {
     tags: tagsQuery.data?.items ?? [],
     suggestions: suggestionsQuery.data?.items ?? [],
     isLoading: tagsQuery.isPending,
-    name,
-    setName,
     pending,
     createTag,
     deleteTag,

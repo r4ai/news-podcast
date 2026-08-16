@@ -1,5 +1,3 @@
-import "katex/dist/katex.min.css"
-
 import { MarkdownError } from "./components/markdown-error"
 import { MarkdownSkeleton } from "./components/markdown-skeleton"
 import {

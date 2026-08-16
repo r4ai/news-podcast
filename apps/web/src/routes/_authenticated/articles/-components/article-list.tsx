@@ -1,5 +1,5 @@
 import { LoaderCircle, Newspaper, SearchX } from "lucide-react"
-import { useCallback, useEffect, useRef } from "react"
+import { useEffect, useEffectEvent, useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -13,7 +13,10 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 
 import { useArticleKeyboardShortcuts } from "../-hooks/use-article-keyboard-shortcuts"
-import { useArticleList } from "../-hooks/use-article-list"
+import {
+  useArticleItems,
+  useFeedSyncIndicator,
+} from "../-hooks/use-article-list"
 import { siblingArticleId, type Article, type ArticlesSearch } from "../-model"
 import { ArticleDateGroup } from "./article-date-group"
 import { ARTICLE_HEADER_HEIGHT, ArticleListHeader } from "./article-list-header"
@@ -26,32 +29,22 @@ export type ArticleListProps = {
   ) => void
   readonly selectedArticleId: string | undefined
   readonly onSelect: (articleId: string | undefined) => void
-  readonly onShowEnrichQueue: () => void
 }
 
 /**
- * 一覧パネル全体。データ接続もここで行い、Panelの表示境界の内側で
- * suspendする。ツールバーと行を1つの枠の中へ収め、枠線が行だけを囲って
+ * 一覧パネル全体。ツールバーと行を1つの枠の中へ収め、枠線が行だけを囲って
  * 浮く状態を無くす。
+ *
+ * ここ自身はserver stateを一切購読しない。購読は「その値を実際に描く場所」
+ * まで下ろしてある。ここで受け取って配ると、件数が動いただけで記事行まで
+ * 描き直される。
  */
 export function ArticleList({
   search,
   onSearchChange,
   selectedArticleId,
   onSelect,
-  onShowEnrichQueue,
 }: ArticleListProps) {
-  const list = useArticleList({ search, onSearchChange })
-
-  // j/kの送りと`/`の検索は一覧の操作なので、一覧と寿命を揃える。
-  useArticleKeyboardShortcuts({
-    focusSearchOnSlash: true,
-    onNext: () =>
-      onSelect(siblingArticleId(list.articles, selectedArticleId, 1)),
-    onPrev: () =>
-      onSelect(siblingArticleId(list.articles, selectedArticleId, -1)),
-  })
-
   return (
     <section
       aria-labelledby="article-list-heading"
@@ -63,31 +56,22 @@ export function ArticleList({
       <h2 className="sr-only" id="article-list-heading">
         記事一覧
       </h2>
-      <ArticleListHeader
-        aiPending={list.aiPending}
-        facets={list.facets}
-        isMarkingAllRead={list.isMarkingAllRead}
-        onFeedIdsChange={list.setFeedIds}
-        onIncludeHiddenChange={list.setIncludeHidden}
-        onMarkAllRead={list.markAllRead}
-        onQChange={list.setQ}
-        onShowEnrichQueue={onShowEnrichQueue}
-        onSortChange={list.setSort}
-        onStateChange={list.setState}
-        q={list.q}
-        search={list.search}
-      />
-      {list.isSyncing ? <SyncBanner /> : null}
-      <ArticleListView
-        {...list}
-        onSelect={(article: Article) => onSelect(article.id)}
+      <ArticleListHeader onSearchChange={onSearchChange} search={search} />
+      <SyncBanner />
+      <ConnectedArticleListView
+        onSelect={onSelect}
+        search={search}
         selectedArticleId={selectedArticleId}
       />
     </section>
   )
 }
 
+/** 同期中かどうかだけを購読する。ジョブの中身が動いても描き直されない。 */
 function SyncBanner() {
+  const syncing = useFeedSyncIndicator()
+  if (!syncing) return null
+
   return (
     <p
       aria-live="polite"
@@ -100,9 +84,54 @@ function SyncBanner() {
   )
 }
 
-export type ArticleListViewProps = ReturnType<typeof useArticleList> & {
+export type ArticleListViewProps = {
+  readonly articles: readonly Article[]
+  readonly groups: ReturnType<typeof useArticleItems>["groups"]
+  readonly search: ArticlesSearch
+  readonly hasNextPage: boolean
+  readonly isFetchingNextPage: boolean
+  readonly fetchNextPage: () => void
+  readonly toggleSaved: (article: Article) => void
   readonly onSelect: (article: Article) => void
   readonly selectedArticleId: string | undefined
+}
+
+/**
+ * データ接続。記事の中身が変わったときだけ描き直される。
+ * j/kの送りもここに置く。対象になる並びを持っているのがここだから。
+ */
+function ConnectedArticleListView({
+  search,
+  onSelect,
+  selectedArticleId,
+}: {
+  readonly search: ArticlesSearch
+  readonly onSelect: (articleId: string | undefined) => void
+  readonly selectedArticleId: string | undefined
+}) {
+  const items = useArticleItems(search)
+
+  useArticleKeyboardShortcuts({
+    focusSearchOnSlash: true,
+    onNext: () =>
+      onSelect(siblingArticleId(items.articles, selectedArticleId, 1)),
+    onPrev: () =>
+      onSelect(siblingArticleId(items.articles, selectedArticleId, -1)),
+  })
+
+  return (
+    <ArticleListView
+      articles={items.articles}
+      fetchNextPage={items.fetchNextPage}
+      groups={items.groups}
+      hasNextPage={items.hasNextPage}
+      isFetchingNextPage={items.isFetchingNextPage}
+      onSelect={(article: Article) => onSelect(article.id)}
+      search={search}
+      selectedArticleId={selectedArticleId}
+      toggleSaved={items.toggleSaved}
+    />
+  )
 }
 
 function emptyStateCopy(search: ArticlesSearch) {
@@ -154,20 +183,15 @@ function LoadMoreSentinel({
   "hasNextPage" | "isFetchingNextPage" | "fetchNextPage"
 >) {
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const pendingFetchRef = useRef<Promise<unknown> | null>(null)
 
-  const loadMore = useCallback(() => {
-    // IntersectionObserver may notify again before React reflects the pending
-    // state. Keep one in-flight request across rerenders to avoid requesting
-    // the same cursor twice.
-    if (pendingFetchRef.current) return
-    const request = Promise.resolve().then(() => fetchNextPage())
-    pendingFetchRef.current = request
-    const release = () => {
-      if (pendingFetchRef.current === request) pendingFetchRef.current = null
-    }
-    void request.then(release, release)
-  }, [fetchNextPage])
+  // 通知の処理には「その時点の最新の取得関数と進捗」が要るが、それらを依存に
+  // 入れるとobserverを張り直すことになる。張り直すと、既に交差している要素へ
+  // もう一度通知が走り、同じcursorを二度要求してしまう。非リアクティブに
+  // 保つことで、observerの寿命を`hasNextPage`だけに縛る (ADR-0047)。
+  const loadMore = useEffectEvent(() => {
+    if (isFetchingNextPage) return
+    fetchNextPage()
+  })
 
   useEffect(() => {
     const node = sentinelRef.current
@@ -183,7 +207,7 @@ function LoadMoreSentinel({
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [hasNextPage, loadMore])
+  }, [hasNextPage])
 
   if (!hasNextPage) return null
 
@@ -192,7 +216,7 @@ function LoadMoreSentinel({
       {isFetchingNextPage ? (
         <Spinner aria-label="続きを読み込み中" />
       ) : (
-        <Button onClick={loadMore} size="sm" variant="outline">
+        <Button onClick={() => loadMore()} size="sm" variant="outline">
           もっと読み込む
         </Button>
       )}

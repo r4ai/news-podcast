@@ -1,18 +1,18 @@
-import { CheckCheck, Loader2, Search, X } from "lucide-react"
+import { useSetAtom } from "jotai"
+import { CheckCheck, Loader2 } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
-import { Input } from "@workspace/ui/components/input"
 
-import { ARTICLE_SEARCH_INPUT_ID } from "../-hooks/use-article-keyboard-shortcuts"
+import { enrichQueueOpenAtom } from "../-atoms"
+import { useArticleListHeaderState } from "../-hooks/use-article-list"
 import {
   type ArticleFacets,
   type ArticlesSearch,
+  type ArticleSort,
   type ArticleState,
 } from "../-model"
-import {
-  ArticleFilterPopover,
-  type ArticleFilterPopoverProps,
-} from "./article-filter-popover"
+import { ArticleFilterPopover } from "./article-filter-popover"
+import { ArticleSearchField } from "./article-search-field"
 import { ArticleStateTabs } from "./article-state-tabs"
 
 /**
@@ -28,73 +28,86 @@ export const ARTICLE_HEADER_HEIGHT = "[--article-header-h:5.5rem]"
 export const ARTICLE_GROUP_STICKY_TOP =
   "top-[calc(var(--app-bar-h)+var(--article-header-h))] md:top-[var(--article-header-h)]"
 
+export type ArticleListHeaderProps = {
+  readonly search: ArticlesSearch
+  readonly onSearchChange: (
+    patch: Partial<ArticlesSearch>,
+    options?: { readonly replace?: boolean }
+  ) => void
+}
+
 /**
  * 一覧のスクロール中も常に触れる操作面。
  *
+ * 件数(facets)を購読するのはここだけ。以前は一覧パネルが受け取って配って
+ * いたので、件数が1つ動くたびに記事行まで描き直されていた。
+ *
  * lgでは一覧自身がスクロール領域なので上端へ、lg未満はページがスクロールし
- * 上部app barが`top-0`を占めるので、その分だけ下げて吸着させる。
- * 検索はトグルで畳まず常設する。スクロール位置に関係なく、開く操作を挟まずに
- * 絞り込みへ入れるようにするため。
+ * 上部app barが`top-0`を占めるので、その分だけ下げて吸着させる。検索はトグルで
+ * 畳まず常設する。スクロール位置に関係なく、開く操作を挟まずに絞り込みへ
+ * 入れるようにするため。
  */
-export type ArticleListHeaderProps = Omit<
-  ArticleFilterPopoverProps,
-  "facets" | "search"
-> & {
+export function ArticleListHeader({
+  search,
+  onSearchChange,
+}: ArticleListHeaderProps) {
+  const header = useArticleListHeaderState(search)
+  // ダイアログの開閉はatomが持つ。routeまで持ち上げると、開くたびに
+  // 一覧全体が描き直される。
+  const openEnrichQueue = useSetAtom(enrichQueueOpenAtom)
+
+  return (
+    <ArticleListHeaderView
+      aiPending={header.aiPending}
+      facets={header.facets}
+      isMarkingAllRead={header.isMarkingAllRead}
+      onFeedIdsChange={(feedIds: readonly string[]) =>
+        onSearchChange({ feedIds })
+      }
+      onIncludeHiddenChange={(includeHidden: boolean) =>
+        onSearchChange({ includeHidden })
+      }
+      onMarkAllRead={header.markAllRead}
+      onQCommit={(q: string) => onSearchChange({ q }, { replace: true })}
+      onShowEnrichQueue={() => openEnrichQueue(true)}
+      onSortChange={(sort: ArticleSort) => onSearchChange({ sort })}
+      onStateChange={(state: ArticleState) => onSearchChange({ state })}
+      search={search}
+    />
+  )
+}
+
+export type ArticleListHeaderViewProps = {
   readonly search: ArticlesSearch
   readonly facets: ArticleFacets | undefined
-  readonly q: string
-  readonly onQChange: (value: string) => void
+  /** 検索語がURLへ確定したときに呼ばれる。打鍵ごとではない。 */
+  readonly onQCommit: (value: string) => void
   readonly onStateChange: (state: ArticleState) => void
+  readonly onSortChange: (sort: ArticleSort) => void
+  readonly onFeedIdsChange: (feedIds: readonly string[]) => void
+  readonly onIncludeHiddenChange: (value: boolean) => void
   readonly onMarkAllRead: () => void
   readonly isMarkingAllRead: boolean
   readonly aiPending: number | undefined
   readonly onShowEnrichQueue: () => void
 }
 
-export function ArticleListHeader({
+export function ArticleListHeaderView({
   search,
   facets,
-  q,
   aiPending,
-  onQChange,
+  onQCommit,
   onStateChange,
   onMarkAllRead,
   onShowEnrichQueue,
   isMarkingAllRead,
   ...filterProps
-}: ArticleListHeaderProps) {
+}: ArticleListHeaderViewProps) {
   return (
     <div className="sticky top-[var(--app-bar-h)] z-20 flex h-[var(--article-header-h)] shrink-0 flex-col justify-center gap-2 rounded-t-xl border-b bg-background/70 px-3 backdrop-blur-xl md:top-0">
       {/* 1段目: 探す操作。パネル幅が狭いので、常設するのは検索だけにする。 */}
       <div className="flex items-center gap-1">
-        <div className="relative min-w-0 flex-1">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            aria-label="記事を検索"
-            className="h-8 bg-background/60 pr-8 pl-8"
-            id={ARTICLE_SEARCH_INPUT_ID}
-            onChange={(event) => onQChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") onQChange("")
-            }}
-            placeholder="タイトルや本文で検索"
-            value={q}
-          />
-          {q ? (
-            <Button
-              aria-label="検索条件を消す"
-              className="absolute top-1/2 right-1 -translate-y-1/2"
-              onClick={() => onQChange("")}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <X aria-hidden="true" />
-            </Button>
-          ) : null}
-        </div>
+        <ArticleSearchField onCommit={onQCommit} q={search.q} />
 
         <ArticleFilterPopover
           facets={facets}

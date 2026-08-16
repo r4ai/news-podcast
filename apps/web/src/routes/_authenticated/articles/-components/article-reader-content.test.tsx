@@ -58,7 +58,11 @@ describe("ArticleReaderContent", () => {
       />
     )
 
-    await waitFor(() => expect(container.querySelector("img")).not.toBeNull())
+    // Markdownのコンパイル器は遅延importなので、そのファイルで最初の1件は
+    // moduleの取得を待つ。既定の1秒では全ファイル同時実行時に足りない。
+    await waitFor(() => expect(container.querySelector("img")).not.toBeNull(), {
+      timeout: 10_000,
+    })
     const img = container.querySelector("img")
     expect(img?.getAttribute("src")).toBe(
       new URL("assets/hash123.png", articleBaseUrl(article.id)).toString()

@@ -10,9 +10,10 @@ import {
   useState,
   useTransition,
 } from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { toast } from "@/shared/ui/toast"
 
 import { api } from "@/shared/api"
+import { usePreloadMarkdownProcessor } from "@/shared/markdown"
 import {
   ARTICLE_STATE_MUTATION_SCOPE,
   articleMarkdownQueryOptions,
@@ -57,6 +58,10 @@ export function useArticleReader({
 }: UseArticleReaderParams) {
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
+
+  // 本文のコンパイル器は遅延読み込みなので、本文の取得と重ねて取りに行く。
+  // 直列にすると、遅延にした分がそのまま表示の遅れになる。
+  usePreloadMarkdownProcessor()
 
   const { data: serverArticle } = useSuspenseQuery(
     articleQueryOptions(articleId)

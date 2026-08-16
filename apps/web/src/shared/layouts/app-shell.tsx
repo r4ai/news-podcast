@@ -82,6 +82,17 @@ export function AppShell({ actions, children }: AppShellProps) {
 
   return (
     <div className="min-h-svh bg-background text-foreground">
+      {/*
+        キーボードだけで使う場合、ページを開くたびに6本のナビゲーションを
+        通り抜けないと本文へ入れない。最初のTabで本文へ飛べる出口を置く。
+        普段は視界から外し、focusされたときだけ現れる。
+      */}
+      <a
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:outline-none focus:ring-3 focus:ring-ring/50"
+        href="#main-content"
+      >
+        本文へスキップ
+      </a>
       <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6">
         <Brand />
         <Navigation />
@@ -93,7 +104,11 @@ export function AppShell({ actions, children }: AppShellProps) {
         {actions}
       </header>
 
-      <main className="pb-24 md:ml-56 md:pb-0">
+      {/*
+        スキップリンクの着地点。`tabIndex={-1}`が無いとfocusを受け取れず、
+        以降のTabが本文からではなくページ先頭から再開してしまう。
+      */}
+      <main className="pb-24 md:ml-56 md:pb-0" id="main-content" tabIndex={-1}>
         <div
           className={cn(
             "mx-auto flex flex-col gap-6 p-4 sm:p-6 lg:p-8",

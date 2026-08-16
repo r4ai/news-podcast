@@ -1,5 +1,5 @@
+import { useAtomValue, useSetAtom, useStore } from "jotai"
 import { Pencil, Plus, X } from "lucide-react"
-import { useState } from "react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -13,6 +13,14 @@ import {
 import { Empty, EmptyDescription } from "@workspace/ui/components/empty"
 import { Input } from "@workspace/ui/components/input"
 
+import { AtomInput } from "@/shared/ui/atom-input"
+import {
+  canAddReadingAtom,
+  forgetReadingEntryEdit,
+  readingEntryEditAtom,
+  readingReadingDraftAtom,
+  readingSurfaceDraftAtom,
+} from "../-atoms"
 import { useReadingDictionary } from "../-hooks/use-reading-dictionary"
 
 export function ReadingDictionaryManager() {
@@ -32,11 +40,7 @@ export type ReadingDictionaryEntry = {
 export type ReadingDictionaryManagerViewProps = {
   readonly entries: readonly ReadingDictionaryEntry[]
   readonly isLoading: boolean
-  readonly surface: string
-  readonly reading: string
   readonly pending: boolean
-  readonly setSurface: (value: string) => void
-  readonly setReading: (value: string) => void
   readonly addEntry: () => void
   readonly updateEntry: (
     id: string,
@@ -45,14 +49,25 @@ export type ReadingDictionaryManagerViewProps = {
   readonly deleteEntry: (id: string) => void
 }
 
+/**
+ * 追加ボタンだけが下書きの中身を購読する。フォーム全体を購読させると、
+ * 打鍵のたびに登録済みの一覧まで描き直される。
+ */
+function AddEntryButton({ pending }: { readonly pending: boolean }) {
+  const canAdd = useAtomValue(canAddReadingAtom)
+
+  return (
+    <Button disabled={pending || !canAdd} type="submit">
+      <Plus data-icon="inline-start" />
+      追加
+    </Button>
+  )
+}
+
 export function ReadingDictionaryManagerView({
   entries,
   isLoading,
-  surface,
-  reading,
   pending,
-  setSurface,
-  setReading,
   addEntry,
   updateEntry,
   deleteEntry,
@@ -76,29 +91,21 @@ export function ReadingDictionaryManagerView({
             addEntry()
           }}
         >
-          <Input
+          <AtomInput
             aria-label="表記（漢字・英字）"
-            disabled={pending}
-            onChange={(event) => setSurface(event.target.value)}
-            placeholder="表記（例: GPT-5）"
-            value={surface}
+            atom={readingSurfaceDraftAtom}
             className="flex-1"
-          />
-          <Input
-            aria-label="読み（カタカナ）"
             disabled={pending}
-            onChange={(event) => setReading(event.target.value)}
-            placeholder="読み（例: ジーピーティーファイブ）"
-            value={reading}
-            className="flex-[2]"
+            placeholder="表記（例: GPT-5）"
           />
-          <Button
-            disabled={pending || !surface.trim() || !reading.trim()}
-            type="submit"
-          >
-            <Plus data-icon="inline-start" />
-            追加
-          </Button>
+          <AtomInput
+            aria-label="読み（カタカナ）"
+            atom={readingReadingDraftAtom}
+            className="flex-[2]"
+            disabled={pending}
+            placeholder="読み（例: ジーピーティーファイブ）"
+          />
+          <AddEntryButton pending={pending} />
         </form>
 
         {isLoading ? null : entries.length > 0 ? (
@@ -125,6 +132,10 @@ export function ReadingDictionaryManagerView({
   )
 }
 
+/**
+ * 編集中かどうかと編集内容は行ごとに独立している (`atomFamily`)。
+ * 1行を編集しても、他の行はその値を購読していないので描き直されない。
+ */
 function ReadingDictionaryItem({
   entry,
   onDelete,
@@ -137,47 +148,43 @@ function ReadingDictionaryItem({
     patch: { surface?: string; reading?: string; accentType?: number }
   ) => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [editSurface, setEditSurface] = useState(entry.surface)
-  const [editReading, setEditReading] = useState(entry.reading)
+  const editAtom = readingEntryEditAtom(entry.id)
+  const edit = useAtomValue(editAtom)
+  const setEdit = useSetAtom(editAtom)
 
-  if (editing) {
+  if (edit !== null) {
     return (
       <li className="flex items-center gap-2 rounded-md border px-3 py-2">
         <Input
           aria-label="表記"
           className="flex-1"
-          onChange={(event) => setEditSurface(event.target.value)}
-          value={editSurface}
+          onChange={(event) =>
+            setEdit({ ...edit, surface: event.target.value })
+          }
+          value={edit.surface}
         />
         <Input
           aria-label="読み"
           className="flex-[2]"
-          onChange={(event) => setEditReading(event.target.value)}
-          value={editReading}
+          onChange={(event) =>
+            setEdit({ ...edit, reading: event.target.value })
+          }
+          value={edit.reading}
         />
         <Button
-          disabled={!editSurface.trim() || !editReading.trim()}
+          disabled={!edit.surface.trim() || !edit.reading.trim()}
           onClick={() => {
             onUpdate(entry.id, {
-              surface: editSurface,
-              reading: editReading,
+              surface: edit.surface,
+              reading: edit.reading,
             })
-            setEditing(false)
+            setEdit(null)
           }}
           size="sm"
         >
           保存
         </Button>
-        <Button
-          onClick={() => {
-            setEditSurface(entry.surface)
-            setEditReading(entry.reading)
-            setEditing(false)
-          }}
-          size="sm"
-          variant="ghost"
-        >
+        <Button onClick={() => setEdit(null)} size="sm" variant="ghost">
           取消
         </Button>
       </li>
@@ -185,10 +192,7 @@ function ReadingDictionaryItem({
   }
 
   return (
-    <li
-      className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
-      key={entry.id}
-    >
+    <li className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-sm font-medium truncate">{entry.surface}</span>
         <span className="text-xs text-muted-foreground">→</span>
@@ -202,21 +206,42 @@ function ReadingDictionaryItem({
       <div className="flex items-center gap-1 shrink-0">
         <Button
           aria-label={`「${entry.surface}」を編集`}
-          onClick={() => setEditing(true)}
+          onClick={() =>
+            setEdit({ surface: entry.surface, reading: entry.reading })
+          }
           size="icon-sm"
           variant="ghost"
         >
           <Pencil aria-hidden="true" />
         </Button>
-        <Button
-          aria-label={`「${entry.surface}」を削除`}
-          onClick={onDelete}
-          size="icon-sm"
-          variant="ghost"
-        >
-          <X aria-hidden="true" />
-        </Button>
+        <DeleteEntryButton entry={entry} onDelete={onDelete} />
       </div>
     </li>
+  )
+}
+
+/** 削除した行の編集下書きは、家族から外して残さない。 */
+function DeleteEntryButton({
+  entry,
+  onDelete,
+}: {
+  readonly entry: ReadingDictionaryEntry
+  readonly onDelete: () => void
+}) {
+  const store = useStore()
+
+  return (
+    <Button
+      aria-label={`「${entry.surface}」を削除`}
+      onClick={() => {
+        store.set(readingEntryEditAtom(entry.id), null)
+        forgetReadingEntryEdit(entry.id)
+        onDelete()
+      }}
+      size="icon-sm"
+      variant="ghost"
+    >
+      <X aria-hidden="true" />
+    </Button>
   )
 }

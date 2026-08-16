@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Web
 - Supersedes: ADR-0009
 - Superseded by: N/A
-- Related: ADR-0006、ADR-0018、`apps/web/src/routes`, `apps/web/src/shared/components/panel.tsx`
+- Related: ADR-0006、ADR-0018、ADR-0060（状態の所在と計測を追加）、`apps/web/src/routes`, `apps/web/src/shared/components/panel.tsx`
 
 ## コンテキストと変更契機
 

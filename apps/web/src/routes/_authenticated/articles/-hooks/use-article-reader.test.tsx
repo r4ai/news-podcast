@@ -9,7 +9,7 @@ import {
 import { MARKDOWN_FALLBACK_MIN_LENGTH, type Article } from "../-model"
 import { useArticleReader, type ArticleReaderState } from "./use-article-reader"
 
-vi.mock("@workspace/ui/components/sonner", () => ({
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 

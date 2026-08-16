@@ -2,7 +2,7 @@ import { Lightbulb, RefreshCw, Sparkles } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import { Progress } from "@workspace/ui/components/progress"
-import { toast } from "@workspace/ui/components/sonner"
+import { toast } from "@/shared/ui/toast"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { cn } from "@workspace/ui/lib/utils"
 import { Markdown } from "@/shared/markdown"

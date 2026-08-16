@@ -31,15 +31,6 @@ const probe = (session, path, route) => {
   recordProbe(response, route)
 }
 
-const probePost = (session, path, route) => {
-  const response = http.post(`${baseUrl}${path}`, null, {
-    headers: { Cookie: session.cookie },
-    tags: { route },
-  })
-  apiLatency.add(response.timings.duration, { route })
-  recordProbe(response, route)
-}
-
 export const runOwnerIsolation = () => {
   if (!hasOwnerIsolationFixtures) return
 
@@ -62,9 +53,9 @@ export const runOwnerIsolation = () => {
   const episodeId = episodeIdsFor(ownerSession)[0]
   if (episodeId !== undefined) {
     probe(foreignSession, `/v1/episodes/${episodeId}`, "ownerIsolationEpisode")
-    probePost(
+    probe(
       foreignSession,
-      `/v1/episodes/${episodeId}/audio-access`,
+      `/v1/episodes/${episodeId}/audio`,
       "ownerIsolationAudio"
     )
   }

@@ -207,6 +207,21 @@ dockerが無い環境では実行できない。撮り方を変えるより、�
 
 長いページは行ボックスの丸めで全体の高さが実行ごとに1px動くことがあり、寸法が違うと`maxDiffPixelRatio`は効かずに失敗する。記事リーダーだけはviewport固定で撮る。また、非同期に差し替わる本文(remark/rehype + Shiki)は、題名ではなく本文の最後に出る要素を待ってから撮る。
 
+### フロントエンドの性能計測
+
+計測は**本番ビルド**に対して行う。dev serverは変換とHMR clientの分だけ実態から離れる。`scripts/run-fake-preview.ts`が`vite build` → `vite preview`と偽Gatewayを起動し、Playwrightがそこを測る。
+
+```bash
+pnpm --filter web perf:vitals   # FCP/LCP/CLS/INPを実測する
+pnpm --filter web perf:bundle   # 初期ロードのgzipサイズを予算と比べる
+```
+
+条件はCPU 4倍抑制、Slow 4G相当(1.6 Mbps / 150 ms)、**キャッシュが空のcontext**での初回訪問に固定してある。抑制しないと開発機の速さとlocalhostの帯域が差を潰し、バンドルを削っても数字が動かない。ログイン後のページ内遷移を測るのも同じ理由で無意味になる。
+
+タイミングの値は実行環境で揺れるのでCIでは非ブロッキング(`web-perf` job)。決定的なのは`perf:bundle`のgzipサイズで、退行はここで捕らえる。
+
+「どのcomponentが何回描かれたか」はVitestで予算にする。`shared/test/render-count`の`watchRenders`で実物のcomponentを`vi.mock`から包み、操作前後の差を数える。production側へ計測用のコードは入れない。詳細は[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)。
+
 ### 構造化入力のparser方針
 
 RSS/Atom、HTML、Markdownの文書構造は正規表現で解釈しない。専用parserでASTまたは構造化データへ変換し、sanitize・正規化・serializeを別段階に分ける。

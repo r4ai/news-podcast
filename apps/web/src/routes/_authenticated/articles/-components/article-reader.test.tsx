@@ -5,7 +5,7 @@ import { createTestQueryClient, TestProviders } from "@/shared/test/render"
 import type { Article } from "../-model"
 import { ArticleReaderView } from "./article-reader"
 
-vi.mock("@workspace/ui/components/sonner", () => ({
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 

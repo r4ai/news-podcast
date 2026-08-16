@@ -1,7 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { renderHook, type RenderHookResult } from "@testing-library/react"
-import { Suspense, type PropsWithChildren } from "react"
+import { Provider as JotaiProvider } from "jotai"
+import { Suspense, useState, type PropsWithChildren } from "react"
 import { vi } from "vitest"
+
+import { createAppStore, type AppStore } from "@/shared/state/store"
+
+/**
+ * テストごとに独立したjotai store。atomの値がテストを跨いで残らない。
+ * server stateのatomは`queryClientAtom`を見るので、必ずそのテストの
+ * QueryClientを繋いだ状態で作る。
+ */
+export function createTestStore(queryClient: QueryClient) {
+  return createAppStore(queryClient)
+}
+
+export type TestStore = AppStore
 
 /** テストごとに独立したcacheを持つQueryClient。再試行と鮮度保持を無効化する。 */
 export function createTestQueryClient() {
@@ -16,11 +30,19 @@ export function createTestQueryClient() {
 export function TestProviders({
   children,
   queryClient,
-}: PropsWithChildren<{ readonly queryClient: QueryClient }>) {
+  store,
+}: PropsWithChildren<{
+  readonly queryClient: QueryClient
+  readonly store?: TestStore
+}>) {
+  // storeを渡さない呼び出しでも、再renderのたびに作り直さない。
+  const [fallbackStore] = useState(() => createAppStore(queryClient))
   return (
-    <QueryClientProvider client={queryClient}>
-      <Suspense fallback={null}>{children}</Suspense>
-    </QueryClientProvider>
+    <JotaiProvider store={store ?? fallbackStore}>
+      <QueryClientProvider client={queryClient}>
+        <Suspense fallback={null}>{children}</Suspense>
+      </QueryClientProvider>
+    </JotaiProvider>
   )
 }
 
@@ -29,18 +51,25 @@ export function renderHookWithProviders<Result, Props = void>(
   hook: (props: Props) => Result,
   options: {
     readonly queryClient?: QueryClient
+    readonly store?: TestStore
     /** propsを取るhookをrerenderで差し替えたい時 (URL状態の往復テストなど) に渡す。 */
     readonly initialProps?: Props
   } = {}
-): RenderHookResult<Result, Props> & { readonly queryClient: QueryClient } {
+): RenderHookResult<Result, Props> & {
+  readonly queryClient: QueryClient
+  readonly store: TestStore
+} {
   const queryClient = options.queryClient ?? createTestQueryClient()
+  const store = options.store ?? createTestStore(queryClient)
   const result = renderHook(hook, {
     initialProps: options.initialProps,
     wrapper: ({ children }) => (
-      <TestProviders queryClient={queryClient}>{children}</TestProviders>
+      <TestProviders queryClient={queryClient} store={store}>
+        {children}
+      </TestProviders>
     ),
   })
-  return Object.assign(result, { queryClient })
+  return Object.assign(result, { queryClient, store })
 }
 
 /**

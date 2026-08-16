@@ -288,7 +288,16 @@ function GenerationStatus({
           </Badge>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      {/*
+        生成は数分かけて状態が移る。画面を見ていない利用者にも進行が届くよう、
+        状態を表す文言と進捗をまとめて読み上げ対象にする。`polite`なので
+        操作を遮らず、区切りのよいところで読まれる。
+      */}
+      <CardContent
+        aria-live="polite"
+        className="flex flex-col gap-4"
+        role="status"
+      >
         <p className="text-sm leading-6 text-muted-foreground">
           {copy.description}
         </p>

@@ -1,13 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { useState, useTransition } from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { useStore } from "jotai"
+import { useTransition } from "react"
+import { toast } from "@/shared/ui/toast"
 
 import { api } from "@/shared/api"
+import { readingReadingDraftAtom, readingSurfaceDraftAtom } from "../-atoms"
 
 const DICTIONARY_KEY = ["get", "/v1/me/reading-dictionary"] as const
 
 export function useReadingDictionary() {
   const queryClient = useQueryClient()
+  // 下書きは購読せずに読む。購読すると打鍵のたびにこのhookの利用者
+  // (= 登録済み一覧を含むパネル全体) が描き直される。
+  const store = useStore()
   const listQuery = api.useQuery("get", "/v1/me/reading-dictionary")
   const createMutation = api.useMutation("post", "/v1/me/reading-dictionary")
   const updateMutation = api.useMutation(
@@ -19,8 +24,6 @@ export function useReadingDictionary() {
     "/v1/me/reading-dictionary/{id}"
   )
 
-  const [surface, setSurface] = useState("")
-  const [reading, setReading] = useState("")
   const [pending, startTransition] = useTransition()
 
   async function invalidate() {
@@ -28,8 +31,8 @@ export function useReadingDictionary() {
   }
 
   function addEntry() {
-    const trimmedSurface = surface.trim()
-    const trimmedReading = reading.trim()
+    const trimmedSurface = store.get(readingSurfaceDraftAtom).trim()
+    const trimmedReading = store.get(readingReadingDraftAtom).trim()
     if (!trimmedSurface || !trimmedReading) return
     startTransition(async () => {
       try {
@@ -40,8 +43,8 @@ export function useReadingDictionary() {
             accentType: 0,
           },
         })
-        setSurface("")
-        setReading("")
+        store.set(readingSurfaceDraftAtom, "")
+        store.set(readingReadingDraftAtom, "")
         await invalidate()
         toast.success(`「${trimmedSurface}」を登録しました`)
       } catch {
@@ -93,10 +96,6 @@ export function useReadingDictionary() {
   return {
     entries: listQuery.data?.items ?? [],
     isLoading: listQuery.isPending,
-    surface,
-    setSurface,
-    reading,
-    setReading,
     pending,
     addEntry,
     updateEntry,

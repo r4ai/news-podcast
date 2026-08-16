@@ -1,3 +1,4 @@
+import { useAtomValue } from "jotai"
 import { Plus, X } from "lucide-react"
 import { useState } from "react"
 
@@ -12,9 +13,22 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 import { Empty, EmptyDescription } from "@workspace/ui/components/empty"
-import { Input } from "@workspace/ui/components/input"
 
+import { AtomInput } from "@/shared/ui/atom-input"
+import { canAddTagAtom, tagNameDraftAtom } from "../-atoms"
 import { useTagVocabulary } from "../-hooks/use-tag-vocabulary"
+
+/** 下書きの中身を購読するのはこのボタンだけ。 */
+function AddTagButton({ pending }: { readonly pending: boolean }) {
+  const canAdd = useAtomValue(canAddTagAtom)
+
+  return (
+    <Button disabled={pending || !canAdd} type="submit">
+      <Plus data-icon="inline-start" />
+      追加
+    </Button>
+  )
+}
 
 /** データ接続: hookを呼び、viewへ渡すだけ。 */
 export function TagVocabularyManager() {
@@ -26,9 +40,7 @@ export type TagVocabularyManagerViewProps = {
   readonly tags: readonly Tag[]
   readonly suggestions: readonly TagSuggestion[]
   readonly isLoading: boolean
-  readonly name: string
   readonly pending: boolean
-  readonly setName: (value: string) => void
   readonly createTag: () => void
   readonly deleteTag: (tagId: string) => void
   readonly promoteSuggestion: (name: string) => void
@@ -43,9 +55,7 @@ export function TagVocabularyManagerView({
   tags,
   suggestions,
   isLoading,
-  name,
   pending,
-  setName,
   createTag,
   deleteTag,
   promoteSuggestion,
@@ -73,17 +83,13 @@ export function TagVocabularyManagerView({
             createTag()
           }}
         >
-          <Input
+          <AtomInput
             aria-label="新しいタグ名"
+            atom={tagNameDraftAtom}
             disabled={pending}
-            onChange={(event) => setName(event.target.value)}
             placeholder="新しいタグ名"
-            value={name}
           />
-          <Button disabled={pending || !name.trim()} type="submit">
-            <Plus data-icon="inline-start" />
-            追加
-          </Button>
+          <AddTagButton pending={pending} />
         </form>
 
         {isLoading ? null : tags.length > 0 ? (

@@ -5,7 +5,7 @@ import { settingsQueryOptions } from "@/features/settings"
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
 import { useScheduleForm } from "./use-schedule-form"
 
-vi.mock("@workspace/ui/components/sonner", () => ({
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 

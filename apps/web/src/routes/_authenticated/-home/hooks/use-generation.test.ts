@@ -10,7 +10,7 @@ const streamState = vi.hoisted(() => ({
 vi.mock("./use-generation-stream", () => ({
   useGenerationStream: () => streamState.current,
 }))
-vi.mock("@workspace/ui/components/sonner", () => ({
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 

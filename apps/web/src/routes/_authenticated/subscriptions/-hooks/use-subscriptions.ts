@@ -1,6 +1,6 @@
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
 import { useOptimistic, useState, useTransition } from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { toast } from "@/shared/ui/toast"
 
 import {
   feedSyncJobsQueryOptions,

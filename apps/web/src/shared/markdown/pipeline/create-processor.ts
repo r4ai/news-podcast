@@ -1,3 +1,7 @@
+// 数式のstylesheetはパイプラインと同じ塊に置く。routeの静的importに残すと、
+// 記事を開かない利用者にも配られてしまう。
+import "katex/dist/katex.min.css"
+
 import rehypeKatex from "rehype-katex"
 import rehypeRaw from "rehype-raw"
 import rehypeReact from "rehype-react"

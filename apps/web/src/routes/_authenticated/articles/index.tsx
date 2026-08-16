@@ -12,8 +12,7 @@ import {
   EmptySelection,
   ReaderSkeleton,
 } from "./-components/article-reader"
-import { EnrichQueueDialog } from "./-components/enrich-queue-dialog"
-import { useEnrichQueueDialog } from "./-hooks/use-enrich-queue"
+import { ConnectedEnrichQueueDialog } from "./-components/enrich-queue-dialog"
 import { validateArticlesSearch } from "./-model"
 
 export const Route = createFileRoute("/_authenticated/articles/")({
@@ -47,8 +46,6 @@ function ArticlesRoute() {
     })
   }
 
-  const enrichQueue = useEnrichQueueDialog()
-
   function selectArticle(id: string | undefined) {
     onSearchChange({ article: id })
   }
@@ -76,7 +73,6 @@ function ArticlesRoute() {
           <ArticleList
             onSearchChange={onSearchChange}
             onSelect={selectArticle}
-            onShowEnrichQueue={() => enrichQueue.onOpenChange(true)}
             search={search}
             selectedArticleId={search.article}
           />
@@ -104,12 +100,7 @@ function ArticlesRoute() {
         </Panel>
       </div>
 
-      <EnrichQueueDialog
-        connected={enrichQueue.connected}
-        onOpenChange={enrichQueue.onOpenChange}
-        open={enrichQueue.open}
-        status={enrichQueue.status}
-      />
+      <ConnectedEnrichQueueDialog />
     </div>
   )
 }

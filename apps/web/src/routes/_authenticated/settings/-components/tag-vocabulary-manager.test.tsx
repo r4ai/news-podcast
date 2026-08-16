@@ -16,10 +16,8 @@ function renderManager(deleteTag = vi.fn()) {
       createTag={vi.fn()}
       deleteTag={deleteTag}
       isLoading={false}
-      name=""
       pending={false}
       promoteSuggestion={vi.fn()}
-      setName={vi.fn()}
       suggestions={suggestions}
       tags={[{ id: "tag-1", name: "AI", createdAt: "2026-08-12" }]}
     />

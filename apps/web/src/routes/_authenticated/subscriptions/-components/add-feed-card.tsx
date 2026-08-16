@@ -1,3 +1,4 @@
+import { useAtomValue, useSetAtom } from "jotai"
 import { Plus } from "lucide-react"
 import { useState } from "react"
 
@@ -34,6 +35,7 @@ import {
 } from "@workspace/ui/components/toggle-group"
 
 import type { Feed } from "@/features/subscriptions"
+import { canRegisterFeedAtom, feedUrlDraftAtom } from "../-atoms"
 import { useFeedCatalog } from "../-hooks/use-feed-catalog"
 import { useFeedRegistration } from "../-hooks/use-feed-registration"
 
@@ -49,11 +51,46 @@ export type CatalogState = {
 }
 
 export type RegistrationState = {
-  readonly feedUrl: string
   readonly pending: boolean
-  readonly canSubmit: boolean
-  readonly setFeedUrl: (value: string) => void
   readonly submit: () => void
+}
+
+/**
+ * URLの中身を購読するのはこのボタンだけ。カード全体で購読すると、
+ * 打鍵のたびにカタログのコンボボックスまで描き直される。
+ */
+function RegisterFeedButton({ pending }: { readonly pending: boolean }) {
+  const canSubmit = useAtomValue(canRegisterFeedAtom)
+
+  return (
+    <Button
+      aria-label="URLから追加"
+      disabled={!canSubmit || pending}
+      size="icon"
+      type="submit"
+    >
+      {pending ? <Spinner /> : <Plus aria-hidden="true" />}
+    </Button>
+  )
+}
+
+/** 入力欄も自分の値だけを購読する。 */
+function FeedUrlInput({ disabled }: { readonly disabled: boolean }) {
+  const value = useAtomValue(feedUrlDraftAtom)
+  const setValue = useSetAtom(feedUrlDraftAtom)
+
+  return (
+    <InputGroupInput
+      disabled={disabled}
+      id="feed-url"
+      inputMode="url"
+      onChange={(event) => setValue(event.target.value)}
+      placeholder="https://example.com/feed.xml"
+      required
+      type="url"
+      value={value}
+    />
+  )
 }
 
 /** データ接続: hookを呼び、viewへ渡すだけ。 */
@@ -138,31 +175,9 @@ export function AddFeedCardView({
               <FieldLabel htmlFor="feed-url">フィードURL</FieldLabel>
               <div className="flex items-center gap-2">
                 <InputGroup className="flex-1">
-                  <InputGroupInput
-                    disabled={registration.pending}
-                    id="feed-url"
-                    inputMode="url"
-                    onChange={(event) =>
-                      registration.setFeedUrl(event.target.value)
-                    }
-                    placeholder="https://example.com/feed.xml"
-                    required
-                    type="url"
-                    value={registration.feedUrl}
-                  />
+                  <FeedUrlInput disabled={registration.pending} />
                 </InputGroup>
-                <Button
-                  aria-label="URLから追加"
-                  disabled={!registration.canSubmit}
-                  size="icon"
-                  type="submit"
-                >
-                  {registration.pending ? (
-                    <Spinner />
-                  ) : (
-                    <Plus aria-hidden="true" />
-                  )}
-                </Button>
+                <RegisterFeedButton pending={registration.pending} />
               </div>
               <FieldDescription>
                 登録後、新着記事は自動的にオフライン保存されます。

@@ -1,11 +1,20 @@
-import { useContext } from "react"
+import { useAtomValue, useSetAtom } from "jotai"
 
-import { ThemeContext, type ThemeContextValue } from "../theme-context"
+import { resolvedThemeAtom, themeAtom } from "../atoms"
+import type { ResolvedTheme, Theme } from "../model"
 
-export function useTheme(): ThemeContextValue {
-  const context = useContext(ThemeContext)
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider")
-  }
-  return context
+/**
+ * 読みと書きを別のhookに分けているのは、`useAtom`で両方を受け取ると
+ * 「書くだけのcomponent」まで値の変化で描き直されるため。
+ */
+export function useThemeValue(): Theme {
+  return useAtomValue(themeAtom)
+}
+
+export function useResolvedTheme(): ResolvedTheme {
+  return useAtomValue(resolvedThemeAtom)
+}
+
+export function useSetTheme(): (theme: Theme) => void {
+  return useSetAtom(themeAtom)
 }

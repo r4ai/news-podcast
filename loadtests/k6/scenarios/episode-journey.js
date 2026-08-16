@@ -117,8 +117,8 @@ const checkNoPublication = (session, beforeIds, job) => {
 
     const audioResponse = request(
       session,
-      "POST",
-      `/v1/episodes/${episodeId}/audio-access`,
+      "GET",
+      `/v1/episodes/${episodeId}/audio`,
       undefined,
       "chaosPublishedAudio"
     )
@@ -248,12 +248,13 @@ export const runEpisodeJourney = () => {
   )
   ownerMismatch.add(sourceUrls.size === 0)
 
+  // 音声は署名URLの発行ではなく、Gateway経由の同一originストリーム (ADR-0055)。
   const audioResponse = request(
     session,
-    "POST",
-    `/v1/episodes/${episodeId}/audio-access`,
+    "GET",
+    `/v1/episodes/${episodeId}/audio`,
     undefined,
-    "createAudioAccess"
+    "streamEpisodeAudio"
   )
-  recordCheck(audioResponse, "createAudioAccess", 200)
+  recordCheck(audioResponse, "streamEpisodeAudio", 200)
 }

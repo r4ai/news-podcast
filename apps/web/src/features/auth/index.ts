@@ -1,8 +1,4 @@
-export {
-  authClient,
-  authStateQueryOptions,
-  loginWithGoogle,
-} from "./api/auth-state"
+export { authStateQueryOptions, loginWithGoogle } from "./api/auth-state"
 export {
   AuthStateError,
   currentPath,

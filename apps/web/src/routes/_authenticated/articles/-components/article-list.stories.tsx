@@ -47,30 +47,11 @@ const unreadArticles = [
 ]
 
 const baseArgs = {
-  facets: {
-    states: { all: 3, unread: 2, saved: 1, later: 0 },
-    feeds: [
-      { feedId: "feed-1", name: "Zenn", count: 2 },
-      { feedId: "feed-2", name: "Hacker News", count: 1 },
-    ],
-    aiPending: 0,
-  },
-  aiPending: 0,
   search: defaultArticlesSearch,
-  q: "",
-  isSyncing: false,
   hasNextPage: false,
   isFetchingNextPage: false,
   fetchNextPage: fn(),
-  setQ: fn(),
-  setState: fn(),
-  setSort: fn(),
-  setFeedIds: fn(),
-  setIncludeHidden: fn(),
   toggleSaved: fn(),
-  markRead: fn(),
-  markAllRead: fn(),
-  isMarkingAllRead: false,
   onSelect: fn(),
   selectedArticleId: undefined,
 } satisfies Omit<ArticleListViewProps, "articles" | "groups">
@@ -116,7 +97,6 @@ export const NoSearchResults: Story = {
     articles: [],
     groups: [],
     search: { ...defaultArticlesSearch, q: "存在しないキーワード" },
-    q: "存在しないキーワード",
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

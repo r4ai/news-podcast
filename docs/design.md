@@ -133,6 +133,8 @@ Gatewayと4 Context serviceは`@news-podcast/service-runtime`のSupervisorを使
 - External contract gate: 公式仕様→稼働version/digest→実データの順に照合し、匿名fixtureを`provider-contract:check`でoffline再生する。詳細は[外部provider契約台帳](external-provider-contracts.md)。
 - API: OpenAPI lint/validation、型生成差分、認証matrix、Problem Details、owner isolation、pagination、冪等性競合。
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
+- Web(a11y): axe検査は視覚回帰から切り離し、`tests/e2e/accessibility.spec.ts`が全ページ（ログイン、今日、記事、記事表示中、購読、生成時刻、ライブラリ、設定）を検査する。スキップリンクと非同期状態のlive regionも同じところで確認する。
+- Web(性能): 本番ビルドに対する実測を常設する。Web Vitals（FCP/LCP/CLS/INP）は`pnpm --filter web perf:vitals`、初期ロードのgzipサイズは`perf:bundle`。描画回数はVitestで予算化する（`shared/test/render-count`）。計測値は環境で揺れるためCIでは非ブロッキングで回し、決定的なバンドル予算で退行を捕らえる（[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)）。
 - E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生を重要導線として確認するが、確認ゲート後に実装する。
 
 ### 7.1 UI設計原則
@@ -158,7 +160,16 @@ Gatewayと4 Context serviceは`@news-podcast/service-runtime`のSupervisorを使
 - 文字色は背景ごとに4.5:1を確認する。選択行(`accent`)やセグメンテッドコントロールの溝(`muted`)の上では`muted-foreground`が基準を割るため、前景寄りの色へ上げる。
 - 行内の操作(保存など)をhoverだけで出さない。タッチとキーボードから到達できなくなるため、フォーカス時と選択済み状態では常に見せる。
 
-### 7.2 初期画面構成
+### 7.2 状態の所在と描画範囲
+
+- client state（テーマ、入力の下書き、ダイアログの開閉）はjotai atomが持ち、**購読はその値を実際に描くcomponentまで下ろす**。1つのhookがまとめて返しpropsで配ると、購読の単位がツリーの形に縛られ、無関係な部分木まで描き直される。実測では検索欄に5文字打つだけで記事行が180回描き直されていた。
+- 読みは`useAtomValue`、書きは`useSetAtom`と分ける。送信時にだけ値が要る場合は`useStore()`で購読せずに読む。
+- 派生値は読み取り専用の派生atomにし、冗長なstateを持たない。「URLが外から変われば下書きを捨てる」のような規則は、由来を値に含める（`{ base, value }`）ことで純粋な関数として書ける。前の値を覚えるstateやEffectは要らない。
+- OSの配色やキーボードショートカットのような外部への購読はatomの`onMount`へ置く。リスナの寿命が購読の有無と一致し、依存配列が消える。
+- server stateはTanStack Queryのまま。ただし**suspendしない読み**（件数、同期状態）は`atomWithQuery`にして購読の単位を分ける。suspendする読みはTanStack Queryのsuspense hookを使う。`Panel`の表示・回復境界がそれに依存しており、`jotai-tanstack-query`のsuspense系atomはReact 19のSuspenseで解決しないことを実測している。
+- 初回フレームに要らないものはcritical pathへ置かない。OTelのSDK、Markdownのコンパイル器（KaTeX・Shiki・parse5）、トースト、better-authのclientはいずれも動的importにする。遅延で観測が欠けないよう、計装が載るまでのfetchは`pre-init-fetch`が記録し、後からspanへ起こす（ADR-0025）。
+
+### 7.3 初期画面構成
 
 | 領域                     | PC           | モバイル            | 表示する確定ユースケース                 |
 | ------------------------ | ------------ | ------------------- | ---------------------------------------- |
@@ -329,3 +340,4 @@ flowchart TD
 - [ADR-0052 RPC障害隔離と自己回復可能なサービスランタイム](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)
 - [ADR-0053 変換器の実出力をgolden corpusとして描画側へ橋渡しする](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)
 - [ADR-0054 埋め込みのsandbox権限をprovider単位で宣言する](adr/0054-per-provider-embed-sandbox.md)
+- [ADR-0060 描画範囲をatomで区切り、フロントエンドの予算を実測で守る](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)

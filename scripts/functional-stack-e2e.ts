@@ -63,6 +63,11 @@ const request = (
   init?: RequestInit
 ) => handler(new Request(`http://gateway.e2e${path}`, init))
 
+/** Libraryの署名器が返す先。この値へ来た取得だけを偽の上流が受ける。 */
+const SIGNED_AUDIO_URL = "https://audio.e2e.invalid/signed"
+/** 完成通知が申告するWAVの長さと合わせる。 */
+const AUDIO_BYTE_LENGTH = 44
+
 const main = Effect.scoped(
   Effect.gen(function* () {
     const directory = yield* Effect.acquireRelease(
@@ -148,8 +153,7 @@ const main = Effect.scoped(
           ...defaultNodeEpisodeLibraryServiceDependencies,
           openSigner: () => ({
             signer: {
-              issue: () =>
-                Effect.succeed("https://audio.e2e.invalid/signed" as never),
+              issue: () => Effect.succeed(SIGNED_AUDIO_URL as never),
             },
             close: Effect.void,
           }),
@@ -162,20 +166,42 @@ const main = Effect.scoped(
       requestTimeoutMillis: 500,
       loginMethods: { development: true, google: false },
     })
+    // 音声はGatewayが署名URLの中身を取りに行き、そのまま流し返す契約
+    // (ADR-0055)。実体のS3は無いので、署名URLに対してだけ答える上流を挿す。
+    // Rangeにも答えることで、206とcontent-rangeの転送まで確認できる。
     let requestedAudioUrl: string | undefined
+    const audioBody = new Uint8Array(AUDIO_BYTE_LENGTH).fill(1)
+    const audioUpstream: typeof globalThis.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : String(input)
+      requestedAudioUrl = url
+      if (url !== SIGNED_AUDIO_URL) {
+        return new Response(null, { status: 404 })
+      }
+      const range = new Headers(init?.headers).get("range")
+      if (range === null) {
+        return new Response(audioBody, {
+          status: 200,
+          headers: {
+            "accept-ranges": "bytes",
+            "content-length": String(audioBody.byteLength),
+            "content-type": "audio/wav",
+          },
+        })
+      }
+      const start = Number(/^bytes=(\d+)-/.exec(range)?.[1] ?? 0)
+      const slice = audioBody.subarray(start)
+      return new Response(slice, {
+        status: 206,
+        headers: {
+          "accept-ranges": "bytes",
+          "content-length": String(slice.byteLength),
+          "content-range": `bytes ${start}-${audioBody.byteLength - 1}/${audioBody.byteLength}`,
+          "content-type": "audio/wav",
+        },
+      })
+    }
     const web = makeGatewayWebHandler(ports, undefined, {
-      fetcher: (input) => {
-        requestedAudioUrl = String(input)
-        return Promise.resolve(
-          new Response(Uint8Array.from([82, 73, 70, 70]), {
-            status: 200,
-            headers: {
-              "content-length": "4",
-              "content-type": "audio/wav",
-            },
-          })
-        )
-      },
+      fetcher: audioUpstream,
     })
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => web.dispose()).pipe(Effect.ignore)
@@ -398,23 +424,67 @@ const main = Effect.scoped(
         "episode detail returned another episode"
       )
 
+      // 署名URLはブラウザへ出さず、Gatewayがowner認可の後に中身を流す。
       const audioResponse = await request(
         web.handler,
         `/v1/episodes/${episodeId}/audio`,
         { headers }
       )
-      assert(audioResponse.status === 200, "audio was not streamed")
+      assert(audioResponse.status === 200, "episode audio was not streamed")
       assert(
-        requestedAudioUrl === "https://audio.e2e.invalid/signed",
+        requestedAudioUrl === SIGNED_AUDIO_URL,
         "audio access was not owner-scoped through Library"
-      )
-      assert(
-        new TextDecoder().decode(await audioResponse.arrayBuffer()) === "RIFF",
-        "audio stream did not preserve WAV bytes"
       )
       assert(
         !audioResponse.headers.has("location"),
         "signed audio URL escaped the same-origin Gateway"
+      )
+      assert(
+        audioResponse.headers.get("content-type") === "audio/wav",
+        "episode audio lost its content type"
+      )
+      assert(
+        audioResponse.headers.get("cache-control") === "private, no-store",
+        "episode audio was cacheable"
+      )
+      const audioBytes = new Uint8Array(await audioResponse.arrayBuffer())
+      assert(
+        audioBytes.byteLength === AUDIO_BYTE_LENGTH,
+        "episode audio body was truncated"
+      )
+
+      const rangeResponse = await request(
+        web.handler,
+        `/v1/episodes/${episodeId}/audio`,
+        { headers: { ...headers, range: "bytes=8-" } }
+      )
+      assert(
+        rangeResponse.status === 206,
+        "audio range request was not partial"
+      )
+      assert(
+        rangeResponse.headers.get("content-range") ===
+          `bytes 8-${AUDIO_BYTE_LENGTH - 1}/${AUDIO_BYTE_LENGTH}`,
+        "audio range response lost its content range"
+      )
+
+      const malformedRange = await request(
+        web.handler,
+        `/v1/episodes/${episodeId}/audio`,
+        { headers: { ...headers, range: "bytes=abc" } }
+      )
+      assert(
+        malformedRange.status === 416,
+        "malformed audio range was not rejected"
+      )
+
+      const anonymousAudio = await request(
+        web.handler,
+        `/v1/episodes/${episodeId}/audio`
+      )
+      assert(
+        anonymousAudio.status === 401,
+        "episode audio was readable without a session"
       )
 
       const anonymous = await request(web.handler, "/v1/episodes")

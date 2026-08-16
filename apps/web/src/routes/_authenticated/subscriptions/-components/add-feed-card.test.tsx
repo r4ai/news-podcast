@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react"
+import { Provider, createStore } from "jotai"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import type { Feed } from "@/features/subscriptions"
+import { feedUrlDraftAtom } from "../-atoms"
 import {
   AddFeedCardView,
   type CatalogState,
@@ -29,13 +31,19 @@ function registrationState(
   overrides: Partial<RegistrationState> = {}
 ): RegistrationState {
   return {
-    feedUrl: "",
     pending: false,
-    canSubmit: false,
-    setFeedUrl: vi.fn(),
     submit: vi.fn(),
     ...overrides,
   }
+}
+
+/** URL下書きのatomを仕込んだProviderで包む。 */
+function withDraftUrl(url: string) {
+  const store = createStore()
+  store.set(feedUrlDraftAtom, url)
+  return ({ children }: { children: React.ReactNode }) => (
+    <Provider store={store}>{children}</Provider>
+  )
 }
 
 describe("AddFeedCardView", () => {
@@ -67,12 +75,10 @@ describe("AddFeedCardView", () => {
     render(
       <AddFeedCardView
         catalog={catalogState()}
-        registration={registrationState({
-          feedUrl: "https://example.com/feed.xml",
-          canSubmit: true,
-          submit,
-        })}
-      />
+        registration={registrationState({ submit })}
+      />,
+      // 送信ボタンの活性はURL下書きのatomが決める。値の出どころを揃える。
+      { wrapper: withDraftUrl("https://example.com/feed.xml") }
     )
 
     await user.click(screen.getByRole("button", { name: "URLで追加" }))
@@ -87,10 +93,7 @@ describe("AddFeedCardView", () => {
     render(
       <AddFeedCardView
         catalog={catalogState()}
-        registration={registrationState({
-          feedUrl: "https://example.com/feed.xml",
-          pending: true,
-        })}
+        registration={registrationState({ pending: true })}
       />
     )
 

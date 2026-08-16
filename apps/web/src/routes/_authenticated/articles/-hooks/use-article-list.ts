@@ -1,23 +1,12 @@
-import {
-  useQuery,
-  useQueryClient,
-  useSuspenseInfiniteQuery,
-} from "@tanstack/react-query"
-import {
-  useEffect,
-  useOptimistic,
-  useRef,
-  useState,
-  useTransition,
-} from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { useQueryClient, useSuspenseInfiniteQuery } from "@tanstack/react-query"
+import { useAtomValue } from "jotai"
+import { useEffect, useOptimistic, useRef, useTransition } from "react"
 
 import { api } from "@/shared/api"
-import { isFeedSyncActive } from "@/features/subscriptions"
-import { useDebouncedCallback } from "@/shared/lib/use-debounced-callback"
+import { toast } from "@/shared/ui/toast"
+import { articleFacetsAtomFamily, isSyncingAtom } from "../-atoms"
 import {
   ARTICLE_STATE_MUTATION_SCOPE,
-  articleFacetsQueryOptions,
   articlesInfiniteQueryOptions,
   refetchArticleCollections,
   writeArticleToCaches,
@@ -27,10 +16,11 @@ import {
   toBulkFilter,
   type Article,
   type ArticlePage,
-  type ArticleSort,
-  type ArticleState,
   type ArticlesSearch,
 } from "../-model"
+
+/** 同期中の追い取得。1秒ポーリングは一覧全ページを叩くので、間隔を緩める。 */
+const SYNC_POLL_MS = 2_000
 
 type ArticlePatch = {
   readonly read?: boolean
@@ -49,61 +39,28 @@ export function applyDraft(
   )
 }
 
-const SEARCH_DEBOUNCE_MS = 300
-/** 同期中の追い取得。1秒ポーリングは一覧全ページを叩くので、間隔を緩める。 */
-const SYNC_POLL_MS = 2_000
-
-export type UseArticleListParams = {
-  readonly search: ArticlesSearch
-  readonly onSearchChange: (
-    patch: Partial<ArticlesSearch>,
-    options?: { readonly replace?: boolean }
-  ) => void
-}
-
-export function useArticleList({
-  search,
-  onSearchChange,
-}: UseArticleListParams) {
+/**
+ * 記事一覧の本体。
+ *
+ * 件数(facets)と同期状態は**別のatom**なので、ここでは購読しない。1つのhookが
+ * 全部を返してpropsで配ると、件数が1つ動いただけで記事行まで描き直される
+ * (計測済み: 30行 × 1回)。購読の単位を分けるのがatomにした理由。
+ */
+export function useArticleItems(search: ArticlesSearch) {
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
 
-  const syncJobsQuery = api.useQuery(
-    "get",
-    "/v1/me/feed-sync-jobs",
-    undefined,
-    {
-      refetchInterval: (query) =>
-        query.state.data?.items.some(isFeedSyncActive) ? 1_000 : false,
-    }
-  )
-  const syncActive = syncJobsQuery.data?.items.some(isFeedSyncActive) ?? false
-  const wasSyncActive = useRef(false)
-
-  // 初回の読み込みと失敗はPanelのSuspense/CatchBoundaryが引き受ける。
+  const syncing = useAtomValue(isSyncingAtom)
+  // 一覧の取得だけはTanStack Queryのsuspense hookのまま。`Panel`の表示・回復
+  // 境界がsuspendする読みに依存しており、jotai側のsuspense atomはReact 19の
+  // Suspenseで解決しないことを実測した (docs/adr参照)。
   const listQuery = useSuspenseInfiniteQuery({
     ...articlesInfiniteQueryOptions(search),
     // 続きを読み込んだ後は再取得が全ページに及ぶので、先頭ページの間だけ追う。
     refetchInterval: (query) =>
-      syncActive && (query.state.data?.pages.length ?? 0) <= 1
+      syncing && (query.state.data?.pages.length ?? 0) <= 1
         ? SYNC_POLL_MS
         : false,
-  })
-
-  const facetsQuery = useQuery({
-    ...articleFacetsQueryOptions(search),
-    staleTime: 30_000,
-  })
-
-  const patchMutation = api.useMutation(
-    "patch",
-    "/v1/me/articles/{articleId}",
-    {
-      scope: ARTICLE_STATE_MUTATION_SCOPE,
-    }
-  )
-  const bulkMutation = api.useMutation("post", "/v1/me/articles/bulk-state", {
-    scope: ARTICLE_STATE_MUTATION_SCOPE,
   })
 
   const serverItems = listQuery.data.pages.flatMap(
@@ -112,14 +69,11 @@ export function useArticleList({
   const [articles, addDraft] = useOptimistic(serverItems, applyDraft)
   const groups = groupArticlesByDate(articles)
 
-  // 外部のフィード同期ジョブが終わった瞬間に、取り込まれた記事を取り直す。
-  // stateのミラーではなく「外部システムの完了への反応」なのでEffectで扱う。
-  useEffect(() => {
-    const wasActive = wasSyncActive.current
-    wasSyncActive.current = syncActive
-    if (!wasActive || syncActive) return
-    void refetchArticleCollections(queryClient)
-  }, [queryClient, syncActive])
+  const patchMutation = api.useMutation(
+    "patch",
+    "/v1/me/articles/{articleId}",
+    { scope: ARTICLE_STATE_MUTATION_SCOPE }
+  )
 
   function update(article: Article, next: ArticlePatch) {
     startTransition(async () => {
@@ -141,6 +95,30 @@ export function useArticleList({
     })
   }
 
+  return {
+    articles,
+    groups,
+    hasNextPage: listQuery.hasNextPage,
+    isFetchingNextPage: listQuery.isFetchingNextPage,
+    fetchNextPage: () => void listQuery.fetchNextPage(),
+    toggleSaved: (article: Article) =>
+      update(article, { saved: !article.saved }),
+    markRead: (article: Article) => update(article, { read: true }),
+  } as const
+}
+
+/**
+ * 一覧ヘッダーが要る分だけ。件数と一括既読で、記事行の中身には触れない。
+ */
+export function useArticleListHeaderState(search: ArticlesSearch) {
+  const queryClient = useQueryClient()
+  const [, startTransition] = useTransition()
+  const facetsQuery = useAtomValue(articleFacetsAtomFamily(search))
+
+  const bulkMutation = api.useMutation("post", "/v1/me/articles/bulk-state", {
+    scope: ARTICLE_STATE_MUTATION_SCOPE,
+  })
+
   function markAllRead() {
     startTransition(async () => {
       try {
@@ -156,46 +134,31 @@ export function useArticleList({
     })
   }
 
-  // 検索欄はデバウンスしてからURLへ反映し、それ以外の絞り込みは即時にURLへ載せる。
-  const [qDraft, setQDraft] = useState(search.q)
-  const [lastSyncedQ, setLastSyncedQ] = useState(search.q)
-  // 戻る/進むやフィルタリセットでURLのqが外から変わったら入力欄へ取り込む。
-  // Effectで同期するとデバウンス中の打鍵と競合するので、render中に解決する。
-  if (lastSyncedQ !== search.q) {
-    setLastSyncedQ(search.q)
-    setQDraft(search.q)
-  }
-  const pushQ = useDebouncedCallback(
-    (value: string) => onSearchChange({ q: value }, { replace: true }),
-    SEARCH_DEBOUNCE_MS
-  )
-
-  function setQ(value: string) {
-    setQDraft(value)
-    pushQ(value)
-  }
-
   return {
-    articles,
-    groups,
     facets: facetsQuery.data,
     aiPending: facetsQuery.data?.aiPending,
-    isSyncing: syncActive,
-    hasNextPage: listQuery.hasNextPage,
-    isFetchingNextPage: listQuery.isFetchingNextPage,
-    fetchNextPage: () => listQuery.fetchNextPage(),
-    search,
-    q: qDraft,
-    setQ,
-    setState: (state: ArticleState) => onSearchChange({ state }),
-    setSort: (sort: ArticleSort) => onSearchChange({ sort }),
-    setFeedIds: (feedIds: readonly string[]) => onSearchChange({ feedIds }),
-    setIncludeHidden: (includeHidden: boolean) =>
-      onSearchChange({ includeHidden }),
-    toggleSaved: (article: Article) =>
-      update(article, { saved: !article.saved }),
-    markRead: (article: Article) => update(article, { read: true }),
     markAllRead,
     isMarkingAllRead: bulkMutation.isPending,
   } as const
+}
+
+/**
+ * RSS同期の進行。真偽値だけを購読するので、ジョブの中身が動いても
+ * ここを読むcomponentは描き直されない。
+ */
+export function useFeedSyncIndicator() {
+  const queryClient = useQueryClient()
+  const syncActive = useAtomValue(isSyncingAtom)
+  const wasSyncActive = useRef(false)
+
+  // 外部のフィード同期ジョブが終わった瞬間に、取り込まれた記事を取り直す。
+  // stateのミラーではなく「外部システムの完了への反応」なのでEffectで扱う。
+  useEffect(() => {
+    const wasActive = wasSyncActive.current
+    wasSyncActive.current = syncActive
+    if (!wasActive || syncActive) return
+    void refetchArticleCollections(queryClient)
+  }, [queryClient, syncActive])
+
+  return syncActive
 }

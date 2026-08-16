@@ -629,6 +629,7 @@ test("development login to generated episode playback completes", async ({
     page.getByRole("heading", { name: "今日の開発ニュース" })
   ).toBeVisible()
   await page.getByRole("button", { name: "再生" }).click()
+  // 公開音声契約はsame-originの `GET /v1/episodes/{id}/audio` (ADR-0055)。
   await expect(page.locator("audio")).toHaveAttribute(
     "src",
     /\/v1\/episodes\/[^/]+\/audio$/

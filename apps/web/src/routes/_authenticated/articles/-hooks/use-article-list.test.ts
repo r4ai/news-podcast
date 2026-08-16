@@ -7,9 +7,30 @@ import {
   type Article,
   type ArticlesSearch,
 } from "../-model"
-import { applyDraft, useArticleList } from "./use-article-list"
+import {
+  applyDraft,
+  useArticleItems,
+  useArticleListHeaderState,
+  useFeedSyncIndicator,
+} from "./use-article-list"
 
-vi.mock("@workspace/ui/components/sonner", () => ({
+/**
+ * 一覧パネル全体がやることをまとめて呼ぶ。実装は購読の単位ごとに分かれて
+ * いるが、振る舞いの検証は「パネルとして正しいか」で行う。
+ */
+function useArticleListPanel({
+  search,
+}: {
+  search: ArticlesSearch
+  onSearchChange: (patch: Partial<ArticlesSearch>) => void
+}) {
+  const items = useArticleItems(search)
+  const header = useArticleListHeaderState(search)
+  const isSyncing = useFeedSyncIndicator()
+  return { ...items, ...header, isSyncing, search }
+}
+
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
@@ -49,7 +70,7 @@ describe("applyDraft", () => {
   })
 })
 
-describe("useArticleList", () => {
+describe("記事一覧パネル", () => {
   function renderList(
     routes: Parameters<typeof stubFetch>[0],
     search: ArticlesSearch = defaultArticlesSearch
@@ -58,7 +79,7 @@ describe("useArticleList", () => {
     const onSearchChange = vi.fn()
     const rendered = renderHookWithProviders(
       ({ search: currentSearch }: { search: ArticlesSearch }) =>
-        useArticleList({ search: currentSearch, onSearchChange }),
+        useArticleListPanel({ search: currentSearch, onSearchChange }),
       { initialProps: { search } }
     )
     return { ...rendered, ...stub, onSearchChange }
@@ -71,52 +92,12 @@ describe("useArticleList", () => {
     ])
 
     await waitFor(() => expect(result.current.articles).toHaveLength(2))
-    expect(result.current.facets).toEqual(facets)
+    // 件数は一覧とは別のatomなので、届く順は独立している。
+    await waitFor(() => expect(result.current.facets).toEqual(facets))
     expect(result.current.aiPending).toBe(3)
 
     const listCall = calls.find((call) => call.url === "/v1/me/articles")
     expect(listCall?.method).toBe("GET")
-  })
-
-  it("debounces search input and pushes it to the URL via onSearchChange", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const { result, onSearchChange } = renderList([
-      {
-        path: "/v1/me/articles",
-        body: { items: [], page: { hasMore: false } },
-      },
-      { path: "/v1/me/articles/facets", body: facets },
-    ])
-
-    await vi.waitFor(() => expect(result.current).not.toBeNull())
-    act(() => result.current.setQ("otel"))
-    expect(onSearchChange).not.toHaveBeenCalled()
-
-    await act(async () => {
-      vi.advanceTimersByTime(300)
-    })
-
-    expect(onSearchChange).toHaveBeenCalledWith(
-      { q: "otel" },
-      { replace: true }
-    )
-    vi.useRealTimers()
-  })
-
-  it("reflects a search prop change coming from browser back/forward (URL round trip)", async () => {
-    const { result, rerender } = renderList(
-      [
-        { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
-        { path: "/v1/me/articles/facets", body: facets },
-      ],
-      { ...defaultArticlesSearch, state: "unread" }
-    )
-    await waitFor(() => expect(result.current.articles).toHaveLength(2))
-
-    rerender({ search: { ...defaultArticlesSearch, state: "saved" } })
-
-    await waitFor(() => expect(result.current.search.state).toBe("saved"))
-    expect(result.current.q).toBe(defaultArticlesSearch.q)
   })
 
   it("sends only the changed flag when saving an article, optimistically first", async () => {
@@ -138,7 +119,7 @@ describe("useArticleList", () => {
   })
 
   it("rolls back the optimistic update and toasts when the save mutation fails", async () => {
-    const { toast } = await import("@workspace/ui/components/sonner")
+    const { toast } = await import("@/shared/ui/toast")
     const { result } = renderList([
       { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
       { path: "/v1/me/articles/facets", body: facets },
@@ -237,7 +218,14 @@ describe("useArticleList", () => {
       },
     ])
     await waitFor(() => expect(result.current.articles).toHaveLength(2))
-    const before = calls.filter((call) => call.method === "GET").length
+    // 件数は別のatomで独立に届く。基準を取る前に揃うのを待つ。
+    await waitFor(() => expect(result.current.facets).toBeDefined())
+    // 数えるのは一覧の再取得だけ。件数の取得は別のqueryで、到着の順も独立。
+    const listGets = () =>
+      calls.filter(
+        (call) => call.method === "GET" && call.url === "/v1/me/articles"
+      ).length
+    const before = listGets()
 
     await act(async () => result.current.toggleSaved(items[0]!))
 
@@ -246,9 +234,11 @@ describe("useArticleList", () => {
         result.current.articles.find((article) => article.id === "a")?.saved
       ).toBe(true)
     )
-    expect(calls.filter((call) => call.method === "GET").length).toBe(before)
+    expect(listGets()).toBe(before)
     // facetsの保存件数は再取得ではなく差分で進む。
-    expect(result.current.facets?.states.saved).toBe(facets.states.saved + 1)
+    await waitFor(() =>
+      expect(result.current.facets?.states.saved).toBe(facets.states.saved + 1)
+    )
   })
 
   // 連打は mutation の scope で直列化される。投入順のまま、1クリック1リクエスト。
@@ -310,7 +300,7 @@ describe("useArticleList", () => {
 
     const onSearchChange = vi.fn()
     const { result } = renderHookWithProviders(() =>
-      useArticleList({ search: defaultArticlesSearch, onSearchChange })
+      useArticleListPanel({ search: defaultArticlesSearch, onSearchChange })
     )
     await waitFor(() => expect(result.current.articles).toHaveLength(2))
 
@@ -358,7 +348,7 @@ describe("useArticleList", () => {
 
     const onSearchChange = vi.fn()
     const { result } = renderHookWithProviders(() =>
-      useArticleList({ search: defaultArticlesSearch, onSearchChange })
+      useArticleListPanel({ search: defaultArticlesSearch, onSearchChange })
     )
     await waitFor(() => expect(result.current.articles).toHaveLength(2))
 
@@ -377,7 +367,7 @@ describe("useArticleList", () => {
   })
 
   it("applies a bulk read across the current filter and reports how many changed", async () => {
-    const { toast } = await import("@workspace/ui/components/sonner")
+    const { toast } = await import("@/shared/ui/toast")
     const { result, calls } = renderList([
       { path: "/v1/me/articles", body: { items, page: { hasMore: false } } },
       { path: "/v1/me/articles/facets", body: facets },

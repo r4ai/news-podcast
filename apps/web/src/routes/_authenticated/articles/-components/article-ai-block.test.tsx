@@ -31,7 +31,11 @@ describe("ArticleAiBlock", () => {
       />
     )
 
-    await waitFor(() => expect(view.getByText("生成済みの要約")).toBeTruthy())
+    // Markdownのコンパイル器は遅延importなので、そのファイルで最初の1件は
+    // moduleの取得を待つ。既定の1秒では全ファイル同時実行時に足りない。
+    await waitFor(() => expect(view.getByText("生成済みの要約")).toBeTruthy(), {
+      timeout: 10_000,
+    })
     expect(view.getByText("適合度未計算")).toBeTruthy()
     expect(view.queryByLabelText("適合度")).toBeNull()
   })
@@ -49,7 +53,11 @@ describe("ArticleAiBlock", () => {
       />
     )
 
-    await waitFor(() => expect(view.getByText("生成済みの要約")).toBeTruthy())
+    // Markdownのコンパイル器は遅延importなので、そのファイルで最初の1件は
+    // moduleの取得を待つ。既定の1秒では全ファイル同時実行時に足りない。
+    await waitFor(() => expect(view.getByText("生成済みの要約")).toBeTruthy(), {
+      timeout: 10_000,
+    })
     expect(view.getByLabelText("適合度 82")).toBeTruthy()
     expect(view.getByText("興味に合致するから")).toBeTruthy()
   })

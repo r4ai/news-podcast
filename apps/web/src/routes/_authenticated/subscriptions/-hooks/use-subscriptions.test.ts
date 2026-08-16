@@ -9,7 +9,7 @@ import type { Subscription } from "@/features/subscriptions"
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
 import { applyDraft, useSubscriptions } from "./use-subscriptions"
 
-vi.mock("@workspace/ui/components/sonner", () => ({
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
 import { useInterestProfileForm } from "./use-interest-profile-form"
 
-vi.mock("@workspace/ui/components/sonner", () => ({
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 

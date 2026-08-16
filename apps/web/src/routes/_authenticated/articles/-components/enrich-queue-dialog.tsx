@@ -20,13 +20,25 @@ import type {
   EnrichQueueItem,
   EnrichQueueStatus,
 } from "@/features/enrich/queue"
-import type { EnrichQueueDialogState } from "../-hooks/use-enrich-queue"
+import {
+  useEnrichQueueDialog,
+  type EnrichQueueDialogState,
+} from "../-hooks/use-enrich-queue"
 
 export type EnrichQueueDialogProps = {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly status: EnrichQueueDialogState["status"]
   readonly connected: boolean
+}
+
+/**
+ * データ接続。開閉はatomが持つので、routeから状態を配らない。
+ * 開いたことでrouteが描き直され、一覧まで巻き添えになるのを避ける。
+ */
+export function ConnectedEnrichQueueDialog() {
+  const dialog = useEnrichQueueDialog()
+  return <EnrichQueueDialog {...dialog} />
 }
 
 export function EnrichQueueDialog({

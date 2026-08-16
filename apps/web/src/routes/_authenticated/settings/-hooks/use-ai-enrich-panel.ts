@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { useState, useTransition } from "react"
-import { toast } from "@workspace/ui/components/sonner"
+import { toast } from "@/shared/ui/toast"
 
 import {
   ENRICH_QUEUE_QUERY_KEY,

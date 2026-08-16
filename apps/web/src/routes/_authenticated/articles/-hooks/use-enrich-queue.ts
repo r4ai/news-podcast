@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query"
+import { useAtom } from "jotai"
 import { useEffect, useState } from "react"
 
 import {
@@ -7,6 +8,7 @@ import {
 } from "@/features/enrich/queue"
 import { api } from "@/shared/api"
 import { subscribeEventStream } from "@/shared/api"
+import { enrichQueueOpenAtom } from "../-atoms"
 
 /**
  * AI補助キュー状態ダイアログ。開いている間だけSSEでライブ更新し、
@@ -14,7 +16,8 @@ import { subscribeEventStream } from "@/shared/api"
  */
 export function useEnrichQueueDialog() {
   const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
+  // 開閉はatomが持つ。routeのstateにすると、開くたびに一覧まで描き直される。
+  const [open, setOpen] = useAtom(enrichQueueOpenAtom)
   const [streamConnected, setStreamConnected] = useState(false)
 
   const statusQuery = api.useQuery("get", "/v1/me/enrich/queue", undefined, {

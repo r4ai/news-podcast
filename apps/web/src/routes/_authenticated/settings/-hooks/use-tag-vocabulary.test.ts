@@ -2,9 +2,10 @@ import { act, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
+import { tagNameDraftAtom } from "../-atoms"
 import { useTagVocabulary } from "./use-tag-vocabulary"
 
-vi.mock("@workspace/ui/components/sonner", () => ({
+vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
@@ -40,7 +41,7 @@ describe("useTagVocabulary", () => {
   })
 
   it("creates a tag from the name field and clears it", async () => {
-    const { result, calls } = await renderState([
+    const { result, calls, store } = await renderState([
       { path: "/v1/me/tags", body: tags },
       { path: "/v1/me/tag-suggestions", body: suggestions },
       {
@@ -56,12 +57,12 @@ describe("useTagVocabulary", () => {
     ])
     await waitFor(() => expect(result.current.tags).toEqual(tags.items))
 
-    act(() => result.current.setName("Web"))
+    act(() => store.set(tagNameDraftAtom, "Web"))
     await act(async () => result.current.createTag())
 
     const created = calls.find((call) => call.method === "POST")
     expect(created?.body).toEqual({ name: "Web" })
-    expect(result.current.name).toBe("")
+    expect(store.get(tagNameDraftAtom)).toBe("")
   })
 
   it("promotes a suggestion into a tag", async () => {

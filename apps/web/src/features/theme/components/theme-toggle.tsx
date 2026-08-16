@@ -13,7 +13,7 @@ import {
 
 import { TelemetryPreference } from "@/shared/observability/telemetry-preference"
 
-import { useTheme } from "../hooks/use-theme"
+import { useSetTheme, useThemeValue } from "../hooks/use-theme"
 import type { Theme } from "../model"
 
 const themes = [
@@ -27,7 +27,8 @@ const themes = [
 }>
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
+  const theme = useThemeValue()
+  const setTheme = useSetTheme()
 
   return (
     <DropdownMenu>
