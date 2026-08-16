@@ -96,6 +96,14 @@ describe("SQLite execution repository", () => {
             total: 2,
             occurredAt: timestamp("2026-08-13T00:01:20.000Z"),
           })
+          yield* execution.reportStageProgress({
+            jobId,
+            leaseToken: token("lease-1"),
+            step: "synthesizing_audio",
+            completed: 0,
+            total: 2,
+            occurredAt: timestamp("2026-08-13T00:01:25.000Z"),
+          })
           const jobWithProgress = yield* execution.findById(jobId)
           const staleProgressExit = yield* Effect.exit(
             execution.reportStageProgress({

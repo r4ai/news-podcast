@@ -392,6 +392,11 @@ export const makeJobHandle = (
           )
           .get()
         if (row === undefined) return false
+        if (
+          row.stageProgressCompleted !== null &&
+          input.completed <= row.stageProgressCompleted
+        )
+          return true
         tx.update(episodeJobs)
           .set({
             lastProgressAt: input.occurredAt,

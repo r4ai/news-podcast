@@ -47,7 +47,7 @@ describe("HTTP to S3 article capture", () => {
       }
       response.setHeader("content-type", "text/html; charset=utf-8")
       response.end(
-        '<!doctype html><title>Secret</title><link rel="stylesheet" href="/style.css"><script>alert(1)</script><article><h1>Hello world</h1><p>Read <strong>important</strong> <a href="/docs">guide</a> and <img src="/images/cover.png" alt="cover" />.</p><p><a href="javascript:alert(2)">unsafe</a></p><pre><code>const answer = 42</code></pre></article>'
+        '<!doctype html><title>Secret</title><link rel="stylesheet" href="/style.css" integrity="sha384-stale"><script>alert(1)</script><article><h1>Hello world</h1><p>Read <strong>important</strong> <a href="/docs">guide</a> and <img src="/images/cover.png" alt="cover" />.</p><p><a href="javascript:alert(2)">unsafe</a></p><pre><code>const answer = 42</code></pre></article>'
       )
     })
     servers.push(server)
@@ -110,6 +110,7 @@ describe("HTTP to S3 article capture", () => {
     expect(replay).toContain("Content-Security-Policy")
     expect(replay).not.toContain("<script>")
     expect(replay).toContain("../assets/")
+    expect(replay).not.toContain("integrity=")
     expect(capture.assets).toHaveLength(2)
     await Effect.runPromise(resource.close)
     expect(closeS3).toHaveBeenCalledOnce()

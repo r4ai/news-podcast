@@ -51,6 +51,26 @@ describe("EpisodeCompleted message parser", () => {
     expect(Object.isFrozen(notice.sources)).toBe(true)
   })
 
+  it("accepts a queued v2 message published before article provenance was added", async () => {
+    const legacyMessage = {
+      ...validMessage,
+      payload: {
+        ...validMessage.payload,
+        sources: validMessage.payload.sources.map(
+          ({ articleId: _articleId, ...source }) => source
+        ),
+      },
+    }
+
+    const notice = await Effect.runPromise(
+      parseEpisodeCompletedMessage(legacyMessage)
+    )
+
+    expect(notice.sources).toEqual([
+      expect.not.objectContaining({ articleId: expect.anything() }),
+    ])
+  })
+
   it.each([
     ["invalid envelope", { ...validMessage, messageId: "message" }],
     [

@@ -36,7 +36,9 @@ export const parseEpisodeCompletedMessage = (input: unknown) =>
       audio: payload.audio,
       sources: payload.sources.map((source) => ({
         _tag: "RssSource" as const,
-        articleId: source.articleId,
+        ...(source.articleId === undefined
+          ? {}
+          : { articleId: source.articleId }),
         url: source.url,
         title: source.title,
         snapshotId: source.snapshotId,

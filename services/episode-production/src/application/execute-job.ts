@@ -54,19 +54,19 @@ const withProviderStage =
     })
 
 const canceled = (): LeaseFailure => deepFreeze({ _tag: "ExecutionCanceled" })
+const jobDeadlineExceeded = (): PipelineFailure =>
+  deepFreeze({
+    _tag: "PipelineFailure",
+    code: "job_deadline_exceeded",
+    retryable: false,
+  })
 
 const failWhenCanceled = (
   signal: AbortSignal | undefined
 ): Effect.Effect<void, LeaseFailure | PipelineFailure> => {
   if (!signal?.aborted) return Effect.void
   if (signal.reason !== "job_deadline_exceeded") return Effect.fail(canceled())
-  return Effect.fail(
-    deepFreeze({
-      _tag: "PipelineFailure",
-      code: "job_deadline_exceeded",
-      retryable: false,
-    })
-  )
+  return Effect.fail(jobDeadlineExceeded())
 }
 
 const isTagged = (failure: unknown, tag: string) =>
@@ -135,9 +135,16 @@ const classify = (failure: ExecutionFailure) => {
 const transitionFailure = (
   ports: EpisodeExecutionPorts,
   job: RunningJob,
-  failure: ExecutionFailure
+  failure: ExecutionFailure,
+  signal: AbortSignal | undefined
 ): Effect.Effect<EpisodeExecutionOutcome, PipelineFailure> => {
-  const classified = classify(failure)
+  const initial = classify(failure)
+  const classified =
+    initial._tag === "Canceled" &&
+    signal?.aborted === true &&
+    signal.reason === "job_deadline_exceeded"
+      ? { _tag: "Terminal" as const, code: jobDeadlineExceeded().code }
+      : initial
   if (classified._tag === "StaleLease") {
     return Effect.succeed(deepFreeze({ _tag: "StaleLease" }))
   }
@@ -485,7 +492,7 @@ export const executeEpisodeJob =
 
     return run.pipe(
       Effect.matchEffect({
-        onFailure: (failure) => transitionFailure(ports, job, failure),
+        onFailure: (failure) => transitionFailure(ports, job, failure, signal),
         onSuccess: Effect.succeed,
       }),
       Effect.withSpan("episodeProduction.executeJob")

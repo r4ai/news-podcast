@@ -86,7 +86,7 @@ export const parseEpisodeCompleted = parse(EpisodeCompletedSchema)
 
 const EpisodeCompletedV2SourceSchema = Schema.Struct({
   sourceKind: Schema.Literal("rss"),
-  articleId: uuid("ArticleId"),
+  articleId: Schema.optional(uuid("ArticleId")),
   snapshotId: uuid("ArticleSnapshotId"),
   url: HttpUrlSchema,
   title: Schema.NonEmptyString.check(Schema.isMaxLength(500)),

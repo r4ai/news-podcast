@@ -347,10 +347,14 @@ const captureReplay = async (input: {
       references.push({
         url,
         required,
-        rewrite: (path) =>
-          path === undefined
-            ? element.removeAttribute(attribute)
-            : element.setAttribute(attribute, path),
+        rewrite: (path) => {
+          if (path === undefined) {
+            element.removeAttribute(attribute)
+            return
+          }
+          element.setAttribute(attribute, path)
+          if (required) element.removeAttribute("integrity")
+        },
       })
     }
   }

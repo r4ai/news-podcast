@@ -339,6 +339,35 @@ describe("executeEpisodeJob", () => {
     })
   })
 
+  it("classifies a provider abort at the job deadline as a terminal deadline failure", async () => {
+    const controller = new AbortController()
+    const ports = makePorts({
+      speech: {
+        synthesize: () =>
+          Effect.sync(() => controller.abort("job_deadline_exceeded")).pipe(
+            Effect.andThen(Effect.fail({ _tag: "Canceled" as const }))
+          ),
+      },
+    })
+
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running, signal: controller.signal })
+    )
+
+    expect(outcome).toEqual({
+      _tag: "Failed",
+      failureCode: "job_deadline_exceeded",
+    })
+    expect(
+      vi.mocked(ports.persistence.transition).mock.calls[0]![0]
+    ).toMatchObject({
+      state: {
+        _tag: "Failed",
+        failure: { code: "job_deadline_exceeded", retryable: false },
+      },
+    })
+  })
+
   it("rejects a stale lease before materializing sources", async () => {
     const ports = makePorts()
     vi.mocked(ports.persistence.assertLease).mockReturnValue(

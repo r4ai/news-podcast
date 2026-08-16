@@ -13,7 +13,7 @@ Productionは生成入力の`articleId`を保持していたが、完了eventで
 
 ## 決定
 
-新しく発行する`episode.completed.v2`の各sourceで`articleId`を必須にし、Libraryの`episode_sources.article_id`へ保存してRESTへ投影する。既存Library行は移行後も読めるようnullableとし、legacy行だけRESTで省略を許す。
+新しく発行する`episode.completed.v2`の各sourceで`articleId`をProduction内部契約上必須にし、Libraryの`episode_sources.article_id`へ保存してRESTへ投影する。同じv2 subjectで変更前に発行されJetStreamへ滞留中のmessageはconsumerが`articleId`なしでも受理する。既存Library行は移行後も読めるようnullableとし、legacy message/行だけRESTで省略を許す。
 
 ```mermaid
 flowchart LR
@@ -47,6 +47,7 @@ flowchart LR
 ### 欠点とリスク
 
 - legacy Episodeのsourceには`articleId`がない場合がある。
+- v2 consumerのwire schemaは滞留中messageとの互換性のため`articleId`省略を許す。新規producerの必須性はProductionの内部契約とテストで保証する。
 - event producer/consumer/DB/RESTを同時に更新する必要がある。
 
 ## 影響と同期
@@ -76,4 +77,3 @@ flowchart LR
 - `pnpm --filter @news-podcast/protocols test`
 - `pnpm --filter @news-podcast/episode-production test`
 - `pnpm --filter @news-podcast/episode-library test`
-
