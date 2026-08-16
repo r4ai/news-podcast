@@ -150,9 +150,12 @@ export const makeCompletion = (
           countSuggestions(tx, ownerId, output.suggestedTags, completedAt)
 
           tx.insert(contentEnrichmentDailyProgress)
-            .values({ localDate, processedCount: 1 })
+            .values({ ownerId, localDate, processedCount: 1 })
             .onConflictDoUpdate({
-              target: contentEnrichmentDailyProgress.localDate,
+              target: [
+                contentEnrichmentDailyProgress.ownerId,
+                contentEnrichmentDailyProgress.localDate,
+              ],
               set: {
                 processedCount: sql`${contentEnrichmentDailyProgress.processedCount} + 1`,
               },

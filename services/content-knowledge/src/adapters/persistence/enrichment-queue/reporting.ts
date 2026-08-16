@@ -84,17 +84,22 @@ export const makeReporting = (
       .where(and(eq(contentEnrichmentQueue.ownerId, ownerId), extra))
       .get()
 
-  const dailyProgress = (date: string) =>
+  const dailyProgress = (ownerId: string, date: string) =>
     database
       .select({ count: contentEnrichmentDailyProgress.processedCount })
       .from(contentEnrichmentDailyProgress)
-      .where(eq(contentEnrichmentDailyProgress.localDate, date))
+      .where(
+        and(
+          eq(contentEnrichmentDailyProgress.ownerId, ownerId),
+          eq(contentEnrichmentDailyProgress.localDate, date)
+        )
+      )
       .get() ?? { count: 0 }
 
   return {
-    budgetUsed: (date) =>
+    budgetUsed: (ownerId, date) =>
       Effect.try({
-        try: () => dailyProgress(date),
+        try: () => dailyProgress(ownerId, date),
         catch: () => failure("Budget"),
       }).pipe(Effect.flatMap((row) => parseCount(row, "Budget"))),
 
@@ -166,7 +171,7 @@ export const makeReporting = (
             .from(contentEnrichmentResults)
             .where(eq(contentEnrichmentResults.ownerId, ownerId))
             .get(),
-          daily: dailyProgress(date),
+          daily: dailyProgress(ownerId, date),
         }),
         catch: () => failure("Status"),
       }).pipe(
@@ -197,12 +202,17 @@ export const makeReporting = (
         )
       ),
 
-    resetDaily: (date) =>
+    resetDaily: (ownerId, date) =>
       Effect.try({
         try: () =>
           database
             .delete(contentEnrichmentDailyProgress)
-            .where(eq(contentEnrichmentDailyProgress.localDate, date))
+            .where(
+              and(
+                eq(contentEnrichmentDailyProgress.ownerId, ownerId),
+                eq(contentEnrichmentDailyProgress.localDate, date)
+              )
+            )
             .run(),
         catch: () => failure("Budget"),
       }).pipe(Effect.asVoid),

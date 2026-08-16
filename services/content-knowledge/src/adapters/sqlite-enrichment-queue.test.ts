@@ -211,7 +211,43 @@ describe("SQLite enrichment queue", () => {
     ).toEqual({ _tag: "Processing" })
   })
 
-  it("reports and resets the daily budget for the named local date only", async () => {
+  it("reports and resets the daily budget for one owner and local date only", async () => {
+    const { database, queue } = await setup()
+    await Effect.runPromise(queue.reconcile(now))
+    const [claim] = await Effect.runPromise(
+      queue.claim(ownerA, 1, now, expires, "lease-token-0001")
+    )
+    await Effect.runPromise(
+      queue.completeSuccess(ownerA, claim!, output, now, "2026-08-13")
+    )
+
+    expect(
+      await Effect.runPromise(queue.budgetUsed(ownerA, "2026-08-13"))
+    ).toBe(1)
+    expect(
+      await Effect.runPromise(queue.budgetUsed(ownerA, "2026-08-14"))
+    ).toBe(0)
+
+    database.runSql(
+      `INSERT INTO content_enrichment_daily_progress
+        (owner_id, local_date, processed_count) VALUES (?, ?, ?)`,
+      [ownerB, "2026-08-13", 3]
+    )
+
+    await Effect.runPromise(queue.resetDaily(ownerA, "2026-08-14"))
+    expect(
+      await Effect.runPromise(queue.budgetUsed(ownerA, "2026-08-13"))
+    ).toBe(1)
+    await Effect.runPromise(queue.resetDaily(ownerA, "2026-08-13"))
+    expect(
+      await Effect.runPromise(queue.budgetUsed(ownerA, "2026-08-13"))
+    ).toBe(0)
+    expect(
+      await Effect.runPromise(queue.budgetUsed(ownerB, "2026-08-13"))
+    ).toBe(3)
+  })
+
+  it("isolates the daily budget between owners", async () => {
     const { queue } = await setup()
     await Effect.runPromise(queue.reconcile(now))
     const [claim] = await Effect.runPromise(
@@ -221,13 +257,14 @@ describe("SQLite enrichment queue", () => {
       queue.completeSuccess(ownerA, claim!, output, now, "2026-08-13")
     )
 
-    expect(await Effect.runPromise(queue.budgetUsed("2026-08-13"))).toBe(1)
-    expect(await Effect.runPromise(queue.budgetUsed("2026-08-14"))).toBe(0)
-
-    await Effect.runPromise(queue.resetDaily("2026-08-14"))
-    expect(await Effect.runPromise(queue.budgetUsed("2026-08-13"))).toBe(1)
-    await Effect.runPromise(queue.resetDaily("2026-08-13"))
-    expect(await Effect.runPromise(queue.budgetUsed("2026-08-13"))).toBe(0)
+    expect(
+      (await Effect.runPromise(queue.status(ownerA, 200, "2026-08-13"))).daily
+        .used
+    ).toBe(1)
+    expect(
+      (await Effect.runPromise(queue.status(ownerB, 200, "2026-08-13"))).daily
+        .used
+    ).toBe(0)
   })
 
   it("replaces AI tags with known vocabulary and records unknown names as suggestions", async () => {

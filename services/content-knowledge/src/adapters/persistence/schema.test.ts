@@ -111,6 +111,36 @@ describe("content-knowledge migrated schema", () => {
     }
   })
 
+  it("migrates the global enrichment allowance to an empty owner-scoped allowance", () => {
+    const database = new DatabaseSync(":memory:")
+    try {
+      database.exec(readMigration("20260815015622_init"))
+      database.exec(`
+        INSERT INTO content_enrichment_daily_progress
+          (local_date, processed_count)
+        VALUES ('2026-08-16', 17);
+      `)
+
+      database.exec(readMigration("20260816162331_eminent_forge"))
+
+      expect(
+        database
+          .prepare(
+            "SELECT owner_id, local_date, processed_count FROM content_enrichment_daily_progress"
+          )
+          .all()
+      ).toEqual([])
+      expect(schemaSql().get("content_enrichment_daily_progress")).toContain(
+        "PRIMARY KEY(`owner_id`, `local_date`)"
+      )
+      expect(database.prepare("PRAGMA integrity_check").get()).toEqual({
+        integrity_check: "ok",
+      })
+    } finally {
+      database.close()
+    }
+  })
+
   it("keeps the composite foreign key from article tags to the owner vocabulary", () => {
     const sql = schemaSql().get("content_article_tags") ?? ""
 

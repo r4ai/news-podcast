@@ -35,7 +35,11 @@ import type {
   CompletedEpisodeReader,
   EpisodePagePosition,
 } from "../application/ports/episode-library.js"
-import { OwnerIdSchema, type EpisodeSource } from "../domain/episode.js"
+import {
+  EpisodeIdSchema,
+  OwnerIdSchema,
+  type EpisodeSource,
+} from "../domain/episode.js"
 
 export type EpisodeLibraryRpcDelivery<ReplyError = never> = Readonly<{
   subject: string
@@ -53,6 +57,7 @@ const rejection = (code: EpisodeLibraryRejection["code"]) =>
   deepFreeze({ _tag: "Rejected" as const, code })
 
 const parseOwnerId = parse(OwnerIdSchema)
+const parseEpisodeId = parse(EpisodeIdSchema)
 
 const decodeJson = (payload: string) =>
   Effect.try({
@@ -242,7 +247,10 @@ export const makeEpisodeLibraryRpcHandler = (
                 ),
               ]).pipe(
                 Effect.flatMap(([ownerId, request]) =>
-                  audio({ ownerId, episodeId: request.episodeId as never })
+                  parseEpisodeId(request.episodeId).pipe(
+                    Effect.mapError(() => rejection("INVALID_REQUEST")),
+                    Effect.flatMap((episodeId) => audio({ ownerId, episodeId }))
+                  )
                 ),
                 Effect.flatMap((access) =>
                   parse(CreateAudioAccessReplySchema)(
@@ -284,7 +292,10 @@ export const makeEpisodeLibraryRpcHandler = (
                 ),
               ]).pipe(
                 Effect.flatMap(([ownerId, request]) =>
-                  get({ ownerId, episodeId: request.episodeId as never })
+                  parseEpisodeId(request.episodeId).pipe(
+                    Effect.mapError(() => rejection("INVALID_REQUEST")),
+                    Effect.flatMap((episodeId) => get({ ownerId, episodeId }))
+                  )
                 ),
                 Effect.flatMap((episode) =>
                   parse(GetEpisodeReplySchema)(

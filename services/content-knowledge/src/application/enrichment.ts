@@ -95,6 +95,7 @@ export type EnrichmentQueueRepository = DeepReadonly<{
     completedAt: CapturedAt
   ) => Effect.Effect<void, EnrichmentQueueError>
   readonly budgetUsed: (
+    ownerId: OwnerId,
     localDate: string
   ) => Effect.Effect<number, EnrichmentQueueError>
   readonly status: (
@@ -112,6 +113,7 @@ export type EnrichmentQueueRepository = DeepReadonly<{
     queuedAt: CapturedAt
   ) => Effect.Effect<EnqueueEnrichmentResult, EnrichmentQueueError>
   readonly resetDaily: (
+    ownerId: OwnerId,
     localDate: string
   ) => Effect.Effect<void, EnrichmentQueueError>
 }>
@@ -239,12 +241,11 @@ export const createEnrichmentOperations = (input: {
       const now = input.now()
       const date = localDate(now)
       yield* input.queue.reconcile(now)
-      let used = yield* input.queue.budgetUsed(date)
-      if (used >= input.dailyLimit) return deepFreeze({ processed: 0 })
       const owners = yield* input.queue.listOwners()
       let processed = 0
       for (const ownerId of owners) {
-        if (used >= input.dailyLimit) break
+        let used = yield* input.queue.budgetUsed(ownerId, date)
+        if (used >= input.dailyLimit) continue
         const limit = Math.min(ENRICHMENT_BATCH_LIMIT, input.dailyLimit - used)
         const expiresAt = new Date(
           Date.parse(now) + ENRICHMENT_LEASE_MILLISECONDS
@@ -290,11 +291,11 @@ export const createEnrichmentOperations = (input: {
     ) {
       return yield* input.queue.enqueueOne(ownerId, articleId, input.now())
     }),
-    resetDaily: Effect.fn("contentKnowledge.enrichment.resetDaily")(
-      function* () {
-        const now = input.now()
-        yield* input.queue.resetDaily(localDate(now))
-      }
-    ),
+    resetDaily: Effect.fn("contentKnowledge.enrichment.resetDaily")(function* (
+      ownerId: OwnerId
+    ) {
+      const now = input.now()
+      yield* input.queue.resetDaily(ownerId, localDate(now))
+    }),
   })
 }

@@ -13,6 +13,9 @@ import { ArticleIdSchema } from "../../domain/article.js"
 import { TagIdSchema, TagNameSchema } from "../../domain/content-taxonomy.js"
 import { parseInterestProfile } from "../../domain/interest-profile.js"
 import { OwnerIdSchema } from "../../domain/subscription.js"
+import type { createContentTaxonomy } from "../../application/content-taxonomy.js"
+import type { createEnrichmentOperations } from "../../application/enrichment.js"
+import type { createInterestProfileOperations } from "../../application/interest-profile.js"
 
 type Delivery<E = never> = Readonly<{
   readonly subject: string
@@ -20,21 +23,9 @@ type Delivery<E = never> = Readonly<{
   readonly reply: (payload: string) => Effect.Effect<void, E>
 }>
 type Operations = Readonly<{
-  readonly taxonomy: Readonly<
-    Record<string, (...input: readonly any[]) => Effect.Effect<any, any, never>>
-  >
-  readonly interestProfiles: Readonly<
-    Record<
-      "get" | "update",
-      (...input: readonly any[]) => Effect.Effect<any, any, never>
-    >
-  >
-  readonly enrichment: Readonly<
-    Record<
-      "status" | "enqueueReprocess" | "enqueueOne" | "resetDaily",
-      (...input: readonly any[]) => Effect.Effect<any, any, never>
-    >
-  >
+  readonly taxonomy: ReturnType<typeof createContentTaxonomy>
+  readonly interestProfiles: ReturnType<typeof createInterestProfileOperations>
+  readonly enrichment: ReturnType<typeof createEnrichmentOperations>
 }>
 type Dependencies = Readonly<{
   readonly newMessageId: () => string
@@ -209,7 +200,7 @@ export const makePersonalizationRpcHandler =
                     )
                   case "ResetDailyEnrichment":
                     return operations.enrichment
-                      .resetDaily()
+                      .resetDaily(ownerId)
                       .pipe(Effect.as({ _tag: "Reset" as const }))
                   case "EnrichArticle":
                     return parse(ArticleIdSchema)(command.articleId).pipe(
