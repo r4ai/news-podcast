@@ -112,11 +112,13 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
     },
     persistence: {
       markStep: vi.fn(() => Effect.void),
+      reportStageProgress: vi.fn(() => Effect.void),
       recordSelectedArticles: vi.fn(() => Effect.void),
       renewLease: () => Effect.succeed("Applied"),
       assertLease: vi.fn(() => Effect.void),
       loadCheckpoint: vi.fn(() => Effect.succeed(checkpoint as never)),
       loadGenerationPlan: vi.fn(() => Effect.succeed(generationPlan)),
+      listUsedAutomaticArticleIds: vi.fn(() => Effect.succeed([])),
       saveGenerationPlan: vi.fn((input) =>
         Effect.sync(() => {
           generationPlan ??= input.plan
@@ -175,7 +177,8 @@ describe("executeEpisodeJob", () => {
         dictionarySnapshot: expect.objectContaining({
           fingerprint: "a".repeat(64),
         }),
-      })
+      }),
+      expect.any(Function)
     )
 
     const saved = vi.mocked(first.persistence.saveDictionarySnapshot).mock
@@ -199,6 +202,10 @@ describe("executeEpisodeJob", () => {
       request: { ...running.request, articleIds: undefined },
     } as typeof running
     const ports = makePorts()
+    const previouslyUsed = "3c4d046c-b47b-4047-a562-66ac7e74e996" as never
+    vi.mocked(ports.persistence.listUsedAutomaticArticleIds).mockReturnValue(
+      Effect.succeed([previouslyUsed])
+    )
 
     await Effect.runPromise(executeEpisodeJob(ports)({ job: automaticJob }))
 
@@ -212,12 +219,23 @@ describe("executeEpisodeJob", () => {
       })
     )
     expect(ports.planning.create).toHaveBeenCalledWith(
-      expect.objectContaining({ selection: { _tag: "Automatic" } })
+      expect.objectContaining({
+        selection: {
+          _tag: "Automatic",
+          excludedArticleIds: [previouslyUsed],
+        },
+      })
     )
   })
 
   it("completes selected sources and atomically writes success plus outbox intent", async () => {
     const ports = makePorts()
+    vi.mocked(ports.speech.synthesize).mockImplementation(
+      (_request, onProgress) =>
+        onProgress!({ completed: 1, total: 1 }).pipe(
+          Effect.as(new Uint8Array([1, 2, 3]))
+        )
+    )
     const outcome = await Effect.runPromise(
       executeEpisodeJob(ports)({ job: running })
     )
@@ -241,6 +259,14 @@ describe("executeEpisodeJob", () => {
         episodeId: "6518412b-ce2f-4641-9f2c-a02dd515bc31",
       })
     )
+    expect(ports.persistence.reportStageProgress).toHaveBeenCalledWith({
+      jobId: running.jobId,
+      leaseToken: running.lease.token,
+      step: "synthesizing_audio",
+      completed: 1,
+      total: 1,
+      occurredAt: at("2026-08-12T00:00:30.000Z"),
+    })
     expect(ports.persistence.completeWithOutbox).toHaveBeenCalledWith(
       expect.objectContaining({
         leaseToken: "lease-1",
@@ -288,6 +314,58 @@ describe("executeEpisodeJob", () => {
     )
     expect(outcome._tag).toBe("Canceled")
     expect(ports.script.generate).not.toHaveBeenCalled()
+  })
+
+  it("fails an expired job terminally instead of treating it as user cancellation", async () => {
+    const ports = makePorts()
+    const controller = new AbortController()
+    controller.abort("job_deadline_exceeded")
+
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running, signal: controller.signal })
+    )
+
+    expect(outcome).toEqual({
+      _tag: "Failed",
+      failureCode: "job_deadline_exceeded",
+    })
+    expect(
+      vi.mocked(ports.persistence.transition).mock.calls[0]![0]
+    ).toMatchObject({
+      state: {
+        _tag: "Failed",
+        failure: { code: "job_deadline_exceeded", retryable: false },
+      },
+    })
+  })
+
+  it("classifies a provider abort at the job deadline as a terminal deadline failure", async () => {
+    const controller = new AbortController()
+    const ports = makePorts({
+      speech: {
+        synthesize: () =>
+          Effect.sync(() => controller.abort("job_deadline_exceeded")).pipe(
+            Effect.andThen(Effect.fail({ _tag: "Canceled" as const }))
+          ),
+      },
+    })
+
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running, signal: controller.signal })
+    )
+
+    expect(outcome).toEqual({
+      _tag: "Failed",
+      failureCode: "job_deadline_exceeded",
+    })
+    expect(
+      vi.mocked(ports.persistence.transition).mock.calls[0]![0]
+    ).toMatchObject({
+      state: {
+        _tag: "Failed",
+        failure: { code: "job_deadline_exceeded", retryable: false },
+      },
+    })
   })
 
   it("rejects a stale lease before materializing sources", async () => {

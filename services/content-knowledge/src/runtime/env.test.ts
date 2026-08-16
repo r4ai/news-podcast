@@ -60,6 +60,9 @@ describe("content-knowledge environment boundary", () => {
         secretAccessKey: "secret-key",
         timeoutMillis: 20_000,
         maximumHtmlBytes: 2_097_152,
+        maximumAssetBytes: 20_971_520,
+        maximumAssetCount: 512,
+        maximumAssetTotalBytes: 104_857_600,
       },
     })
     expect(Object.isFrozen(config)).toBe(true)
@@ -93,12 +96,17 @@ describe("content-knowledge environment boundary", () => {
     ],
     [
       "partial OpenAI configuration",
-      { ...validEnvironment, OPENAI_API_KEY: "test-key" },
+      {
+        ...validEnvironment,
+        PROVIDER_MODE: "live",
+        OPENAI_API_KEY: "test-key",
+      },
     ],
     [
       "invalid OpenAI retry budget",
       {
         ...validEnvironment,
+        PROVIDER_MODE: "live",
         OPENAI_API_KEY: "test-key",
         OPENAI_MODEL: "gpt-test",
         CONTENT_ENRICH_OPENAI_MAX_ATTEMPTS: "6",
@@ -116,6 +124,7 @@ describe("content-knowledge environment boundary", () => {
     const config = await Effect.runPromise(
       readContentKnowledgeConfig({
         ...validEnvironment,
+        PROVIDER_MODE: "live",
         OPENAI_API_KEY: "test-key",
         CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
       })
@@ -130,5 +139,18 @@ describe("content-knowledge environment boundary", () => {
       baseDelayMillis: 1_000,
       maximumDelayMillis: 30_000,
     })
+  })
+
+  it("keeps enrichment offline in fake provider mode even when a key remains", async () => {
+    const config = await Effect.runPromise(
+      readContentKnowledgeConfig({
+        ...validEnvironment,
+        PROVIDER_MODE: "fake",
+        OPENAI_API_KEY: "test-key",
+        CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+      })
+    )
+
+    expect(config.enrichment.provider).toBeNull()
   })
 })

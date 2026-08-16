@@ -105,6 +105,14 @@ const progressStateOf = (
       plan?.selectionMode ?? (requestedIds.length > 0 ? "manual" : "automatic"),
     selectedArticles,
     ...(row.currentStage == null ? {} : { currentStage: row.currentStage }),
+    ...(row.stageProgressCompleted == null || row.stageProgressTotal == null
+      ? {}
+      : {
+          stageProgress: {
+            completed: row.stageProgressCompleted,
+            total: row.stageProgressTotal,
+          },
+        }),
     ...(row.failureCode === null
       ? {}
       : {
@@ -323,11 +331,26 @@ export const makeJobHandle = (
           .get()
         if (row === undefined) return false
         const currentStage = input.phase === "started" ? input.step : null
+        const stageStartedAt =
+          input.phase === "started" ? input.occurredAt : null
         tx.update(episodeJobs)
-          .set({ currentStage })
+          .set({
+            currentStage,
+            stageStartedAt,
+            lastProgressAt: input.occurredAt,
+            stageProgressCompleted: null,
+            stageProgressTotal: null,
+          })
           .where(eq(episodeJobs.jobId, input.jobId))
           .run()
-        const updated = { ...row, currentStage }
+        const updated = {
+          ...row,
+          currentStage,
+          stageStartedAt,
+          lastProgressAt: input.occurredAt,
+          stageProgressCompleted: null,
+          stageProgressTotal: null,
+        }
         const state = progressStateOf(tx, updated)
         appendAgUiEvent(
           tx,
@@ -343,6 +366,58 @@ export const makeJobHandle = (
             state,
             input.occurredAt,
             `${input.jobId}:run:${row.attempt}:step:${input.step}:${input.phase}:state`
+          )
+        )
+        return true
+      }),
+
+    reportStageProgress: (input) =>
+      database.transaction((tx) => {
+        if (
+          !Number.isSafeInteger(input.completed) ||
+          !Number.isSafeInteger(input.total) ||
+          input.completed < 0 ||
+          input.total <= 0 ||
+          input.completed > input.total
+        )
+          return false
+        const row = selectJob(tx)
+          .where(
+            and(
+              eq(episodeJobs.jobId, input.jobId),
+              eq(episodeJobs.status, "Running"),
+              eq(episodeJobs.leaseToken, input.leaseToken),
+              eq(episodeJobs.currentStage, input.step)
+            )
+          )
+          .get()
+        if (row === undefined) return false
+        if (
+          row.stageProgressCompleted !== null &&
+          input.completed <= row.stageProgressCompleted
+        )
+          return true
+        tx.update(episodeJobs)
+          .set({
+            lastProgressAt: input.occurredAt,
+            stageProgressCompleted: input.completed,
+            stageProgressTotal: input.total,
+          })
+          .where(eq(episodeJobs.jobId, input.jobId))
+          .run()
+        const updated = {
+          ...row,
+          lastProgressAt: input.occurredAt,
+          stageProgressCompleted: input.completed,
+          stageProgressTotal: input.total,
+        }
+        appendAgUiEvent(
+          tx,
+          updated,
+          stateSnapshotEvent(
+            progressStateOf(tx, updated),
+            input.occurredAt,
+            `${input.jobId}:run:${row.attempt}:step:${input.step}:progress:${input.completed}:${input.total}`
           )
         )
         return true
@@ -543,6 +618,29 @@ export const makeJobHandle = (
             model: row.model,
             createdAt: row.createdAt,
           })
+    },
+
+    listUsedAutomaticArticleIds: (ownerId) => {
+      const rows = database
+        .select({ articleIds: episodeGenerationPlans.selectedArticleIds })
+        .from(episodeGenerationPlans)
+        .innerJoin(
+          episodeJobs,
+          eq(episodeJobs.jobId, episodeGenerationPlans.jobId)
+        )
+        .where(
+          and(
+            eq(episodeGenerationPlans.ownerId, ownerId),
+            eq(episodeGenerationPlans.selectionMode, "automatic"),
+            eq(episodeJobs.status, "Succeeded")
+          )
+        )
+        .all()
+      return [
+        ...new Set(
+          rows.flatMap((row) => JSON.parse(row.articleIds) as readonly string[])
+        ),
+      ]
     },
 
     saveGenerationPlan: (input) =>

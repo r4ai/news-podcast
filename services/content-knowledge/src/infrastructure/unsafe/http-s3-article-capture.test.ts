@@ -34,10 +34,20 @@ const config = {
 
 describe("HTTP to S3 article capture", () => {
   it("stores deterministic bounded artifacts with hashes through a real HTTP server", async () => {
-    const server = createServer((_request, response) => {
+    const server = createServer((request, response) => {
+      if (request.url === "/style.css") {
+        response.setHeader("content-type", "text/css")
+        response.end("article { color: navy; }")
+        return
+      }
+      if (request.url === "/images/cover.png") {
+        response.setHeader("content-type", "image/png")
+        response.end(new Uint8Array([137, 80, 78, 71]))
+        return
+      }
       response.setHeader("content-type", "text/html; charset=utf-8")
       response.end(
-        '<!doctype html><title>Secret</title><script>alert(1)</script><article><h1>Hello world</h1><p>Read <strong>important</strong> <a href="/docs">guide</a> and <img src="/images/cover.png" alt="cover" />.</p><p><a href="javascript:alert(2)">unsafe</a></p><pre><code>const answer = 42</code></pre></article>'
+        '<!doctype html><title>Secret</title><link rel="stylesheet" href="/style.css" integrity="sha384-stale"><script>alert(1)</script><article><h1>Hello world</h1><p>Read <strong>important</strong> <a href="/docs">guide</a> and <img src="/images/cover.png" alt="cover" />.</p><p><a href="javascript:alert(2)">unsafe</a></p><pre><code>const answer = 42</code></pre></article>'
       )
     })
     servers.push(server)
@@ -76,6 +86,12 @@ describe("HTTP to S3 article capture", () => {
       `articles/${snapshotId}/raw/response.html`,
       `articles/${snapshotId}/replay/index.html`,
       `articles/${snapshotId}/markdown/article.md`,
+      expect.stringMatching(
+        `^articles/${snapshotId}/assets/[a-f0-9]{64}\\.css$`
+      ),
+      expect.stringMatching(
+        `^articles/${snapshotId}/assets/[a-f0-9]{64}\\.png$`
+      ),
     ])
     expect(capture.markdown.sha256).toHaveLength(64)
     expect(capture.markdown.byteLength).toBeGreaterThan(0)
@@ -93,9 +109,91 @@ describe("HTTP to S3 article capture", () => {
     const replay = new TextDecoder().decode(objects[1]!.input.Body)
     expect(replay).toContain("Content-Security-Policy")
     expect(replay).not.toContain("<script>")
+    expect(replay).toContain("../assets/")
+    expect(replay).not.toContain("integrity=")
+    expect(capture.assets).toHaveLength(2)
     await Effect.runPromise(resource.close)
     expect(closeS3).toHaveBeenCalledOnce()
     expect(closeFetch).toHaveBeenCalledOnce()
+  })
+
+  it("captures and rewrites recursive CSS dependencies and every srcset candidate", async () => {
+    const server = createServer((request, response) => {
+      if (request.url === "/root.css") {
+        response.setHeader("content-type", "text/css")
+        response.end(
+          '@import "/theme.css"; article { background: url("/same.png") }'
+        )
+        return
+      }
+      if (request.url === "/theme.css") {
+        response.setHeader("content-type", "text/css")
+        response.end('@font-face { src: url("/font.woff2") }')
+        return
+      }
+      if (request.url === "/font.woff2") {
+        response.setHeader("content-type", "font/woff2")
+        response.end(new Uint8Array([119, 79, 70, 50]))
+        return
+      }
+      if (request.url === "/same.png" || request.url === "/large.png") {
+        response.setHeader("content-type", "image/png")
+        response.end(
+          request.url === "/same.png"
+            ? new Uint8Array([1, 2, 3])
+            : new Uint8Array([4, 5, 6])
+        )
+        return
+      }
+      response.setHeader("content-type", "text/html")
+      response.end(
+        '<link rel="stylesheet" href="/root.css"><article><h1>Archive</h1><img srcset="/same.png 1x, /large.png 2x"></article>'
+      )
+    })
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (address === null || typeof address === "string")
+      throw new Error("missing address")
+    const sourceUrl = Schema.decodeUnknownSync(ArticleUrlSchema)(
+      `http://127.0.0.1:${address.port}/article`
+    )
+    const objects: Array<{
+      input: { Key?: string; Body?: Uint8Array; ContentType?: string }
+    }> = []
+    const resource = openHttpS3ArticleCaptureUnsafe(config, {
+      createS3: () => ({
+        client: {
+          send: async (input: {
+            input: { Key?: string; Body?: Uint8Array; ContentType?: string }
+          }) => void objects.push(input),
+        } as never,
+        close: vi.fn(),
+      }),
+      createSafeFetch: () => ({ fetch, close: vi.fn(async () => undefined) }),
+    })
+
+    const capture = await Effect.runPromise(
+      resource.capture({
+        sourceUrl,
+        snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
+      })
+    )
+
+    expect(capture.assets).toHaveLength(5)
+    const replay = new TextDecoder().decode(objects[1]!.input.Body)
+    expect(replay).toMatch(
+      /srcset="\.\.\/assets\/[a-f0-9]{64}\.png 1x, \.\.\/assets\/[a-f0-9]{64}\.png 2x"/
+    )
+    expect(replay).not.toContain(sourceUrl)
+    const styles = objects
+      .filter(({ input }) => input.ContentType === "text/css")
+      .map(({ input }) => new TextDecoder().decode(input.Body))
+    expect(styles).toHaveLength(2)
+    expect(styles.join("\n")).toMatch(/@import "\.\/[a-f0-9]{64}\.css"/)
+    expect(styles.join("\n")).toMatch(
+      /url\("\.\/[a-f0-9]{64}\.(?:png|woff2)"\)/
+    )
   })
 
   it.each([

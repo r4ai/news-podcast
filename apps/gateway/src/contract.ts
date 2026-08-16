@@ -127,7 +127,7 @@ export const EpisodeAudioHeadersSchema = Schema.Struct({
 export const CreateEpisodeJobHeadersSchema = Schema.Struct({
   authorization: Schema.optional(Schema.String),
   cookie: Schema.optional(Schema.String),
-  "idempotency-key": boundedText(255),
+  "idempotency-key": boundedText(128),
   traceparent: Schema.optional(TraceparentSchema),
 }).annotate({ identifier: "CreateEpisodeJobHeaders" })
 
@@ -166,6 +166,15 @@ export const JobReceiptSchema = Schema.Struct({
 })
   .annotate({ identifier: "JobReceipt" })
   .pipe(HttpApiSchema.status(202))
+
+const JobReceiptWithLocationSchema = HttpApiSchema.WithHeaders(
+  JobReceiptSchema,
+  {
+    Location: Schema.String.check(
+      Schema.isPattern(/^\/v1\/episode-jobs\/[0-9a-f-]{36}$/)
+    ).annotate({ description: "Canonical URL of the accepted episode job." }),
+  }
+)
 
 const jobFields = {
   id: JobIdSchema,
@@ -305,6 +314,7 @@ export const EpisodeJobEventStreamSchema = HttpApiSchema.StreamSse({
 })
 
 const EpisodeSourceSchema = Schema.Struct({
+  articleId: Schema.optional(ArticleIdSchema),
   url: AbsoluteHttpUrlSchema,
   title: boundedText(500),
   publishedAt: Schema.optional(UtcDateTimeStringSchema),
@@ -733,7 +743,7 @@ export const createEpisodeJobEndpoint = HttpApiEndpoint.post(
   {
     headers: CreateEpisodeJobHeadersSchema,
     payload: CreateEpisodeJobRequestSchema,
-    success: JobReceiptSchema,
+    success: JobReceiptWithLocationSchema,
     error: [
       BadRequestProblemSchema,
       UnauthorizedProblemSchema,
@@ -1425,5 +1435,4 @@ export const gatewayApi = HttpApi.make("gateway")
     })
   )
 
-export const generateOpenApi = () =>
-  deepFreeze(structuredClone(OpenApi.fromApi(gatewayApi)))
+export const generateOpenApi = () => deepFreeze(OpenApi.fromApi(gatewayApi))

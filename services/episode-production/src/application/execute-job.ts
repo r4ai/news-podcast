@@ -54,9 +54,20 @@ const withProviderStage =
     })
 
 const canceled = (): LeaseFailure => deepFreeze({ _tag: "ExecutionCanceled" })
+const jobDeadlineExceeded = (): PipelineFailure =>
+  deepFreeze({
+    _tag: "PipelineFailure",
+    code: "job_deadline_exceeded",
+    retryable: false,
+  })
 
-const failWhenCanceled = (signal: AbortSignal | undefined) =>
-  signal?.aborted ? Effect.fail(canceled()) : Effect.void
+const failWhenCanceled = (
+  signal: AbortSignal | undefined
+): Effect.Effect<void, LeaseFailure | PipelineFailure> => {
+  if (!signal?.aborted) return Effect.void
+  if (signal.reason !== "job_deadline_exceeded") return Effect.fail(canceled())
+  return Effect.fail(jobDeadlineExceeded())
+}
 
 const isTagged = (failure: unknown, tag: string) =>
   typeof failure === "object" &&
@@ -124,9 +135,16 @@ const classify = (failure: ExecutionFailure) => {
 const transitionFailure = (
   ports: EpisodeExecutionPorts,
   job: RunningJob,
-  failure: ExecutionFailure
+  failure: ExecutionFailure,
+  signal: AbortSignal | undefined
 ): Effect.Effect<EpisodeExecutionOutcome, PipelineFailure> => {
-  const classified = classify(failure)
+  const initial = classify(failure)
+  const classified =
+    initial._tag === "Canceled" &&
+    signal?.aborted === true &&
+    signal.reason === "job_deadline_exceeded"
+      ? { _tag: "Terminal" as const, code: jobDeadlineExceeded().code }
+      : initial
   if (classified._tag === "StaleLease") {
     return Effect.succeed(deepFreeze({ _tag: "StaleLease" }))
   }
@@ -235,12 +253,21 @@ export const executeEpisodeJob =
         job.jobId
       )
       if (generationPlan === undefined) {
+        const excludedArticleIds =
+          job.request.articleIds === undefined
+            ? yield* ports.persistence.listUsedAutomaticArticleIds(
+                job.request.ownerId
+              )
+            : []
         generationPlan = yield* ports.planning.create({
           jobId: job.jobId,
           ownerId: job.request.ownerId,
           selection:
             job.request.articleIds === undefined
-              ? deepFreeze({ _tag: "Automatic" as const })
+              ? deepFreeze({
+                  _tag: "Automatic" as const,
+                  excludedArticleIds,
+                })
               : deepFreeze({
                   _tag: "Manual" as const,
                   articleIds: job.request.articleIds,
@@ -372,11 +399,23 @@ export const executeEpisodeJob =
         yield* markStep("synthesizing_audio", "started")
         yield* assertLease()
         const bytes = yield* ports.speech
-          .synthesize({
-            text: script.script,
-            dictionarySnapshot,
-            ...(signal === undefined ? {} : { signal }),
-          })
+          .synthesize(
+            {
+              text: script.script,
+              dictionarySnapshot,
+              ...(signal === undefined ? {} : { signal }),
+            },
+            (progress) =>
+              ports.persistence
+                .reportStageProgress({
+                  jobId: job.jobId,
+                  leaseToken: job.lease.token,
+                  step: "synthesizing_audio",
+                  ...progress,
+                  occurredAt: ports.now(),
+                })
+                .pipe(Effect.ignore)
+          )
           .pipe(Effect.mapError(withProviderStage("speech")))
         yield* markStep("synthesizing_audio", "finished")
         yield* markStep("storing_episode", "started")
@@ -439,7 +478,7 @@ export const executeEpisodeJob =
             ...(source!.publishedAt === undefined
               ? {}
               : { publishedAt: source!.publishedAt }),
-          })) as unknown as EpisodeCompletionIntent["sources"],
+          })) as EpisodeCompletionIntent["sources"],
           completedAt,
           traceparent: `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`,
         }),
@@ -453,7 +492,7 @@ export const executeEpisodeJob =
 
     return run.pipe(
       Effect.matchEffect({
-        onFailure: (failure) => transitionFailure(ports, job, failure),
+        onFailure: (failure) => transitionFailure(ports, job, failure, signal),
         onSuccess: Effect.succeed,
       }),
       Effect.withSpan("episodeProduction.executeJob")

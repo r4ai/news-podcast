@@ -230,8 +230,9 @@ export const makeArticlePorts = (transport: Transport): ArticlePorts => {
             ? parse(ArticleFacetsSchema)({
                 ...reply.facets,
                 feeds: reply.facets.feeds.map((feed) => ({
-                  ...feed,
-                  name: feed.feedId,
+                  feedId: feed.feedId,
+                  count: feed.count,
+                  name: new URL(feed.feedUrl).hostname,
                 })),
                 aiPending: 0,
               }).pipe(Effect.mapError(unavailable))

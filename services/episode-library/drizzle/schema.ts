@@ -61,6 +61,7 @@ export const episodeSources = sqliteTable(
     sourceKind: text("source_kind", { enum: ["rss", "web"] }).notNull(),
     url: text("url").notNull(),
     title: text("title").notNull(),
+    articleId: text("article_id"),
     publishedAt: text("published_at"),
     snapshotId: text("snapshot_id"),
   },
@@ -74,7 +75,7 @@ export const episodeSources = sqliteTable(
     // 出典の種別ごとに、あり得る欠損の形を1箇所で拘束する。
     check(
       "episode_sources_provenance_check",
-      sql`(${table.sourceKind} = 'rss' AND ${table.snapshotId} IS NOT NULL) OR (${table.sourceKind} = 'web' AND ${table.snapshotId} IS NULL AND ${table.publishedAt} IS NULL)`
+      sql`(${table.sourceKind} = 'rss' AND ${table.snapshotId} IS NOT NULL) OR (${table.sourceKind} = 'web' AND ${table.articleId} IS NULL AND ${table.snapshotId} IS NULL AND ${table.publishedAt} IS NULL)`
     ),
   ]
 )

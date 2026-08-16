@@ -82,6 +82,7 @@ export type ArticleFacets = DeepReadonly<{
   }
   readonly feeds: readonly {
     readonly feedId: FeedId
+    readonly feedUrl: string
     readonly count: number
   }[]
 }>

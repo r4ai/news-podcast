@@ -11,6 +11,7 @@ import {
   newQueuedJob,
 } from "../../domain/episode-job.js"
 import {
+  episodeJobDeadlineAt,
   runEpisodeWorkerLoop,
   type EpisodeWorkerEvent,
   type EpisodeWorkerPorts,
@@ -37,6 +38,42 @@ const job = leaseQueuedJob(
 )
 
 describe("episode worker loop", () => {
+  it("derives one immutable thirty-minute deadline from job creation", () => {
+    expect(episodeJobDeadlineAt(at("2026-08-13T00:00:00.000Z"))).toBe(
+      "2026-08-13T00:30:00.000Z"
+    )
+  })
+
+  it("passes an already-aborted deadline signal to overdue execution", async () => {
+    const controller = new AbortController()
+    let deadlineReason: unknown
+    const ports: EpisodeWorkerPorts = {
+      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      renewLease: () => Effect.succeed("Applied"),
+      execute: ({ signal }) =>
+        Effect.sync(() => {
+          deadlineReason = signal?.reason
+          return {
+            _tag: "Failed" as const,
+            failureCode: "job_deadline_exceeded",
+          }
+        }),
+      now: () => at("2026-08-13T00:31:00.000Z"),
+      leasedUntil: () => at("2026-08-13T00:36:00.000Z"),
+      nextLeaseToken: () => leaseToken,
+      heartbeatMillis: 20,
+      backoffMillis: () => 100,
+      wait: () => Effect.void,
+      observe: (event) =>
+        Effect.sync(() => {
+          if (event._tag === "JobFinished") controller.abort()
+        }),
+    }
+
+    await Effect.runPromise(runEpisodeWorkerLoop(ports, controller.signal))
+
+    expect(deadlineReason).toBe("job_deadline_exceeded")
+  })
   it("backs off while idle, resets after work, and reports typed outcomes", async () => {
     const controller = new AbortController()
     const events: EpisodeWorkerEvent[] = []

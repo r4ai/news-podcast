@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   AddFeedSubscriptionRequestSchema,
+  CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeSchema,
   gatewayApi,
@@ -14,6 +15,13 @@ import {
 const validArticleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
 
 describe("gateway HttpApi contract", () => {
+  it("keeps the public idempotency key within the RPC limit", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(CreateEpisodeJobHeadersSchema)({
+        "idempotency-key": "x".repeat(129),
+      })
+    ).toThrow()
+  })
   it("generates the complete public OpenAPI 3.1 surface", () => {
     const specification = generateOpenApi()
 
@@ -64,6 +72,9 @@ describe("gateway HttpApi contract", () => {
     expect(
       specification.paths["/v1/episode-jobs"]?.post?.responses
     ).toHaveProperty("202")
+    expect(
+      specification.paths["/v1/episode-jobs"]?.post?.responses?.["202"]?.headers
+    ).toHaveProperty("location")
     expect(
       specification.paths["/v1/episodes/{episodeId}/audio"]?.get?.responses
     ).toHaveProperty("404")

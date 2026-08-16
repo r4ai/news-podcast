@@ -57,6 +57,7 @@ describe("integration contracts", () => {
         sources: [
           {
             sourceKind: "rss",
+            articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
             snapshotId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
             url: "https://example.com/news",
             title: "News",
@@ -71,6 +72,9 @@ describe("integration contracts", () => {
     expect(completion.audio.byteLength).toBe(42)
     expect(completion.sources[0]?.snapshotId).toBe(
       "3c4d046c-b47b-4047-a562-66ac7e74e995"
+    )
+    expect(completion.sources[0]?.articleId).toBe(
+      "f8f15e30-6877-4b4d-9568-76bfa3dc3e40"
     )
     expect(Object.isFrozen(completion.audio)).toBe(true)
   })

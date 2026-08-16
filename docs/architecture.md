@@ -270,7 +270,7 @@ erDiagram
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_user_states` | ユーザーごとの既読・保存状態 |
 | `episode_jobs` / `episode_generation_plans` / `episode_job_articles` | 状態、lease、retry、冪等性、初回実行時に固定した嗜好・記事集合 |
-| `episodes` / `episode_sources` | 台本・音声keyと、入力RSSへ遡れるprovenance |
+| `episodes` / `episode_sources` | 台本・音声keyと、`articleId`・snapshot・入力RSSへ遡れるprovenance。legacy sourceだけ`articleId`がnullable |
 | `episode_job_agui_events` | 公式AG-UI event envelopeを保存する再開可能な進捗ログ |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
 | `job_outbox` | Productionが完成eventをJetStreamへ確実に配信するtransactional outbox |

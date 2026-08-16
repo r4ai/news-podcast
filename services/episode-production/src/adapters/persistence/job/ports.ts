@@ -63,6 +63,14 @@ export type SqliteJobHandle = Readonly<{
     readonly phase: "started" | "finished"
     readonly occurredAt: string
   }) => boolean
+  reportStageProgress: (input: {
+    readonly jobId: string
+    readonly leaseToken: string
+    readonly step: "synthesizing_audio"
+    readonly completed: number
+    readonly total: number
+    readonly occurredAt: string
+  }) => boolean
   recordSelectedArticles: (input: {
     readonly jobId: string
     readonly leaseToken: string
@@ -103,6 +111,7 @@ export type SqliteJobHandle = Readonly<{
   }) => boolean
   loadCheckpoint: (jobId: string) => StoredCheckpointRow | undefined
   loadGenerationPlan: (jobId: string) => string | undefined
+  listUsedAutomaticArticleIds: (ownerId: string) => readonly string[]
   saveGenerationPlan: (input: {
     readonly jobId: string
     readonly leaseToken: string

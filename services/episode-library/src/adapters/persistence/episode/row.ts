@@ -17,6 +17,7 @@ export type EpisodeSourceRow = Readonly<{
   sourceKind: string
   url: string
   title: string
+  articleId: string | null
   publishedAt: string | null
   snapshotId: string | null
 }>
@@ -29,6 +30,7 @@ const toSourceInput = (source: EpisodeSourceRow) => ({
   sourceKind: source.sourceKind,
   url: source.url,
   title: source.title,
+  ...(source.articleId === null ? {} : { articleId: source.articleId }),
   ...(source.publishedAt === null ? {} : { publishedAt: source.publishedAt }),
   ...(source.snapshotId === null ? {} : { snapshotId: source.snapshotId }),
 })

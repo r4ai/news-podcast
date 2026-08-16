@@ -9,6 +9,7 @@ import { openProductionDatabaseUnsafe } from "../../../infrastructure/unsafe/dri
 import { executionRepository } from "./repository.js"
 import { jobRepository } from "../job/repository.js"
 import {
+  ArticleIdSchema,
   EpisodeIdSchema,
   IdempotencyKeySchema,
   JobIdSchema,
@@ -31,6 +32,9 @@ const jobId = Schema.decodeUnknownSync(JobIdSchema)(
 const ownerId = Schema.decodeUnknownSync(OwnerIdSchema)("owner-1")
 const episodeId = Schema.decodeUnknownSync(EpisodeIdSchema)(
   "cd31ca98-fb40-4925-a51c-60940a535c8a"
+)
+const articleId = Schema.decodeUnknownSync(ArticleIdSchema)(
+  "f8f15e30-6877-4b4d-9568-76bfa3dc3e40"
 )
 const token = (value: string) =>
   Schema.decodeUnknownSync(LeaseTokenSchema)(value)
@@ -76,6 +80,57 @@ describe("SQLite execution repository", () => {
           })
           expect(leased?.recovered).toBe(false)
           const running = leased!.job
+
+          yield* execution.markStep({
+            jobId,
+            leaseToken: token("lease-1"),
+            step: "synthesizing_audio",
+            phase: "started",
+            occurredAt: timestamp("2026-08-13T00:01:10.000Z"),
+          })
+          yield* execution.reportStageProgress({
+            jobId,
+            leaseToken: token("lease-1"),
+            step: "synthesizing_audio",
+            completed: 1,
+            total: 2,
+            occurredAt: timestamp("2026-08-13T00:01:20.000Z"),
+          })
+          yield* execution.reportStageProgress({
+            jobId,
+            leaseToken: token("lease-1"),
+            step: "synthesizing_audio",
+            completed: 0,
+            total: 2,
+            occurredAt: timestamp("2026-08-13T00:01:25.000Z"),
+          })
+          const jobWithProgress = yield* execution.findById(jobId)
+          const staleProgressExit = yield* Effect.exit(
+            execution.reportStageProgress({
+              jobId,
+              leaseToken: token("stale"),
+              step: "synthesizing_audio",
+              completed: 2,
+              total: 2,
+              occurredAt: timestamp("2026-08-13T00:01:30.000Z"),
+            })
+          )
+
+          yield* execution.saveGenerationPlan({
+            jobId,
+            leaseToken: token("lease-1"),
+            plan: {
+              jobId,
+              ownerId,
+              selectionMode: "automatic",
+              interestProfile: { include: "", exclude: "" },
+              selectedArticleIds: [articleId],
+              model: "deterministic-fallback",
+              createdAt: timestamp("2026-08-13T00:01:00.000Z"),
+            },
+          })
+          const usedBeforeSuccess =
+            yield* execution.listUsedAutomaticArticleIds(ownerId)
 
           const dictionarySnapshot = Schema.decodeUnknownSync(
             ReadingDictionarySnapshotSchema
@@ -152,8 +207,12 @@ describe("SQLite execution repository", () => {
           const pending = yield* execution.listPendingCompletionOutbox(10)
           yield* execution.markCompletionPublished(jobId, completedAt)
           const afterPublish = yield* execution.listPendingCompletionOutbox(10)
+          const usedAfterSuccess =
+            yield* execution.listUsedAutomaticArticleIds(ownerId)
           return {
             staleExit,
+            staleProgressExit,
+            jobWithProgress,
             staleDictionaryExit,
             loadedDictionary,
             checkpoint,
@@ -162,12 +221,22 @@ describe("SQLite execution repository", () => {
             outbox,
             pending,
             afterPublish,
+            usedBeforeSuccess,
+            usedAfterSuccess,
           }
         })
       )
     )
 
     expect(result.staleExit._tag).toBe("Failure")
+    expect(result.staleProgressExit._tag).toBe("Failure")
+    expect(result.jobWithProgress).toMatchObject({
+      _tag: "Running",
+      stage: "synthesizing_audio",
+      stageStartedAt: timestamp("2026-08-13T00:01:10.000Z"),
+      lastProgressAt: timestamp("2026-08-13T00:01:20.000Z"),
+      stageProgress: { completed: 1, total: 2 },
+    })
     expect(result.staleDictionaryExit._tag).toBe("Failure")
     expect(result.loadedDictionary?.fingerprint).toBe("a".repeat(64))
     expect(Object.isFrozen(result.loadedDictionary)).toBe(true)
@@ -179,6 +248,8 @@ describe("SQLite execution repository", () => {
     expect(result.pending).toHaveLength(1)
     expect(result.pending[0]?.jobId).toBe(jobId)
     expect(result.afterPublish).toEqual([])
+    expect(result.usedBeforeSuccess).toEqual([])
+    expect(result.usedAfterSuccess).toEqual([articleId])
   })
 
   it("recovers an expired lease without consuming another attempt", async () => {

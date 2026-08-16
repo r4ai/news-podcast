@@ -145,4 +145,52 @@ describe("durable AG-UI events", () => {
       database.close()
     }
   })
+
+  it("streams chunk progress as a durable state snapshot", () => {
+    const { handle, database } = openHandle()
+    try {
+      save(handle)
+      handle.replaceOwnedActive({
+        ownerId,
+        jobId,
+        replace: () => toStatusEventDocument(running),
+      })
+      handle.markStep({
+        jobId,
+        leaseToken: "lease-1",
+        step: "synthesizing_audio",
+        phase: "started",
+        occurredAt: "2026-08-13T00:01:10.000Z",
+      })
+
+      expect(
+        handle.reportStageProgress({
+          jobId,
+          leaseToken: "lease-1",
+          step: "synthesizing_audio",
+          completed: 1,
+          total: 2,
+          occurredAt: "2026-08-13T00:01:20.000Z",
+        })
+      ).toBe(true)
+
+      const event = handle
+        .listOwnedAgUiEvents({
+          ownerId,
+          jobId,
+          afterSequence: 0,
+          limit: 50,
+        })
+        .at(-1)
+      expect(JSON.parse(event!.payload)).toMatchObject({
+        type: "STATE_SNAPSHOT",
+        snapshot: {
+          currentStage: "synthesizing_audio",
+          stageProgress: { completed: 1, total: 2 },
+        },
+      })
+    } finally {
+      database.close()
+    }
+  })
 })

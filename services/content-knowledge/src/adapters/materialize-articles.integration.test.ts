@@ -140,6 +140,34 @@ describe("article materialization", () => {
       expect(read).toHaveBeenCalledWith("articles/a/article.md")
       expect(
         await Effect.runPromise(
+          catalog.listGenerationCandidates(ownerA, 50, [articleId])
+        )
+      ).toEqual([])
+
+      await Effect.runPromise(
+        subscriptions.setEnabled(
+          ownerA,
+          "9aa2225d-07e7-4af4-a8e6-e4788f801a91" as never,
+          false
+        )
+      )
+      expect(
+        await Effect.runPromise(
+          materialize({ ownerId: ownerA, selection: { _tag: "Automatic" } })
+        )
+      ).toEqual({ _tag: "NoArticles" })
+
+      // Manual selection remains available for a paused source.
+      expect(
+        await Effect.runPromise(
+          materialize({
+            ownerId: ownerA,
+            selection: { _tag: "Selected", articleIds: [articleId] },
+          })
+        )
+      ).toMatchObject({ _tag: "Materialized" })
+      expect(
+        await Effect.runPromise(
           materialize({
             ownerId: ownerB,
             selection: { _tag: "Selected", articleIds: [articleId] },

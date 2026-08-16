@@ -426,9 +426,21 @@ export const makeContentKnowledgeRpcHandler =
                   Effect.mapError(() => rejection("INVALID_REQUEST")),
                   Effect.flatMap((input) =>
                     input.selection._tag === "Automatic"
-                      ? planGeneration(
-                          ownerId,
-                          deepFreeze({ _tag: "Automatic" })
+                      ? Effect.forEach(
+                          input.selection.excludedArticleIds ?? [],
+                          (articleId) => parse(ArticleIdSchema)(articleId),
+                          { concurrency: 1 }
+                        ).pipe(
+                          Effect.mapError(() => rejection("INVALID_REQUEST")),
+                          Effect.flatMap((excludedArticleIds) =>
+                            planGeneration(
+                              ownerId,
+                              deepFreeze({
+                                _tag: "Automatic",
+                                excludedArticleIds,
+                              })
+                            )
+                          )
                         )
                       : Effect.forEach(
                           input.selection.articleIds,

@@ -24,6 +24,7 @@ const validMessage = {
     sources: [
       {
         sourceKind: "rss",
+        articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
         snapshotId: "06c0200a-e447-4243-b5e7-f31e7464f2e4",
         url: "https://example.com/news/1",
         title: "News 1",
@@ -44,9 +45,30 @@ describe("EpisodeCompleted message parser", () => {
       episodeId: validMessage.payload.episodeId,
       script: validMessage.payload.script,
       occurredAt: validMessage.occurredAt,
+      sources: [{ articleId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40" }],
     })
     expect(Object.isFrozen(notice)).toBe(true)
     expect(Object.isFrozen(notice.sources)).toBe(true)
+  })
+
+  it("accepts a queued v2 message published before article provenance was added", async () => {
+    const legacyMessage = {
+      ...validMessage,
+      payload: {
+        ...validMessage.payload,
+        sources: validMessage.payload.sources.map(
+          ({ articleId: _articleId, ...source }) => source
+        ),
+      },
+    }
+
+    const notice = await Effect.runPromise(
+      parseEpisodeCompletedMessage(legacyMessage)
+    )
+
+    expect(notice.sources).toEqual([
+      expect.not.objectContaining({ articleId: expect.anything() }),
+    ])
   })
 
   it.each([

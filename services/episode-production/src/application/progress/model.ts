@@ -26,6 +26,7 @@ export type ProgressState = Readonly<{
   selectionMode: "automatic" | "manual"
   selectedArticles: readonly ProgressArticle[]
   currentStage?: EpisodeJobStep
+  stageProgress?: Readonly<{ completed: number; total: number }>
   failure?: Readonly<{ code: string; message: string; retryable: boolean }>
   episodeId?: string
 }>

@@ -12,7 +12,13 @@ import {
   JobReceiptSchema,
 } from "../../contract.js"
 import type { GatewayPorts } from "../../application/ports.js"
-import { conflict, jobConflict, jobNotFound, unavailable } from "./problems.js"
+import {
+  conflict,
+  jobConflict,
+  jobNotFound,
+  normalizeProblem,
+  unavailable,
+} from "./problems.js"
 import type { Transport } from "./transport.js"
 
 /**
@@ -28,6 +34,9 @@ type ParsedProductionJob = Extract<
   { readonly _tag: "Found" }
 >["job"]
 type PublicEpisodeJob = Schema.Schema.Type<typeof EpisodeJobSchema>
+
+const deadlineAt = (createdAt: string) =>
+  new Date(Date.parse(createdAt) + 30 * 60_000).toISOString()
 
 const stateTimestamp = (job: ParsedProductionJob) => {
   switch (job.status) {
@@ -53,10 +62,23 @@ export const toEpisodeJob = (
     id: job.jobId,
     status: job.status,
     createdAt: job.createdAt,
+    deadlineAt: deadlineAt(job.createdAt),
     ...(job.articleIds === undefined ? {} : { articleIds: job.articleIds }),
     attempt: job.attempt,
     maxAttempts: job.maxAttempts,
     ...(job.status === "running" ? { startedAt: job.startedAt } : {}),
+    ...(job.status === "running" && job.stage !== undefined
+      ? { stage: job.stage }
+      : {}),
+    ...(job.status === "running" && job.stageStartedAt !== undefined
+      ? { stageStartedAt: job.stageStartedAt }
+      : {}),
+    ...(job.status === "running" && job.lastProgressAt !== undefined
+      ? { lastProgressAt: job.lastProgressAt }
+      : {}),
+    ...(job.status === "running" && job.stageProgress !== undefined
+      ? { stageProgress: job.stageProgress }
+      : {}),
     ...(job.status === "retrying" ? { nextAttemptAt: job.retryAt } : {}),
     ...(["succeeded", "failed", "canceled"].includes(job.status)
       ? { finishedAt: stateTimestamp(job) }
@@ -125,47 +147,64 @@ export const makeEpisodeJobPorts = (transport: Transport): EpisodeJobPorts => {
 
   return {
     createEpisodeJob: ({ headers, payload }) =>
-      transport.authenticated(headers).pipe(
-        Effect.flatMap(({ actor, lineage: parent }) => {
-          const lineage = transport.childLineage(
-            parent,
-            transport.nextMessageId()
-          )
-          return transport
-            .rpc(
-              subjects.production.createJob,
-              "episode-production",
-              actor,
-              {
-                idempotencyKey: headers["idempotency-key"],
-                trigger: payload.trigger,
-                articleIds: payload.articleIds,
-              },
-              lineage
-            )
-            .pipe(
-              Effect.flatMap((reply) =>
-                parseCreateEpisodeJobReply(reply.payload)
-              ),
-              Effect.mapError(unavailable)
-            )
-        }),
-        Effect.flatMap((reply) =>
-          reply._tag === "Accepted"
-            ? parse(JobReceiptSchema)({
-                id: reply.jobId,
-                status: "queued",
-                createdAt: transport.now(),
-                attempt: 0,
-                maxAttempts: 4,
-              }).pipe(Effect.mapError(unavailable))
-            : Effect.fail(
-                reply.code === "IDEMPOTENCY_CONFLICT"
-                  ? conflict()
-                  : unavailable()
-              )
+      Effect.gen(function* () {
+        const { actor, lineage: parent } =
+          yield* transport.authenticated(headers)
+        const createLineage = transport.childLineage(
+          parent,
+          transport.nextMessageId()
         )
-      ),
+        const reply = yield* transport
+          .rpc(
+            subjects.production.createJob,
+            "episode-production",
+            actor,
+            {
+              idempotencyKey: headers["idempotency-key"],
+              trigger: payload.trigger,
+              articleIds: payload.articleIds,
+            },
+            createLineage
+          )
+          .pipe(
+            Effect.flatMap((response) =>
+              parseCreateEpisodeJobReply(response.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        if (reply._tag === "Rejected") {
+          return yield* Effect.fail(
+            reply.code === "IDEMPOTENCY_CONFLICT" ? conflict() : unavailable()
+          )
+        }
+        const getLineage = transport.childLineage(
+          parent,
+          transport.nextMessageId()
+        )
+        const current = yield* transport
+          .rpc(
+            subjects.production.getJob,
+            "episode-production",
+            actor,
+            { jobId: reply.jobId },
+            getLineage
+          )
+          .pipe(
+            Effect.flatMap((response) =>
+              parseEpisodeJobControlReply(response.payload)
+            ),
+            Effect.mapError(unavailable)
+          )
+        if (current._tag !== "Found") return yield* Effect.fail(unavailable())
+        const job = yield* toEpisodeJob(current.job)
+        return yield* parse(JobReceiptSchema)({
+          id: job.id,
+          status: job.status,
+          createdAt: job.createdAt,
+          attempt: job.attempt,
+          maxAttempts: job.maxAttempts,
+        }).pipe(Effect.mapError(unavailable))
+      }).pipe(Effect.mapError(normalizeProblem)),
     listEpisodeJobs: ({ headers, limit }) =>
       control(headers, subjects.production.listJobs, {
         ...(limit === undefined ? {} : { limit }),

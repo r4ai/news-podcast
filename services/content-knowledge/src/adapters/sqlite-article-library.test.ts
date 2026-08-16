@@ -351,7 +351,13 @@ describe("SQLite article library", () => {
       )
     ).toEqual({
       states: { all: 1, unread: 1, saved: 1, later: 0 },
-      feeds: [{ feedId: ids.feedA, count: 1 }],
+      feeds: [
+        {
+          feedId: ids.feedA,
+          feedUrl: "https://feeds.example.com/a.xml",
+          count: 1,
+        },
+      ],
     })
     expect(
       await Effect.runPromise(articles.find(ids.ownerB, ids.articleB))

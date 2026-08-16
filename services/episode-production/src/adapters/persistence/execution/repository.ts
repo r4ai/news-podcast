@@ -130,6 +130,17 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
           applied ? Effect.void : Effect.fail(staleLease())
         )
       ),
+    reportStageProgress: (input) =>
+      tryPersistence("report_stage_progress", () =>
+        handle.reportStageProgress({
+          ...input,
+          occurredAt: encodeTimestamp(input.occurredAt),
+        })
+      ).pipe(
+        Effect.flatMap((applied) =>
+          applied ? Effect.void : Effect.fail(staleLease())
+        )
+      ),
     recordSelectedArticles: (input) =>
       tryPersistence("record_selected_articles", () =>
         handle.recordSelectedArticles({
@@ -190,6 +201,15 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
           document === undefined
             ? Effect.succeed(undefined)
             : decodeGenerationPlan(document)
+        )
+      ),
+    listUsedAutomaticArticleIds: (ownerId) =>
+      tryPersistence("list_used_automatic_articles", () =>
+        handle.listUsedAutomaticArticleIds(ownerId)
+      ).pipe(
+        Effect.map(
+          (ids) =>
+            ids as readonly import("../../../domain/episode-job.js").ArticleId[]
         )
       ),
     saveGenerationPlan: (input) =>

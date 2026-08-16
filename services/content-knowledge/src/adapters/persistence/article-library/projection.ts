@@ -36,6 +36,7 @@ export const CountRowSchema = Schema.Struct({
 })
 export const FeedCountRowSchema = Schema.Struct({
   feedId: Schema.String,
+  feedUrl: Schema.String,
   count: Schema.Int,
 })
 

@@ -165,7 +165,11 @@ export const ArticleLibraryReplySchema = Schema.Union([
         later: Schema.Int,
       }),
       feeds: Schema.Array(
-        Schema.Struct({ feedId: FeedIdSchema, count: Schema.Int })
+        Schema.Struct({
+          feedId: FeedIdSchema,
+          feedUrl: url,
+          count: Schema.Int,
+        })
       ).check(Schema.isMaxLength(100)),
     }),
   }),

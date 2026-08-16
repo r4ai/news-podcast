@@ -50,6 +50,14 @@ export type QueuedJob = Schema.Schema.Type<typeof QueuedJobSchema>
 
 const AttemptSchema = Schema.Literals([1, 2, 3, 4])
 const RetryAttemptSchema = Schema.Literals([1, 2, 3])
+export const EpisodeJobStageSchema = Schema.Literals([
+  "selecting_articles",
+  "materializing_articles",
+  "generating_script",
+  "preparing_pronunciation",
+  "synthesizing_audio",
+  "storing_episode",
+])
 export const LeaseTokenSchema = Schema.NonEmptyString.pipe(
   Schema.brand("LeaseToken")
 )
@@ -58,6 +66,15 @@ export const RunningJobSchema = Schema.TaggedStruct("Running", {
   ...baseFields,
   attempt: AttemptSchema,
   startedAt: UtcTimestampSchema,
+  stage: Schema.optional(EpisodeJobStageSchema),
+  stageStartedAt: Schema.optional(UtcTimestampSchema),
+  lastProgressAt: Schema.optional(UtcTimestampSchema),
+  stageProgress: Schema.optional(
+    Schema.Struct({
+      completed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      total: Schema.Int.check(Schema.isGreaterThan(0)),
+    }).check(Schema.makeFilter(({ completed, total }) => completed <= total))
+  ),
   lease: Schema.Struct({
     token: LeaseTokenSchema,
     leasedUntil: UtcTimestampSchema,

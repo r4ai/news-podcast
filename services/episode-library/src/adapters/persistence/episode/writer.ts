@@ -90,6 +90,7 @@ export const saveEpisodeOnce = (
             source._tag === "RssSource" ? ("rss" as const) : ("web" as const),
           url: source.url,
           title: source.title,
+          articleId: source._tag === "RssSource" ? source.articleId : null,
           publishedAt:
             source._tag === "RssSource" ? (source.publishedAt ?? null) : null,
           snapshotId: source._tag === "RssSource" ? source.snapshotId : null,

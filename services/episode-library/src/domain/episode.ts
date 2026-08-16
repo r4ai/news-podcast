@@ -46,6 +46,8 @@ export type EpisodeId = Schema.Schema.Type<typeof EpisodeIdSchema>
 
 export const SnapshotIdSchema = uuid("SnapshotId")
 export type SnapshotId = Schema.Schema.Type<typeof SnapshotIdSchema>
+export const ArticleIdSchema = uuid("ArticleId")
+export type ArticleId = Schema.Schema.Type<typeof ArticleIdSchema>
 
 export const EpisodeTitleSchema = nonEmpty("EpisodeTitle")
 export type EpisodeTitle = Schema.Schema.Type<typeof EpisodeTitleSchema>
@@ -63,6 +65,7 @@ export const UtcInstantSchema = utcInstant("UtcInstant")
 export type UtcInstant = Schema.Schema.Type<typeof UtcInstantSchema>
 
 export const RssSourceSchema = Schema.TaggedStruct("RssSource", {
+  articleId: Schema.optionalKey(ArticleIdSchema),
   url: HttpUrlSchema,
   title: Schema.NonEmptyString,
   publishedAt: Schema.optionalKey(UtcInstantSchema),

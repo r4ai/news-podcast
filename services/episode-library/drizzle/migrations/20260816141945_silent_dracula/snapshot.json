@@ -1,0 +1,305 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "c89369f4-3636-4f9a-8a27-6a05a140b822",
+  "prevIds": ["3e03f5de-3169-481b-86b4-7e336d9fc803"],
+  "ddl": [
+    {
+      "name": "episode_completion_inbox",
+      "entityType": "tables"
+    },
+    {
+      "name": "episode_sources",
+      "entityType": "tables"
+    },
+    {
+      "name": "episodes",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message_id",
+      "entityType": "columns",
+      "table": "episode_completion_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "episode_id",
+      "entityType": "columns",
+      "table": "episode_completion_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload_hash",
+      "entityType": "columns",
+      "table": "episode_completion_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "received_at",
+      "entityType": "columns",
+      "table": "episode_completion_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "episode_id",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_kind",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "url",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "article_id",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "published_at",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "snapshot_id",
+      "entityType": "columns",
+      "table": "episode_sources"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "script",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "audio_object_key",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "audio_byte_length",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "audio_content_type",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "episodes"
+    },
+    {
+      "columns": ["episode_id"],
+      "tableTo": "episodes",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_episode_sources_episode_id_episodes_id_fk",
+      "entityType": "fks",
+      "table": "episode_sources"
+    },
+    {
+      "columns": ["episode_id", "position"],
+      "nameExplicit": false,
+      "name": "episode_sources_pk",
+      "entityType": "pks",
+      "table": "episode_sources"
+    },
+    {
+      "columns": ["message_id"],
+      "nameExplicit": false,
+      "name": "episode_completion_inbox_pk",
+      "table": "episode_completion_inbox",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "episodes_pk",
+      "table": "episodes",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false
+        },
+        {
+          "value": "\"created_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"id\" DESC",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "episodes_owner_created_idx",
+      "entityType": "indexes",
+      "table": "episodes"
+    },
+    {
+      "value": "\"position\" >= 0",
+      "name": "episode_sources_position_check",
+      "entityType": "checks",
+      "table": "episode_sources"
+    },
+    {
+      "value": "\"source_kind\" IN ('rss', 'web')",
+      "name": "episode_sources_kind_check",
+      "entityType": "checks",
+      "table": "episode_sources"
+    },
+    {
+      "value": "(\"source_kind\" = 'rss' AND \"snapshot_id\" IS NOT NULL) OR (\"source_kind\" = 'web' AND \"article_id\" IS NULL AND \"snapshot_id\" IS NULL AND \"published_at\" IS NULL)",
+      "name": "episode_sources_provenance_check",
+      "entityType": "checks",
+      "table": "episode_sources"
+    },
+    {
+      "value": "\"audio_byte_length\" > 0",
+      "name": "episodes_audio_byte_length_check",
+      "entityType": "checks",
+      "table": "episodes"
+    },
+    {
+      "value": "\"audio_content_type\" IN ('audio/wav', 'audio/mpeg')",
+      "name": "episodes_audio_content_type_check",
+      "entityType": "checks",
+      "table": "episodes"
+    }
+  ],
+  "renames": []
+}
