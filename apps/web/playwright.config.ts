@@ -19,12 +19,14 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "pnpm storybook --ci --no-open",
+      // VRTはPlaywrightコンテナの中で走る。そこにpnpmは無いので、
+      // インストール済みのbinを直接叩く。
+      command: "./node_modules/.bin/storybook dev -p 6006 --ci --no-open",
       url: "http://127.0.0.1:6006",
       reuseExistingServer: true,
     },
     {
-      command: "tsx scripts/run-fake-stack.ts",
+      command: "./node_modules/.bin/tsx scripts/run-fake-stack.ts",
       env: { E2E_API_PORT: "3200", E2E_WEB_PORT: "4373" },
       url: "http://127.0.0.1:4373/health",
       reuseExistingServer: false,

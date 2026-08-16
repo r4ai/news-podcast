@@ -8,7 +8,7 @@ export default defineConfig({
   timeout: 30_000,
   use: { baseURL: `http://127.0.0.1:${webPort}` },
   webServer: {
-    command: "tsx scripts/run-fake-stack.ts",
+    command: "./node_modules/.bin/tsx scripts/run-fake-stack.ts",
     env: { E2E_API_PORT: apiPort, E2E_WEB_PORT: webPort },
     url: `http://127.0.0.1:${webPort}/health`,
     reuseExistingServer: false,

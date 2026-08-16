@@ -85,17 +85,23 @@ export function articleQueryOptions(articleId: string) {
   })
 }
 
-/** 本文Markdownは記事ごとに不変なので、切り替えで取り直さないよう長めに保つ。 */
+/**
+ * 本文Markdownは記事ごとに不変なので、切り替えで取り直さないよう長めに保つ。
+ *
+ * 応答は`text/markdown`ではなく`application/json`の`{ markdown }`。
+ * `parseAs: "text"`にすると本文の代わりにJSONのソース文字列を受け取り、
+ * それがそのままMarkdownとして描画されてしまう。
+ */
 export function articleMarkdownQueryOptions(articleId: string) {
   return queryOptions({
     queryKey: ["article-markdown", articleId] as const,
     queryFn: async ({ signal }) => {
       const { data, error } = await fetchClient.GET(
         "/v1/me/articles/{articleId}/markdown",
-        { signal, params: { path: { articleId } }, parseAs: "text" }
+        { signal, params: { path: { articleId } } }
       )
       if (error) throw error
-      return data ?? ""
+      return data?.markdown ?? ""
     },
     staleTime: 5 * 60_000,
   })

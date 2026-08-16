@@ -20,7 +20,9 @@ export default defineConfig({
     // 取りこぼしたfetchが実サーバへ届かないよう別originにする。
     environmentOptions: { jsdom: { url: "http://web.test/" } },
     globals: false,
-    include: ["src/**/*.test.{ts,tsx}"],
+    // scriptsも含めるのは、e2e/視覚回帰が使う偽Gatewayが実契約から
+    // ずれていないかを検査する`fake-api.contract.test.ts`のため。
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],
     setupFiles: ["./src/shared/test/setup.ts"],
     restoreMocks: true,
     unstubGlobals: true,

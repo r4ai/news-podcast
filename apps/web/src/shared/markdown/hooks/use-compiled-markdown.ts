@@ -4,10 +4,16 @@ import {
   createMarkdownProcessor,
   type MarkdownProcessorOptions,
 } from "../pipeline/create-processor"
+import type { HeadingOutlineEntry } from "../pipeline/rehype-heading-outline"
 
 export type MarkdownCompileState =
   | { readonly status: "loading" }
-  | { readonly status: "ready"; readonly content: ReactNode }
+  | {
+      readonly status: "ready"
+      readonly content: ReactNode
+      /** 見出しの並び。目次の描画に使う。 */
+      readonly outline: readonly HeadingOutlineEntry[]
+    }
   | { readonly status: "error"; readonly message: string }
 
 function errorMessage(error: unknown): string {
@@ -36,9 +42,14 @@ export function useCompiledMarkdown(
 
     createMarkdownProcessor({ baseUrl, headingBaseLevel, omitLeadingTitle })
       .process(markdown)
-      .then((file: { result: unknown }) => {
+      .then((file: { result: unknown; data: { outline?: unknown } }) => {
         if (!cancelled) {
-          setState({ status: "ready", content: file.result as ReactNode })
+          setState({
+            status: "ready",
+            content: file.result as ReactNode,
+            outline: (file.data.outline ??
+              []) as readonly HeadingOutlineEntry[],
+          })
         }
       })
       .catch((error: unknown) => {

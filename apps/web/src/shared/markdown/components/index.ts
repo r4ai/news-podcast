@@ -13,7 +13,16 @@ import { H1, H2, H3, H4, H5, H6 } from "./heading"
 import { ListItem, OrderedList, UnorderedList } from "./list"
 import { Mermaid } from "./mermaid/mermaid"
 import { Paragraph } from "./paragraph"
-import { Table, TableCell, TableHead, TableHeaderCell, TableRow } from "./table"
+import { SourceFooter } from "./source-footer"
+import { ThematicBreak } from "./thematic-break"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "./table"
 
 /**
  * rehype-reactの `components` へ渡すhastタグ⇄Reactコンポーネントの対応表。
@@ -31,6 +40,7 @@ export const markdownComponents: Partial<Components> = {
   h4: H4,
   h5: H5,
   h6: H6,
+  hr: ThematicBreak,
   img: Image,
   input: Input,
   li: ListItem,
@@ -39,6 +49,7 @@ export const markdownComponents: Partial<Components> = {
   pre: CodeBlock,
   summary: Summary,
   table: Table,
+  tbody: TableBody,
   td: TableCell,
   th: TableHeaderCell,
   thead: TableHead,
@@ -49,4 +60,5 @@ export const markdownComponents: Partial<Components> = {
   "markdown-embed": Embed,
   "markdown-link-card": LinkCard,
   "markdown-mermaid": Mermaid,
+  "markdown-source": SourceFooter,
 }

@@ -45,15 +45,20 @@ async function expectNoAccessibilityViolations(page: Page) {
   expect(violations).toEqual([])
 }
 
-async function expectStablePage(page: Page, snapshot: string) {
+async function expectStablePage(
+  page: Page,
+  snapshot: string,
+  { fullPage = true }: { readonly fullPage?: boolean } = {}
+) {
   await page.evaluate(() => document.fonts.ready)
   await expectNoAccessibilityViolations(page)
   await expect(page).toHaveScreenshot(`${snapshot}.png`, {
     animations: "disabled",
     caret: "hide",
-    fullPage: true,
-    // Ubuntu runner font rasterization differs slightly from local snapshots.
-    // Keep layout regressions visible while allowing a small cross-platform delta.
+    fullPage,
+    // 環境差はコンテナで消してあるので、ここが吸収するのはページ自身の
+    // 実行ごとの揺れだけ。購読ページは同じコンテナで撮り直しても3%程度動く
+    // (同期ジョブの相対時刻など)。レイアウト回帰は見えるまま残す。
     maxDiffPixelRatio: 0.04,
   })
 }
@@ -110,7 +115,28 @@ for (const theme of ["light", "dark"] as const) {
           name: "Durable Objectsが東京リージョンに対応",
         })
       ).toBeVisible()
-      await expectStablePage(page, `articles-reader-${suffix}`)
+      // 題名は記事レコードから即座に出るが、本文はremark/rehypeの非同期
+      // パイプライン(Shikiの言語遅延import込み)を通ってから差し替わる。
+      // 題名だけを待って撮ると、ハイライト前後どちらの高さになるかが実行ごとに
+      // 変わる。本文の最後に出るものを待って、完成した状態だけを撮る。
+      await expect(
+        page.getByRole("button", { name: "コードをコピー" })
+      ).toBeVisible()
+      // 目次はdisclosureと右レールの2箇所にあり、どちらが見えるかは幅次第。
+      // 存在だけを確かめれば、見出しの収集まで終わったことが分かる。
+      await expect(
+        page
+          .getByRole("navigation", { name: "目次", includeHidden: true })
+          .first()
+      ).toBeAttached()
+      // リーダーだけviewport固定で撮る。本文は長く、行ボックスの丸めで
+      // 全体の高さが実行ごとに1px動く。寸法が違うと`maxDiffPixelRatio`は
+      // 効かず即失敗するので、高さが確定する撮り方にする。desktopは本文が
+      // 元々viewportへ収まるので情報量は変わらず、mobileで折り返した先は
+      // desktop側のスナップショットが受け持つ。
+      await expectStablePage(page, `articles-reader-${suffix}`, {
+        fullPage: false,
+      })
     })
   }
 }

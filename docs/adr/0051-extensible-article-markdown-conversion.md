@@ -32,7 +32,7 @@ flowchart LR
 - DOM境界は`jsdom@30.0.1`に限定し、`runScripts`と外部resource取得を有効にしない。ReadabilityはcloneしたDOMで実行し、最終HASTを必ずsanitizeする。
 - Zenn・QiitaのProfileはhostname完全一致、本文root、除去selector、filename selector、callout意味対応だけを所有する。ProfileからReadability・serializerへ直接依存することを静的gateで禁止する。
 - code、callout、embed、math、URL安全化は共有Ruleとして全サイトへ適用する。明示言語→サイト属性→filename→shebang/modeline→VS Codeローカルモデルの順に証拠を使い、モデルは80非空白文字、confidence 0.35、次点差0.20を満たす場合だけ採用する。
-- 保存方言はGFM、math、Mermaid、Obsidian/GitHub型callout、`@[card]`、`@[embed]`、code metaへ限定する。表示側は`@r4ai/remark-callout`を使い、外部embedはHTTPS provider allowlist、空sandbox、`no-referrer`でのみ自動ロードする。
+- 保存方言はGFM、math、Mermaid、Obsidian/GitHub型callout、`@[card]`、`@[embed]`、code metaへ限定する。表示側は`@r4ai/remark-callout`を使い、外部embedはHTTPS provider allowlist、sandbox、`no-referrer`でのみ自動ロードする（sandbox権限のprovider別宣言は[ADR-0054](0054-per-provider-embed-sandbox.md)で改訂した。当初の空sandboxではプレイヤーが初期化せず、埋め込みが常にエラー表示になっていた）。
 - `createArticleArchiveArtifacts`は`Promise`を返す。archive storage key、hash、media type、DB/OpenAPI契約は維持する。
 - 診断情報はProfile ID、適用Rule ID、入力/出力byte数、処理時間だけとし、URLや本文を含めない。
 
@@ -100,3 +100,4 @@ flowchart LR
 - Green: `pnpm --filter web test:markdown:coverage`。
 - Boundary: `pnpm parser:check`。
 - 任意の実通信確認: `pnpm --filter @news-podcast/content-knowledge test:article-markdown:live`。
+- 後日追補（[ADR-0053](0053-markdown-corpus-bridges-converter-and-renderer.md)）: ここで定めた方言が描画側で実際に出るところまでは検証していなかった。`pnpm markdown:corpus`が変換結果をfixtureとして書き出し、`apps/web/src/shared/markdown/corpus.test.tsx`が実際のパイプラインで描画するようになった。Green: `pnpm markdown:corpus:check`、`pnpm --filter web test`。

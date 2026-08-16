@@ -148,7 +148,11 @@ Gatewayと4 Context serviceは`@news-podcast/service-runtime`のSupervisorを使
 - 記事の既読は「開いた瞬間」ではなく「離れたタイミング」(別記事への切り替え・一覧へ戻る・ページ遷移・タブを閉じる)で反映する。開いている間は一覧でも未読表示のまま保つ。
 - 記事一覧のヘッダー(検索・状態タブ)は常設し、スクロール位置に関わらず操作できる。日付見出しはそのヘッダーの直下へ吸着する。吸着位置は`--app-bar-h`と`--article-header-h`だけで決め、各所へ数値を散らさない。スクロール領域の祖先に`overflow-hidden`を置くと吸着が死ぬので使わない。
 - ページには必ずlevel-1見出しを置く。記事ページのようにヘッダーを視覚化しない画面では`sr-only`の`h1`を置き、見出しレベルを飛ばさない。
-- Markdown本文はグローバルCSS（`prose`など）ではなく、要素ごとのReactコンポーネントで描画する。`rehype-react`のcomponent mapに`h1`〜`h6`、`p`、`ul/ol/li`、`table`、`blockquote`、`pre/code`などを個別に割り当て、shadcn/uiのtypographyに倣った見た目をコンポーネント側が持つ。
+- Markdown本文はグローバルCSS（`prose`など）ではなく、要素ごとのReactコンポーネントで描画する。`rehype-react`のcomponent mapに`h1`〜`h6`、`p`、`ul/ol/li`、`table/thead/tbody/tr/th/td`、`blockquote`、`pre/code`、`hr`、`img`などを個別に割り当て、表はshadcn/uiのTableへ、解析失敗の表示はAlertへ委ねる。取りこぼしは`corpus.test.tsx`が「Reactコンポーネントを持たずに描画された要素の一覧」として検出する（[ADR-0053](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)）。
+- 画像は「段落の唯一の中身」であるときだけ図版として扱い、中央寄せと枠を付ける。文中に埋め込まれた画像（リンクカードのfaviconなど）に同じ装飾を掛けると本文が崩れるため、判定は`rehype-mark-block-images`が印を付ける。キャプションは`![alt](src "title")`の`title`があるときだけ出す。`alt`は代替テキストであってキャプションではなく、実記事では図を説明した長文であることが多い。取得元は第三者サイトなので`referrerPolicy="no-referrer"`を付ける。
+- 変換器が本文末尾へ必ず足す`Source: <url>`は、裸のURL段落ではなく出典フッターとして描く。判定は末尾の1要素に限り、「テキスト`Source: `」と「URLを表示文言に持つリンク」の2要素という形に厳密一致する場合だけ置き換える。本文中に偶然現れた同じ書き出しの段落は壊さない。
+- 見出しにはテキスト由来のidを振り、その見出しへのリンクを添える。アンカーは支援技術から隠す（見出しの中のリンクはアクセシブル名へ混ざり、読み上げが二重になる）。キーボードと支援技術から見出しへ飛ぶ経路は目次が持つ。
+- リーダーは本文の見出しから目次を作る。幅に余裕がある時（`xl`）は追従する右レール、それ未満は本文の前の`<details>`。`<aside>`にはしない（AppShellのサイドバーが既にcomplementaryランドマークを持つため、axeの`landmark-unique`に触れる）。字下げは絶対レベルではなく最も浅い見出しからの相対の深さで決め、2階層までに留める。GFM脚注の`sr-only`な「Footnotes」見出しは目次に載せない。
 - 取り込んだ本文の見出しは、埋め込み先の階層へ接ぎ木する。`<Markdown headingBaseLevel>`は「本文の最も浅い見出しに与えるレベル」を指定する。固定のオフセットにしないのは、タイトル再掲の除去で最浅レベルが変わり、見出し順に穴が空くため。リーダー本文は`3`（ページh1 + 記事タイトルh2の下）、AI要約内は`4`。
 - リーダーは記事タイトルを自前の見出しで表示するので、本文先頭の同じ見出しは`omitLeadingTitle`で落とす。判定は先頭ノードに限り、本文中の見出しには触れない。
 - 文字色は背景ごとに4.5:1を確認する。選択行(`accent`)やセグメンテッドコントロールの溝(`muted`)の上では`muted-foreground`が基準を割るため、前景寄りの色へ上げる。
@@ -203,7 +207,9 @@ flowchart LR
 
 構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後にFeedItemへ正規化する。記事HTMLはscript/resource無効の`jsdom`でDOM化し、共有Feature Ruleでcode/callout/embed/mathを保持してから、Site Profileの明示root、semantic `article`、Readabilityの順で本文を抽出する。その後`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。Profileはselectorと意味対応だけを所有し、汎用抽出・serializeを複製しない。XML/HTML/Markdownのタグ境界を正規表現で解釈せず、`pnpm parser:check`で依存境界を検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)、[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)）。
 
-保存MarkdownはGFM、math、Mermaid、Obsidian/GitHub型callout、`@[card]`、`@[embed]`、code fence metadataを扱う。code言語は明示属性、filename、shebang/modeline、閾値付きoffline検出の順に決める。Webはcalloutを`@r4ai/remark-callout`で描画し、embedはHTTPS provider allowlist、sandbox、`no-referrer`を満たす場合だけ自動ロードする。
+保存MarkdownはGFM、math、Mermaid、Obsidian/GitHub型callout、`@[card]`、`@[embed]`、code fence metadataを扱う。code言語は明示属性、filename、shebang/modeline、閾値付きoffline検出の順に決める。Webはcalloutを`@r4ai/remark-callout`で描画し、embedはHTTPS provider allowlist、sandbox、`no-referrer`を満たす場合だけ自動ロードする。sandboxの権限はprovider単位で宣言し、必要な物だけを与える。動画プレイヤーやスライドはJavaScriptなしでは何も描けないため`allow-scripts`を与えるが、`allow-same-origin`は型で表現できないようにして決して与えない（両方揃うとiframeが自分でsandbox属性を外せる）。許可リストに載らないhostnameは、URLがどれだけ安全に見えてもiframeにせずリンクへ落とす。
+
+この方言は、変換器が実際に出力したMarkdownを描画して検証する。`pnpm markdown:corpus`が`services/content-knowledge/fixtures/article-markdown/`のfixtureを変換して`apps/web/src/shared/markdown/__fixtures__/`へ書き出し（`apps/web`は`services/**`をimportできないので、橋渡しは生成物のcommitで行う）、`corpus.test.tsx`がそれを実際のパイプラインで描画する。CIは`pnpm markdown:corpus:check`でdriftを検出する。e2eと視覚回帰が使う偽Gatewayの応答形もOpenAPIとの一致を検査する — テストダブルが実装のバグへ合わせると、どの層も嘘を検知できなくなる（[ADR-0053](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)）。
 
 保存するMarkdownは「取得元ページの断片」であり、埋め込み先の見出し階層は保存時点では決まらない。そこで変換時に見出しを**最も浅いものがlevel 1になる正規形**へ畳み、相対関係だけを残す（`<h2>`から始まるサイトと`<h1>`から始まるサイトの差を吸収する）。実際の見出しレベルは、埋め込み文脈を知っている表示側が決める。
 
@@ -319,3 +325,5 @@ flowchart TD
 - [ADR-0042 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)
 - [ADR-0048 Grafana LGTM向けプロジェクト単位MCP](adr/0048-grafana-mcp-observability.md)
 - [ADR-0052 RPC障害隔離と自己回復可能なサービスランタイム](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)
+- [ADR-0053 変換器の実出力をgolden corpusとして描画側へ橋渡しする](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)
+- [ADR-0054 埋め込みのsandbox権限をprovider単位で宣言する](adr/0054-per-provider-embed-sandbox.md)

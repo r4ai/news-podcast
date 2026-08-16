@@ -1,11 +1,13 @@
-import { Markdown } from "@/shared/markdown"
-import { articleBaseUrl, type Article, type ArticleSource } from "../-model"
+import { MarkdownBody, type MarkdownCompileState } from "@/shared/markdown"
+import type { Article, ArticleSource } from "../-model"
 
 export type ArticleReaderContentProps = {
   readonly article: Article
   readonly source: ArticleSource
   readonly markdown: string | undefined
   readonly isMarkdownLoading: boolean
+  /** リーダー側で1度だけコンパイルした本文。目次と同じ結果を共有する。 */
+  readonly compiled: MarkdownCompileState
   readonly archiveHtml: string | undefined
   readonly isArchiveLoading: boolean
   readonly archiveUnavailable: boolean
@@ -33,6 +35,7 @@ export function ArticleReaderContent({
   source,
   markdown,
   isMarkdownLoading,
+  compiled,
   archiveHtml,
   isArchiveLoading,
   archiveUnavailable,
@@ -72,14 +75,5 @@ export function ArticleReaderContent({
   if (!markdown) {
     return <NoContentNotice article={article} />
   }
-  // ページはh1(記事)、リーダーはh2(記事タイトル)を既に使っているので、
-  // 本文の見出しはh3から始める。
-  return (
-    <Markdown
-      baseUrl={articleBaseUrl(article.id)}
-      headingBaseLevel={3}
-      markdown={markdown}
-      omitLeadingTitle={article.title}
-    />
-  )
+  return <MarkdownBody state={compiled} />
 }

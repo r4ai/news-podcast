@@ -85,6 +85,8 @@ pnpm observability:validate
 pnpm audit --audit-level=high
 ```
 
+`pnpm test:visual`はPlaywright公式コンテナの中で実行するためDockerを必要とする。CIも同じイメージ(digest固定)をjobのcontainerとして使い、スナップショットの環境差を無くしている。イメージのversionは`apps/web`の`@playwright/test`と揃えること。
+
 Dockerを使うobservability smokeをローカルで初めて実行する場合は、先に`pnpm setup:env`で`.env`を生成する。CIも同じスクリプトで一時的な開発用secretを生成し、実シークレットを使わない。
 
 security workflowの検査ツールは公式release assetをダウンロードし、固定したSHA256 checksumを検証する。Gitleaksの結果や診断artifactへ実シークレットを出力しない。

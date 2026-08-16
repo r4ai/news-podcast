@@ -77,7 +77,7 @@ describe("useArticleReader", () => {
   it("keeps markdown as the source when the archived body is long enough", async () => {
     const { state } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
-      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: longMarkdown } },
     ])
 
     await readerReady()
@@ -88,7 +88,7 @@ describe("useArticleReader", () => {
   it("marks raw archive content unavailable when markdown is too short", async () => {
     const { state } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
-      { path: "/v1/me/articles/a/markdown", raw: shortMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: shortMarkdown } },
     ])
 
     await waitFor(() => expect(state.current?.source).toBe("archive"))
@@ -111,7 +111,7 @@ describe("useArticleReader", () => {
   it("does not mark an unread article as read while it is open", async () => {
     const { calls } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
-      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: longMarkdown } },
     ])
 
     await readerReady()
@@ -121,9 +121,9 @@ describe("useArticleReader", () => {
   it("marks an unread article as read when switching to another article", async () => {
     const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
-      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: longMarkdown } },
       { path: "/v1/me/articles/b", body: makeArticle({ id: "b" }) },
-      { path: "/v1/me/articles/b/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/b/markdown", body: { markdown: longMarkdown } },
       {
         method: "PATCH",
         path: "/v1/me/articles/a",
@@ -145,7 +145,7 @@ describe("useArticleReader", () => {
   it("marks pending unread articles as read when the reader unmounts", async () => {
     const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
-      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: longMarkdown } },
       {
         method: "PATCH",
         path: "/v1/me/articles/a",
@@ -167,7 +167,7 @@ describe("useArticleReader", () => {
   it("marks pending unread articles as read on pagehide", async () => {
     const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: false }) },
-      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: longMarkdown } },
       {
         method: "PATCH",
         path: "/v1/me/articles/a",
@@ -191,7 +191,7 @@ describe("useArticleReader", () => {
   it("sends only the toggled flag when saving", async () => {
     const { state, calls } = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
-      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: longMarkdown } },
       {
         method: "PATCH",
         path: "/v1/me/articles/a",
@@ -210,7 +210,7 @@ describe("useArticleReader", () => {
   it("keeps an article unread when the user marks it unread and leaves", async () => {
     const rendered = renderReader([
       { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
-      { path: "/v1/me/articles/a/markdown", raw: longMarkdown },
+      { path: "/v1/me/articles/a/markdown", body: { markdown: longMarkdown } },
       {
         method: "PATCH",
         path: "/v1/me/articles/a",

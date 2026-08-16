@@ -68,6 +68,18 @@
         "@[card](https://developer.wordpress.org/news/)"
       ],
       "excludes": ["WordPress site header"]
+    },
+    {
+      "file": "azukiazusa-design.html",
+      "sourceUrl": "https://azukiazusa.dev/blog/recent-ai-coding-development-process-centered-on-design/",
+      "sha256": "449e330bbc62fc877af1ff42860e50ecd507d9c686a6ceadb696ec0226a887a5",
+      "includes": [
+        "設計を中心とした開発の進め方",
+        "`interface`",
+        "AI と本音トーク",
+        "> 設計の意図を保ったまま実装される。"
+      ],
+      "excludes": ["Back to blog", "azukiazusa.dev footer"]
     }
   ]
 }

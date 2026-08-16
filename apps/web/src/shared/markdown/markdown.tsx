@@ -2,7 +2,10 @@ import "katex/dist/katex.min.css"
 
 import { MarkdownError } from "./components/markdown-error"
 import { MarkdownSkeleton } from "./components/markdown-skeleton"
-import { useCompiledMarkdown } from "./hooks/use-compiled-markdown"
+import {
+  useCompiledMarkdown,
+  type MarkdownCompileState,
+} from "./hooks/use-compiled-markdown"
 
 export type MarkdownProps = {
   /** アーカイブ記事本文などのMarkdown文字列。 */
@@ -19,10 +22,28 @@ export type MarkdownProps = {
 }
 
 /**
+ * コンパイル済みの状態を描き分けるだけのview(ADR-0018: hookが状態を持ち、
+ * viewはpropsのみ)。目次のように本文の外へ置きたいものがある場合は、
+ * 呼び出し側が`useCompiledMarkdown`を直接使い、その状態をここへ渡す。
+ */
+export function MarkdownBody({
+  state,
+}: {
+  readonly state: MarkdownCompileState
+}) {
+  if (state.status === "loading") {
+    return <MarkdownSkeleton />
+  }
+  if (state.status === "error") {
+    return <MarkdownError message={state.message} />
+  }
+  return <div className="min-w-0">{state.content}</div>
+}
+
+/**
  * アーカイブ記事本文をremark/rehypeパイプラインで描画するルート
  * コンポーネント。ShikiとMermaidの読み込みが非同期なため、結果は
- * `useCompiledMarkdown`が持つ状態(ADR-0018: hookが状態を持ち、viewは
- * propsのみ)に従って出し分ける。
+ * `useCompiledMarkdown`が持つ状態に従って出し分ける。
  */
 export function Markdown({
   markdown,
@@ -36,11 +57,5 @@ export function Markdown({
     omitLeadingTitle,
   })
 
-  if (state.status === "loading") {
-    return <MarkdownSkeleton />
-  }
-  if (state.status === "error") {
-    return <MarkdownError message={state.message} />
-  }
-  return <div className="min-w-0">{state.content}</div>
+  return <MarkdownBody state={state} />
 }

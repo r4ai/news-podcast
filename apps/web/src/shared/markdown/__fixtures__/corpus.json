@@ -1,0 +1,101 @@
+{
+  "generatedFrom": "services/content-knowledge/fixtures/article-markdown",
+  "capturedAt": "2026-08-15",
+  "entries": [
+    {
+      "name": "azukiazusa-design",
+      "sourceFile": "azukiazusa-design.html",
+      "sourceUrl": "https://azukiazusa.dev/blog/recent-ai-coding-development-process-centered-on-design/",
+      "sourceSha256": "449e330bbc62fc877af1ff42860e50ecd507d9c686a6ceadb696ec0226a887a5",
+      "markdownSha256": "c3a229f54007d7fad4767434efd257c4eb454d31088d15a990b4d5b39d672397",
+      "markdownBytes": 778,
+      "profileId": "generic",
+      "appliedRules": []
+    },
+    {
+      "name": "github-docs",
+      "sourceFile": "github-docs.html",
+      "sourceUrl": "https://docs.github.com/en/get-started/writing-on-github",
+      "sourceSha256": "966cf3e598525fecbaad5a5d38d31210166da8c332423c9044eb1006391bef1a",
+      "markdownSha256": "5cc768426974ab636f5d1b6ecf50c2a2f63dab1efcfecdfa360f6c0992cf7133",
+      "markdownBytes": 195,
+      "profileId": "generic",
+      "appliedRules": []
+    },
+    {
+      "name": "mdn-closures",
+      "sourceFile": "mdn-closures.html",
+      "sourceUrl": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Closures",
+      "sourceSha256": "c09d54a9e4b092761dd25fee7ed391a3d3e1f06f5606e64695a920466e3c947f",
+      "markdownSha256": "f2b3b70b97725f6c91b4603148530132048c86eff9df51cf25751f266c3cce47",
+      "markdownBytes": 272,
+      "profileId": "generic",
+      "appliedRules": [
+        "code-block"
+      ]
+    },
+    {
+      "name": "qiita-guide",
+      "sourceFile": "qiita-guide.html",
+      "sourceUrl": "https://qiita.com/Qiita/items/c686397e4a0f4f11683d",
+      "sourceSha256": "c4998c33ecf8996a9c26b402e66128c5d50e1816376725297e8af999eb641a95",
+      "markdownSha256": "9718bce1d833225c52a5ce7832d40941d040800b0bdf029528cd37bff5c13dbb",
+      "markdownBytes": 235,
+      "profileId": "qiita",
+      "appliedRules": [
+        "callout",
+        "code-block"
+      ]
+    },
+    {
+      "name": "shiki-transformers",
+      "sourceFile": "shiki-transformers.html",
+      "sourceUrl": "https://shiki.style/packages/transformers",
+      "sourceSha256": "519c9cda7ed45cfba11a9637b07f0544585cb4dd21b32f91c3e508d5faca4ca0",
+      "markdownSha256": "7b679914a887cd3f66271cf5a12f9c3bfb9d59888365f7ebc2f60b296a260874",
+      "markdownBytes": 190,
+      "profileId": "generic",
+      "appliedRules": [
+        "code-block"
+      ]
+    },
+    {
+      "name": "wordpress-blog",
+      "sourceFile": "wordpress-blog.html",
+      "sourceUrl": "https://developer.wordpress.org/news/",
+      "sourceSha256": "3d46f6bb512a3eacee08786a95514c8472b61d7e11737ab2727a2674c8cdd7c3",
+      "markdownSha256": "bf219b6a89ea7b5b2845c591c84524561169714110b640351a89de586fe1b650",
+      "markdownBytes": 276,
+      "profileId": "generic",
+      "appliedRules": [
+        "embed"
+      ]
+    },
+    {
+      "name": "zenn-callout",
+      "sourceFile": "zenn-callout.html",
+      "sourceUrl": "https://zenn.dev/ricora/articles/5a170c17933c3f",
+      "sourceSha256": "132cccfe380d18f06f13310c5659b1b94ca82f6827f2a3dca2908c3afa67bfd7",
+      "markdownSha256": "72a6ce19c4ba2b8d7074cf04c4b02484b0212e70930e7ad71db8d811fbb7ca50",
+      "markdownBytes": 153,
+      "profileId": "zenn",
+      "appliedRules": [
+        "callout"
+      ]
+    },
+    {
+      "name": "zenn-guide",
+      "sourceFile": "zenn-guide.html",
+      "sourceUrl": "https://zenn.dev/zenn/articles/markdown-guide",
+      "sourceSha256": "d6c2d0908b3fb77c8646602ac3dd12bbe4368139e2a92a6e76a5f2a3514605bc",
+      "markdownSha256": "86d343f0f0e002b42857f73ff9ddb7332d8e49d8da184bf1f92c64748bdd0793",
+      "markdownBytes": 301,
+      "profileId": "zenn",
+      "appliedRules": [
+        "callout",
+        "embed",
+        "code-block"
+      ]
+    }
+  ]
+}

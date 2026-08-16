@@ -20,6 +20,8 @@ export default mergeConfig(
           "src/shared/markdown/lib/callout.ts",
           "src/shared/markdown/lib/embed.ts",
           "src/shared/markdown/lib/line-ranges.ts",
+          "src/shared/markdown/lib/slug.ts",
+          "src/shared/markdown/lib/to-plain-text.ts",
           "src/shared/markdown/pipeline/remark-embed-directive.ts",
         ],
         thresholds: {

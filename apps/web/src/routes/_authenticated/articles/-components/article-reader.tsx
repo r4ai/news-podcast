@@ -11,8 +11,16 @@ import {
 } from "@workspace/ui/components/empty"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 
+import {
+  MarkdownToc,
+  tocEntries,
+  useActiveHeading,
+  useCompiledMarkdown,
+} from "@/shared/markdown"
+
 import { useArticleKeyboardShortcuts } from "../-hooks/use-article-keyboard-shortcuts"
 import { useArticleReader } from "../-hooks/use-article-reader"
+import { articleMarkdownOptions } from "../-model"
 import { ArticleActions } from "./article-actions"
 import { ArticleAiBlock } from "./article-ai-block"
 import { ArticleReaderContent } from "./article-reader-content"
@@ -122,66 +130,117 @@ export function ArticleReaderView({
 }: ArticleReaderViewProps) {
   const focusRef = useSingleColumnReaderFocus(articleId)
 
+  // 目次を本文の外へ出すため、コンパイルはここで1度だけ行い、本文と目次へ
+  // 同じ結果を配る(ADR-0018: hookが状態を持ち、viewはpropsのみ)。
+  const compiled = useCompiledMarkdown(
+    markdown ?? "",
+    articleMarkdownOptions(article)
+  )
+  const outline =
+    compiled.status === "ready" && source === "markdown" ? compiled.outline : []
+  // 器を出すかどうかは`outline`ではなく「実際に並ぶ項目」で決める。見出しが
+  // 1つだけの記事では目次自体が何も描かないので、空のdisclosureと幅だけ取る
+  // レールが残ってしまう。
+  const hasToc = tocEntries(outline).length > 0
+  const activeHeadingId = useActiveHeading(outline)
+
   return (
-    // 下端の固定操作列と下部ナビはどちらもmdで消えるので、余白もmdで戻す。
-    <article
-      aria-label={article.title}
-      className="flex w-full max-w-3xl flex-col gap-4 pb-24 outline-none md:pb-4"
-      ref={focusRef}
-      tabIndex={-1}
-    >
-      <Button
-        className="self-start lg:hidden"
-        onClick={onBack}
-        size="sm"
-        variant="ghost"
+    <div className="flex w-full gap-6">
+      {/* 下端の固定操作列と下部ナビはどちらもmdで消えるので、余白もmdで戻す。 */}
+      <article
+        aria-label={article.title}
+        className="flex w-full min-w-0 max-w-3xl flex-col gap-4 pb-24 outline-none md:pb-4"
+        ref={focusRef}
+        tabIndex={-1}
       >
-        <ArrowLeft aria-hidden="true" data-icon="inline-start" />
-        一覧へ戻る
-      </Button>
+        <Button
+          className="self-start lg:hidden"
+          onClick={onBack}
+          size="sm"
+          variant="ghost"
+        >
+          <ArrowLeft aria-hidden="true" data-icon="inline-start" />
+          一覧へ戻る
+        </Button>
 
-      <ArticleReaderHeader article={article} />
+        <ArticleReaderHeader article={article} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <ArticleSourceTabs onSourceChange={setSource} source={source} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <ArticleSourceTabs onSourceChange={setSource} source={source} />
+          <ArticleActions
+            article={article}
+            className="hidden md:flex"
+            onToggleHidden={toggleHidden}
+            onToggleReadLater={toggleReadLater}
+            onToggleSaved={toggleSaved}
+          />
+        </div>
+
+        {didAutoFallback ? (
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            本文が短いため、アーカイブ表示に切り替えました。
+          </p>
+        ) : null}
+
+        <ArticleAiBlock
+          article={article}
+          isRecalculating={isRecalculating}
+          onRecalculate={recalculateAi}
+        />
+
+        {/*
+          右レールが入らない幅では、目次を本文の前に折りたたんで置く。
+          `<details>`はJSなしで開閉でき、Ctrl+Fの検索にも掛かる。
+        */}
+        {hasToc ? (
+          <details className="rounded-md border border-border px-3 py-2 xl:hidden">
+            <summary className="cursor-pointer text-sm font-medium">
+              目次
+            </summary>
+            <MarkdownToc
+              activeId={activeHeadingId}
+              className="mt-2"
+              label="目次"
+              outline={outline}
+            />
+          </details>
+        ) : null}
+
+        <ArticleReaderContent
+          archiveHtml={archiveHtml}
+          archiveUnavailable={archiveUnavailable}
+          article={article}
+          compiled={compiled}
+          isArchiveLoading={isArchiveLoading}
+          isMarkdownLoading={isMarkdownLoading}
+          markdown={markdown}
+          source={source}
+        />
+
         <ArticleActions
           article={article}
-          className="hidden md:flex"
+          className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-10 justify-center border-t bg-background/95 p-3 backdrop-blur md:hidden"
           onToggleHidden={toggleHidden}
           onToggleReadLater={toggleReadLater}
           onToggleSaved={toggleSaved}
         />
-      </div>
+      </article>
 
-      {didAutoFallback ? (
-        <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          本文が短いため、アーカイブ表示に切り替えました。
-        </p>
+      {/*
+        幅に余裕がある時だけ、追従する目次を右へ出す。`<aside>`にはしない。
+        AppShellのサイドバーが既にcomplementaryランドマークを持っており、
+        2つ目を足すと区別が付かなくなる (axe: landmark-unique)。目次自身は
+        `MarkdownToc`が`nav[aria-label="目次"]`として名前付きで公開する。
+      */}
+      {hasToc ? (
+        <div className="hidden w-56 shrink-0 xl:block">
+          <MarkdownToc
+            activeId={activeHeadingId}
+            className="sticky top-4 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain"
+            outline={outline}
+          />
+        </div>
       ) : null}
-
-      <ArticleAiBlock
-        article={article}
-        isRecalculating={isRecalculating}
-        onRecalculate={recalculateAi}
-      />
-
-      <ArticleReaderContent
-        archiveHtml={archiveHtml}
-        archiveUnavailable={archiveUnavailable}
-        article={article}
-        isArchiveLoading={isArchiveLoading}
-        isMarkdownLoading={isMarkdownLoading}
-        markdown={markdown}
-        source={source}
-      />
-
-      <ArticleActions
-        article={article}
-        className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-10 justify-center border-t bg-background/95 p-3 backdrop-blur md:hidden"
-        onToggleHidden={toggleHidden}
-        onToggleReadLater={toggleReadLater}
-        onToggleSaved={toggleSaved}
-      />
-    </article>
+    </div>
   )
 }

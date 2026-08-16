@@ -62,6 +62,9 @@ jobs:
       - name: Check provider contracts
         run: pnpm provider-contract:check
 
+      - name: Check generated markdown corpus
+        run: pnpm markdown:corpus:check
+
       - name: Check SQLite state policy
         run: pnpm test:sqlite-state
 
@@ -153,6 +156,14 @@ jobs:
   visual:
     name: visual
     runs-on: ubuntu-24.04
+    # スナップショットの比較はピクセル単位なので、フォントとラスタライザが
+    # 違えば同じページでも別の絵になる。ローカルの`pnpm test:visual`も
+    # scripts/run-visual.sh が同じイメージで実行し、環境差そのものを無くす。
+    # apps/web の @playwright/test と同じversionを指すこと。
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+      # Chromiumが共有メモリ不足で落ちるのを避ける公式推奨の設定。
+      options: --ipc=host
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -173,9 +184,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright Chromium
-        run: pnpm --filter web exec playwright install --with-deps chromium
 
       - name: Run visual regression tests
         run: pnpm test:visual

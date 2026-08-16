@@ -313,6 +313,24 @@ export function articleBaseUrl(
   return `${origin}/v1/me/articles/${articleId}/`
 }
 
+/**
+ * リーダー本文をコンパイルする際のオプション。
+ *
+ * 目次を本文の外(右レール)へ出すため、コンパイルはリーダー側で1度だけ行い、
+ * 本文と目次の両方へ同じ結果を配る。オプションの組み立てをここに置くのは、
+ * 本番とテストで同じ設定が使われることを保証するため。
+ *
+ * 見出しは`3`から始める。ページがh1(記事)、リーダーがh2(記事タイトル)を
+ * 既に使っている。
+ */
+export function articleMarkdownOptions(article: Pick<Article, "id" | "title">) {
+  return {
+    baseUrl: articleBaseUrl(article.id),
+    headingBaseLevel: 3,
+    omitLeadingTitle: article.title,
+  } as const
+}
+
 /** 本文が無い/取得失敗/極端に短い場合は自動でアーカイブへ切り替える閾値。 */
 export const MARKDOWN_FALLBACK_MIN_LENGTH = 80
 
@@ -333,40 +351,6 @@ export function hasAiEnrichment(
   return (
     typeof article.aiSummary === "string" && article.aiSummary.trim().length > 0
   )
-}
-
-// 一覧行のスニペット用に、Markdownから最初の見出し・結論行を平文として抽出する。
-// 見出しラベル（例: `## 結論`）やMermaid図、```コードブロック```は飛ばし、
-// 本文の最初の行を取り200文字に切る。
-export function aiSummarySnippet(markdown: string): string {
-  let inCodeBlock = false
-  for (const rawLine of markdown.split("\n")) {
-    const line = rawLine.trim()
-    if (line.startsWith("```")) {
-      inCodeBlock = !inCodeBlock
-      continue
-    }
-    if (inCodeBlock || line.length === 0 || line.startsWith("#")) continue
-    const stripped = line
-      .replace(/^[-*+]\s+/, "")
-      .replace(/[*_>]/g, "")
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .trim()
-    if (stripped.length === 0) continue
-    return stripped.slice(0, 200)
-  }
-  return ""
-}
-
-/** 一覧行のスニペット。AI要約の冒頭を優先し、未処理ならRSSのsummaryへフォールバックする。 */
-export function articleSnippet(
-  article: Pick<Article, "aiSummary" | "summary">
-): string | undefined {
-  if (typeof article.aiSummary === "string" && article.aiSummary.length > 0) {
-    return aiSummarySnippet(article.aiSummary)
-  }
-  return article.summary ?? undefined
 }
 
 /** j/kキー送り用に、現在の記事から前後の記事IDを求める。 */

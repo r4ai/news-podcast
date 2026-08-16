@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react"
 
+import { Badge } from "@workspace/ui/components/badge"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { parseLineNumberList } from "../../lib/diff-lines"
@@ -187,7 +188,18 @@ export function CodeBlock({
       <ShikiThemeStyle />
       <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground">
         <span className="truncate font-mono">{title ?? lang ?? "text"}</span>
-        <CopyButton text={rawCode} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/*
+            ファイル名がある時は左のラベルがそれに占められ、言語が見えなくなる。
+            両方ある場合だけ言語をバッジで添える。
+          */}
+          {title && lang ? (
+            <Badge className="font-mono" variant="outline">
+              {lang}
+            </Badge>
+          ) : null}
+          <CopyButton text={rawCode} />
+        </div>
       </div>
       <pre
         className={cn(

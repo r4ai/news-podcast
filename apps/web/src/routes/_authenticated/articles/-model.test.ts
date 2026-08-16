@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  aiSummarySnippet,
   applyFacetsDelta,
   archiveLabel,
   archiveMetaLabel,
   articleBaseUrl,
-  articleSnippet,
   replaceArticleInPages,
   dateGroupKey,
   defaultArticlesSearch,
@@ -23,6 +21,7 @@ import {
   type Article,
   type ArticleFlags,
 } from "./-model"
+import { aiSummarySnippet, articleSnippet } from "./-snippet"
 
 const now = new Date("2026-08-11T12:00:00.000Z")
 

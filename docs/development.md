@@ -175,9 +175,23 @@ pnpm audit --audit-level=high
 | `pnpm db:generate` | drizzle schemaからmigration SQLを生成（要レビュー） |
 | `pnpm observability:validate` | LGTM構文、Dashboard UID、未確認metric参照 |
 | `pnpm observability:smoke` | 起動後のGrafana API、datasource、Collector、Browser OTLP、依存endpoint |
+| `pnpm test:visual` | 視覚回帰とaxe。Playwright公式コンテナの中で実行する |
 | `pnpm reliability:chaos` | 隔離Composeで4 service/NATSを停止し、自動再起動・Ready・state整合性を検査 |
 
 bug修正は再現testを先に追加する。LLM接続ではsuccessだけでなく、timeout、429/5xx、invalid schema、response上限、non-retryable failureをprovider境界で確認する。
+
+### 視覚回帰(VRT)
+
+スナップショットの比較はピクセル単位なので、フォントとラスタライザが1つでも違えば同じページでも別の絵になる。**VRTは常にPlaywright公式コンテナの中で実行する**。`pnpm test:visual`も`pnpm --filter web test:visual`も`scripts/run-visual.sh`を通り、CIは同じイメージをjobのcontainerとして使う。イメージはdigestで固定し、`apps/web`の`@playwright/test`と同じversionを指す。
+
+```bash
+pnpm test:visual                            # 比較する
+pnpm test:visual -- --update-snapshots=all  # 基準画像を作り直す
+```
+
+dockerが無い環境では実行できない。撮り方を変えるより、環境を揃える方が壊れにくいという判断である。
+
+長いページは行ボックスの丸めで全体の高さが実行ごとに1px動くことがあり、寸法が違うと`maxDiffPixelRatio`は効かずに失敗する。記事リーダーだけはviewport固定で撮る。また、非同期に差し替わる本文(remark/rehype + Shiki)は、題名ではなく本文の最後に出る要素を待ってから撮る。
 
 ### 構造化入力のparser方針
 
@@ -195,6 +209,8 @@ flowchart LR
 現在のContent境界は、RSS/Atomに`fast-xml-parser`、記事HTML→Markdownにscript/resource無効の`jsdom`、Readability、rehype/remarkを使う。Site Profileはroot/selector/意味対応だけを宣言し、code/callout/embed/mathは共有Ruleで変換する。記事変換には入力1 MiB、ASTノード5万、深さ128、Markdown出力1 MiBの上限を設け、上限超過は`ResourceLimit`として保存前に拒否する。正規表現はURL・固定語彙などの字句検証に限定し、構造解釈へ戻さない。詳細は[ADR-0042](adr/0042-structured-input-parser-boundaries.md)と[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)を参照する。
 
 記事変換の固定corpusと100% scoped coverageは`pnpm --filter @news-podcast/content-knowledge test:article-markdown:coverage`、renderer純粋関数は`pnpm --filter web test:markdown:coverage`で検証する。実サイトの任意smokeは通常CIから分離し、`pnpm --filter @news-podcast/content-knowledge test:article-markdown:live`で実行する。
+
+変換器が実際に出力したMarkdownは、`pnpm markdown:corpus`で`apps/web/src/shared/markdown/__fixtures__/`へ書き出してcommitする（`apps/web`は`services/**`をimportできないため、橋渡しは生成物で行う）。変換器やfixtureを触ったらこれを再実行すること。CIは`pnpm markdown:corpus:check`で同期を検査し、描画結果は`corpus.test.tsx`とStorybookの`Markdown/Corpus`で確認する（[ADR-0053](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)）。
 
 ```bash
 pnpm parser:check

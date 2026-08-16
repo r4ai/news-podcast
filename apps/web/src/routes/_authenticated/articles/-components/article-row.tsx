@@ -4,12 +4,8 @@ import { useEffect, useRef } from "react"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-import {
-  archiveMetaLabel,
-  articleSnippet,
-  articleTimestamp,
-  type Article,
-} from "../-model"
+import { archiveMetaLabel, articleTimestamp, type Article } from "../-model"
+import { articleSnippet } from "../-snippet"
 
 export type ArticleRowProps = {
   readonly article: Article

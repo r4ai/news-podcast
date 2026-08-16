@@ -21,6 +21,7 @@
     "infra/**",
     "packages/contracts/openapi/**",
     "packages/contracts/src/generated/**",
+    "apps/web/src/shared/markdown/__fixtures__/**",
     "**/routeTree.gen.ts",
     "pnpm-lock.yaml"
   ]

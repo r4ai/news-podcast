@@ -2,13 +2,14 @@ import { render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
 import { Markdown } from "./markdown"
+import { createMarkdownProcessor } from "./pipeline/create-processor"
 
 async function renderMarkdown(markdown: string) {
   const view = render(<Markdown markdown={markdown} />)
   await waitFor(() =>
     expect(
       view.container.querySelector(
-        "h1, p, table, pre, figure, iframe, a, .katex"
+        "h1, p, table, pre, figure, img, iframe, a, .katex"
       )
     ).not.toBeNull()
   )
@@ -97,7 +98,9 @@ describe("Markdown", () => {
       '@[embed](https://www.youtube.com/embed/abc "https://youtu.be/abc")'
     )
     const frame = safe.container.querySelector("iframe")
-    expect(frame?.getAttribute("sandbox")).toBe("")
+    // プレイヤーはJSを要るが、`allow-same-origin`が無いのでiframeは一意な
+    // オリジンのまま。自分でsandboxを外すことも親を触ることもできない。
+    expect(frame?.getAttribute("sandbox")).toBe("allow-scripts")
     expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer")
     safe.unmount()
 
@@ -126,11 +129,36 @@ describe("Markdown", () => {
   })
 
   it("does not nest figure/figcaption inside a paragraph for a captioned image", async () => {
-    const { container } = await renderMarkdown("![説明文](assets/x.png)")
+    const { container } = await renderMarkdown(
+      '![説明文](assets/x.png "図1 全体の流れ")'
+    )
 
     const figure = container.querySelector("figure")
     expect(figure?.closest("p")).toBeNull()
-    expect(figure?.querySelector("figcaption")?.textContent).toBe("説明文")
+    expect(figure?.querySelector("figcaption")?.textContent).toBe(
+      "図1 全体の流れ"
+    )
+    // altは代替テキストのまま。キャプションへ転記しない。
+    expect(figure?.querySelector("img")?.getAttribute("alt")).toBe("説明文")
+  })
+
+  it("keeps alt text out of the visible caption when there is no title", async () => {
+    const { container } = await renderMarkdown("![説明文](assets/x.png)")
+
+    expect(container.querySelector("figcaption")).toBeNull()
+    expect(container.querySelector("img")?.getAttribute("alt")).toBe("説明文")
+  })
+
+  it("does not style an image inside running text as a standalone figure", async () => {
+    // リンクカードのfaviconのように文中へ埋め込まれた画像。図版として
+    // 中央寄せ・枠付きにすると本文が崩れる。
+    const { container } = await renderMarkdown(
+      "以前[![](assets/favicon.png)前の記事](https://example.com/a)で書いた。"
+    )
+
+    const image = container.querySelector("img")
+    expect(image?.className).not.toMatch(/\bmx-auto\b/)
+    expect(image?.closest("figure")).toBeNull()
   })
 
   it("renders math via KaTeX", async () => {
@@ -237,5 +265,111 @@ describe("Markdown heading placement", () => {
     })
 
     expect(levelsOf(container)).toEqual(["h3:React 19の並行機能"])
+  })
+})
+
+describe("Markdown heading anchors", () => {
+  async function renderOutline(markdown: string) {
+    const view = render(<Markdown headingBaseLevel={3} markdown={markdown} />)
+    await waitFor(() =>
+      expect(view.container.querySelector("h3, h4, p")).not.toBeNull()
+    )
+    return view
+  }
+
+  it("gives every heading a stable id derived from its text", async () => {
+    const { container } = await renderOutline("# Getting Started\n\n## 設計")
+
+    expect(container.querySelector("#getting-started")).not.toBeNull()
+    expect(container.querySelector("#設計")).not.toBeNull()
+  })
+
+  it("numbers repeated headings so ids stay unique", async () => {
+    const { container } = await renderOutline("# Setup\n\n本文\n\n# Setup")
+
+    expect(container.querySelector("#setup")).not.toBeNull()
+    expect(container.querySelector("#setup-1")).not.toBeNull()
+  })
+
+  it("keeps the anchor out of the heading's accessible name", async () => {
+    await renderOutline("# 見出し")
+
+    // 見出しの中のリンクはアクセシブル名へ混ざる。名前が「見出し」のままである
+    // ことが、読み上げが二重にならないことの担保になる。
+    expect(
+      screen.getByRole("heading", { level: 3, name: "見出し" })
+    ).toBeTruthy()
+  })
+
+  it("does not expose the anchor as a focusable link", async () => {
+    const { container } = await renderOutline("# 見出し")
+
+    const anchor = container.querySelector("h3 a")
+    expect(anchor?.getAttribute("aria-hidden")).toBe("true")
+    expect(anchor?.getAttribute("tabindex")).toBe("-1")
+    expect(anchor?.getAttribute("href")).toBe(
+      `#${encodeURIComponent("見出し")}`
+    )
+  })
+})
+
+describe("heading outline", () => {
+  async function outlineOf(markdown: string, headingBaseLevel = 3) {
+    const file = await createMarkdownProcessor({ headingBaseLevel }).process(
+      markdown
+    )
+    return (file.data.outline ?? []) as readonly { text: string; id: string }[]
+  }
+
+  it("collects the headings in document order with their ids", async () => {
+    expect(await outlineOf("# 章\n\n本文\n\n## 節")).toEqual([
+      { id: "章", level: 3, text: "章" },
+      { id: "節", level: 4, text: "節" },
+    ])
+  })
+
+  it("leaves the GFM footnote label out of the outline", async () => {
+    // 脚注は`<section data-footnotes>`の中に`sr-only`の「Footnotes」見出しを
+    // 作る。目に見えない見出しが目次へ並ぶと、本文の構造と食い違う。
+    expect(
+      (await outlineOf("# 章\n\n本文[^1]\n\n[^1]: 脚注")).map(
+        (entry) => entry.text
+      )
+    ).toEqual(["章"])
+  })
+})
+
+describe("source footer", () => {
+  const sourceUrl = "https://example.com/articles/a"
+
+  it("turns the converter's trailing Source line into a footer", async () => {
+    const { container } = await renderMarkdown(
+      `本文。\n\nSource: <${sourceUrl}>`
+    )
+
+    const footer = container.querySelector("footer")
+    expect(footer?.textContent).toContain("出典:")
+    const link = footer?.querySelector("a")
+    expect(link?.getAttribute("href")).toBe(sourceUrl)
+    expect(link?.getAttribute("target")).toBe("_blank")
+    // 裸のURL段落として本文に残らない。
+    expect(container.querySelector("p")?.textContent).toBe("本文。")
+  })
+
+  it("leaves a prose paragraph that merely starts with Source alone", async () => {
+    const { container } = await renderMarkdown(
+      "Source: [参考文献](https://example.com/ref) を参照。"
+    )
+
+    expect(container.querySelector("footer")).toBeNull()
+    expect(container.querySelector("p")?.textContent).toContain("を参照。")
+  })
+
+  it("leaves a Source line that is not the last block alone", async () => {
+    const { container } = await renderMarkdown(
+      `Source: <${sourceUrl}>\n\nあとがき。`
+    )
+
+    expect(container.querySelector("footer")).toBeNull()
   })
 })

@@ -14,10 +14,13 @@ import type { Callout as ParsedCallout } from "@r4ai/remark-callout"
 import { markdownComponents } from "../components"
 import { rehypeDropLeadingTitle } from "./rehype-drop-leading-title"
 import { rehypeHeadingLevels } from "./rehype-heading-levels"
+import { rehypeHeadingOutline } from "./rehype-heading-outline"
+import { rehypeMarkBlockImages } from "./rehype-mark-block-images"
 import { rehypeMarkCodeBlocks } from "./rehype-mark-code-blocks"
 
 import { rehypeMermaid } from "./rehype-mermaid"
 import { rehypeResolveUrls } from "./rehype-resolve-urls"
+import { rehypeSourceFooter } from "./rehype-source-footer"
 import { remarkCodeMeta } from "./remark-code-meta"
 import { remarkEmbedDirective } from "./remark-embed-directive"
 import { markdownSanitizeSchema } from "./sanitize-schema"
@@ -77,11 +80,14 @@ export function createMarkdownProcessor({
     .use(rehypeSanitize, markdownSanitizeSchema)
     .use(rehypeDropLeadingTitle(omitLeadingTitle))
     .use(rehypeHeadingLevels(headingBaseLevel))
+    .use(rehypeHeadingOutline)
     .use(rehypeResolveUrls(baseUrl))
     .use(rehypeKatex)
     .use(rehypeShikiLazy)
     .use(rehypeMermaid)
     .use(rehypeMarkCodeBlocks)
+    .use(rehypeMarkBlockImages)
+    .use(rehypeSourceFooter)
     .use(rehypeReact, {
       Fragment,
       jsx,

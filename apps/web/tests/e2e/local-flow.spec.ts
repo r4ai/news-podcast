@@ -403,8 +403,13 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
         contentType: "application/json",
       })
   )
+  // 本文が空 = アーカイブへフォールバックする経路。応答形はOpenAPI通り
+  // `application/json`の`{ markdown }`。
   await page.route(`**${article.markdownUrl}`, (route) =>
-    route.fulfill({ body: "", contentType: "text/markdown" })
+    route.fulfill({
+      body: JSON.stringify({ markdown: "" }),
+      contentType: "application/json",
+    })
   )
   await page.route(
     (url) => url.pathname === `/v1/me/articles/${article.id}`,

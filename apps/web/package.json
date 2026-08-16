@@ -13,8 +13,8 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test:visual": "playwright test tests/visual",
-    "test": "vitest run src",
+    "test:visual": "bash ../../scripts/run-visual.sh",
+    "test": "vitest run",
     "test:markdown:coverage": "vitest run --config vitest.markdown-coverage.config.ts",
     "test:e2e": "playwright test --config playwright.e2e.config.ts"
   },
