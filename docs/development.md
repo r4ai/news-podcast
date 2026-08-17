@@ -218,7 +218,7 @@ pnpm --filter web perf:bundle   # 初期ロードのgzipサイズを予算と比
 
 条件はCPU 4倍抑制、Slow 4G相当(1.6 Mbps / 150 ms)、**キャッシュが空のcontext**での初回訪問に固定してある。抑制しないと開発機の速さとlocalhostの帯域が差を潰し、バンドルを削っても数字が動かない。ログイン後のページ内遷移を測るのも同じ理由で無意味になる。
 
-タイミングの値は実行環境で揺れるのでCIでは非ブロッキング(`web-perf` job)。決定的なのは`perf:bundle`のgzipサイズで、退行はここで捕らえる。
+タイミングの値は実行環境で揺れるのでCIでは`web-e2e` job内の非ブロッキングstepとして計測する。決定的なのは`perf:bundle`のgzipサイズで、退行はここで捕らえる。
 
 「どのcomponentが何回描かれたか」はVitestで予算にする。`shared/test/render-count`の`watchRenders`で実物のcomponentを`vi.mock`から包み、操作前後の差を数える。production側へ計測用のコードは入れない。詳細は[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)。
 
