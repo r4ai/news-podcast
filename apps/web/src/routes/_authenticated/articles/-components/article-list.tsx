@@ -12,6 +12,8 @@ import {
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 
+import { Panel } from "@/shared/components/panel"
+
 import { useArticleKeyboardShortcuts } from "../-hooks/use-article-keyboard-shortcuts"
 import {
   useArticleItems,
@@ -38,6 +40,11 @@ export type ArticleListProps = {
  * ここ自身はserver stateを一切購読しない。購読は「その値を実際に描く場所」
  * まで下ろしてある。ここで受け取って配ると、件数が動いただけで記事行まで
  * 描き直される。
+ *
+ * 表示境界(`Panel`)は行だけに掛ける。パネル全体を包むと、絞り込みを変えて
+ * 取り直すたびに検索欄と状態タブまで骨組みへ差し替わり、打った直後に
+ * 打ち直せなくなる。ヘッダーが読む件数は`atomWithQuery`でsuspendしないので、
+ * 境界の外に置いても取得中に落ちない。
  */
 export function ArticleList({
   search,
@@ -58,11 +65,13 @@ export function ArticleList({
       </h2>
       <ArticleListHeader onSearchChange={onSearchChange} search={search} />
       <SyncBanner />
-      <ConnectedArticleListView
-        onSelect={onSelect}
-        search={search}
-        selectedArticleId={selectedArticleId}
-      />
+      <Panel fallback={<ArticleListSkeleton />} name="article-list">
+        <ConnectedArticleListView
+          onSelect={onSelect}
+          search={search}
+          selectedArticleId={selectedArticleId}
+        />
+      </Panel>
     </section>
   )
 }
@@ -156,15 +165,45 @@ function emptyStateCopy(search: ArticlesSearch) {
       }
 }
 
-/** Panelのfallbackとして使う。行の形に合わせ、切り替わりで高さが飛ばないようにする。 */
+/**
+ * 題名の長さの散らばり。乱数にすると再取得のたびに骨組みが動いて、
+ * 読み込みが進んでいるように見えてしまう。並びは固定する。
+ */
+const SKELETON_TITLE_WIDTHS = [
+  "w-[92%]",
+  "w-[74%]",
+  "w-[85%]",
+  "w-[63%]",
+  "w-[88%]",
+  "w-[70%]",
+  "w-[80%]",
+  "w-[66%]",
+] as const
+
+/**
+ * 行の`Panel`のfallback。`ArticleRow`と同じ骨格(未読の点・題名・出典と時刻)を
+ * 同じ余白で置き、行が届いた瞬間に一覧の高さが飛ばないようにする。
+ * ヘッダーは境界の外なので、ここには含めない。
+ */
 export function ArticleListSkeleton() {
   return (
-    <div aria-label="記事を読み込み中" className="flex flex-col" role="status">
-      {Array.from({ length: 8 }, (_, index) => (
-        <div className="flex items-start gap-2 border-b px-3 py-3" key={index}>
-          <Skeleton className="mt-1.5 size-1.5 shrink-0 rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-4 w-3/4" />
+    <div
+      aria-label="記事を読み込み中"
+      className="flex flex-1 flex-col"
+      role="status"
+    >
+      {/* 日付見出しの分。行だけを並べると、届いた瞬間に全体が1段ずれる。 */}
+      <div className="border-b border-border/60 px-3 py-1.5">
+        <Skeleton className="h-3 w-16" />
+      </div>
+      {SKELETON_TITLE_WIDTHS.map((width, index) => (
+        <div
+          className="flex items-start gap-2 border-b border-border/60 pr-1.5 pl-2.5 last:border-b-0"
+          key={width + String(index)}
+        >
+          <Skeleton className="mt-3.5 size-1.5 shrink-0 rounded-full" />
+          <div className="flex min-h-11 flex-1 flex-col justify-center gap-1.5 py-2">
+            <Skeleton className={`h-4 ${width}`} />
             <Skeleton className="h-3 w-1/3" />
           </div>
         </div>

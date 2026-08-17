@@ -146,7 +146,10 @@ export const WithArchiveFailures: Story = {
   },
 }
 
-/** 読み込み中はPanelのfallbackが出る。一覧本体は描画されない。 */
+/**
+ * 行の読み込み中。境界は行だけに掛かっているので、実際の画面ではこの上に
+ * 検索欄と状態タブが常設のまま残る。
+ */
 export const Loading: Story = {
   render: () => <ArticleListSkeleton />,
 }

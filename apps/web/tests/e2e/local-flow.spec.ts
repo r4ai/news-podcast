@@ -598,6 +598,90 @@ test("the list header and date headings stay pinned while scrolling", async ({
   expect(headingBox!.y).toBeGreaterThanOrEqual(before!.y)
 })
 
+test("the reader toc stays pinned while the body scrolls", async ({ page }) => {
+  // 追従は「包む枠の高さ」で決まる。スクロール領域のflexの子は既定で領域の
+  // 高さまでしか伸びないので、伸ばされたままだと1画面で追従が尽きる。
+  // 実際に長い本文を送ってみないと分からない回帰なので、ここで確かめる。
+  const article = {
+    id: "00000000-0000-4000-8000-000000000050",
+    feedId: "00000000-0000-4000-8000-000000000001",
+    sourceName: "Example Feed",
+    title: "目次のある長い記事",
+    url: "https://example.com/toc",
+    publishedAt: "2026-08-10T00:00:00.000Z",
+    discoveredAt: "2026-08-10T00:01:00.000Z",
+    archiveStatus: "succeeded",
+    snapshotId: "00000000-0000-4000-8000-000000000021",
+    read: false,
+    saved: false,
+    readLater: false,
+    hidden: false,
+    markdownUrl:
+      "/v1/me/articles/00000000-0000-4000-8000-000000000050/markdown",
+  }
+  const section = (name: string) =>
+    `## ${name}\n\n${"この節の本文です。".repeat(40)}\n\n`
+  const markdown = ["最初の節", "次の節", "最後の節"].map(section).join("")
+
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles",
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: [article], page: { hasMore: false } }),
+      })
+  )
+  await page.route(
+    (url) => url.pathname === `/v1/me/articles/${article.id}`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(article),
+      })
+  )
+  await page.route(`**${article.markdownUrl}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ markdown }),
+    })
+  )
+
+  await page.goto("/articles")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await page.getByRole("button", { name: /^目次のある長い記事/ }).click()
+  await expect(
+    page.getByRole("heading", { name: "目次のある長い記事" })
+  ).toBeVisible()
+
+  // 幅が足りる時だけ出る右レール。本文の前に畳んである器と2つあるので、
+  // 実際に見えている方を掴む。
+  const toc = page
+    .getByRole("navigation", { name: "目次" })
+    .filter({ visible: true })
+    .last()
+  await expect(toc.getByRole("link", { name: "最後の節" })).toBeVisible()
+  const before = await toc.boundingBox()
+
+  const scrolled = await page.evaluate(() => {
+    const reader = [...document.querySelectorAll("div")].find(
+      (node) =>
+        getComputedStyle(node).overflowY === "auto" &&
+        node.scrollHeight > node.clientHeight + 100 &&
+        node.querySelector("article") !== null
+    )
+    if (!reader) return 0
+    reader.scrollTop = 1_200
+    return reader.scrollTop
+  })
+  expect(scrolled).toBeGreaterThan(0)
+
+  const after = await toc.boundingBox()
+  expect(after).not.toBeNull()
+  expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(1)
+  await expect(toc).toBeInViewport()
+})
+
 test("development login to generated episode playback completes", async ({
   page,
 }) => {

@@ -6,7 +6,7 @@ import {
   articleFacetsQueryOptions,
   articlesInfiniteQueryOptions,
 } from "./-queries"
-import { ArticleList, ArticleListSkeleton } from "./-components/article-list"
+import { ArticleList } from "./-components/article-list"
 import {
   ArticleReader,
   EmptySelection,
@@ -69,14 +69,17 @@ function ArticlesRoute() {
           hasSelection && "hidden lg:block"
         )}
       >
-        <Panel fallback={<ArticleListSkeleton />} name="article-list">
-          <ArticleList
-            onSearchChange={onSearchChange}
-            onSelect={selectArticle}
-            search={search}
-            selectedArticleId={search.article}
-          />
-        </Panel>
+        {/*
+          一覧の表示境界は`ArticleList`の内側、記事行だけに掛かっている。
+          ここで包むと、絞り込みを変えるたびに検索欄と状態タブまで骨組みへ
+          差し替わる。
+        */}
+        <ArticleList
+          onSearchChange={onSearchChange}
+          onSelect={selectArticle}
+          search={search}
+          selectedArticleId={search.article}
+        />
       </div>
       <div
         className={cn(

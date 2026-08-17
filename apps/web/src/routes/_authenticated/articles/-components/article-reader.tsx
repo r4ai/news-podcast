@@ -145,7 +145,14 @@ export function ArticleReaderView({
   const activeHeadingId = useActiveHeading(outline)
 
   return (
-    <div className="flex w-full gap-6">
+    /*
+      `self-start`は目次の吸着のためにある。この枠はスクロール領域(flex)の子
+      なので、既定では領域の高さまで引き伸ばされ、本文はそこから溢れて表示
+      される。stickyが動ける範囲は包む枠の中までなので、伸ばされたままだと
+      1画面ぶんで尽きてしまう。高さを中身に戻すことで、本文の長さいっぱいまで
+      追従できるようにする。
+    */
+    <div className="flex w-full gap-6 self-start">
       {/* 下端の固定操作列と下部ナビはどちらもmdで消えるので、余白もmdで戻す。 */}
       <article
         aria-label={article.title}
@@ -189,21 +196,17 @@ export function ArticleReaderView({
         />
 
         {/*
-          右レールが入らない幅では、目次を本文の前に折りたたんで置く。
-          `<details>`はJSなしで開閉でき、Ctrl+Fの検索にも掛かる。
+          右レールが入らない幅では、目次を本文の前に畳んで置く。開いたままだと
+          記事を開くたびに本文が目次の分だけ下へ押される。畳んだ中身は
+          `hidden="until-found"`で残るので、Ctrl+Fの検索にも掛かる。
         */}
         {hasToc ? (
-          <details className="rounded-md border border-border px-3 py-2 xl:hidden">
-            <summary className="cursor-pointer text-sm font-medium">
-              目次
-            </summary>
-            <MarkdownToc
-              activeId={activeHeadingId}
-              className="mt-2"
-              label="目次"
-              outline={outline}
-            />
-          </details>
+          <MarkdownToc
+            activeId={activeHeadingId}
+            className="xl:hidden"
+            defaultOpen={false}
+            outline={outline}
+          />
         ) : null}
 
         <ArticleReaderContent
@@ -231,14 +234,14 @@ export function ArticleReaderView({
         AppShellのサイドバーが既にcomplementaryランドマークを持っており、
         2つ目を足すと区別が付かなくなる (axe: landmark-unique)。目次自身は
         `MarkdownToc`が`nav[aria-label="目次"]`として名前付きで公開する。
+
+        stickyは器のこの`div`が持つ。flexの子は既定で親と同じ高さまで伸びるので、
+        中身側をstickyにすると追従できる範囲がその高さで尽きる。`self-start`で
+        高さを中身の分に戻し、動ける余地を本文の長さぶん残す。
       */}
       {hasToc ? (
-        <div className="hidden w-56 shrink-0 xl:block">
-          <MarkdownToc
-            activeId={activeHeadingId}
-            className="sticky top-4 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain"
-            outline={outline}
-          />
+        <div className="sticky top-4 hidden max-h-[calc(100dvh-6rem)] w-56 shrink-0 self-start overflow-y-auto overscroll-contain xl:block">
+          <MarkdownToc activeId={activeHeadingId} outline={outline} />
         </div>
       ) : null}
     </div>
