@@ -2,9 +2,31 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  request,
   waitForPrometheusResult,
   waitForSyntheticServiceGraph,
 } from "./observability-smoke.mjs"
+
+test("bounds every observability HTTP probe", async () => {
+  await assert.rejects(
+    request(
+      "http://observability.test/health",
+      {},
+      {
+        timeoutMillis: 1,
+        fetchImpl: (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init.signal.addEventListener(
+              "abort",
+              () => reject(init.signal.reason),
+              { once: true }
+            )
+          }),
+      }
+    ),
+    (error) => error?.name === "TimeoutError"
+  )
+})
 
 test("waits for eventually consistent Prometheus series", async () => {
   let attempts = 0

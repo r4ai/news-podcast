@@ -33,8 +33,16 @@ const auth = `Basic ${Buffer.from(
   `${process.env.GRAFANA_ADMIN_USER ?? "admin"}:${process.env.GRAFANA_ADMIN_PASSWORD ?? "local-only-change-me"}`
 ).toString("base64")}`
 
-const request = async (url, init = {}) => {
-  const response = await fetch(url, init)
+export const request = async (
+  url,
+  init = {},
+  { fetchImpl = globalThis.fetch, timeoutMillis = 10_000 } = {}
+) => {
+  const timeoutSignal = AbortSignal.timeout(timeoutMillis)
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, timeoutSignal])
+    : timeoutSignal
+  const response = await fetchImpl(url, { ...init, signal })
   const body = await response.text()
   if (!response.ok)
     throw new Error(

@@ -9,6 +9,8 @@ flowchart TD
   PUSH[main push] --> CI
   PUSH --> SEC
   CI --> TEST[Build / lint / test / E2E]
+  TEST --> CACHE[Turbo cache<br/>障害時は通常実行へfallback]
+  TEST --> BROWSER[固定Playwright環境<br/>E2E + 非blocking性能計測]
   SEC --> PIN[pinact]
   SEC --> LINT[actionlint]
   SEC --> ZIZ[zizmor]
@@ -23,7 +25,7 @@ flowchart TD
 | --- | --- |
 | `CI / static` | format、lint、typecheck、build、契約、Compose、Storybook |
 | `CI / unit` | unit/integration test、functional coverage |
-| `CI / web-e2e` | fake providerを使うPlaywright E2E |
+| `CI / web-e2e` | 固定Playwright環境でfake provider E2E、続けて非blocking性能計測 |
 | `CI / visual` | desktop/mobile visual regression |
 | `CI / functional-e2e` | Docker上のNATSとbackend縦断E2E |
 | `CI / observability` | fake observed stack、Collector、Grafana、service graph |
@@ -31,9 +33,29 @@ flowchart TD
 
 `main`のRulesetでは7つすべてをrequired status checkにする。live OpenAI、VOICEVOX、Google OAuth、SMTPなどの資格情報はCIへ渡さない。
 
-observability smokeはCIでhermeticなdev loginから認証済みfeed subscription APIまでの実サービスフローを通し、続けて機密情報を含まないOTLP client/server traceをCollectorへ送る。これにより、アプリの計装結果だけに依存せず、Collectorのservice graph契約も検証する。service graphのstore TTL（30秒）、metric flush（15秒）、remote write遅延を考慮してPrometheusにsynthetic edgeが現れるまで最大90秒待ってから判定する。ブラウザジョブは`web` workspaceから次のコマンドでChromiumとOS依存パッケージを準備する。
+observability smokeはCIでhermeticなdev loginから認証済みfeed subscription APIまでの実サービスフローを通し、続けて機密情報を含まないOTLP client/server traceをCollectorへ送る。これにより、アプリの計装結果だけに依存せず、Collectorのservice graph契約も検証する。service graphのstore TTL（30秒）、metric flush（15秒）、remote write遅延を考慮してPrometheusにsynthetic edgeが現れるまで最大90秒待ってから判定する。
 
-CIの各jobには上限時間を設定し、Composeのhealth待機（180秒）とsmokeのHTTP要求（10秒）も明示的に期限を設ける。依存サービスの停止やrunner異常は、無期限の`in_progress`ではなく診断artifact付きの失敗として収束させる。pnpm store cacheは`static` jobだけが保存し、並行job間の同一cache key予約競合を避ける。
+CIの各jobには上限時間を設定し、Composeのhealth待機（180秒）、smokeの全HTTP要求（10秒）も明示的に期限を設ける。依存サービスの停止やrunner異常は、無期限の`in_progress`ではなく診断artifact付きの失敗として収束させる。pnpm store cacheは`static` jobだけが保存し、並行job間の同一cache key予約競合を避ける。
+
+## 実行時間とコスト
+
+```mermaid
+flowchart LR
+  CHANGE[変更] --> STATIC[static<br/>Turbo cache]
+  CHANGE --> UNIT[unit<br/>通常testとcoverageを分担]
+  CHANGE --> WEB[web-e2e<br/>固定container]
+  WEB --> E2E[blocking E2E]
+  E2E --> PERF[non-blocking<br/>Web Vitals + bundle]
+  UNIT --> SHARD[coverage<br/>2 package並列 × 2 worker]
+```
+
+- `static`と`unit`はjob別の`.turbo` cacheを前回runから復元する。cache keyはcommitごとに保存し、Turbo自身の入力hashで再利用可否を判定する。
+- cache restore/save障害は`continue-on-error`で通常実行へfallbackする。GitHub cache serviceの一時障害をCI失敗へ変換しない。
+- `unit`の通常testからcoverage対象8 packageを外し、同じtestをcoverage付きで一度だけ実行する。coverageはworkspace concurrency 2、各Vitest max worker 2でCPU競合を抑えつつ並列化する。
+- `web-e2e`と性能計測は同じdigest固定Playwright containerを共有する。性能値は共有runnerで揺れるため非blockingだが、機能E2Eは引き続きrequiredである。
+- 変更前の基準run（2026-08-17、run `31960536313`）はwall time 5分31秒、7 job合計約17分。改善後の差はGitHub Actions復旧後の同一条件runで確認する。
+
+ローカルでブラウザを初回実行するときは`web` workspaceから次のコマンドでChromiumとOS依存パッケージを準備する。CIはdigest固定Playwright containerを使うため、このdownloadをjobごとに繰り返さない。
 
 ```bash
 pnpm --filter web exec playwright install --with-deps chromium
@@ -64,8 +86,9 @@ git diff -- .github/workflows
 pinact run --check --verify-comment --verify-min-age --min-age 7
 ```
 
-更新はDependabotの週次PR、またはレビュー済みの手動PRで行う。CIは自動修正・自動mergeをしない。Actionの許可リストは次の5つに限定する。
+更新はDependabotの週次PR、またはレビュー済みの手動PRで行う。CIは自動修正・自動mergeをしない。Actionの許可リストは次の6つに限定する。
 
+- `actions/cache`
 - `actions/checkout`
 - `actions/setup-node`
 - `actions/upload-artifact`
@@ -80,6 +103,8 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:ci
+pnpm test:coverage:functional
 pnpm test:e2e
 pnpm test:e2e:functional
 pnpm test:visual
