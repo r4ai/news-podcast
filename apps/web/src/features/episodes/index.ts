@@ -1,4 +1,5 @@
 export {
+  episodeQueryOptions,
   episodesInfiniteQueryOptions,
   episodesQueryOptions,
 } from "./api/episode-queries"

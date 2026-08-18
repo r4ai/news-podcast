@@ -1,8 +1,12 @@
-import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
+import {
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query"
 import { useAtomValue } from "jotai"
 import { useEffect, useState, useTransition } from "react"
 
-import { episodesQueryOptions } from "@/features/episodes"
+import { episodeQueryOptions, episodesQueryOptions } from "@/features/episodes"
 import { api } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
 import {
@@ -26,6 +30,18 @@ import { settleJobAction } from "./job-action"
 import { useGenerationStream } from "./use-generation-stream"
 
 const jobsQueryOptions = api.queryOptions("get", "/v1/episode-jobs")
+const PROJECTION_RETRY_COUNT = 4
+const PROJECTION_RETRY_DELAY_MS = 500
+
+function shouldRetryProjection(failureCount: number, error: unknown): boolean {
+  if (failureCount >= PROJECTION_RETRY_COUNT) return false
+  if (error instanceof Error) return true
+  if (typeof error !== "object" || error === null || !("status" in error)) {
+    return false
+  }
+  const status = (error as { readonly status?: unknown }).status
+  return status === 404 || status === 503
+}
 
 export function useGeneration() {
   const queryClient = useQueryClient()
@@ -67,7 +83,6 @@ export function useGeneration() {
   const retryJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/retry")
 
   const latestJob = jobs.data.items[0]
-  const latestEpisode = episodes.items[0]
 
   // 進行中かどうかで絞らず、常に最新ジョブを購読する。終端済みのジョブでも
   // サーバは履歴を全部リプレイして閉じるので、完成後も生成処理が何を
@@ -91,14 +106,6 @@ export function useGeneration() {
     void queryClient.invalidateQueries({ queryKey: jobsQueryOptions.queryKey })
   }, [liveStatus, queryClient])
 
-  useEffect(() => {
-    if (latestJob?.status === "succeeded") {
-      void queryClient.invalidateQueries({
-        queryKey: episodesQueryOptions.queryKey,
-      })
-    }
-  }, [latestJob?.status, queryClient])
-
   // SSEが繋がっている間はそちらが最新。切れていればポーリング結果を使う。
   // ただし今のジョブのストリームである時だけ。購読の張り替えはEffectなので、
   // ジョブが変わった直後の1描画では前のジョブの値がまだatomに残っている。
@@ -113,6 +120,32 @@ export function useGeneration() {
   const failure =
     (live ? liveFailure : undefined) ?? latestJob?.failure ?? undefined
   const recovery = failureRecovery(failure?.code)
+  const projectionEpisodeId =
+    state === "succeeded" ? (latestJob?.episodeId ?? undefined) : undefined
+  const projection = useQuery({
+    ...episodeQueryOptions(projectionEpisodeId ?? ""),
+    enabled: projectionEpisodeId !== undefined,
+    retry: shouldRetryProjection,
+    retryDelay: PROJECTION_RETRY_DELAY_MS,
+  })
+  const presentationState =
+    projectionEpisodeId === undefined
+      ? state
+      : projection.data
+        ? "succeeded"
+        : projection.isError
+          ? "projection-failed"
+          : "projecting"
+  const latestEpisode = projection.data ?? episodes.items[0]
+
+  // 対象Episodeが読めた時点で一覧も再取得する。詳細を画面へ即時表示しつつ、
+  // HomeとLibraryが共有する一覧cacheを投影後の状態へ収束させる。
+  useEffect(() => {
+    if (!projection.data) return
+    void queryClient.invalidateQueries({
+      queryKey: episodesQueryOptions.queryKey,
+    })
+  }, [projection.data, queryClient])
 
   function runJobAction(
     request: () => Promise<unknown>,
@@ -167,7 +200,7 @@ export function useGeneration() {
             : "新規生成",
     progress: state === "running" && stage ? stagePercent(stage) : undefined,
     stage: state === "running" && stage ? stageLabel(stage) : undefined,
-    state,
+    state: presentationState,
     streaming: liveForThisJob && streamConnected,
     episode: latestEpisode
       ? {
@@ -216,6 +249,7 @@ export function useGeneration() {
       setPickerInitialArticleIds([])
       setPickerOpen(true)
     },
+    onRetryProjection: () => void projection.refetch(),
     submitError,
     onDismissSubmitError: () => setSubmitError(undefined),
   } as const

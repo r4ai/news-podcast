@@ -63,6 +63,16 @@ sequenceDiagram
 
 step名は順に`selecting_articles`、`materializing_articles`、`generating_script`、`preparing_pronunciation`、`synthesizing_audio`、`storing_episode`で固定する。checkpointから再開したstepは再実行しないため、そのattemptではeventが省略される場合がある。
 
+`STATE_SNAPSHOT succeeded`はProductionでの生成完了を表し、別ContextであるLibraryへの投影完了までは保証しない。Webはsnapshotの`episodeId`を使い、次の状態を明示的に分ける。これはAG-UI event envelopeを変更しないclient側の整合性処理である。
+
+```mermaid
+stateDiagram-v2
+  [*] --> projecting: job succeeded + episodeId
+  projecting --> succeeded: GET episode 成功
+  projecting --> projection_failed: 有界retryを消費
+  projection_failed --> projecting: 利用者が再確認
+```
+
 ## 3. EpisodeJobState
 
 `STATE_SNAPSHOT.snapshot`は差分ではなく常に完全置換する。

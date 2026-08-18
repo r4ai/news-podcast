@@ -39,6 +39,8 @@ export type DashboardState =
   | "queued"
   | "running"
   | "retrying"
+  | "projecting"
+  | "projection-failed"
   | "succeeded"
   | "failed"
   | "canceled"
@@ -67,6 +69,7 @@ export type PodcastDashboardProps = {
   readonly onGenerate?: () => void
   readonly onCancel?: () => void
   readonly onRetry?: () => void
+  readonly onRetryProjection?: () => void
   /** 作業実況。SSEを購読するのはこの中だけ。 */
   readonly timelineSlot?: ReactNode
   /** 生成時刻と購読フィードの要約。独自の取得と表示境界を持つ。 */
@@ -100,6 +103,16 @@ const statusCopy: Record<
     label: "再試行待ち",
     title: "生成を再試行します",
     description: "一時的な問題が解消され次第、自動的に再開します。",
+  },
+  projecting: {
+    label: "準備中",
+    title: "完成した番組を準備しています",
+    description: "音声と出典を再生できる状態になるまで確認しています。",
+  },
+  "projection-failed": {
+    label: "確認待ち",
+    title: "完成した番組を確認できませんでした",
+    description: "生成は完了しています。時間をおいて番組を再確認してください。",
   },
   succeeded: {
     label: "完成",
@@ -186,6 +199,7 @@ function GenerationAction({
   onCancel,
   onGenerate,
   onRetry,
+  onRetryProjection,
   pending,
   retryLabel = "再試行",
   state,
@@ -196,6 +210,7 @@ function GenerationAction({
   | "onCancel"
   | "onGenerate"
   | "onRetry"
+  | "onRetryProjection"
   | "pending"
   | "retryLabel"
   | "state"
@@ -209,7 +224,25 @@ function GenerationAction({
           ? "まだ生成していません"
           : `試行 ${attempt}/${maxAttempts}`}
       </span>
-      {active ? (
+      {state === "projecting" ? (
+        <Button className="min-h-11 min-w-32 sm:min-h-9" disabled>
+          <Spinner aria-hidden="true" data-icon="inline-start" />
+          番組を準備中…
+        </Button>
+      ) : state === "projection-failed" ? (
+        <Button
+          className="min-h-11 min-w-32 sm:min-h-9"
+          disabled={pending || !onRetryProjection}
+          onClick={onRetryProjection}
+        >
+          {pending ? (
+            <Spinner aria-hidden="true" data-icon="inline-start" />
+          ) : (
+            <RotateCcw aria-hidden="true" data-icon="inline-start" />
+          )}
+          {pending ? "確認中…" : "番組を再確認"}
+        </Button>
+      ) : active ? (
         <Button
           className="min-h-11 min-w-32 sm:min-h-9"
           disabled={pending || !onCancel}
@@ -255,6 +288,7 @@ function GenerationStatus({
   onCancel,
   onGenerate,
   onRetry,
+  onRetryProjection,
   pending,
   progress,
   retryAt,
@@ -273,7 +307,13 @@ function GenerationStatus({
         </CardTitle>
         <CardDescription>{copy.title}</CardDescription>
         <CardAction>
-          <Badge variant={state === "failed" ? "destructive" : "secondary"}>
+          <Badge
+            variant={
+              state === "failed" || state === "projection-failed"
+                ? "destructive"
+                : "secondary"
+            }
+          >
             {copy.label}
           </Badge>
         </CardAction>
@@ -307,6 +347,7 @@ function GenerationStatus({
           onCancel={onCancel}
           onGenerate={onGenerate}
           onRetry={onRetry}
+          onRetryProjection={onRetryProjection}
           pending={pending}
           retryLabel={retryLabel}
           state={state}

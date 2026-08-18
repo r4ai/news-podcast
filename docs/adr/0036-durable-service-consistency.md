@@ -73,7 +73,7 @@ sequenceDiagram
 | データ/ストレージ | service別SQLite、outbox/inbox | Done | SQLite adapter tests |
 | 実行/配備 | stream/durable provision、単一replica | Done | `compose.yaml` |
 | 認証/セキュリティ | ownerをevent payloadでparse | Done | v2 protocol/consumer tests |
-| フロント/品質保証 | eventual state表示 | In progress | Web切替工程 |
+| フロント/品質保証 | job成功とLibrary投影待ちを分離し、有界追跡と手動回復を表示 | Done | `use-generation.test.ts`、`podcast-dashboard.test.tsx` |
 | テスト/運用 | 実NATS E2E、coverage、queue監視 | Done | `pnpm test:e2e:functional`、`pnpm test:coverage:functional` |
 
 ## 再検討条件
