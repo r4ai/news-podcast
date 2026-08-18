@@ -6,6 +6,12 @@ import type { Episode } from "../model"
 /** `/`（生成）と `/library` の両方が読む。 */
 export const episodesQueryOptions = api.queryOptions("get", "/v1/episodes")
 
+export function episodeQueryOptions(episodeId: string) {
+  return api.queryOptions("get", "/v1/episodes/{episodeId}", {
+    params: { path: { episodeId } },
+  })
+}
+
 type EpisodePage = {
   readonly items: readonly Episode[]
   readonly page: {

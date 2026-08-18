@@ -192,4 +192,34 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
     expect(typeof body.markdown).toBe("string")
     expect(body.markdown.startsWith("#")).toBe(true)
   })
+
+  it("serves a generated episode from the detail endpoint", async () => {
+    const api = createFakeApi()
+    const headers = {
+      cookie: fakeApiIdentifiers.sessionCookie,
+      "content-type": "application/json",
+    }
+    const created = await api.fetch(
+      new Request("http://127.0.0.1:4000/v1/episode-jobs", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ trigger: "manual", articleIds: [articleId] }),
+      })
+    )
+    const job = (await created.json()) as { episodeId: string }
+
+    const response = await api.fetch(
+      new Request(`http://127.0.0.1:4000/v1/episodes/${job.episodeId}`, {
+        headers,
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const media = successMediaTypes("/v1/episodes/{episodeId}", "GET")
+    assertMatches(
+      await response.json(),
+      media["application/json"]!.schema!,
+      "/v1/episodes/{episodeId}"
+    )
+  })
 })

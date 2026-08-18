@@ -60,6 +60,7 @@ flowchart LR
 4. 実行開始時に最新InterestProfileと候補metadataから`GenerationPlan`をfirst-write-winsで固定し、その記事snapshot取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にする。
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
+7. Webはjobの`succeeded`を生成完了として受け取った後、`episodeId`の詳細がLibraryから読めるまで初回を含む最大5回・500ms間隔で確認する。確認中は再生可能な「完成」と区別し、上限到達後は利用者の再確認操作で回復できる。
 
 RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease tokenでfenceしたworkerで進める。claim・完了ごとに現在時刻を再取得し、期限切れleaseのworkerによる完了上書きを拒否する。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。
 

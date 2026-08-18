@@ -1,3 +1,4 @@
+import { act } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { renderHookWithProviders, stubFetch } from "@/shared/test/render"
@@ -27,6 +28,27 @@ const runningJob = {
   nextAttemptAt: null,
   stageProgress: null,
   failure: null,
+}
+
+const succeededJob = {
+  ...runningJob,
+  status: "succeeded",
+  stage: null,
+  episodeId: "episode-1",
+}
+
+const projectedEpisode = {
+  id: "episode-1",
+  title: "投影を待った番組",
+  script: "台本",
+  sources: [
+    {
+      title: "出典",
+      url: "https://example.com/source",
+      articleId: "article-1",
+    },
+  ],
+  createdAt: "2026-08-19T00:00:00.000Z",
 }
 
 function routes(): Parameters<typeof stubFetch>[0] {
@@ -65,6 +87,52 @@ function jobPolls(calls: ReadonlyArray<{ url: string; method: string }>) {
   return calls.filter(
     (call) => call.url === "/v1/episode-jobs" && call.method === "GET"
   ).length
+}
+
+function stubProjection(
+  availableOnAttempt: number | undefined,
+  job: typeof succeededJob | typeof runningJob = succeededJob
+) {
+  let detailCalls = 0
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      const path = new URL(request.url, "http://localhost").pathname
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        })
+
+      if (path === "/v1/episode-jobs") {
+        return json({ items: [job], page: { hasMore: false } })
+      }
+      if (path === "/v1/episodes") {
+        return json({ items: [], page: { hasMore: false } })
+      }
+      if (path === "/v1/episodes/episode-1") {
+        detailCalls += 1
+        if (
+          availableOnAttempt !== undefined &&
+          detailCalls >= availableOnAttempt
+        ) {
+          return json(projectedEpisode)
+        }
+        return json(
+          {
+            type: "about:blank",
+            title: "Not Found",
+            status: 404,
+            code: "episode-not-found",
+          },
+          404
+        )
+      }
+      return json({ message: "not stubbed" }, 404)
+    })
+  )
+  return { detailCalls: () => detailCalls }
 }
 
 describe("useGeneration", () => {
@@ -140,6 +208,69 @@ describe("useGeneration", () => {
     expect(jobPolls(calls)).toBeGreaterThan(before)
     // 前のジョブの状態を「今のジョブのライブ表示」として出さない。
     expect(result.current?.streaming).toBe(false)
+  })
+
+  it("keeps the succeeded job in projection wait until its episode becomes readable", async () => {
+    const projection = stubProjection(3)
+    const { result } = renderHookWithProviders(() => useGeneration())
+
+    await vi.waitFor(() => expect(result.current?.state).toBe("projecting"))
+    expect(result.current?.episode).toBeUndefined()
+
+    await act(async () => vi.advanceTimersByTimeAsync(2_000))
+
+    await vi.waitFor(() => expect(result.current?.state).toBe("succeeded"))
+    expect(result.current?.episode?.title).toBe("投影を待った番組")
+    expect(projection.detailCalls()).toBe(3)
+  })
+
+  it("uses the episode ID from streamed success while the REST job still reports running", async () => {
+    const projection = stubProjection(2, runningJob)
+    const { result, store } = renderHookWithProviders(() => useGeneration())
+    await vi.waitFor(() => expect(result.current?.state).toBe("running"))
+
+    store.set(generationStreamAtom, {
+      ...emptyGenerationStream,
+      jobId: runningJob.id,
+      connected: true,
+      finished: true,
+      state: {
+        jobId: runningJob.id,
+        status: "succeeded",
+        attempt: 1,
+        maxAttempts: 4,
+        selectionMode: "manual",
+        selectedArticles: [],
+        episodeId: "episode-1",
+      },
+    })
+
+    await vi.waitFor(() => expect(result.current?.state).toBe("projecting"))
+    expect(projection.detailCalls()).toBe(1)
+
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    await vi.waitFor(() => expect(result.current?.state).toBe("succeeded"))
+    expect(result.current?.episode?.title).toBe("投影を待った番組")
+  })
+
+  it("stops bounded projection retries and exposes a manual recovery action", async () => {
+    const projection = stubProjection(undefined)
+    const { result } = renderHookWithProviders(() => useGeneration())
+
+    await vi.waitFor(() => expect(result.current?.state).toBe("projecting"))
+    await act(async () => vi.advanceTimersByTimeAsync(10_000))
+
+    await vi.waitFor(() =>
+      expect(result.current?.state).toBe("projection-failed")
+    )
+    const attemptsAtTimeout = projection.detailCalls()
+    expect(attemptsAtTimeout).toBeGreaterThan(1)
+
+    await act(async () => vi.advanceTimersByTimeAsync(10_000))
+    expect(projection.detailCalls()).toBe(attemptsAtTimeout)
+
+    await act(async () => result.current?.onRetryProjection())
+    expect(projection.detailCalls()).toBe(attemptsAtTimeout + 1)
   })
 })
 
