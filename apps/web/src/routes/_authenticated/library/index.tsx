@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { episodesQueryOptions } from "@/features/episodes"
+import { episodesInfiniteQueryOptions } from "@/features/episodes"
 import { Panel } from "@/shared/components/panel"
 import { PageHeader } from "@/shared/layouts/page-header"
 import { EpisodeLibrary } from "./-components/episode-library"
 
 export const Route = createFileRoute("/_authenticated/library/")({
   loader: ({ context }) => {
-    void context.queryClient.ensureQueryData(episodesQueryOptions)
+    void context.queryClient.ensureInfiniteQueryData(
+      episodesInfiniteQueryOptions
+    )
   },
   component: LibraryRoute,
 })
