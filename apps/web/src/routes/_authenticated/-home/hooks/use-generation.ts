@@ -12,6 +12,7 @@ import { recordBrowserEvent } from "@/shared/observability/events"
 import {
   generationConnectedAtom,
   generationFinishedAtom,
+  generationLiveEpisodeIdAtom,
   generationLiveFailureAtom,
   generationLiveStageAtom,
   generationLiveStatusAtom,
@@ -58,6 +59,7 @@ export function useGeneration() {
   const streamConnected = useAtomValue(generationConnectedAtom)
   const streamFinished = useAtomValue(generationFinishedAtom)
   const liveStatus = useAtomValue(generationLiveStatusAtom)
+  const liveEpisodeId = useAtomValue(generationLiveEpisodeIdAtom)
   const liveStage = useAtomValue(generationLiveStageAtom)
   const liveFailure = useAtomValue(generationLiveFailureAtom)
 
@@ -121,7 +123,11 @@ export function useGeneration() {
     (live ? liveFailure : undefined) ?? latestJob?.failure ?? undefined
   const recovery = failureRecovery(failure?.code)
   const projectionEpisodeId =
-    state === "succeeded" ? (latestJob?.episodeId ?? undefined) : undefined
+    state === "succeeded"
+      ? ((live ? liveEpisodeId : undefined) ??
+        latestJob?.episodeId ??
+        undefined)
+      : undefined
   const projection = useQuery({
     ...episodeQueryOptions(projectionEpisodeId ?? ""),
     enabled: projectionEpisodeId !== undefined,

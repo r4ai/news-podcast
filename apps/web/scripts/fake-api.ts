@@ -477,6 +477,11 @@ export function createFakeApi(): FakeApi {
     if (path === "/v1/episodes") {
       return json({ items: state.episodes, page: { hasMore: false } })
     }
+    const episodeMatch = /^\/v1\/episodes\/([^/]+)$/.exec(path)
+    if (episodeMatch && request.method === "GET") {
+      const episode = state.episodes.find((item) => item.id === episodeMatch[1])
+      return episode ? json(episode) : json({ error: "not found" }, 404)
+    }
     const audioMatch = path.match(/^\/v1\/episodes\/([^/]+)\/audio$/)
     if (audioMatch && request.method === "GET") {
       return new Response(silentWave(), {

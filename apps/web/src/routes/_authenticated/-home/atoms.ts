@@ -71,6 +71,12 @@ export const generationLiveStatusAtom = selectAtom(
   (stream) => stream.state?.status
 )
 
+/** 成功snapshotが伝えるEpisode。statusと同じlive stateから読む。 */
+export const generationLiveEpisodeIdAtom = selectAtom(
+  generationStreamAtom,
+  (stream) => stream.state?.episodeId ?? undefined
+)
+
 export const generationLiveStageAtom = selectAtom(
   generationStreamAtom,
   (stream) => stream.state?.currentStage as JobStage | undefined

@@ -89,7 +89,10 @@ function jobPolls(calls: ReadonlyArray<{ url: string; method: string }>) {
   ).length
 }
 
-function stubProjection(availableOnAttempt: number | undefined) {
+function stubProjection(
+  availableOnAttempt: number | undefined,
+  job: typeof succeededJob | typeof runningJob = succeededJob
+) {
   let detailCalls = 0
   vi.stubGlobal(
     "fetch",
@@ -103,7 +106,7 @@ function stubProjection(availableOnAttempt: number | undefined) {
         })
 
       if (path === "/v1/episode-jobs") {
-        return json({ items: [succeededJob], page: { hasMore: false } })
+        return json({ items: [job], page: { hasMore: false } })
       }
       if (path === "/v1/episodes") {
         return json({ items: [], page: { hasMore: false } })
@@ -219,6 +222,35 @@ describe("useGeneration", () => {
     await vi.waitFor(() => expect(result.current?.state).toBe("succeeded"))
     expect(result.current?.episode?.title).toBe("投影を待った番組")
     expect(projection.detailCalls()).toBe(3)
+  })
+
+  it("uses the episode ID from streamed success while the REST job still reports running", async () => {
+    const projection = stubProjection(2, runningJob)
+    const { result, store } = renderHookWithProviders(() => useGeneration())
+    await vi.waitFor(() => expect(result.current?.state).toBe("running"))
+
+    store.set(generationStreamAtom, {
+      ...emptyGenerationStream,
+      jobId: runningJob.id,
+      connected: true,
+      finished: true,
+      state: {
+        jobId: runningJob.id,
+        status: "succeeded",
+        attempt: 1,
+        maxAttempts: 4,
+        selectionMode: "manual",
+        selectedArticles: [],
+        episodeId: "episode-1",
+      },
+    })
+
+    await vi.waitFor(() => expect(result.current?.state).toBe("projecting"))
+    expect(projection.detailCalls()).toBe(1)
+
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    await vi.waitFor(() => expect(result.current?.state).toBe("succeeded"))
+    expect(result.current?.episode?.title).toBe("投影を待った番組")
   })
 
   it("stops bounded projection retries and exposes a manual recovery action", async () => {
