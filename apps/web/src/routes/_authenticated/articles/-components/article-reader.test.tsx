@@ -66,6 +66,36 @@ const PIPELINE_TIMEOUT = { timeout: 5_000 } as const
 
 describe("ArticleReaderView table of contents", () => {
   it("shows the toc once the body has enough headings to navigate", async () => {
+    renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
+
+    await waitFor(
+      () =>
+        expect(
+          screen.getAllByRole("navigation", { name: "目次" }).length
+        ).toBeGreaterThan(0),
+      PIPELINE_TIMEOUT
+    )
+    // 幅の広い右レールと、本文の前に畳んで置く器の2つ。どちらが見えるかは幅次第。
+    expect(screen.getAllByRole("button", { name: /目次/ })).toHaveLength(2)
+  })
+
+  it("collapses the in-body toc and keeps the rail open", async () => {
+    // 本文の前の器は畳んでおく。開いたまま置くと、記事を開くたびに本文が
+    // 目次の分だけ下へ押される。右レールは本文と並ぶので開いたままでよい。
+    renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
+
+    await waitFor(
+      () =>
+        expect(screen.getAllByRole("button", { name: /目次/ })).toHaveLength(2),
+      PIPELINE_TIMEOUT
+    )
+    const expanded = screen
+      .getAllByRole("button", { name: /目次/ })
+      .map((trigger) => trigger.getAttribute("aria-expanded"))
+    expect(expanded).toEqual(["false", "true"])
+  })
+
+  it("pins the rail so the toc follows while the body scrolls", async () => {
     const { container } = renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
 
     await waitFor(
@@ -75,7 +105,12 @@ describe("ArticleReaderView table of contents", () => {
         ).toBeGreaterThan(0),
       PIPELINE_TIMEOUT
     )
-    expect(container.querySelector("details")).not.toBeNull()
+    const rail = container.querySelector(".w-56")
+    expect(rail).not.toBeNull()
+    // flexの子は既定で親の高さまで伸びる。伸びた器の中でstickyにすると
+    // 追従できる範囲がその高さで尽きるので、器自身をstickyにする。
+    expect(rail?.className).toContain("sticky")
+    expect(rail?.className).toContain("self-start")
   })
 
   it("leaves out the disclosure and the rail when the toc would be empty", async () => {
@@ -88,7 +123,7 @@ describe("ArticleReaderView table of contents", () => {
       PIPELINE_TIMEOUT
     )
     expect(screen.queryByRole("navigation", { name: "目次" })).toBeNull()
-    expect(container.querySelector("details")).toBeNull()
+    expect(screen.queryByRole("button", { name: /目次/ })).toBeNull()
     expect(container.querySelector(".w-56")).toBeNull()
   })
 

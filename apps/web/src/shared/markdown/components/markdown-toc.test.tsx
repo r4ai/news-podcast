@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it } from "vitest"
 
 import type { HeadingOutlineEntry } from "../pipeline/rehype-heading-outline"
@@ -17,9 +18,10 @@ describe("MarkdownToc", () => {
       <MarkdownToc outline={outline(["章", 3], ["節", 4])} />
     )
 
-    const items = Array.from(container.querySelectorAll("li"))
-    expect(items[0]?.className).toContain("pl-0")
-    expect(items[1]?.className).toContain("pl-3")
+    // 字下げは軸の罫からの距離なので、項目ではなくリンクが持つ。
+    const links = Array.from(container.querySelectorAll("a"))
+    expect(links[0]?.className).toContain("pl-3")
+    expect(links[1]?.className).toContain("pl-6")
   })
 
   it("omits headings deeper than two levels so the toc stays scannable", () => {
@@ -46,6 +48,58 @@ describe("MarkdownToc", () => {
     expect(
       screen.getByRole("link", { name: "章" }).getAttribute("aria-current")
     ).toBeNull()
+  })
+
+  it("keeps the list open by default so the rail reads as a table of contents", () => {
+    render(<MarkdownToc outline={outline(["章", 3], ["節", 3])} />)
+
+    expect(
+      screen.getByRole("button", { name: /目次/ }).getAttribute("aria-expanded")
+    ).toBe("true")
+    expect(screen.getByRole("link", { name: "章" })).toBeTruthy()
+  })
+
+  it("starts collapsed when the caller asks for it", () => {
+    render(
+      <MarkdownToc
+        defaultOpen={false}
+        outline={outline(["章", 3], ["節", 3])}
+      />
+    )
+
+    expect(
+      screen.getByRole("button", { name: /目次/ }).getAttribute("aria-expanded")
+    ).toBe("false")
+  })
+
+  it("opens and closes from the trigger", async () => {
+    const user = userEvent.setup()
+    render(
+      <MarkdownToc
+        defaultOpen={false}
+        outline={outline(["章", 3], ["節", 3])}
+      />
+    )
+    const trigger = screen.getByRole("button", { name: /目次/ })
+
+    await user.click(trigger)
+    await waitFor(() =>
+      expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    )
+    expect(screen.getByRole("link", { name: "章" })).toBeTruthy()
+
+    await user.click(trigger)
+    await waitFor(() =>
+      expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    )
+  })
+
+  it("counts the entries so the trigger says how long the article is", () => {
+    render(<MarkdownToc outline={outline(["章", 3], ["節", 3], ["項", 3])} />)
+
+    expect(screen.getByRole("button", { name: /目次/ }).textContent).toContain(
+      "3"
+    )
   })
 
   it("escapes ids so a japanese heading produces a usable fragment", () => {
