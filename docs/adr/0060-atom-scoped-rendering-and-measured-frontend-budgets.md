@@ -135,7 +135,7 @@ flowchart TD
 | 認証/セキュリティ | better-authのclientをGoogleログイン時まで遅延。認証状態の確認は素のfetchのまま | Done | `apps/web/src/features/auth/api/auth-state.ts` |
 | 認証/セキュリティ（観測） | 計装前のfetchを記録し、SDK到着時にspanへ起こす | Done | `apps/web/src/shared/observability/pre-init-fetch.ts` |
 | フロント/品質保証 | 描画回数の回帰テスト、axe検査の全ページ化、スキップリンクとlive region | Done | `apps/web/src/shared/test/render-count.tsx`、`apps/web/tests/e2e/accessibility.spec.ts` |
-| テスト/運用 | Web Vitalsとバンドル予算をCIへ（非ブロッキング） | Done | `.github/workflows/ci.yml` の `web-perf` |
+| テスト/運用 | Web Vitalsとバンドル予算をCIへ（非ブロッキング） | Done | `.github/workflows/ci.yml` の `web-e2e` 内performance step |
 
 ## 再検討条件
 
