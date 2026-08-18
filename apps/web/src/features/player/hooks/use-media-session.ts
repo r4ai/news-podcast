@@ -3,9 +3,10 @@ import { useEffect } from "react"
 
 import {
   currentTrackAtom,
+  pausePlaybackAtom,
+  resumePlaybackAtom,
   seekToAtom,
   skipByAtom,
-  togglePlaybackAtom,
 } from "../atoms"
 import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS } from "../model"
 
@@ -18,7 +19,10 @@ import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS } from "../model"
  */
 export function useMediaSession() {
   const track = useAtomValue(currentTrackAtom)
-  const toggle = useSetAtom(togglePlaybackAtom)
+  // OSから届くのは命令なので、切り替えではなく明示の再生/停止を渡す。
+  // 同じ命令が二度届いても状態が反転しない。
+  const resume = useSetAtom(resumePlaybackAtom)
+  const pause = useSetAtom(pausePlaybackAtom)
   const skip = useSetAtom(skipByAtom)
   const seekTo = useSetAtom(seekToAtom)
 
@@ -36,8 +40,8 @@ export function useMediaSession() {
 
     const handlers: readonly [MediaSessionAction, MediaSessionActionHandler][] =
       [
-        ["play", () => toggle()],
-        ["pause", () => toggle()],
+        ["play", () => resume()],
+        ["pause", () => pause()],
         ["seekbackward", () => skip(-SKIP_BACK_SECONDS)],
         ["seekforward", () => skip(SKIP_FORWARD_SECONDS)],
         [
@@ -67,5 +71,5 @@ export function useMediaSession() {
       }
       session.metadata = null
     }
-  }, [track, toggle, skip, seekTo])
+  }, [track, resume, pause, skip, seekTo])
 }

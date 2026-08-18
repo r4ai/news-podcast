@@ -804,3 +804,46 @@ test("selecting articles generates an episode and streams its progress", async (
     page.getByText("今日の開発ニュース", { exact: true })
   ).toBeVisible()
 })
+
+test("switching episodes shows the next script from its beginning", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+
+  await page.getByRole("link", { name: "ライブラリ", exact: true }).click()
+  const rows = page
+    .getByRole("button", { name: /: / })
+    .filter({ hasText: "・" })
+
+  // 長い台本の番組を開いて、詳細を末尾まで送る。
+  await rows.filter({ hasText: "先週の総まとめ" }).first().click()
+  await expect(page.getByText("今週は以上です。").first()).toBeVisible()
+  const scroller = page.locator("[data-detail-pane]")
+  await scroller.evaluate((node) => {
+    node.scrollTop = node.scrollHeight
+  })
+  expect(await scroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+
+  // 別の番組へ切り替えると、題名と再生ボタンから読み始められる。
+  await rows.filter({ hasText: "今日の開発ニュース" }).first().click()
+  await expect(
+    page.getByRole("heading", { name: /Durable ObjectsとTypeScript/ })
+  ).toBeVisible()
+  await expect(
+    page.getByText("こんばんは。今日の開発ニュースをお届けします。")
+  ).toBeVisible()
+  const [top, max] = await scroller.evaluate((node) => [
+    node.scrollTop,
+    node.scrollHeight - node.clientHeight,
+  ])
+  // 切り替え先も溢れる長さでなければ、ブラウザ側の丸めで0に戻ってしまい、
+  // 位置が残る回帰を見逃す。
+  expect(max).toBeGreaterThan(0)
+  expect(top).toBe(0)
+})

@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
+import { useEffect, useRef } from "react"
+
 import { cn } from "@workspace/ui/lib/utils"
 
 import {
@@ -32,6 +34,23 @@ export const Route = createFileRoute("/_authenticated/library/")({
   component: LibraryRoute,
 })
 
+/**
+ * 番組を切り替えたら、詳細の頭から見せる。
+ *
+ * スクロールしているのは外側の枠で、`key`で差し替わるのは中身だけなので、
+ * 位置は前の台本のまま残る。長い台本を読んだ後に隣の番組を開くと、題名も
+ * 再生ボタンも画面の外から始まってしまう。
+ */
+function useDetailPaneScrollReset(episodeId: string | undefined) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    ref.current?.scrollTo({ top: 0 })
+  }, [episodeId])
+
+  return ref
+}
+
 function LibraryRoute() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -41,6 +60,7 @@ function LibraryRoute() {
   }
 
   const hasSelection = search.episode !== undefined
+  const detailPaneRef = useDetailPaneScrollReset(search.episode)
 
   return (
     /*
@@ -71,6 +91,10 @@ function LibraryRoute() {
           "flex flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain",
           !hasSelection && "hidden lg:flex"
         )}
+        // 位置が戻ることをe2eで確かめるための目印。スクロールしているのは
+        // 中身ではなくこの枠なので、検査もここへ当てる。
+        data-detail-pane=""
+        ref={detailPaneRef}
       >
         <Panel fallback={<EpisodeDetailSkeleton />} name="episode-detail">
           {search.episode === undefined ? (

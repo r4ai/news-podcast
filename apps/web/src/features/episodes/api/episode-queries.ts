@@ -11,6 +11,10 @@ import type { EpisodePage } from "../model"
  */
 export const episodesQueryOptions = api.queryOptions("get", "/v1/episodes")
 
+/**
+ * 選択中の1件。URLのIDが一覧のどのページにも無い場合 (共有されたリンク、
+ * 古い番組) でも詳細を開けるよう、一覧とは別に取る。
+ */
 export function episodeQueryOptions(episodeId: string) {
   return api.queryOptions("get", "/v1/episodes/{episodeId}", {
     params: { path: { episodeId } },

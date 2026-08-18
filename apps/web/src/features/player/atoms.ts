@@ -27,9 +27,18 @@ export function episodeAudioUrl(episodeId: string): string {
  * 端末に残す値の保存規則。
  *
  * 保存領域には別のタブや過去の版が書いた値も入る。読める形だけを通し、
- * 読めなければ初期値へ落とす。`subscribe`で別タブの変更も拾う。
+ * 読めなければ初期値へ落とす。
+ *
+ * `crossTab`は「別タブの書き込みを取り込むか」。取り込んでよいのは、その値が
+ * 単独で意味を持つもの (再生記録・速度) だけ。**今どの番組を鳴らしているか**は
+ * このタブの`<audio>`と対で意味を持つので取り込まない。取り込むと、鳴っている
+ * 音は前の番組のまま見出しだけが差し替わり、その位置を別の番組の記録として
+ * 保存してしまう。
  */
-function localStorageWith<Value>(parse: (raw: unknown) => Value | undefined) {
+function localStorageWith<Value>(
+  parse: (raw: unknown) => Value | undefined,
+  { crossTab = true }: { readonly crossTab?: boolean } = {}
+) {
   const read = (key: string, initialValue: Value): Value => {
     try {
       const stored = localStorage.getItem(key)
@@ -49,6 +58,7 @@ function localStorageWith<Value>(parse: (raw: unknown) => Value | undefined) {
       callback: (value: Value) => void,
       initialValue: Value
     ) => {
+      if (!crossTab) return () => {}
       const handle = (event: StorageEvent) => {
         if (event.storageArea !== localStorage || event.key !== key) return
         callback(read(key, initialValue))
@@ -81,7 +91,9 @@ export const progressMapAtom = atomWithStorage<ProgressMap>(
 export const currentTrackAtom = atomWithStorage<PlayerTrack | null>(
   TRACK_STORAGE_KEY,
   null,
-  localStorageWith((raw) => parsePlayerTrack(raw) ?? null),
+  localStorageWith((raw) => parsePlayerTrack(raw) ?? null, {
+    crossTab: false,
+  }),
   { getOnInit: true }
 )
 
@@ -91,6 +103,19 @@ export const playbackRateAtom = atomWithStorage<number>(
   localStorageWith((raw) => (typeof raw === "number" ? raw : undefined)),
   { getOnInit: true }
 )
+
+/**
+ * 端末に残る「誰が何をどこまで聴いたか」を捨てる。
+ *
+ * 保存領域はorigin単位なので、同じブラウザで別の利用者がログインすると、
+ * 前の利用者の番組名と再生履歴がそのまま復元されてしまう。認証が切れて
+ * ログイン画面に着いた時点で捨てる。再生速度は個人を表さない端末の設定
+ * なので残す。
+ */
+export function clearPersistedPlayback(): void {
+  localStorage.removeItem(TRACK_STORAGE_KEY)
+  localStorage.removeItem(PROGRESS_STORAGE_KEY)
+}
 
 export type PlaybackStatus = "idle" | "playing" | "paused" | "error"
 
@@ -226,19 +251,37 @@ export const playEpisodeAtom = atom(null, (get, set, track: PlayerTrack) => {
   recordBrowserEvent("audio.started", { "episode.id": track.episodeId })
 })
 
-export const togglePlaybackAtom = atom(null, (get, set) => {
+/**
+ * 鳴らす。既に鳴っていれば何もしない。
+ *
+ * OSのロック画面やメディアキーから届くのは「命令」であって切り替えではない。
+ * 同じ命令が二度届いても状態が反転しないよう、再生と停止は別々に持つ。
+ */
+export const resumePlaybackAtom = atom(null, (get, set) => {
   const element = get(audioElementAtom)
   if (element === null || get(currentTrackAtom) === null) return
-  if (element.paused) {
-    rewindIfFinished(element)
-    set(playbackPositionAtom, element.currentTime)
-    set(playbackStatusAtom, "playing")
-    void element.play()
-    return
-  }
+  if (!element.paused) return
+  rewindIfFinished(element)
+  set(playbackPositionAtom, element.currentTime)
+  set(playbackStatusAtom, "playing")
+  void element.play()
+})
+
+/** 止める。既に止まっていれば何もしない。 */
+export const pausePlaybackAtom = atom(null, (get, set) => {
+  const element = get(audioElementAtom)
+  if (element === null || get(currentTrackAtom) === null) return
+  if (element.paused) return
   element.pause()
   set(playbackStatusAtom, "paused")
   set(saveProgressAtom)
+})
+
+/** 画面のボタン。今の状態の反対へ倒す。 */
+export const togglePlaybackAtom = atom(null, (get, set) => {
+  const element = get(audioElementAtom)
+  if (element === null) return
+  set(element.paused ? resumePlaybackAtom : pausePlaybackAtom)
 })
 
 export const seekToAtom = atom(null, (get, set, seconds: number) => {

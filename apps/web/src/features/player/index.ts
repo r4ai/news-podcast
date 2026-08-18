@@ -1,4 +1,5 @@
 export {
+  clearPersistedPlayback,
   currentEpisodeIdAtom,
   episodeAudioUrl,
   episodePlayingAtomFamily,

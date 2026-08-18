@@ -3,18 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   attachAudioElementAtom,
+  clearPersistedPlayback,
   currentEpisodeIdAtom,
+  currentTrackAtom,
   cyclePlaybackRateAtom,
   episodeAudioUrl,
   handleEndedAtom,
   handleLoadedMetadataAtom,
   handleTimeUpdateAtom,
   isPlayingAtom,
+  pausePlaybackAtom,
   playEpisodeAtom,
   playbackDurationAtom,
   playbackPositionAtom,
   playbackRateAtom,
   progressEntryAtomFamily,
+  resumePlaybackAtom,
   progressMapAtom,
   seekToAtom,
   skipByAtom,
@@ -226,6 +230,43 @@ describe("togglePlaybackAtom", () => {
   })
 })
 
+/**
+ * OSのロック画面やメディアキーから届くのは「命令」であって切り替えではない。
+ * 同じ命令が二度届いても、状態が反転してはいけない。
+ */
+describe("resumePlaybackAtom / pausePlaybackAtom", () => {
+  it("再生中にもう一度play命令が来ても止めない", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    audio.play.mockClear()
+
+    store.set(resumePlaybackAtom)
+
+    expect(audio.pause).not.toHaveBeenCalled()
+    expect(store.get(isPlayingAtom)).toBe(true)
+  })
+
+  it("停止中にもう一度pause命令が来ても鳴らさない", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    store.set(pausePlaybackAtom)
+    audio.play.mockClear()
+
+    store.set(pausePlaybackAtom)
+
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(store.get(isPlayingAtom)).toBe(false)
+  })
+
+  it("番組が載っていなければ、どちらの命令も何も起こさない", () => {
+    const { store, audio } = setup()
+    store.set(resumePlaybackAtom)
+    store.set(pausePlaybackAtom)
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(audio.pause).not.toHaveBeenCalled()
+  })
+})
+
 describe("seekToAtom / skipByAtom", () => {
   it("指定位置は0..総時間へ収める", () => {
     const { store, audio } = setup()
@@ -354,9 +395,61 @@ describe("記録の保存", () => {
     expect(nextAudio.currentTime).toBe(75)
   })
 
+  it("別のタブが載せ替えた番組を、鳴っている音とは無関係に引き継がない", async () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    loaded(store, audio, 600)
+    audio.currentTime = 100
+
+    // 保存値の購読はatomがmountされている間だけ張られる。画面と同じ条件に
+    // するため、購読を1つ立ててから別タブの書き込みを起こす。
+    const unsubscribe = store.sub(currentTrackAtom, () => {})
+
+    // 別のタブが自分のバーへ載せた番組。こちらの音は`track`のまま鳴っている。
+    localStorage.setItem(
+      "player.track",
+      JSON.stringify({ ...otherTrack, title: "別タブの番組" })
+    )
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: "player.track",
+        storageArea: localStorage,
+      })
+    )
+
+    expect(store.get(currentEpisodeIdAtom)).toBe(track.episodeId)
+    store.set(handleTimeUpdateAtom)
+    expect(store.get(progressMapAtom)[otherTrack.episodeId]).toBeUndefined()
+    unsubscribe()
+  })
+
   it("壊れた保存値は無視して起動する", async () => {
     localStorage.setItem("player.progress", "{ではない")
     const reopened = await reopen()
     expect(createStore().get(reopened.progressMapAtom)).toEqual({})
+  })
+})
+
+describe("clearPersistedPlayback", () => {
+  it("端末に残る番組と再生履歴を捨てる", async () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    loaded(store, audio, 600)
+    audio.currentTime = 42
+    store.set(handleTimeUpdateAtom)
+    store.set(playbackRateAtom, 1.5)
+
+    clearPersistedPlayback()
+
+    expect(localStorage.getItem("player.track")).toBeNull()
+    expect(localStorage.getItem("player.progress")).toBeNull()
+    // 速度は個人を表さない端末の設定なので残す。
+    expect(localStorage.getItem("player.rate")).not.toBeNull()
+
+    vi.resetModules()
+    const reopened = await import("./atoms")
+    const next = createStore()
+    expect(next.get(reopened.currentTrackAtom)).toBeNull()
+    expect(next.get(reopened.progressMapAtom)).toEqual({})
   })
 })
