@@ -1,5 +1,6 @@
 import { Library } from "lucide-react"
 
+import { Button } from "@workspace/ui/components/button"
 import {
   Empty,
   EmptyDescription,
@@ -7,6 +8,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@workspace/ui/components/empty"
+import { Spinner } from "@workspace/ui/components/spinner"
 
 import type { Episode } from "@/features/episodes"
 import { useEpisodeLibrary } from "../-hooks/use-episode-library"
@@ -24,12 +26,20 @@ export type EpisodeLibraryViewProps = {
   readonly audioUrl?: string
   readonly playingEpisodeId?: string
   readonly pending: boolean
+  readonly hasNextPage: boolean
+  readonly isFetchingNextPage: boolean
+  readonly isFetchNextPageError: boolean
+  readonly fetchNextPage: () => void
   readonly play: (episodeId: string) => void
 }
 
 export function EpisodeLibraryView({
   audioUrl,
   episodes,
+  fetchNextPage,
+  hasNextPage,
+  isFetchingNextPage,
+  isFetchNextPageError,
   pending,
   playingEpisodeId,
   play,
@@ -64,6 +74,35 @@ export function EpisodeLibraryView({
           />
         ))}
       </div>
+      {hasNextPage ? (
+        <div className="flex flex-col items-center gap-2">
+          {isFetchNextPageError ? (
+            <p className="text-sm text-destructive" role="alert">
+              続きを読み込めませんでした
+            </p>
+          ) : null}
+          {isFetchingNextPage ? (
+            <span
+              className="sr-only"
+              role="status"
+              aria-label="続きを読み込み中"
+            >
+              続きを読み込み中
+            </span>
+          ) : null}
+          <Button
+            disabled={isFetchingNextPage}
+            onClick={fetchNextPage}
+            size="sm"
+            variant="outline"
+          >
+            {isFetchingNextPage ? (
+              <Spinner aria-hidden="true" data-icon="inline-start" />
+            ) : null}
+            {isFetchNextPageError ? "再試行" : "もっと読み込む"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
