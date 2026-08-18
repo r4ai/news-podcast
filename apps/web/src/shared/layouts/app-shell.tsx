@@ -71,17 +71,31 @@ function Navigation({ mobile = false }: { readonly mobile?: boolean }) {
 type AppShellProps = {
   /** ナビゲーション末尾へ差し込む操作。テーマ切替などをrouteから渡す。 */
   readonly actions?: ReactNode
+  /**
+   * ページを跨いで居座る再生バー。routeの外に置くための差し込み口で、
+   * 高さの確保はこのcomponentが`:has()`で行う (下の`--player-h`)。
+   */
+  readonly player?: ReactNode
   readonly children: ReactNode
 }
 
-export function AppShell({ actions, children }: AppShellProps) {
-  // /articles だけは一覧+本文の2ペイン構造を見据えて、主領域の幅上限を外す (docs/design.md §7.1)。
+/** 一覧+本文の2ペインを組むページ。主領域の幅上限を外す (docs/design.md §7.1)。 */
+const WIDE_PATHS = ["/articles", "/library"] as const
+
+export function AppShell({ actions, children, player }: AppShellProps) {
   const isWide = useLocation({
-    select: (location) => location.pathname.startsWith("/articles"),
+    select: (location) =>
+      WIDE_PATHS.some((path) => location.pathname.startsWith(path)),
   })
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
+    /*
+      下端に居座るものの高さを、ここで一度だけ宣言する。
+      `--player-h`は再生バーが実際に立っている時だけ値を持つ。バーの有無を
+      stateで配ると、鳴らし始めた瞬間に画面全体が描き直されるので、DOMに
+      在るかどうか (`:has`) で決める。
+    */
+    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:3.5rem]">
       {/*
         キーボードだけで使う場合、ページを開くたびに6本のナビゲーションを
         通り抜けないと本文へ入れない。最初のTabで本文へ飛べる出口を置く。
@@ -108,7 +122,12 @@ export function AppShell({ actions, children }: AppShellProps) {
         スキップリンクの着地点。`tabIndex={-1}`が無いとfocusを受け取れず、
         以降のTabが本文からではなくページ先頭から再開してしまう。
       */}
-      <main className="pb-24 md:ml-56 md:pb-0" id="main-content" tabIndex={-1}>
+      <main
+        // 下端に居座るもの (モバイルのナビ・再生バー) の分だけ本文の末尾を空ける。
+        className="pb-[calc(var(--app-nav-h)+var(--player-h)+1rem)] md:ml-56 md:pb-[calc(var(--player-h)+1rem)]"
+        id="main-content"
+        tabIndex={-1}
+      >
         <div
           className={cn(
             "mx-auto flex flex-col gap-6 p-4 sm:p-6 lg:p-8",
@@ -118,6 +137,8 @@ export function AppShell({ actions, children }: AppShellProps) {
           {children}
         </div>
       </main>
+
+      {player}
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
         <Navigation mobile />

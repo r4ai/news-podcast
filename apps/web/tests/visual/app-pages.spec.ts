@@ -3,11 +3,13 @@ import { expect, test, type Page } from "@playwright/test"
 
 const axePath = createRequire(import.meta.url).resolve("axe-core/axe.min.js")
 
+/** 偽Gatewayが固定で持つ番組。`fakeApiIdentifiers.episodeId`と同じ値。 */
+const SEEDED_EPISODE_ID = "00000000-0000-4000-8000-000000000030"
+
 const pages = [
   { path: "/", title: "今日のニュース番組", snapshot: "today" },
   { path: "/subscriptions", title: "購読フィード", snapshot: "subscriptions" },
   { path: "/schedule", title: "生成時刻", snapshot: "schedule" },
-  { path: "/library", title: "ライブラリ", snapshot: "library" },
   // 設定は項目ごとに独立した画面なので、1枚では足りない。登録が積み上がるほど
   // 幅の使い方が問われるので、偽Gatewayもタグ・提案・読み辞書をまとまった
   // 件数で返す。
@@ -163,6 +165,54 @@ for (const theme of ["light", "dark"] as const) {
       // 元々viewportへ収まるので情報量は変わらず、mobileで折り返した先は
       // desktop側のスナップショットが受け持つ。
       await expectStablePage(page, `articles-reader-${suffix}`, {
+        fullPage: false,
+      })
+
+      /*
+        ライブラリも2ペインなのでページ見出しを持たない。行が出たことを
+        安定の基準にし、原稿を開いた状態まで撮る。
+
+        再生バーは「鳴らしてから撮る」と位置が実行ごとに動く。前回の続きは
+        端末に残る記録から復元されるので、その記録を先に置くことで、
+        止まったまま同じ位置を指すバーを撮れる。
+      */
+      await page.goto("/library")
+      const firstEpisode = page
+        .getByRole("button", { name: /今日の開発ニュース/ })
+        .first()
+      await expect(firstEpisode).toBeVisible()
+      await expectStablePage(page, `library-${suffix}`)
+
+      await page.addInitScript((episodeId: string) => {
+        localStorage.setItem(
+          "player.track",
+          JSON.stringify({
+            episodeId,
+            title: "今日の開発ニュース: Durable ObjectsとTypeScript 6.0",
+            createdAt: "2026-08-18T21:00:00.000Z",
+          })
+        )
+        localStorage.setItem(
+          "player.progress",
+          JSON.stringify({
+            [episodeId]: { position: 12, duration: 30, updatedAt: 1 },
+          })
+        )
+      }, SEEDED_EPISODE_ID)
+      await page.goto(`/library?episode=${SEEDED_EPISODE_ID}`)
+      await expect(
+        page.getByText("こんばんは。今日の開発ニュースをお届けします。")
+      ).toBeVisible()
+      await expect(
+        page.getByRole("region", { name: "再生中の番組" })
+      ).toBeVisible()
+      // 総時間は音声のmetadataが届いてから確定する。届く前に撮ると、
+      // 目盛りと残り時間だけが実行ごとに違う絵になる。時刻の文字はmd未満で
+      // 隠れるので、幅に関係なく読める目盛りの値で待つ。
+      await expect(
+        page.getByRole("slider", { name: "再生位置" })
+      ).toHaveAttribute("aria-valuetext", "0:12 / 0:30")
+      await expectStablePage(page, `library-episode-${suffix}`, {
         fullPage: false,
       })
     })

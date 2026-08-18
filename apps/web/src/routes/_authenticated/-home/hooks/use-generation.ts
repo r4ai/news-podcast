@@ -210,6 +210,8 @@ export function useGeneration() {
     streaming: liveForThisJob && streamConnected,
     episode: latestEpisode
       ? {
+          // 下端のバーへ載せるのにIDが要る。
+          id: latestEpisode.id,
           title: latestEpisode.title,
           createdAt: latestEpisode.createdAt,
           sourceCount: latestEpisode.sources.length,

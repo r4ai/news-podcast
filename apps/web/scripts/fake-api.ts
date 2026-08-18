@@ -5,12 +5,15 @@ const ownerId = "00000000-0000-4000-8000-000000000100"
 const feedId = "00000000-0000-4000-8000-000000000001"
 const subscriptionId = "00000000-0000-4000-8000-000000000002"
 const createdAt = "2026-08-10T00:00:00.000Z"
+/** 視覚回帰が`?episode=`で名指しできるよう、seedの番組IDは固定する。 */
+const seededEpisodeId = "00000000-0000-4000-8000-000000000030"
 
 export const fakeApiIdentifiers = {
   sessionCookie,
   ownerId,
   feedId,
   subscriptionId,
+  episodeId: seededEpisodeId,
 } as const
 
 type Job = {
@@ -122,6 +125,71 @@ function seedArticles() {
 }
 
 /**
+ * ライブラリは「原稿を読みながら出典を確かめる」画面なので、seedにも
+ * 段落のある台本と、保存済み・未保存の両方の出典を持たせる。空に近いseedだと
+ * 2ペインの幅の使い方も右レールも絵に出ない。
+ */
+function seedEpisodes(): Array<Record<string, unknown>> {
+  return [
+    {
+      id: seededEpisodeId,
+      title: "今日の開発ニュース: Durable ObjectsとTypeScript 6.0",
+      script: [
+        "こんばんは。今日の開発ニュースをお届けします。",
+        "最初の話題です。Durable Objectsが東京リージョンに対応しました。国内からの往復が短くなり、状態を持つ処理を日本のユーザーの近くへ置けるようになります。",
+        "次の話題です。TypeScript 6.0のリリース候補が公開されました。型推論の改善に加えて、既定値の変更がいくつか入っています。",
+        "最後に、SQLiteのWALモードと本番運用の勘所を紹介します。書き込みの詰まりをどこで観測するかが要点です。",
+        "本日は以上です。詳しくは出典の記事をご確認ください。",
+      ].join("\n\n"),
+      sources: [
+        {
+          articleId: "00000000-0000-4000-8000-000000000010",
+          url: "https://zenn.dev/seed-1",
+          title: "Durable Objectsが東京リージョンに対応",
+          publishedAt: createdAt,
+          snapshotId: "00000000-0000-4000-8000-000000000020",
+          sourceKind: "rss",
+        },
+        {
+          articleId: "00000000-0000-4000-8000-000000000011",
+          url: "https://zenn.dev/seed-2",
+          title: "TypeScript 6.0のリリース候補が公開",
+          publishedAt: createdAt,
+          snapshotId: "00000000-0000-4000-8000-000000000021",
+          sourceKind: "rss",
+        },
+        {
+          url: "https://example.com/sqlite-wal",
+          title: "SQLiteのWALモードと本番運用の勘所",
+          publishedAt: createdAt,
+          sourceKind: "web",
+        },
+      ],
+      createdAt: "2026-08-18T21:00:00.000Z",
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000031",
+      title: "先週の総まとめ: 型システムと配信基盤",
+      script: [
+        "今週の開発ニュースをまとめてお届けします。",
+        "型システムの話題が続いた一週間でした。推論の改善と、既存コードへの影響を整理します。",
+      ].join("\n\n"),
+      sources: [
+        {
+          articleId: "00000000-0000-4000-8000-000000000012",
+          url: "https://zenn.dev/seed-3",
+          title: "SQLiteのWALモードと本番運用の勘所",
+          publishedAt: createdAt,
+          snapshotId: "00000000-0000-4000-8000-000000000022",
+          sourceKind: "rss",
+        },
+      ],
+      createdAt: "2026-08-11T21:00:00.000Z",
+    },
+  ]
+}
+
+/**
  * 設定画面は「登録済みが何十件も並んだ状態」でこそ一覧性が問われる。
  * 空に近いseedだと、幅の使い方も折り返しも絵に出ない。
  */
@@ -217,7 +285,7 @@ export function createFakeApi(): FakeApi {
     },
     jobs: [] as Job[],
     syncJob: undefined as FeedSyncJob | undefined,
-    episodes: [] as Array<Record<string, unknown>>,
+    episodes: seedEpisodes(),
     tags: seedTags(),
     suggestions: seedTagSuggestions(),
     dictionary: seedReadingDictionary(),
@@ -597,10 +665,38 @@ function json(
 
 // `Uint8Array.from`は`ArrayBufferLike`を返し`BodyInit`に代入できないので、
 // バッファ型が確定する`new Uint8Array`で作る。
-function silentWave(): Uint8Array<ArrayBuffer> {
-  return new Uint8Array([
-    82, 73, 70, 70, 38, 0, 0, 0, 87, 65, 86, 69, 102, 109, 116, 32, 16, 0, 0, 0,
-    1, 0, 1, 0, 68, 172, 0, 0, 136, 88, 1, 0, 2, 0, 16, 0, 100, 97, 116, 97, 0,
-    2, 0, 0, 0, 0, 0,
-  ])
+/**
+ * 無音のWAV。
+ *
+ * 一瞬で鳴り終わる長さにすると、「ページを移っても再生が続く」ことを
+ * e2eで確かめられない (遷移する前に`ended`が来る)。実際の番組と同じように、
+ * 数十秒は鳴り続ける長さを持たせる。
+ */
+function silentWave(seconds = 30): Uint8Array<ArrayBuffer> {
+  const sampleRate = 8_000
+  const bytesPerSample = 2
+  const dataBytes = sampleRate * bytesPerSample * seconds
+  const buffer = new ArrayBuffer(44 + dataBytes)
+  const view = new DataView(buffer)
+  const ascii = (offset: number, text: string) => {
+    for (const [index, character] of Array.from(text).entries()) {
+      view.setUint8(offset + index, character.charCodeAt(0))
+    }
+  }
+
+  ascii(0, "RIFF")
+  view.setUint32(4, 36 + dataBytes, true)
+  ascii(8, "WAVE")
+  ascii(12, "fmt ")
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * bytesPerSample, true)
+  view.setUint16(32, bytesPerSample, true)
+  view.setUint16(34, 8 * bytesPerSample, true)
+  ascii(36, "data")
+  view.setUint32(40, dataBytes, true)
+  // 本体は無音なので0のまま。
+  return new Uint8Array(buffer)
 }

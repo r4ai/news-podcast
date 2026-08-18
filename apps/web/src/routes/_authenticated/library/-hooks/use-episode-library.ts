@@ -1,29 +1,34 @@
 import { useSuspenseInfiniteQuery } from "@tanstack/react-query"
-import { useState } from "react"
 
 import { episodesInfiniteQueryOptions } from "@/features/episodes"
-export function useEpisodeLibrary() {
-  // Production完了からLibraryのoutbox投影までの短いずれで、Homeが取得した
-  // 古い一覧を表示し続けない。Libraryへ入るたびにowner-scoped一覧を再確認する。
-  const list = useSuspenseInfiniteQuery({
+import { groupEpisodesByDate, type Episode, type EpisodePage } from "../-model"
+
+/**
+ * 番組一覧。
+ *
+ * Production完了からLibraryのoutbox投影までの短いずれで、Homeが取得した古い
+ * 一覧を表示し続けない。Libraryへ入るたびにowner-scopedの一覧を取り直す。
+ */
+export function useEpisodeItems() {
+  const query = useSuspenseInfiniteQuery({
     ...episodesInfiniteQueryOptions,
     refetchOnMount: "always",
   })
-  const [audioUrl, setAudioUrl] = useState<string>()
 
-  function play(episodeId: string) {
-    setAudioUrl(`/v1/episodes/${encodeURIComponent(episodeId)}/audio`)
-  }
+  const episodes = query.data.pages.flatMap(
+    (page: EpisodePage) => page.items
+  ) as Episode[]
 
   return {
-    episodes: list.data.pages.flatMap((page) => page.items),
-    audioUrl,
-    playingEpisodeId: undefined,
-    pending: false,
-    hasNextPage: list.hasNextPage,
-    isFetchingNextPage: list.isFetchingNextPage,
-    isFetchNextPageError: list.isFetchNextPageError,
-    fetchNextPage: () => void list.fetchNextPage(),
-    play,
+    episodes,
+    groups: groupEpisodesByDate(episodes),
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    // 続きの取得失敗は`Panel`まで上がらない (初回のデータは既にある)。
+    // 画面から見えるのはここだけなので、行の末尾で伝えて再試行させる。
+    isFetchNextPageError: query.isFetchNextPageError,
+    fetchNextPage: () => {
+      void query.fetchNextPage()
+    },
   } as const
 }

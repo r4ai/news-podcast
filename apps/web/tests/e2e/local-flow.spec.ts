@@ -709,19 +709,47 @@ test("development login to generated episode playback completes", async ({
   await expect(page.getByText("試行 1/4", { exact: true })).toBeVisible()
 
   await page.getByRole("link", { name: "ライブラリ" }).click()
-  await expect(
-    page.getByRole("heading", { name: "今日の開発ニュース" })
-  ).toBeVisible()
-  await page.getByRole("button", { name: "再生" }).click()
+  // 生成した番組が一覧の先頭に並ぶ。行には「開く」と「鳴らす」の2つのボタンが
+  // あり、鳴らす方は絵だけなので、文字を持つ方で絞る。
+  const generated = page
+    .getByRole("button", { name: /今日の開発ニュース/ })
+    .filter({ hasText: "今日の開発ニュース" })
+  await expect(generated.first()).toBeVisible()
+
+  // 行の再生ボタンで、画面下端のバーへ載せる。
+  await page
+    .getByRole("button", { name: /今日の開発ニュースを再生/ })
+    .first()
+    .click()
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await expect(bar).toBeVisible()
   // 公開音声契約はsame-originの `GET /v1/episodes/{id}/audio` (ADR-0055)。
   await expect(page.locator("audio")).toHaveAttribute(
     "src",
     /\/v1\/episodes\/[^/]+\/audio$/
   )
-  await page.getByRole("button", { name: "出典を確認" }).click()
+
+  // 番組を開くと、原稿と出典の両方がその場で読める。
+  await generated.first().click()
   await expect(
-    page.getByRole("link", { name: "ローカルE2Eニュース" })
+    page.getByText("ローカル環境の生成フローが正常に完了しました。")
+  ).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: /ローカルE2Eニュース/ }).first()
   ).toHaveAttribute("href", "https://example.com/local-news")
+
+  // 再生バーはページを跨いで残り、音も止まらない (ADR-0064)。
+  // バーに載った番組の題名もリンクなので、ナビゲーションは完全一致で選ぶ。
+  await page.getByRole("link", { name: "今日", exact: true }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  await expect(bar).toBeVisible()
+  await expect(page.locator("audio")).toHaveAttribute(
+    "src",
+    /\/v1\/episodes\/[^/]+\/audio$/
+  )
+  await expect(page.locator("audio")).toHaveJSProperty("paused", false)
 })
 
 test("selecting articles generates an episode and streams its progress", async ({

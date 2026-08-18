@@ -1,23 +1,20 @@
 import { infiniteQueryOptions } from "@tanstack/react-query"
 
 import { api, fetchClient } from "@/shared/api"
-import type { Episode } from "../model"
+import type { EpisodePage } from "../model"
 
-/** `/`（生成）と `/library` の両方が読む。 */
+/**
+ * `/`（生成）が読む最新の一覧。
+ *
+ * `/library`の無限読みはこの鍵を接頭辞に持つので、完成後の
+ * `invalidateQueries`は単発の読みと無限の読みの両方へ届く。
+ */
 export const episodesQueryOptions = api.queryOptions("get", "/v1/episodes")
 
 export function episodeQueryOptions(episodeId: string) {
   return api.queryOptions("get", "/v1/episodes/{episodeId}", {
     params: { path: { episodeId } },
   })
-}
-
-type EpisodePage = {
-  readonly items: readonly Episode[]
-  readonly page: {
-    readonly hasMore: boolean
-    readonly nextCursor?: string | null
-  }
 }
 
 /** Library専用。取得済みのページを保ったままserver cursorを順に辿る。 */

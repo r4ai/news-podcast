@@ -7,6 +7,8 @@ import {
 } from "@workspace/ui/components/collapsible"
 import { cn } from "@workspace/ui/lib/utils"
 
+import { COLLAPSIBLE_PANEL_ANIMATION } from "@/shared/lib/collapsible"
+
 import type { HeadingOutlineEntry } from "../pipeline/rehype-heading-outline"
 
 export type MarkdownTocProps = {
@@ -54,18 +56,6 @@ export function tocEntries(
 }
 
 /**
- * 高さのtransitionはBase UIが実測して配る`--collapsible-panel-height`へ掛ける。
- * `auto`は補間できないので、開閉のたびにJSで高さを測る実装が要らなくなる。
- * 閉じた側の高さ0は`data-starting-style` / `data-ending-style`が受け持つ。
- *
- * `hidden`の除外は`hidden="until-found"`のためにある。畳んだ中身もブラウザの
- * ページ内検索から見つけられるよう、DOMには残したまま隠す(`<details>`が
- * 持っていた性質をここで引き継ぐ)。
- */
-const PANEL_ANIMATION =
-  "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-200 ease-out motion-reduce:transition-none [&[hidden]:not([hidden='until-found'])]:hidden data-starting-style:h-0 data-ending-style:h-0"
-
-/**
  * 本文の見出しから作る目次。並ぶ項目が無ければ何も描かない。
  *
  * 項目は左の罫を軸に並べ、読んでいる節だけが軸の色を持つ。行そのものを塗ると
@@ -109,7 +99,10 @@ export function MarkdownToc({
         />
       </CollapsibleTrigger>
 
-      <CollapsibleContent className={PANEL_ANIMATION} hiddenUntilFound>
+      <CollapsibleContent
+        className={COLLAPSIBLE_PANEL_ANIMATION}
+        hiddenUntilFound
+      >
         <ol className="mr-2 mb-2.5 ml-3.5 flex flex-col border-l border-border/70">
           {entries.map((entry) => (
             <li key={entry.id}>
