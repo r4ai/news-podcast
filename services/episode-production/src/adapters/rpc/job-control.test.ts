@@ -13,6 +13,8 @@ import {
   CreateJobCommandSchema,
   JobIdSchema,
   UtcTimestampSchema,
+  failRunningJob,
+  leaseQueuedJob,
   newQueuedJob,
 } from "../../domain/episode-job.js"
 
@@ -175,6 +177,39 @@ describe("episode job-control NATS RPC", () => {
     expect(replyPayload(replies[0]!)).toMatchObject({
       _tag: "Retried",
       job: { jobId: retriedId, status: "queued" },
+    })
+  })
+
+  it("replays the persisted terminal retry result for an explicit key", async () => {
+    const replies: string[] = []
+    const retried = newQueuedJob({
+      jobId: retriedId,
+      ...command,
+      idempotencyKey: "retry-1" as never,
+      enqueuedAt: now,
+    })
+    const failed = failRunningJob(
+      leaseQueuedJob(retried, {
+        token: "lease-retry" as never,
+        startedAt: now,
+        leasedUntil: now,
+      }),
+      {
+        failedAt: now,
+        failure: { code: "provider-timeout" as never, retryable: false },
+      }
+    )
+
+    await Effect.runPromise(
+      handleRetryJobRpc({
+        retry: () => Effect.succeed(failed),
+        replyDependencies,
+      })(delivery(envelope({ jobId, idempotencyKey: "retry-1" }), replies))
+    )
+
+    expect(replyPayload(replies[0]!)).toMatchObject({
+      _tag: "Retried",
+      job: { jobId: retriedId, status: "failed" },
     })
   })
 

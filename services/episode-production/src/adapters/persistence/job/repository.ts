@@ -60,7 +60,7 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
                 encoded.request.trigger === "scheduled" &&
                 existing.request.trigger === "scheduled")
             ) {
-              return Effect.succeed(existing as QueuedJob)
+              return Effect.succeed(existing)
             }
             return Effect.fail(
               deepFreeze({

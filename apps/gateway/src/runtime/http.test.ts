@@ -276,7 +276,9 @@ describe("Gateway HTTP runtime", () => {
         ],
       })
     )
-    const retryEpisodeJob = vi.fn(() => Effect.succeed(receipt))
+    const retryEpisodeJob = vi.fn<GatewayPorts["retryEpisodeJob"]>((_input) =>
+      Effect.succeed(receipt)
+    )
     const runtime = makeGatewayWebHandler({
       ...ports,
       listEpisodeJobs: () =>
@@ -340,7 +342,7 @@ describe("Gateway HTTP runtime", () => {
       expect(retryEpisodeJob).toHaveBeenCalledWith(
         expect.objectContaining({
           jobId,
-          idempotencyKey: `retry:${jobId}`,
+          idempotencyKey: expect.stringMatching(`^retry:${jobId}:`),
         })
       )
       expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
@@ -351,6 +353,43 @@ describe("Gateway HTTP runtime", () => {
         2,
         expect.objectContaining({ jobId, afterSequence: 7 })
       )
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("issues a fresh retry key per headerless action and preserves explicit keys", async () => {
+    const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
+      id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+      status: "failed",
+      createdAt: "2026-08-12T00:00:00.000Z",
+      attempt: 1,
+      maxAttempts: 4,
+      finishedAt: "2026-08-12T00:01:00.000Z",
+      error: { code: "provider-timeout", retryable: true },
+    })
+    const receipt = Schema.decodeUnknownSync(JobReceiptSchema)(job)
+    const retryEpisodeJob = vi.fn<GatewayPorts["retryEpisodeJob"]>((_input) =>
+      Effect.succeed(receipt)
+    )
+    const runtime = makeGatewayWebHandler({ ...ports, retryEpisodeJob })
+    const url = `http://gateway.test/v1/episode-jobs/${job.id}/retry`
+
+    try {
+      await runtime.handler(new Request(url, { method: "POST" }))
+      await runtime.handler(new Request(url, { method: "POST" }))
+      await runtime.handler(
+        new Request(url, {
+          method: "POST",
+          headers: { "Idempotency-Key": "caller-retry-1" },
+        })
+      )
+
+      const keys = retryEpisodeJob.mock.calls.map(
+        ([input]) => input.idempotencyKey
+      )
+      expect(keys[0]).not.toBe(keys[1])
+      expect(keys[2]).toBe("caller-retry-1")
     } finally {
       await runtime.dispose()
     }

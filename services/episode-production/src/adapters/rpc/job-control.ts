@@ -368,6 +368,11 @@ export const handleRetryJobRpc =
             Effect.map((result): EpisodeJobControlReply => {
               switch (result._tag) {
                 case "Queued":
+                case "Running":
+                case "Retrying":
+                case "Succeeded":
+                case "Failed":
+                case "Canceled":
                   return { _tag: "Retried", job: projectEpisodeJob(result) }
                 case "NotFound":
                   return { _tag: "NotFound" }
