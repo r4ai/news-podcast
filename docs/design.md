@@ -150,7 +150,7 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 - API: OpenAPI lint/validation、型生成差分、認証matrix、Problem Details、owner isolation、pagination、冪等性競合。
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
 - Web(a11y): axe検査は視覚回帰から切り離し、`tests/e2e/accessibility.spec.ts`が全ページ（ログイン、今日、記事、記事表示中、購読、生成時刻、ライブラリ、設定）を検査する。スキップリンクと非同期状態のlive regionも同じところで確認する。
-- Web(性能): 本番ビルドに対する実測を常設する。Web Vitals（FCP/LCP/CLS/INP）は`pnpm --filter web perf:vitals`、初期ロードのgzipサイズは`perf:bundle`。描画回数はVitestで予算化する（`shared/test/render-count`）。計測値は環境で揺れるためCIでは非ブロッキングで回し、決定的なバンドル予算で退行を捕らえる（[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)）。
+- Web(性能): 本番ビルドに対する実測を常設する。Web Vitals（FCP/LCP/CLS/INP）は`pnpm --filter web perf:vitals`としてCIで非ブロッキング、初期ロードと6主要routeのgzipサイズは`perf:bundle`としてrequiredな`static` jobでblocking検査する。route payloadはVite manifestの静的依存から初期資産との重複を除いて測る。描画回数はVitestで予算化する（`shared/test/render-count`）。予算変更はbaseline、計測差、理由を同じdiffへ残す（[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)）。
 - E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生を重要導線として確認するが、確認ゲート後に実装する。
 
 ### 7.1 UI設計原則

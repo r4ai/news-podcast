@@ -222,12 +222,15 @@ dockerが無い環境では実行できない。撮り方を変えるより、�
 
 ```bash
 pnpm --filter web perf:vitals   # FCP/LCP/CLS/INPを実測する
-pnpm --filter web perf:bundle   # 初期ロードのgzipサイズを予算と比べる
+pnpm --filter web build         # bundle計測にはmanifest付きproduction buildが必須
+pnpm --filter web perf:bundle   # 初期ロードと主要routeのgzip予算をblocking検査
 ```
 
 条件はCPU 4倍抑制、Slow 4G相当(1.6 Mbps / 150 ms)、**キャッシュが空のcontext**での初回訪問に固定してある。抑制しないと開発機の速さとlocalhostの帯域が差を潰し、バンドルを削っても数字が動かない。ログイン後のページ内遷移を測るのも同じ理由で無意味になる。
 
-タイミングの値は実行環境で揺れるのでCIでは`web-e2e` job内の非ブロッキングstepとして計測する。決定的なのは`perf:bundle`のgzipサイズで、退行はここで捕らえる。
+タイミングの値は実行環境で揺れるのでCIでは`web-e2e` job内の非ブロッキングstepとして計測する。決定的な`perf:bundle`はrequiredな`static` jobでブロックする。`dist`またはmanifestが無い単独実行は、先にbuildするコマンドを示して失敗する。
+
+予算は`scripts/bundle-budgets.ts`でbaseline、上限、変更理由を一組として管理する。初期ロードは`index.html`の資産、主要routeはVite manifestから静的依存を再帰的に集め、初期資産との重複を除いて測る。CI summaryのbaseline→current差と残量を確認し、上限変更時は実測差と理由を同じdiffへ残す。
 
 「どのcomponentが何回描かれたか」はVitestで予算にする。`shared/test/render-count`の`watchRenders`で実物のcomponentを`vi.mock`から包み、操作前後の差を数える。production側へ計測用のコードは入れない。詳細は[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)。
 

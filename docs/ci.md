@@ -10,7 +10,8 @@ flowchart TD
   PUSH --> SEC
   CI --> TEST[Build / lint / test / E2E]
   TEST --> CACHE[Turbo cache<br/>障害時は通常実行へfallback]
-  TEST --> BROWSER[固定Playwright環境<br/>E2E + 非blocking性能計測]
+  TEST --> BUNDLE[blocking<br/>決定的bundle予算]
+  TEST --> BROWSER[固定Playwright環境<br/>E2E + 非blocking Web Vitals]
   SEC --> PIN[pinact]
   SEC --> LINT[actionlint]
   SEC --> ZIZ[zizmor]
@@ -23,9 +24,9 @@ flowchart TD
 
 | Check | 内容 |
 | --- | --- |
-| `CI / static` | format、lint、typecheck、build、契約、Compose、Storybook |
+| `CI / static` | format、lint、typecheck、build、決定的bundle予算、契約、Compose、Storybook |
 | `CI / unit` | unit/integration test、functional coverage |
-| `CI / web-e2e` | 固定Playwright環境でfake provider E2E、続けて非blocking性能計測 |
+| `CI / web-e2e` | 固定Playwright環境でfake provider E2E、続けて非blocking Web Vitals計測 |
 | `CI / visual` | desktop/mobile visual regression |
 | `CI / functional-e2e` | Docker上のNATSとbackend縦断E2E |
 | `CI / observability` | fake observed stack、Collector、Grafana、service graph |
@@ -44,15 +45,17 @@ flowchart LR
   CHANGE[変更] --> STATIC[static<br/>Turbo cache]
   CHANGE --> UNIT[unit<br/>通常testとcoverageを分担]
   CHANGE --> WEB[web-e2e<br/>固定container]
+  STATIC --> BUNDLE[blocking<br/>初期 + 主要route gzip]
   WEB --> E2E[blocking E2E]
-  E2E --> PERF[non-blocking<br/>Web Vitals + bundle]
+  E2E --> PERF[non-blocking<br/>Web Vitals]
   UNIT --> SHARD[coverage<br/>2 package並列 × 2 worker]
 ```
 
 - `static`と`unit`はjob別の`.turbo` cacheを前回runから復元する。cache keyはcommitごとに保存し、Turbo自身の入力hashで再利用可否を判定する。
 - cache restore/save障害は`continue-on-error`で通常実行へfallbackする。GitHub cache serviceの一時障害をCI失敗へ変換しない。
 - `unit`の通常testからcoverage対象8 packageを外し、同じtestをcoverage付きで一度だけ実行する。coverageはworkspace concurrency 2、各Vitest max worker 2でCPU競合を抑えつつ並列化する。
-- `web-e2e`と性能計測は同じdigest固定Playwright containerを共有する。性能値は共有runnerで揺れるため非blockingだが、機能E2Eは引き続きrequiredである。
+- `web-e2e`とWeb Vitals計測は同じdigest固定Playwright containerを共有する。タイミング値は共有runnerで揺れるため非blockingだが、機能E2Eは引き続きrequiredである。
+- gzip bundle予算は同一buildから決定的に算出し、requiredな`static` jobで初期ロードと6主要routeをblocking検査する。baseline→current→budgetはGitHub Step Summaryへ出す。
 - 変更前の基準run（2026-08-17、run `31960536313`）はwall time 5分31秒、7 job合計約17分。改善後の差はGitHub Actions復旧後の同一条件runで確認する。
 
 ローカルでブラウザを初回実行するときは`web` workspaceから次のコマンドでChromiumとOS依存パッケージを準備する。CIはdigest固定Playwright containerを使うため、このdownloadをjobごとに繰り返さない。

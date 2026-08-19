@@ -68,6 +68,11 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Check deterministic Web bundle budgets
+        # Turbo's workspace build has no cached outputs. Build Web directly so
+        # this gate never reads a missing or stale dist directory.
+        run: pnpm --filter web build && pnpm --filter web perf:bundle
+
       - name: Check generated contracts
         run: pnpm contract:check
 
@@ -170,13 +175,8 @@ jobs:
           PERF_API_PORT: 3320
           PERF_WEB_PORT: 4383
 
-      - name: Check the initial bundle budget
-        id: perf_bundle
-        continue-on-error: true
-        run: pnpm --filter web perf:bundle
-
       - name: Upload Playwright diagnostics
-        if: failure() || steps.perf_vitals.outcome == 'failure' || steps.perf_bundle.outcome == 'failure'
+        if: failure() || steps.perf_vitals.outcome == 'failure'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: web-e2e-results
