@@ -779,6 +779,7 @@ export interface components {
             feed: components["schemas"]["Feed"];
             subscription: components["schemas"]["FeedSubscription"];
         };
+        Union_4: (string & (unknown & unknown & unknown)) | null;
         Article: {
             id: string & unknown;
             feedId: string & unknown;
@@ -823,7 +824,7 @@ export interface components {
             }[];
             aiPending: number & unknown;
         };
-        Union_4: boolean | null;
+        Union_5: boolean | null;
         Objects_: {
             items: {
                 articleId: string & unknown;
@@ -918,7 +919,7 @@ export interface components {
             createdAt: string;
             updatedAt: string;
         };
-        Union_5: (string & (unknown & unknown & unknown)) | null;
+        Union_6: (string & (unknown & unknown & unknown)) | null;
         EnrichQueueItem: {
             feedItemId: string & unknown;
             title: string;
@@ -1960,7 +1961,7 @@ export interface operations {
                 state?: ("all" | "unread" | "saved" | "later") | null;
                 includeHidden?: ("true" | "false") | null;
                 feedIds?: (string & unknown)[] | null;
-                q?: (string & (unknown & unknown & unknown)) | null;
+                q?: components["schemas"]["Union_4"];
                 sort?: ("newest" | "oldest") | null;
                 cursor?: (string & (unknown & unknown & unknown)) | null;
             };
@@ -2008,7 +2009,7 @@ export interface operations {
             query?: {
                 includeHidden?: ("true" | "false") | null;
                 feedIds?: (string & unknown)[] | null;
-                q?: (string & (unknown & unknown & unknown)) | null;
+                q?: components["schemas"]["Union_4"];
             };
             header?: {
                 authorization?: components["schemas"]["Union_"];
@@ -2118,10 +2119,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    read?: components["schemas"]["Union_4"];
-                    saved?: components["schemas"]["Union_4"];
-                    readLater?: components["schemas"]["Union_4"];
-                    hidden?: components["schemas"]["Union_4"];
+                    read?: components["schemas"]["Union_5"];
+                    saved?: components["schemas"]["Union_5"];
+                    readLater?: components["schemas"]["Union_5"];
+                    hidden?: components["schemas"]["Union_5"];
                 };
             };
         };
@@ -2243,13 +2244,13 @@ export interface operations {
             content: {
                 "application/json": {
                     state?: ("all" | "unread" | "saved" | "later") | null;
-                    includeHidden?: components["schemas"]["Union_4"];
+                    includeHidden?: components["schemas"]["Union_5"];
                     feedIds?: (string & unknown)[] | null;
-                    q?: (string & (unknown & unknown & unknown)) | null;
-                    read?: components["schemas"]["Union_4"];
-                    saved?: components["schemas"]["Union_4"];
-                    readLater?: components["schemas"]["Union_4"];
-                    hidden?: components["schemas"]["Union_4"];
+                    q?: components["schemas"]["Union_4"];
+                    read?: components["schemas"]["Union_5"];
+                    saved?: components["schemas"]["Union_5"];
+                    readLater?: components["schemas"]["Union_5"];
+                    hidden?: components["schemas"]["Union_5"];
                 };
             };
         };
@@ -2984,15 +2985,15 @@ export interface operations {
             content: {
                 "application/json": {
                     surface: string & (unknown & unknown & unknown);
-                    reading?: components["schemas"]["Union_5"];
+                    reading?: components["schemas"]["Union_6"];
                     accentType?: (number & unknown) | null;
                 } | {
-                    surface?: components["schemas"]["Union_5"];
+                    surface?: components["schemas"]["Union_6"];
                     reading: string & (unknown & unknown & unknown);
                     accentType?: (number & unknown) | null;
                 } | {
-                    surface?: components["schemas"]["Union_5"];
-                    reading?: components["schemas"]["Union_5"];
+                    surface?: components["schemas"]["Union_6"];
+                    reading?: components["schemas"]["Union_6"];
                     accentType: number & unknown;
                 };
             };

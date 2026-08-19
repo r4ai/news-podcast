@@ -1,5 +1,4 @@
 import { Inbox, ListMusic, Search, TriangleAlert } from "lucide-react"
-import { useDeferredValue, useEffect, useState } from "react"
 
 import {
   Dialog,
@@ -44,6 +43,9 @@ export type ArticlePickerDialogProps = {
   readonly isError?: boolean
   readonly hasNextPage?: boolean
   readonly isFetchingNextPage?: boolean
+  readonly isSearching?: boolean
+  readonly hasSearchQuery: boolean
+  readonly searchQuery: string
   readonly pending?: boolean
   readonly submitError?: string
   readonly onOpenChange: (open: boolean) => void
@@ -52,6 +54,7 @@ export type ArticlePickerDialogProps = {
   readonly onClear: () => void
   readonly onLoadMore: () => void
   readonly onRetry: () => void
+  readonly onSearchChange: (query: string) => void
   readonly onConfirm: () => void
 }
 
@@ -115,7 +118,7 @@ function PickerBody({
   onRetry,
   onToggle,
   selected,
-  hasUnfilteredArticles,
+  hasSearchQuery,
 }: Pick<
   ArticlePickerDialogProps,
   | "articles"
@@ -128,7 +131,7 @@ function PickerBody({
   | "onRetry"
   | "onToggle"
   | "selected"
-> & { readonly hasUnfilteredArticles: boolean }) {
+> & { readonly hasSearchQuery: boolean }) {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-3 p-3">
@@ -166,12 +169,12 @@ function PickerBody({
             <Inbox aria-hidden="true" />
           </EmptyMedia>
           <EmptyTitle>
-            {hasUnfilteredArticles
+            {hasSearchQuery
               ? "検索に一致する記事がありません"
               : "選べる記事がまだありません"}
           </EmptyTitle>
           <EmptyDescription>
-            {hasUnfilteredArticles
+            {hasSearchQuery
               ? "検索語を変えると、ほかの候補を表示できます。"
               : "本文の取り込みが完了した記事だけを番組にできます。少し待ってからもう一度開いてください。"}
           </EmptyDescription>
@@ -220,28 +223,22 @@ export function ArticlePickerDialog({
   onOpenChange,
   onSelectTop,
   onClear,
+  onSearchChange,
   open,
   pending,
+  searchQuery,
   selectedCount,
   submitError,
   ...body
 }: ArticlePickerDialogProps) {
-  const [query, setQuery] = useState("")
-  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("ja"))
-  const filteredArticles = deferredQuery
-    ? body.articles.filter((article) =>
-        [article.title, article.sourceName].some((value) =>
-          value.toLocaleLowerCase("ja").includes(deferredQuery)
-        )
-      )
-    : body.articles
-
-  useEffect(() => {
-    if (!open) setQuery("")
-  }, [open])
-
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onSearchChange("")
+        onOpenChange(nextOpen)
+      }}
+      open={open}
+    >
       <DialogContent
         className="flex max-h-[90dvh] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0"
         size="xl"
@@ -268,14 +265,14 @@ export function ArticlePickerDialog({
               <Input
                 aria-label="候補記事を検索"
                 className="pl-8"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => onSearchChange(event.target.value)}
                 placeholder="タイトル・媒体・タグで絞り込み"
                 role="searchbox"
-                value={query}
+                value={searchQuery}
               />
             </div>
             <Button
-              disabled={body.articles.length === 0}
+              disabled={body.isSearching || body.articles.length === 0}
               onClick={onSelectTop}
               size="sm"
               variant="outline"
@@ -293,7 +290,10 @@ export function ArticlePickerDialog({
           </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          aria-busy={body.isSearching}
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
           {submitError ? (
             <div className="p-3">
               <Alert variant="destructive">
@@ -302,11 +302,16 @@ export function ArticlePickerDialog({
               </Alert>
             </div>
           ) : null}
-          <PickerBody
-            {...body}
-            articles={filteredArticles}
-            hasUnfilteredArticles={body.articles.length > 0}
-          />
+          {body.isSearching ? (
+            <div
+              aria-live="polite"
+              className="flex items-center gap-2 border-b px-3 py-2 text-sm text-muted-foreground"
+            >
+              <Spinner aria-hidden="true" data-icon="inline-start" />
+              検索中…
+            </div>
+          ) : null}
+          <PickerBody {...body} hasSearchQuery={body.hasSearchQuery} />
         </div>
 
         <DialogFooter className="m-0 flex-col gap-3 rounded-none border-t p-4 sm:flex-row sm:items-center sm:justify-between">

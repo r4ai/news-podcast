@@ -7,6 +7,9 @@ const subscriptionId = "00000000-0000-4000-8000-000000000002"
 const createdAt = "2026-08-10T00:00:00.000Z"
 /** 視覚回帰が`?episode=`で名指しできるよう、seedの番組IDは固定する。 */
 const seededEpisodeId = "00000000-0000-4000-8000-000000000030"
+const seededArticleTags: Readonly<Record<string, readonly string[]>> = {
+  "00000000-0000-4000-8000-000000000010": ["observability"],
+}
 
 export const fakeApiIdentifiers = {
   ownerId,
@@ -495,7 +498,17 @@ export function createFakeApi(): FakeApi {
       return json({ message: "Daily enrichment usage reset" })
     }
     if (path === "/v1/me/articles" && request.method === "GET") {
-      return json({ items: articles, page: { hasMore: false } })
+      const query = url.searchParams.get("q")?.trim().toLocaleLowerCase("ja")
+      const items = query
+        ? articles.filter((article) =>
+            [
+              article.title,
+              article.sourceName,
+              ...(seededArticleTags[article.id] ?? []),
+            ].some((value) => value.toLocaleLowerCase("ja").includes(query))
+          )
+        : articles
+      return json({ items, page: { hasMore: false } })
     }
     if (path === "/v1/me/articles/facets") {
       return json({

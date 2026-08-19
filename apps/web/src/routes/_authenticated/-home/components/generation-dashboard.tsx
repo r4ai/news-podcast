@@ -25,8 +25,10 @@ export function GenerationDashboard() {
   const {
     pickerInitialArticleIds,
     pickerOpen,
+    onGenerate,
     onPickerOpenChange,
     onConfirmGenerate,
+    onRetry,
     submitError,
     ...generation
   } = useGeneration()
@@ -41,6 +43,10 @@ export function GenerationDashboard() {
     <>
       <PodcastDashboard
         {...generation}
+        onGenerate={() => {
+          picker.onSearchChange("")
+          onGenerate()
+        }}
         onPlayEpisode={
           latest &&
           (() =>
@@ -50,6 +56,10 @@ export function GenerationDashboard() {
               createdAt: latest.createdAt,
             }))
         }
+        onRetry={() => {
+          picker.onSearchChange("")
+          onRetry()
+        }}
         settingsSlot={
           <Panel
             fallback={<GenerationSettingsSummarySkeleton />}
@@ -64,18 +74,22 @@ export function GenerationDashboard() {
         articles={picker.articles}
         atLimit={picker.atLimit}
         hasNextPage={picker.hasNextPage}
+        hasSearchQuery={picker.hasSearchQuery}
         isError={picker.isError}
         isFetchingNextPage={picker.isFetchingNextPage}
         isLoading={picker.isLoading}
+        isSearching={picker.isSearching}
         onClear={picker.onClear}
         onConfirm={() => onConfirmGenerate(picker.selectedIds)}
         onLoadMore={picker.onLoadMore}
         onOpenChange={onPickerOpenChange}
         onRetry={picker.onRetry}
+        onSearchChange={picker.onSearchChange}
         onSelectTop={picker.onSelectTop}
         onToggle={picker.onToggle}
         open={pickerOpen}
         pending={generation.pending}
+        searchQuery={picker.searchQuery}
         selected={picker.selected}
         selectedCount={picker.selectedIds.length}
         submitError={submitError}

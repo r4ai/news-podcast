@@ -15,10 +15,25 @@
 いずれもリポジトリに存在しない。参照先の `packages/adapters/` 自体が
 ADR-0039 の関数型DDD書き直しで削除されている。
 
-現在の記事検索は `title` / `source_url` に対する `LIKE '%q%'` であり、
+現在の記事検索は `title` / `source_url` / ownerに帰属するタグ名に対する
+`LIKE '%q%'` であり、
 実装箇所は `services/content-knowledge/src/adapters/persistence/article-library/filters.ts`
 （`queryFilters`）である。ADR-0043 のDrizzle移行でも検索の挙動は
 意図的に変更していない。
+
+2026-08-19、手動番組の記事選択が表示中の先頭30件だけを絞り込んでいた
+問題を解消するため、既存の`q`をserver-sideで使うようにした。UIが既に
+「タイトル・媒体・タグ」と約束していたため、owner scopeを保つ相関`EXISTS`で
+タグ名も同じ部分一致に加えた。これは失効したFTS5採用決定の復活ではなく、
+現行LIKE実装の検索対象同期である。
+
+| 2026-08-19の同期対象 | 状態 | 証拠 |
+| --- | --- | --- |
+| 設計書 | Done | `docs/design.md` REST契約方針 |
+| OpenAPI | Done | `q`の検索対象descriptionとcontract test |
+| Content / owner isolation | Done | owner相関のtag `EXISTS`とSQLite adapter test |
+| Web | Done | deferred server query、保留表示、空/失敗の分離、E2E |
+| データ/配備 | N/A | schemaとデプロイ構成は変更しない |
 
 再度FTS5を導入する場合は、drizzle-kit のマイグレーションへ
 仮想テーブルと同期トリガを手書きで追加し、本ADRを新しい番号で書き直すこと。
