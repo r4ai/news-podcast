@@ -1,16 +1,17 @@
-# Service state backup / restore
+# Coordinated service state backup / restore
 
-対象はfunctional backendの4つのservice専用SQLiteである。online backupは稼働中に取得できる。restoreとcutoverは対象serviceを停止し、別pathへ検証復元してから行う。既存DBへの上書きと別serviceのDB復元はCLIが拒否する。
+正本は、4つのservice専用SQLiteとSeaweedFS上のarticle archive・Episode audioを同じ世代へ束ねる`state-backup`である。個別SQLite CLIはcutoverと限定的な手動退避にだけ使い、DBだけの退避を災害復旧可能な世代と扱わない。
 
 ```mermaid
 flowchart LR
-  Live["live SQLite / WAL"] -->|"online backup API"| Archive["immutable backup"]
-  Archive --> I["integrity_check"]
-  I --> S["service profile table check"]
-  S --> R["new *.restored.sqlite"]
-  R --> C["offline atomic cutover"]
-  C --> H["readiness + business smoke"]
-  H -->|"failure"| Rollback["quarantined previous DB"]
+  Marker["generation marker"] --> DB["4 SQLite online backups"]
+  Marker --> Objects["SeaweedFS object inventory"]
+  DB --> Validate["integrity + schema + durable references"]
+  Objects --> Validate
+  Validate --> Encrypt["AES-256-GCM"]
+  Encrypt --> Remote["off-host S3<br/>versioning + Object Lock"]
+  Remote --> Commit["commit.json<br/>success boundary"]
+  Commit --> Drill["weekly restore drill"]
 ```
 
 ## 対象
@@ -22,9 +23,71 @@ flowchart LR
 | `episode-production` | `production` | `/app/data/production.sqlite` | `episode_jobs` |
 | `episode-library` | `library` | `/app/data/library.sqlite` | `episodes` |
 
-## Backup
+SeaweedFSの対象bucketは、同じinventoryに含まれる全objectである。`article_snapshots.snapshot_json`内のraw/replay/Markdown/assetsと、`episodes.audio_object_key`の全参照がinventoryのhash・sizeと一致しなければ世代をcommitしない。
 
-例はProduction。日時を固定した一意なfile名に置き換える。
+## 保護方針
+
+| 項目 | 決定 | 運用境界 |
+| --- | --- | --- |
+| RPO | 24時間 | schedulerは24時間ごと。25時間でcritical alert |
+| RTO | 4時間 | 最新commit世代の復号・検証、object復元、4 DB cutover、read smokeまで |
+| 世代保持 | 直近30成功世代 | bucket lifecycleはObject Lock満了前に削除してはならない |
+| 改変不能期間 | 最低35日 | 各PutをS3 Object Lock `COMPLIANCE`で固定 |
+| 暗号化 | client-side AES-256-GCM | 32 byte鍵はCompose secret。外部bucket管理者から分離保管 |
+| 外部保管 | sourceと異なるoff-host S3 bucket | versioningとObject Lockが起動時の必須検査 |
+| drill | 7日ごと | 8日未成功でcritical alert |
+
+bucket lifecycleは「35日間は保持し、30成功世代を下回らない」規則に設定する。鍵を失うと全世代を復号できない。鍵はrepository・同一host・同一S3 accountに保管せず、rotationは旧鍵で保護した全世代が保持対象外になった後に行う。
+
+## 初期設定と自動Backup
+
+外部bucketは作成時にObject Lockを有効にし、versioningを停止しない。sourceと同じSeaweedFS bucketは設定検査で拒否される。32 byte鍵をhexまたはbase64でsecret fileへ保存し、権限をowner read-onlyにする。
+
+```bash
+mkdir -p .secrets
+openssl rand -hex 32 > .secrets/backup-encryption-key
+chmod 600 .secrets/backup-encryption-key
+
+docker compose --profile backup up -d --build state-backup
+docker compose --profile backup ps state-backup
+curl --fail --silent http://127.0.0.1:4198/metrics
+```
+
+endpoint、bucket、専用credentialsは`.env`の`BACKUP_ARCHIVE_*`へ設定する。`BACKUP_ENCRYPTION_KEY_FILE_HOST`はhost上のsecret fileを指す。起動直後に1世代を作り、全成果物のimmutable Putが成功した最後にだけ`generations/<generation>/commit.json`を置く。
+
+```mermaid
+stateDiagram-v2
+  [*] --> Staging
+  Staging --> Validated: 4 DB + object inventory + references OK
+  Staging --> Partial: backup / download / validation failed
+  Validated --> Uploaded: encrypted artifacts + manifest uploaded
+  Uploaded --> Committed: immutable commit marker uploaded
+  Partial --> [*]: failure metric / successにならない
+  Committed --> [*]: last successを更新
+```
+
+manifestはgeneration、4 DBのprofile/schema/hash、SeaweedFS inventory fingerprint、全objectのkey/hash/size、参照件数、保護policyを持ち、manifest自体も暗号化する。途中uploadだけが残ったprefixにはcommit markerがないため、restore候補にも成功metricにも現れない。
+
+## 自動Restore drillと監視
+
+daemonは週次に最新commit世代を隔離stagingへ取得し、次をすべて検証してから一時復元物を消す。live volumeは変更しない。
+
+1. commitと暗号化manifestのSHA-256、AES-GCM認証tag
+2. 4 DBの平文SHA-256、`integrity_check`、service anchor table
+3. 全objectの平文SHA-256とsize
+4. 全article archive objectと全Episode audioのDB参照整合性
+
+| metric / alert | 意味 | 初動 |
+| --- | --- | --- |
+| `news_podcast_backup_last_success_timestamp_seconds` | 最後のcommit時刻 | generation prefixと構造化failure logを確認 |
+| `news_podcast_backup_generation_age_seconds` / `np-backup-rpo` | 最新世代age / 25時間超過 | source DB・SeaweedFS・外部S3を切り分ける |
+| `news_podcast_backup_failures_total` / `np-backup-failure` | backup失敗 | commitなしprefixを成功扱いしない |
+| `news_podcast_restore_drill_last_success_timestamp_seconds` / `np-backup-drill-stale` | drill成功時刻 / 8日超過 | 最新commitの復号、hash、参照失敗を確認 |
+| `news_podcast_restore_drill_failures_total` | drill失敗 | 鍵、retention、破損object、DB schemaを確認 |
+
+## 個別SQLite backup（限定用途）
+
+例はProduction。migration直前の短期退避などに限定し、これ単独をcoordinated generationと呼ばない。日時を固定した一意なfile名に置き換える。
 
 ```bash
 docker compose exec episode-production \
@@ -41,9 +104,9 @@ sha256sum backups/production-20260813T030000Z.sqlite
 
 - 同名destinationが存在すると失敗する。世代を暗黙に上書きしない。
 - backup後に`integrity_check`とprofile検査を自動実行する。
-- SQLite backupとS3 objectは別々の世代にしない。episode audio/article archiveを含むS3 snapshot IDとSQLite backup hashを同じ運用記録へ残す。
+- 災害復旧用には`state-backup`のcommit世代を使い、個別SQLiteとS3 objectを別々の世代として組み合わせない。
 
-## Restore drill / cutover
+## 障害時cutover
 
 まず外部保管したfileを対象volumeへ置き、live DBとは別名で復元する。
 
@@ -76,13 +139,13 @@ curl --fail --silent http://127.0.0.1:4104/health/ready
 
 readiness後にowner-scoped job GET/listと、外部副作用を起こさないread smokeを行う。失敗時はserviceを停止し、`production.pre-restore.sqlite`を元のpathへ戻す。成功確認と保管期間終了まではquarantine DBを削除しない。
 
-## 受け入れ記録
+## 復旧記録
 
 | 記録 | 必須値 |
 | --- | --- |
-| backup | service/profile、UTC日時、SHA-256、S3 snapshot ID |
-| restore | source SHA-256、復元先、`integrity_check`結果 |
-| smoke | readiness、owner-scoped read、件数/hash照合 |
+| backup | commit generation、UTC日時、manifest cipher SHA-256、source object generation |
+| restore | 4 DB SHA-256、全object hash/size、`integrity_check`結果 |
+| smoke | readiness、owner-scoped read、article archive、Episode audio参照照合 |
 | rollback | 実施有無、quarantine path、原因trace ID |
 
 ## Runtime障害の切り分け

@@ -71,6 +71,7 @@ flowchart LR
 | パス | レイヤー | 現在の責務 |
 | --- | --- | --- |
 | `apps/gateway` | Presentation / Integration | Effect HttpApi、認証proxy、NATS RPC adapter、OpenAPI正本 |
+| `apps/state-backup` | Operations / Durability | 4 SQLite + SeaweedFS同一世代、暗号化外部保管、restore drill、Prometheus metrics |
 | `apps/watchdog` | Operations | 全service health/freshness監視、Prometheus metrics、SMTP/構造化log通知state |
 | `apps/web` | Presentation | React、TanStack Router/Query、生成OpenAPI client |
 | `services/*` | Bounded Context | service内のdomain、application、adapter、runtime |
@@ -184,7 +185,7 @@ NATS RPCは共有payload schemaを`messageEnvelope`で包む。受信時にprodu
 | Grafana相関監視 | P0 done | 8 dashboard、Gateway Browser OTLP proxy、Episode state metrics、LGTM provisioning、smoke script |
 | Effect HttpApi Gateway | Done | 公開API parity、認証proxy、Gateway OpenAPI、functional E2E |
 | Web生成client | Done | Gateway生成型とproxyへ切替、Web E2E 13/13 |
-| state backup/recovery | Implemented | service種別検証、online backup、検証restore、rollback drill |
+| state backup/recovery | Implemented | 4 SQLite + object manifest、AES-256-GCM、off-host Object Lock、commit境界、全参照restore drill |
 | 旧実装 | Removed | source、workspace、Docker、CI、文書から物理削除 |
 
 削除内容と最終gateは[移行ガイド](functional-ddd-migration.md)を参照する。
@@ -398,6 +399,7 @@ supported runtimeはNode self-hostだけである（[ADR-0039](adr/0039-support-
 | 業務service | Identity、Content、Production、LibraryのNode process |
 | DB / messaging | service別SQLite / NATS JetStream |
 | object / TTS | SeaweedFS S3 / VOICEVOX |
+| state durability | `backup` profile / off-host immutable S3 / 24h RPO / weekly restore drill |
 | 起動定義 | `compose.yaml` |
 
 Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、事業要件、owner、contract suiteを揃えた後続ADRで新規設計する。
@@ -410,6 +412,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 | 認可 | 全 `/v1` resourceをowner scopeで検索し、他人のIDと存在しないIDをともに404へ正規化 |
 | API契約 | Effect HttpApi code-first OpenAPI、全operation利用条件、closed typed Problem union（公開detailなし）、Spectral 0件、生成型の差分検査 |
 | 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。BrowserはGatewayの相対OTLP proxyを経由し、Collector originを公開しない。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
+| 永続性 | 4 SQLiteとSeaweedFS inventoryを同じ暗号化manifestへ束ね、全成果物のimmutable Put後にだけcommitする。24時間RPO、4時間RTO、30成功世代、週次full restore drillをADR-0075で固定する |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |
@@ -446,6 +449,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0041: RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
 - [ADR-0042: 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
+- [ADR-0075: 4 SQLiteとObjectStoreをcommit marker付き同一世代で保護する](adr/0075-coordinate-durable-state-backup-generations.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
 - [ADR-0015: Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)

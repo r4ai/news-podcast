@@ -27,6 +27,7 @@ news-podcast-app/
 
 # Local generated credentials (never commit)
 .codex/state/
+.secrets/
 
 # turbo
 .turbo
