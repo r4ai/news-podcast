@@ -194,14 +194,13 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
               )
             },
           })
-          return result._tag === "Updated"
-            ? ({
-                _tag: "Canceled" as const,
-                job: Schema.decodeUnknownSync(EpisodeJobSchema)(
-                  JSON.parse(result.document) as unknown
-                ),
-              } as const)
-            : result
+          if (result._tag !== "Updated") return result
+          const job = Schema.decodeUnknownSync(EpisodeJobSchema)(
+            JSON.parse(result.document) as unknown
+          )
+          if (job._tag !== "Canceled")
+            throw new Error("cancellation did not persist a canceled job")
+          return { _tag: "Canceled" as const, job } as const
         },
         catch: (cause) => persistenceError("cancel-owned-job", cause),
       }),

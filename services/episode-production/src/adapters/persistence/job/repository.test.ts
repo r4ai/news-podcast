@@ -419,6 +419,10 @@ describe("SQLite job repository", () => {
           const leaseExit = yield* Effect.exit(
             execution.assertLease({ jobId: queued.jobId, leaseToken: token })
           )
+          const cancellation = yield* execution.checkCancellation({
+            jobId: queued.jobId,
+            leaseToken: token,
+          })
           const events = yield* repository.listOwnedAgUiEvents({
             ownerId: command.ownerId,
             jobId: queued.jobId,
@@ -431,7 +435,15 @@ describe("SQLite job repository", () => {
             afterSequence: events[2]!.sequence,
             limit: 100,
           })
-          return { hidden, canceled, terminal, leaseExit, events, resumed }
+          return {
+            hidden,
+            canceled,
+            terminal,
+            leaseExit,
+            cancellation,
+            events,
+            resumed,
+          }
         })
       )
     )
@@ -443,6 +455,10 @@ describe("SQLite job repository", () => {
     })
     expect(result.terminal).toEqual({ _tag: "Terminal" })
     expect(result.leaseExit._tag).toBe("Failure")
+    expect(result.cancellation).toMatchObject({
+      _tag: "Canceled",
+      canceledAt: at,
+    })
     expect(
       result.events.map((event) => (event.event as { type: string }).type)
     ).toEqual([

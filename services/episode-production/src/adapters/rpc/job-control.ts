@@ -316,6 +316,9 @@ export const handleCancelJobRpc =
       jobId: JobId,
       canceledAt: UtcTimestamp
     ) => Effect.Effect<CancelOwnedJobResult, StorageError>
+    readonly onCanceled?: (
+      job: Extract<EpisodeJob, { _tag: "Canceled" }>
+    ) => void
     readonly replyDependencies: JobControlRpcReplyDependencies
   }) =>
   <ReplyError>(delivery: JobControlRpcDelivery<ReplyError>) =>
@@ -328,6 +331,11 @@ export const handleCancelJobRpc =
         ports.now.pipe(
           Effect.flatMap((now) =>
             ports.cancelOwned(ownerId, decodeJobId(request.jobId), now)
+          ),
+          Effect.tap((result) =>
+            result._tag === "Canceled"
+              ? Effect.sync(() => ports.onCanceled?.(result.job))
+              : Effect.void
           ),
           Effect.map((result): EpisodeJobControlReply => {
             switch (result._tag) {

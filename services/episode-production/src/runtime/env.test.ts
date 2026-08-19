@@ -33,6 +33,7 @@ describe("Episode Production environment configuration", () => {
     expect(config.voicevox.maximumTextCharactersPerRequest).toBe(200)
     expect(config.completionRelay.batchSize).toBe(50)
     expect(config.worker.heartbeatMillis).toBe(60_000)
+    expect(config.worker.cancellationPollMillis).toBe(250)
     expect(Object.isFrozen(config.s3)).toBe(true)
   })
 
@@ -86,6 +87,27 @@ describe("Episode Production environment configuration", () => {
         S3_SECRET_ACCESS_KEY: "secret",
         EPISODE_WORKER_LEASE_MS: "300000",
         EPISODE_WORKER_HEARTBEAT_MS: "100001",
+      })
+    )
+
+    expect(exit._tag).toBe("Failure")
+  })
+
+  it("rejects cancellation polling above the provider-abort SLA", async () => {
+    const exit = await Effect.runPromiseExit(
+      readEpisodeProductionServiceConfig({
+        EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
+        NATS_SERVERS: "nats://nats:4222",
+        EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
+        PROVIDER_MODE: "fake",
+        VOICEVOX_BASE_URL: "http://voicevox:50021",
+        VOICEVOX_CHARACTER_NAME: "test",
+        S3_ENDPOINT: "http://seaweedfs:8333",
+        S3_REGION: "us-east-1",
+        S3_BUCKET: "news-podcast",
+        S3_ACCESS_KEY_ID: "access",
+        S3_SECRET_ACCESS_KEY: "secret",
+        EPISODE_WORKER_CANCELLATION_POLL_MS: "5001",
       })
     )
 

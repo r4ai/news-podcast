@@ -13,6 +13,7 @@ import {
   CreateJobCommandSchema,
   JobIdSchema,
   UtcTimestampSchema,
+  cancelJob,
   failRunningJob,
   leaseQueuedJob,
   newQueuedJob,
@@ -155,6 +156,48 @@ describe("episode job-control NATS RPC", () => {
       { _tag: "NotFound" },
       { _tag: "Conflict", code: "JOB_TERMINAL" },
     ])
+  })
+
+  it("notifies the local worker after durable cancellation and before replying", async () => {
+    const order: string[] = []
+    const running = leaseQueuedJob(queued, {
+      token: "lease-1" as never,
+      startedAt: now,
+      leasedUntil: now,
+    })
+    const canceled = cancelJob(running, {
+      canceledAt: now,
+      reason: "requested_by_user",
+    })
+    const replies: string[] = []
+    const handler = handleCancelJobRpc({
+      cancelOwned: () =>
+        Effect.sync(() => {
+          order.push("persisted")
+          return { _tag: "Canceled" as const, job: canceled }
+        }),
+      onCanceled: (job) => {
+        order.push("notified")
+        expect(job).toBe(canceled)
+      },
+      now: Effect.succeed(now),
+      replyDependencies,
+    })
+    const request = delivery(envelope({ jobId }), replies)
+
+    await Effect.runPromise(
+      handler({
+        ...request,
+        reply: (payload) =>
+          Effect.sync(() => {
+            order.push("replied")
+            replies.push(payload)
+          }),
+      })
+    )
+
+    expect(order).toEqual(["persisted", "notified", "replied"])
+    expect(replyPayload(replies[0]!)).toMatchObject({ _tag: "Canceled" })
   })
 
   it("returns a new queued projection for a retry", async () => {

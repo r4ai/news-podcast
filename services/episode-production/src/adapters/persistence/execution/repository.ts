@@ -6,6 +6,7 @@ import type {
   EpisodeExecutionCheckpoint,
   EpisodeExecutionPorts,
   LeaseNextInput,
+  LeaseToken,
   LeaseFailure,
   PipelineFailure,
   StoredAudioCheckpoint,
@@ -369,6 +370,24 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
                 recovered: row.recovered,
               })
         )
+      ),
+    checkCancellation: (input: { jobId: JobId; leaseToken: LeaseToken }) =>
+      tryPersistence("check_cancellation", () =>
+        handle.findById(input.jobId)
+      ).pipe(
+        Effect.map((document) => {
+          if (document === undefined)
+            return deepFreeze({ _tag: "StaleLease" as const })
+          const job = decodeJob(parseJson(document))
+          if (job._tag === "Canceled")
+            return deepFreeze({
+              _tag: "Canceled" as const,
+              canceledAt: job.canceledAt,
+            })
+          return job._tag === "Running" && job.lease.token === input.leaseToken
+            ? deepFreeze({ _tag: "Current" as const })
+            : deepFreeze({ _tag: "StaleLease" as const })
+        })
       ),
     findById: (jobId: JobId) =>
       tryPersistence("find_job", () => handle.findById(jobId)).pipe(

@@ -64,6 +64,12 @@ export type NodeCreateJobRpcDependencies = DeepReadonly<{
   readonly newJobId: () => JobId
   readonly now: () => UtcTimestamp
   readonly onReady?: () => void
+  readonly onJobCanceled?: (
+    job: Extract<
+      import("../domain/episode-job.js").EpisodeJob,
+      { _tag: "Canceled" }
+    >
+  ) => void
 }>
 
 export const defaultNodeCreateJobRpcDependencies: NodeCreateJobRpcDependencies =
@@ -215,6 +221,7 @@ export const runNodeProductionRpc = (
               handleCancelJobRpc({
                 now,
                 cancelOwned: repository.cancelOwned,
+                onCanceled: dependencies.onJobCanceled,
                 replyDependencies,
               }),
             ],

@@ -23,7 +23,10 @@ export type OwnerScopedJobQueryPorts<Error = never> = Readonly<{
 }>
 
 export type CancelOwnedJobResult =
-  | Readonly<{ readonly _tag: "Canceled"; readonly job: EpisodeJob }>
+  | Readonly<{
+      readonly _tag: "Canceled"
+      readonly job: Extract<EpisodeJob, { _tag: "Canceled" }>
+    }>
   | Readonly<{ readonly _tag: "NotFound" }>
   | Readonly<{ readonly _tag: "Terminal" }>
 

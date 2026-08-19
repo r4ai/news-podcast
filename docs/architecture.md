@@ -192,6 +192,11 @@ sequenceDiagram
   Production-->>Gateway: durable AG-UI events
   Gateway-->>Web: SSE + Last-Event-ID
   Production->>Providers: Effect AI strict output → 音声合成
+  opt 利用者が実行中jobをcancel
+    Gateway->>Production: cancel RPC
+    Production->>Production: SQLite Canceled commit + token fence
+    Production-xProviders: 同一process即時 / 別process最大5秒でAbortSignal
+  end
   Production->>Objects: WAVを保存
   Production->>Library: durable completion event
   Web->>Gateway: GET /v1/episodes/{id}/audio<br/>Range: bytes=...
@@ -386,4 +391,5 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0069: 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070: Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
 - [ADR-0071: ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
+- [ADR-0072: Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

@@ -1,8 +1,30 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { recordEpisodeWorkerEvent } from "./worker-observability.js"
+import {
+  recordCancellationPropagation,
+  recordEpisodeWorkerEvent,
+} from "./worker-observability.js"
 
 describe("episode worker observability", () => {
+  it("measures cancel-to-provider-abort latency with a bounded source tag", () => {
+    const measure = vi.fn()
+
+    recordCancellationPropagation(
+      { measure },
+      {
+        jobId: "job-1" as never,
+        source: "poll",
+        latencyMillis: 250,
+      }
+    )
+
+    expect(measure).toHaveBeenCalledWith(
+      "episode.cancellation.propagation.duration",
+      250,
+      { source: "poll" }
+    )
+  })
+
   it.each([
     [
       "Retrying",
