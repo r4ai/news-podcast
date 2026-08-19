@@ -43,5 +43,6 @@ export type FeedSyncOutcome = Readonly<{
   readonly discovered: number
   readonly archived: number
   readonly failed: number
+  readonly failureScope?: "Feed" | "Item"
   readonly error?: string
 }>

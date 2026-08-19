@@ -86,6 +86,7 @@ export const runFeedSyncCycle =
                           discovered: 0,
                           archived: 0,
                           failed: 1,
+                          failureScope: "Feed",
                           error: failureReason(failure),
                         },
                         ports.now()
@@ -102,6 +103,7 @@ export const runFeedSyncCycle =
                                 failures: [
                                   deepFreeze({
                                     _tag: "FeedPollFailed" as const,
+                                    scope: "Feed" as const,
                                     reason: "Unavailable" as const,
                                   }),
                                 ],
@@ -119,6 +121,15 @@ export const runFeedSyncCycle =
                           discovered: outcome.discovered,
                           archived: outcome.archived,
                           failed: outcome.failed,
+                          ...(outcome.failed === 0
+                            ? {}
+                            : {
+                                failureScope: outcome.failures.some(
+                                  (failure) => failure.scope === "Feed"
+                                )
+                                  ? ("Feed" as const)
+                                  : ("Item" as const),
+                              }),
                           ...(outcome.failures[0] === undefined
                             ? {}
                             : { error: outcome.failures[0].reason }),
