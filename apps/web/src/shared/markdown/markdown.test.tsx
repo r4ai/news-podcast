@@ -43,6 +43,22 @@ describe("Markdown", () => {
     expect(checkboxes[1].getAttribute("aria-checked")).toBe("false")
   })
 
+  it("draws the table outline once, on the wrapper only", async () => {
+    const { container } = await renderMarkdown(
+      "| a | b |\n| --- | --- |\n| 1 | 2 |"
+    )
+
+    const table = container.querySelector("table")
+    // 外周は角丸の入れ物だけが持つ。セルまで枠を持つと角丸のすぐ内側へ
+    // もう一本線が並び、二重の枠に見えてしまう。
+    const outline = table?.parentElement?.parentElement
+    expect(outline?.className).toContain("rounded-md")
+    expect(outline?.className).toContain("border")
+    for (const cell of Array.from(container.querySelectorAll("th, td"))) {
+      expect(cell.className).not.toMatch(/(^|\s)border(\s|$)/)
+    }
+  })
+
   it("renders a GitHub-alert callout with the matching role and type", async () => {
     await renderMarkdown("> [!WARNING]\n> 気をつけて。")
 

@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Content Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: [ADR-0012](adr/0012-rss-reader-web-archive.md)、[ADR-0002](adr/0002-openapi-async-jobs.md)、`GET /v1/me/feed-sync-jobs`、`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`
+- Related: [ADR-0012](adr/0012-rss-reader-web-archive.md)、[ADR-0002](adr/0002-openapi-async-jobs.md)、[ADR-0068](0068-isolate-feed-item-sync-failures.md)、`GET /v1/me/feed-sync-jobs`、`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`
 
 ## Context and change trigger
 
@@ -36,7 +36,7 @@ flowchart LR
   Content -->|status/counts| Web
 ```
 
-公開APIはowner-scopedな`GET /v1/me/feed-sync-jobs`と、ownerが有効な購読を明示的に同じキューへ再投入する`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`（202）とする。手動同期は登録時と同じfeed単位のjobを再利用し、queued / processing中のjobは重複投入せず、完了・失敗済みjobは再試行可能なqueuedへ戻す。Webはqueued/processing中だけ短い間隔で状態と記事一覧を再取得し、状態を購読画面と記事一覧へ表示する。
+公開APIはowner-scopedな`GET /v1/me/feed-sync-jobs`と、ownerが有効な購読を明示的に同じキューへ再投入する`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`（202）とする。手動同期は登録時と同じfeed単位のjobを再利用し、queued / processing中のjobは重複投入せず、完了・失敗済みjobは再試行可能なqueuedへ戻す。Webはqueued/processing中だけ短い間隔で状態と記事一覧を再取得し、状態を購読画面と記事一覧へ表示する。個別記事のarchive失敗はfeed全体の失敗と分離し、後続の定期同期を継続する。詳細は[ADR-0068](0068-isolate-feed-item-sync-failures.md)を正本とする。
 
 ## Decision drivers
 
