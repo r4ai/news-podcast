@@ -29,7 +29,8 @@ export const CreateJobCommandSchema = Schema.Struct({
   articleIds: Schema.optional(
     Schema.Array(ArticleIdSchema).check(
       Schema.isMinLength(1),
-      Schema.isMaxLength(20)
+      Schema.isMaxLength(20),
+      Schema.isUnique()
     )
   ),
 })
