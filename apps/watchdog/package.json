@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@news-podcast/persistence": "workspace:*",
+    "effect": "4.0.0-rc.109",
     "nodemailer": "9.0.1"
   },
   "devDependencies": {

@@ -22,10 +22,7 @@ import {
   OwnerIdSchema,
   SubscriptionIdSchema,
 } from "../domain/subscription.js"
-import {
-  parseJsonUnsafe,
-  stringifyJsonUnsafe,
-} from "../infrastructure/unsafe/json.js"
+import { stringifyJsonUnsafe } from "../infrastructure/unsafe/json.js"
 import { openTestDatabase, type TestDatabase } from "./persistence/testing.js"
 import { createArchiveStore } from "./persistence/archive/repository.js"
 import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
@@ -55,12 +52,9 @@ const setup = async () => {
   const subscriptions = await Effect.runPromise(
     createSubscriptionRepository(database.db)
   )
-  const catalog = await Effect.runPromise(
-    createArticleCatalog(database.db, { parse: parseJsonUnsafe })
-  )
+  const catalog = await Effect.runPromise(createArticleCatalog(database.db))
   const archiveStore = await Effect.runPromise(
     createArchiveStore(database.db, {
-      parse: parseJsonUnsafe,
       stringify: stringifyJsonUnsafe,
     })
   )

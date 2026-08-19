@@ -1,4 +1,9 @@
-import { deepFreeze, parse } from "@news-podcast/kernel"
+import { deepFreeze } from "@news-podcast/kernel"
+import {
+  decodePersistedJson,
+  decodePersistedJsonSync,
+  isDatabaseError,
+} from "@news-podcast/persistence"
 import { Effect, Schema } from "effect"
 
 import {
@@ -17,7 +22,7 @@ import type { SqliteJobHandle } from "./ports.js"
 
 const encodeJob = Schema.encodeSync(EpisodeJobSchema)
 const encodeTimestamp = Schema.encodeSync(UtcTimestampSchema)
-const parseJob = parse(EpisodeJobSchema)
+const PersistedAgUiEventSchema = Schema.Record(Schema.String, Schema.Unknown)
 
 export type IdempotencyConflict = Readonly<{
   readonly _tag: "IdempotencyConflict"
@@ -26,13 +31,16 @@ export type IdempotencyConflict = Readonly<{
 }>
 
 const persistenceError = (operation: string, cause: unknown) =>
-  deepFreeze({ _tag: "PersistenceError" as const, operation, cause })
+  deepFreeze({
+    _tag: "PersistenceError" as const,
+    operation,
+    reason: isDatabaseError(cause) ? cause.reason : ("Unavailable" as const),
+  })
 
 const decodeDocument = (document: string) =>
-  Effect.try({
-    try: () => JSON.parse(document) as unknown,
-    catch: (cause) => persistenceError("decode-job-json", cause),
-  }).pipe(Effect.flatMap(parseJob))
+  decodePersistedJson("episode_jobs.document", EpisodeJobSchema, document).pipe(
+    Effect.mapError((cause) => persistenceError("decode-job-json", cause))
+  )
 
 const repositoryFromHandle = (handle: SqliteJobHandle) => {
   const save = (
@@ -182,7 +190,11 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             try: () =>
               rows.map((row) => ({
                 sequence: row.sequence,
-                event: JSON.parse(row.payload) as unknown,
+                event: decodePersistedJsonSync(
+                  "episode_job_agui_events.payload",
+                  PersistedAgUiEventSchema,
+                  row.payload
+                ),
               })),
             catch: (cause) => persistenceError("decode-agui-event", cause),
           })
@@ -195,8 +207,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             ownerId,
             jobId,
             replace: (document) => {
-              const current = Schema.decodeUnknownSync(EpisodeJobSchema)(
-                JSON.parse(document) as unknown
+              const current = decodePersistedJsonSync(
+                "episode_jobs.document",
+                EpisodeJobSchema,
+                document
               )
               if (
                 current._tag !== "Queued" &&
@@ -218,8 +232,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             },
           })
           if (result._tag !== "Updated") return result
-          const job = Schema.decodeUnknownSync(EpisodeJobSchema)(
-            JSON.parse(result.document) as unknown
+          const job = decodePersistedJsonSync(
+            "episode_jobs.document",
+            EpisodeJobSchema,
+            result.document
           )
           if (job._tag !== "Canceled")
             throw new Error("cancellation did not persist a canceled job")

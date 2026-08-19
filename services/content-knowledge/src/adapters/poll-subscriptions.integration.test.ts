@@ -27,10 +27,7 @@ import { createArchiveStore } from "./persistence/archive/repository.js"
 import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
 import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
 import { openTestDatabase } from "./persistence/testing.js"
-import {
-  parseJsonUnsafe,
-  stringifyJsonUnsafe,
-} from "../infrastructure/unsafe/json.js"
+import { stringifyJsonUnsafe } from "../infrastructure/unsafe/json.js"
 import { archiveArticle } from "../application/archive-article.js"
 import { pollSubscriptions } from "../application/poll-subscriptions.js"
 import { deriveArticleIdentityUnsafe } from "../infrastructure/unsafe/identity.js"
@@ -183,13 +180,10 @@ describe("pollSubscriptions integration", () => {
       )
       const archiveStore = await Effect.runPromise(
         createArchiveStore(database.db, {
-          parse: parseJsonUnsafe,
           stringify: stringifyJsonUnsafe,
         })
       )
-      const catalog = await Effect.runPromise(
-        createArticleCatalog(database.db, { parse: parseJsonUnsafe })
-      )
+      const catalog = await Effect.runPromise(createArticleCatalog(database.db))
       await Effect.runPromise(
         subscriptions.add({
           subscriptionId: decode(
