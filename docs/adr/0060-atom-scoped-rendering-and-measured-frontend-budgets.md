@@ -73,6 +73,20 @@ flowchart TD
 - **critical pathには初回のフレームに要るものだけを置く。** それ以外は動的importにする。ただし遅延で観測が欠けてはならない（ADR-0025）。OTelは`pre-init-fetch`が計装前のfetchを記録し、SDKが載った時点で実時刻のままspanへ起こす。
 - **予算はテストに書く。** 描画回数はVitest（`shared/test/render-count`）、Web Vitalsとバンドルは本番ビルドへの実測（`tests/perf`、`scripts/measure-bundle.ts`）。
 
+2026-08-20以降、決定的なbundle予算はrequiredな`static` jobでblocking検査する。初期ロードは`index.html`が宣言する資産、dashboard/articles/library/subscriptions/schedule/settingsはVite manifestのroute chunkと静的依存を再帰的に集め、初期資産との重複を除外する。Web Vitalsだけを共有runnerの揺らぎがある非blocking計測として残す。
+
+```mermaid
+flowchart LR
+  Build["production build + manifest"] --> Initial["index.html初期資産"]
+  Build --> Routes["6 routeの静的依存"]
+  Initial --> Gate["blocking gzip budget"]
+  Routes --> Gate
+  Gate --> Summary["baseline → current → budget"]
+  Vitals["Web Vitals"] -. noisy / non-blocking .-> Summary
+```
+
+予算は`bundle-budgets.ts`でbaseline、上限、変更理由を不可分に管理し、未記載をテストで拒否する。CI summaryで計測差と残量をレビューできるようにする。production buildが無い単独実行はbuild手順を示して失敗する。
+
 計測の条件は固定する。本番ビルドを`vite preview`で配り、CPUを4倍抑制、Slow 4G相当（1.6 Mbps / 150 ms）、**キャッシュが空のcontext**で初回訪問を測る。ログイン後のページ内遷移を測ると初期chunkは既にキャッシュにあり、バンドルを削っても数字が動かない。
 
 ## 判断要因
@@ -120,7 +134,7 @@ flowchart TD
 - server stateの読み方が2種類ある。「suspendするか」で選ぶという規則を守る必要がある。境界を跨ぐときは`Panel`に投げるべき失敗かをその都度判断する（ADR-0047の注意点がそのまま効く）。
 - `atomFamily`は引数の同一性で要素を持つ。絞り込み条件のような物体を鍵にする場合、`keyedAtomFamily`で値としての同一性を明示しないと購読が張り直しになる。
 - OTelが初回フレームの後ろへ回るため、SDK到着前のfetchのspanは`pre-init-fetch`が起こしたものになる。`otel.instrumentation.deferred`属性が付き、自動計装のspanと属性が完全には揃わない。
-- 計測はCIで非ブロッキングなので、数字の悪化は人が見ないと気づかない。
+- Web VitalsはCIで非ブロッキングなので、タイミング値の悪化は人が計測ログを確認する必要がある。決定的なbundle超過はmergeをブロックする。
 
 ## 影響と同期
 
@@ -135,7 +149,7 @@ flowchart TD
 | 認証/セキュリティ | better-authのclientをGoogleログイン時まで遅延。認証状態の確認は素のfetchのまま | Done | `apps/web/src/features/auth/api/auth-state.ts` |
 | 認証/セキュリティ（観測） | 計装前のfetchを記録し、SDK到着時にspanへ起こす | Done | `apps/web/src/shared/observability/pre-init-fetch.ts` |
 | フロント/品質保証 | 描画回数の回帰テスト、axe検査の全ページ化、スキップリンクとlive region | Done | `apps/web/src/shared/test/render-count.tsx`、`apps/web/tests/e2e/accessibility.spec.ts` |
-| テスト/運用 | Web Vitalsとバンドル予算をCIへ（非ブロッキング） | Done | `.github/workflows/ci.yml` の `web-e2e` 内performance step |
+| テスト/運用 | Web Vitalsは非blocking、bundle予算はrequired `static` jobへ分離 | Done | `.github/workflows/ci.yml`、`apps/web/scripts/measure-bundle.ts` |
 
 ## 再検討条件
 
@@ -152,8 +166,8 @@ flowchart TD
 ## 検証証拠
 
 - `pnpm --filter web typecheck` / `lint` / `format:check`
-- `pnpm --filter web test`（402 passed。検索打鍵と件数更新での再描画0回を含む）
-- `pnpm --filter web test:e2e`（28 passed。全ページのaxe検査、スキップリンク、live regionを含む）
+- `pnpm --filter web test`（627 passed。bundle予算5件を含む）
+- `pnpm --filter web test:e2e`（35 passed。全ページのaxe検査、スキップリンク、live regionを含む）
 - `pnpm --filter web perf:vitals`（3 passed。予算内）
-- `pnpm --filter web perf:bundle`（219.5 kB / 予算 240 kB）
+- `pnpm --filter web perf:bundle`（初期244.6 / 256 kB、6主要routeすべて予算内）
 - `pnpm --filter web build` / `build-storybook`

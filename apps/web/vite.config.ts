@@ -18,6 +18,11 @@ const apiProxy = {
 
 // https://vite.dev/config/
 export default defineConfig({
+  build: {
+    // Bundle budgets resolve source routes to hashed output chunks through this
+    // deterministic build artifact. Browser entrypoints do not reference it.
+    manifest: true,
+  },
   plugins: [
     tanstackRouter({ autoCodeSplitting: true }),
     react(),
