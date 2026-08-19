@@ -3,10 +3,10 @@ import { and, eq, not, sql } from "drizzle-orm"
 import { Effect } from "effect"
 
 import {
+  articleOwnerAccess,
   contentEnrichmentQueue,
   contentEnrichmentResults,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type {
   EnqueueEnrichmentResult,
@@ -80,11 +80,11 @@ export const makeEnqueueing = (
                   eq(feedItems.articleId, contentEnrichmentResults.articleId)
                 )
                 .innerJoin(
-                  feedSubscriptions,
+                  articleOwnerAccess,
                   and(
-                    eq(feedSubscriptions.feedId, feedItems.feedId),
+                    eq(articleOwnerAccess.articleId, feedItems.articleId),
                     eq(
-                      feedSubscriptions.ownerId,
+                      articleOwnerAccess.ownerId,
                       contentEnrichmentResults.ownerId
                     )
                   )

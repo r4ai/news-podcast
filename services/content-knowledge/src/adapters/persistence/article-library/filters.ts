@@ -1,12 +1,12 @@
 import { and, eq, gt, inArray, lt, or, sql, type SQL } from "drizzle-orm"
 
 import {
+  articleOwnerAccess,
   articleOwnerStates,
   articleSnapshots,
   contentArticleTags,
   contentTags,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type { ArticleListQuery } from "../../../application/article-library.js"
 import { decodeArticleCursor } from "../../../domain/article-library.js"
@@ -58,7 +58,7 @@ export const queryFilters = (query: LibraryFilter): readonly SQL[] => {
           INNER JOIN ${contentTags}
             ON ${contentTags.ownerId} = ${contentArticleTags.ownerId}
            AND ${contentTags.tagId} = ${contentArticleTags.tagId}
-          WHERE ${contentArticleTags.ownerId} = ${feedSubscriptions.ownerId}
+          WHERE ${contentArticleTags.ownerId} = ${articleOwnerAccess.ownerId}
             AND ${contentArticleTags.articleId} = ${feedItems.articleId}
             AND ${contentTags.name} LIKE ${pattern} ESCAPE '\\'
         )`

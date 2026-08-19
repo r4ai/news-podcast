@@ -99,6 +99,26 @@ export const articleOwnerStates = sqliteTable(
   ]
 )
 
+/** 購読解除後も保持する、ownerが一度取り込んだ記事への恒久アクセス権。 */
+export const articleOwnerAccess = sqliteTable(
+  "article_owner_access",
+  {
+    ownerId: text("owner_id").notNull(),
+    articleId: text("article_id")
+      .notNull()
+      .references(() => feedItems.articleId, { onDelete: "cascade" }),
+    acquiredAt: text("acquired_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ownerId, table.articleId] }),
+    index("article_owner_access_owner").on(
+      table.ownerId,
+      table.acquiredAt,
+      table.articleId
+    ),
+  ]
+)
+
 // ---------------------------------------------------------------------------
 // アーカイブと送信アウトボックス
 // ---------------------------------------------------------------------------

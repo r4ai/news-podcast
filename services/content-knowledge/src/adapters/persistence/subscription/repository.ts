@@ -2,7 +2,12 @@ import { deepFreeze, parse } from "@news-podcast/kernel"
 import { and, asc, eq, exists, like, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
-import { feedCatalog, feedSubscriptions } from "../../../../drizzle/schema.js"
+import {
+  articleOwnerAccess,
+  feedCatalog,
+  feedItems,
+  feedSubscriptions,
+} from "../../../../drizzle/schema.js"
 import type {
   SubscriptionRepository,
   SubscriptionStateResult,
@@ -124,6 +129,23 @@ export const createSubscriptionRepository = (
                 target: [feedSubscriptions.ownerId, feedSubscriptions.feedId],
               })
               .run()
+
+            const articles = tx
+              .select({ articleId: feedItems.articleId })
+              .from(feedItems)
+              .where(eq(feedItems.feedId, feed.feedId))
+              .all()
+            if (articles.length > 0)
+              tx.insert(articleOwnerAccess)
+                .values(
+                  articles.map(({ articleId }) => ({
+                    ownerId: subscription.ownerId,
+                    articleId,
+                    acquiredAt: subscription.createdAt,
+                  }))
+                )
+                .onConflictDoNothing()
+                .run()
 
             const row = tx
               .select(subscriptionProjection)

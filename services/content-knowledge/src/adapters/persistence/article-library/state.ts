@@ -2,10 +2,10 @@ import { and, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
+  articleOwnerAccess,
   articleOwnerStates,
   articleSnapshots,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type { ArticleLibraryRepository } from "../../../application/article-library.js"
 import type {
@@ -14,9 +14,9 @@ import type {
 } from "../../../infrastructure/unsafe/drizzle/open.js"
 import { queryFilters } from "./filters.js"
 import {
+  accessibleByOwner,
   failure,
   latestSnapshotOfArticle,
-  ownedBySubscription,
   ownerStateOfArticle,
 } from "./projection.js"
 
@@ -109,12 +109,12 @@ export const makeArticleState = (
             const selected = tx
               .select({ articleId: feedItems.articleId })
               .from(feedItems)
-              .innerJoin(feedSubscriptions, ownedBySubscription)
+              .innerJoin(articleOwnerAccess, accessibleByOwner)
               .leftJoin(articleOwnerStates, ownerStateOfArticle)
               .leftJoin(articleSnapshots, latestSnapshotOfArticle)
               .where(
                 and(
-                  eq(feedSubscriptions.ownerId, ownerId),
+                  eq(articleOwnerAccess.ownerId, ownerId),
                   ...queryFilters(query)
                 )
               )

@@ -22,6 +22,7 @@ const TABLES = [
   "feed_subscriptions",
   "feed_items",
   "article_owner_states",
+  "article_owner_access",
   "article_snapshots",
   "feed_sync_jobs",
   "content_interest_profiles",
@@ -162,5 +163,45 @@ describe("content-knowledge migrated schema", () => {
 
   it("indexes the latest snapshot lookup that replaced json_extract", () => {
     expect(schemaSql().get("article_snapshots_latest")).toContain("article_id")
+  })
+
+  it("backfills durable article access before subscriptions can be removed", () => {
+    const database = new DatabaseSync(":memory:")
+    try {
+      for (const migration of [
+        "20260815015622_init",
+        "20260815070952_sudden_leo",
+        "20260815135150_jittery_makkari",
+        "20260816162331_eminent_forge",
+      ])
+        database.exec(readMigration(migration))
+      database.exec(`
+        INSERT INTO feed_catalog VALUES
+          ('feed-1', 'https://example.test/feed.xml', '2026-08-15T00:00:00Z');
+        INSERT INTO feed_subscriptions VALUES
+          ('sub-1', 'owner-1', 'feed-1', '2026-08-15T00:00:00Z', 1);
+        INSERT INTO feed_items VALUES
+          ('article-1', 'feed-1', 'entry-1', 'https://example.test/1',
+           'Article 1', NULL, '2026-08-15T01:00:00Z');
+      `)
+
+      database.exec(readMigration("20260819135811_yielding_queen_noir"))
+      database.exec(
+        "DELETE FROM feed_subscriptions WHERE subscription_id = 'sub-1'"
+      )
+
+      expect(
+        database
+          .prepare(
+            "SELECT owner_id, article_id FROM article_owner_access ORDER BY article_id"
+          )
+          .all()
+      ).toEqual([{ owner_id: "owner-1", article_id: "article-1" }])
+      expect(database.prepare("PRAGMA integrity_check").get()).toEqual({
+        integrity_check: "ok",
+      })
+    } finally {
+      database.close()
+    }
   })
 })

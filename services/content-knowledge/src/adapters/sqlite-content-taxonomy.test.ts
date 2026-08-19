@@ -29,6 +29,7 @@ const setup = async () => {
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-a', 'owner-a', 'feed-a', '${now}');
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-b', 'owner-b', 'feed-b', '${now}');
     INSERT INTO feed_items VALUES ('${articleA}', 'feed-a', 'a', 'https://a.example/a', 'A', NULL, '${now}');
+    INSERT INTO article_owner_access VALUES ('owner-a', '${articleA}', '${now}');
   `)
   const repository = await Effect.runPromise(
     createContentTaxonomyRepository(database.db)

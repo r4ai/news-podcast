@@ -67,6 +67,11 @@ describe("SubscriptionItem", () => {
 
     await user.click(screen.getByRole("button", { name: "Zennの操作" }))
     await user.click(await screen.findByRole("menuitem", { name: "削除" }))
+    expect(
+      await screen.findByText(
+        "Zennは次回以降の同期と番組へ含まれなくなります。保存済みの記事と過去のエピソードの出典は残ります。"
+      )
+    ).toBeTruthy()
     await user.click(await screen.findByRole("button", { name: "削除する" }))
 
     expect(onRemove).toHaveBeenCalledOnce()

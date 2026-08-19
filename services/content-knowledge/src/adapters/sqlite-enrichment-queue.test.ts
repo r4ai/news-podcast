@@ -30,6 +30,7 @@ const setup = async () => {
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-a', 'owner-a', 'feed-a', '${now}');
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-b', 'owner-b', 'feed-b', '${now}');
     INSERT INTO feed_items VALUES ('${articleId}', 'feed-a', 'a', 'https://a.example/a', 'A', NULL, '${now}');
+    INSERT INTO article_owner_access VALUES ('owner-a', '${articleId}', '${now}');
     INSERT INTO article_snapshots(archive_request_id, snapshot_id, article_id, snapshot_json, captured_at) VALUES (
       'request-a', 'snapshot-a', '${articleId}',
       '{"articleId":"${articleId}","capture":{"markdown":{"key":"articles/a/article.md"}}}',
