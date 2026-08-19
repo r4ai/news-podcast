@@ -124,6 +124,44 @@ describe("pollSubscriptions integration", () => {
     })
   })
 
+  it("aggregates a large invalid-item result within a bounded cycle", async () => {
+    const invalidCount = 20_000
+    const result = await Effect.runPromise(
+      pollSubscriptions({
+        subscriptions: {
+          listFeedsForPolling: () =>
+            Effect.succeed([
+              {
+                feedId: "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd",
+                feedUrl: "https://feeds.example.com/news.xml",
+              },
+            ] as never),
+        },
+        reader: {
+          read: () =>
+            Effect.succeed({
+              items: [],
+              failures: Array.from({ length: invalidCount }, () => ({
+                _tag: "FeedItemValidationFailed" as const,
+                reason: "MissingLink" as const,
+              })),
+            }),
+        },
+        archive: vi.fn(),
+        deriveArticleIdentity: vi.fn(),
+        newContext: vi.fn(),
+        now: vi.fn(),
+      })()
+    )
+
+    expect(result).toMatchObject({
+      feeds: 1,
+      discovered: invalidCount,
+      failed: invalidCount,
+    })
+    expect(result.failures).toHaveLength(invalidCount)
+  }, 500)
+
   it("keeps retries idempotent but snapshots an updated same-GUID item", async () => {
     let version = "v1"
     const server = createServer((_request, response) =>

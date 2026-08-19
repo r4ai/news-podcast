@@ -80,15 +80,30 @@ const empty = (): FeedPollResult =>
     failures: [],
   })
 
-const combine = (left: FeedPollResult, right: FeedPollResult): FeedPollResult =>
-  deepFreeze({
-    feeds: left.feeds + right.feeds,
-    discovered: left.discovered + right.discovered,
-    archived: left.archived + right.archived,
-    alreadyArchived: left.alreadyArchived + right.alreadyArchived,
-    failed: left.failed + right.failed,
-    failures: [...left.failures, ...right.failures],
+const aggregate = (results: readonly FeedPollResult[]): FeedPollResult => {
+  let feeds = 0
+  let discovered = 0
+  let archived = 0
+  let alreadyArchived = 0
+  let failed = 0
+  const failures: FeedPollFailure[] = []
+  for (const result of results) {
+    feeds += result.feeds
+    discovered += result.discovered
+    archived += result.archived
+    alreadyArchived += result.alreadyArchived
+    failed += result.failed
+    for (const failure of result.failures) failures.push(failure)
+  }
+  return deepFreeze({
+    feeds,
+    discovered,
+    archived,
+    alreadyArchived,
+    failed,
+    failures,
   })
+}
 
 const oneFailure = (
   reason: FeedPollFailure["reason"],
@@ -203,11 +218,21 @@ export const pollFeed =
           { concurrency: 1 }
         ).pipe(
           Effect.map((results) =>
-            readResult.failures.reduce(
-              (result, failure) =>
-                combine(result, oneFailure(failure.reason, "Item", 1)),
-              results.reduce(combine, empty())
-            )
+            aggregate([
+              ...results,
+              deepFreeze({
+                ...empty(),
+                discovered: readResult.failures.length,
+                failed: readResult.failures.length,
+                failures: readResult.failures.map((failure) =>
+                  deepFreeze({
+                    _tag: "FeedPollFailed" as const,
+                    scope: "Item" as const,
+                    reason: failure.reason,
+                  })
+                ),
+              }),
+            ])
           )
         )
       ),
@@ -233,5 +258,5 @@ export const pollSubscriptions =
       Effect.flatMap((feeds) =>
         Effect.forEach(feeds, pollFeed(ports), { concurrency: 1 })
       ),
-      Effect.map((results) => results.reduce(combine, empty()))
+      Effect.map(aggregate)
     )
