@@ -13,7 +13,7 @@ AI記事補完のキュー、結果、タグはowner単位である一方、日�
 
 ## 決定
 
-AI記事補完の日次上限は`ownerId + UTC localDate`ごとに評価する。完了時の加算、workerの残量判定、状態表示、開発用リセットを同じowner境界で実行する。
+AI記事補完の日次上限は`ownerId + UTC localDate`ごとに評価する。成功完了時刻を1回取得し、そのUTC日付へ利用量を加算する。workerの残量判定、状態表示、開発用リセットも同じowner境界で実行する。日付をまたぐ処理は開始日ではなく完了日に属する。
 
 ```mermaid
 flowchart LR
@@ -21,6 +21,9 @@ flowchart LR
   QueueB["owner B queue"] --> BudgetB[("owner B / date")]
   BudgetA --> Worker["ownerごとにclaim"]
   BudgetB --> Worker
+  Worker --> Completed["成功完了時のUTC date"]
+  Completed --> BudgetA
+  Completed --> BudgetB
   ResetA["owner A reset"] --> BudgetA
 ```
 
@@ -37,6 +40,7 @@ flowchart LR
 | 全owner共通の日次枠を維持 | tenant間の枯渇とリセット干渉を仕様として説明できない | 管理者だけが操作する単一tenant製品へ変更する |
 | 共通枠とowner枠を二重に持つ | 現時点では費用上限と公平性の2段制御を要求されておらず、claim規則と運用が複雑になる | provider費用の全体hard limitが必要になる |
 | リセットAPIだけを削除 | 枯渇の共有は残り、owner境界の不整合を解消しない | N/A |
+| claim時に日次枠を予約する | 失敗・lease失効・再試行で予約の解放と回収が必要になり、現行の単一workerモデルには過剰 | 複数workerで日次hard limitを原子的に保証する必要が生じる |
 
 ## 結果
 
@@ -45,31 +49,34 @@ flowchart LR
 - 1人が日次枠を使い切っても、他のownerの処理は継続する。
 - 認証actorから導出したownerが、RPCからDBまで型付きPortで伝播する。
 - owner Aのリセットはowner Bの使用量を変更しない。
+- UTC日付をまたぐ外部処理も、実際に成功した日の利用量として表示・抑止される。
 
 ### 欠点とリスク
 
 - 設定値`CONTENT_ENRICH_DAILY_LIMIT`は全体上限ではなくownerごとの上限になるため、owner数に比例して最大provider利用量が増える。
 - 旧カウンターはownerへ正しく帰属できないため、migration時に当日分を破棄する。deploy直後だけ追加処理が発生し得る。
+- 利用枠はclaim時の予約ではなく成功完了時に消費するため、複数workerへ拡張する場合は原子的なhard limitを別途設計する必要がある。
 
 ## 影響と同期
 
 | 対象 | 必要な変更 | 状態 | 証拠 |
 | --- | --- | --- | --- |
 | 設計書 | 日次枠の所有単位とworker規則を明記 | Done | `docs/design.md` §4 |
-| ドメイン/ユースケース | ownerごとに使用量を読み、枯渇ownerだけをskip | Done | `application/enrichment.ts` |
+| ドメイン/ユースケース | ownerごとに使用量を読み、成功完了時のUTC日付へ加算し、枯渇ownerだけをskip | Done | `application/enrichment.ts` |
 | OpenAPI/外部契約 | N/A — endpointとresponse shapeは不変 | Done | contract差分なし |
 | コード/ポート | `budgetUsed`と`resetDaily`へ`OwnerId`を必須化 | Done | Content Application/RPC/adapters |
 | データ/ストレージ | 主キーを`(owner_id, local_date)`へ変更 | Done | Drizzle schema/migration |
 | 実行/配備 | N/A — service、secret、設定項目は不変 | Done | N/A |
 | 認証/セキュリティ | reset対象をRPC user actorのownerへ限定 | Done | personalization RPC test |
 | フロント/品質保証 | N/A — 公開契約とUI操作は不変 | Done | N/A |
-| テスト/運用 | owner分離、枯渇skip、migrationを検証 | Done | Content tests |
+| テスト/運用 | owner分離、枯渇skip、UTC日付境界、migrationを検証 | Done | Content tests |
 
 ## 再検討条件
 
 - provider費用の全体hard limitが必要になり、owner別上限の合計が予算を超える。
 - owner別の契約プランによって異なる日次上限が必要になる。
 - 利用者のIANA time zone基準で補完日を切り替える要件が決まる。
+- Content Knowledgeを複数workerへ水平分割し、claim時点で日次hard limitの予約が必要になる。
 
 ## 受け入れゲートと未決事項
 
