@@ -10,6 +10,7 @@ import {
 } from "@workspace/ui/components/card"
 
 import { authStateQueryOptions, safeRedirect } from "@/features/auth"
+import { clearPersistedPlayback } from "@/features/player"
 import { ThemeToggle } from "@/features/theme"
 import { AppLoading } from "@/shared/components/app-loading"
 import { LoginMethods } from "./-components/login-methods"
@@ -26,6 +27,10 @@ export const Route = createFileRoute("/login/")({
     if (auth.authenticated) {
       throw redirect({ href: safeRedirect(search.redirect) })
     }
+    // ここに着いた = 誰のものでもない状態。端末に残る再生の記録を捨てる。
+    // 保存領域はorigin単位なので、次にログインした別の利用者へ前の利用者の
+    // 番組名と続きが復元されてしまう。
+    clearPersistedPlayback()
     return { auth }
   },
   component: LoginRoute,

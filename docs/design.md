@@ -50,7 +50,7 @@ flowchart LR
 | IdentityAccess    | セッション主体、認可           | Better Auth、Google OIDC                           |
 | FeedManagement    | 媒体カタログ、所有者別購読     | FeedReader                                         |
 | EpisodeProduction | ジョブ、GenerationPlan、構造化生成、冪等性、出典、AG-UI進捗 | LanguageModel、SpeechSynthesizer、JobDispatcher |
-| EpisodeLibrary    | 所有者別一覧、音声アクセス       | ObjectStore、短期URL発行                              |
+| EpisodeLibrary    | 所有者別一覧、音声アクセス、原稿と出典の提示 | ObjectStore、短期URL発行                  |
 
 ## 4. 非同期パイプライン
 
@@ -172,6 +172,15 @@ Gatewayと4 Context serviceは`@news-podcast/service-runtime`のSupervisorを使
 - リーダーは記事タイトルを自前の見出しで表示するので、本文先頭の同じ見出しは`omitLeadingTitle`で落とす。判定は先頭ノードに限り、本文中の見出しには触れない。
 - 文字色は背景ごとに4.5:1を確認する。選択行(`accent`)やセグメンテッドコントロールの溝(`muted`)の上では`muted-foreground`が基準を割るため、前景寄りの色へ上げる。
 - 行内の操作(保存など)をhoverだけで出さない。タッチとキーボードから到達できなくなるため、フォーカス時と選択済み状態では常に見せる。
+- 音声は画面遷移から独立させる。`<audio>`は`AppShell`の中・`Outlet`の外に1つだけ置き、routeのcomponentには持たせない。routeの中にあると、ページを移った瞬間に要素ごと外れて音が切れる。再生位置と再生中かどうかの正本は要素側にあり、atomはその写しを配るだけにする(逆向きにすると、OSのメディアキーやロック画面が要素を直接動かしたときに正本が2つになる)。詳細は[ADR-0064](adr/0064-persistent-playback-outside-the-router-outlet.md)。
+- 再生バーは下端に常設し、モバイルでは下部ナビの上へ載せる。本文末尾がバーに隠れないよう、確保する高さは`--player-h`が1箇所で宣言し、バーがDOMに在るかどうか(`:has()`)で決める。有無をstateで配ると、鳴らし始めた瞬間に画面全体が描き直される。
+- `timeupdate`は毎秒数回届く。購読するのは目盛りだけに閉じ、操作ボタンは「鳴っているか」、一覧の行は「その番組が鳴っているか」と「その番組の再生記録」だけを購読する。一覧全体で`isPlayingAtom`を購読すると、1回の再生/停止で全行が描き直される。
+- 端末に残す再生の記録は、ログイン画面へ着いた時点で捨てる。保存領域はorigin単位なので、同じブラウザで別の利用者がログインすると前の利用者の番組名と続きが復元される。別タブの書き込みを取り込むのは単独で意味を持つ値(再生記録・速度)だけで、「今どの番組を鳴らしているか」はそのタブの`<audio>`と対なので取り込まない。
+- OSのロック画面やメディアキーから届くのは命令であって切り替えではない。再生と停止は別々に持ち、同じ命令が二度届いても状態が反転しないようにする。切り替えるのは画面のボタンだけ。
+- 再生位置は番組ごとに端末へ残し、続きから再開する。末尾の15秒以内まで達していれば再生済みとして次は先頭から鳴らす(末尾から再開しても何も鳴らない)。リロード後はバーに前回の番組が戻るが、音は自動では鳴らさない。
+- ライブラリは記事ページと同じ2ペインにする。左が番組一覧(日付で括った行だけ)、右が詳細で、原稿を主・出典を右レールに置く。台本は最大20,000字あり、カードへ積むと一覧性と可読性のどちらも成り立たない。選択は`?episode=`でURLが正本。
+- 原稿はMarkdownの描画器へ通さない。台本は読み上げ用の地の文で、Markdownとして書かれていない。連続する改行を1つの区切りとして段落へ割り、行間を広く取る。
+- 出典は`articleId`があれば保存版の記事への導線も並べる。外部URLは失効するが、保存した記事は残る。
 
 ### 7.2 状態の所在と描画範囲
 
@@ -196,6 +205,8 @@ Gatewayと4 Context serviceは`@news-podcast/service-runtime`のSupervisorを使
 | 最新の番組               | 主カラム下部 | 生成状況の次        | 完成音声、出典、empty状態                |
 | 生成時刻                 | 右カラム     | 主内容の後半        | 日次local timeとtime zone                |
 | 購読フィード             | 右カラム     | 主内容の後半        | 現在ユーザーの購読一覧と管理導線         |
+| ライブラリ               | 一覧+詳細の2ペイン | 選択で1カラムを入れ替え | 番組の一覧、原稿、出典、聴取状態  |
+| 再生バー                 | 下端に常設   | 下部ナビの上に常設  | 再生/一時停止、15秒戻し/30秒送り、シーク、速度 |
 
 実アプリは生成OpenAPI型とTanStack Query/RouterでAPIへ接続する。StorybookのfixtureはUIの独立確認専用で、実アプリのデータ源には使用しない。
 
@@ -359,3 +370,4 @@ flowchart TD
 - [ADR-0053 変換器の実出力をgolden corpusとして描画側へ橋渡しする](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)
 - [ADR-0054 埋め込みのsandbox権限をprovider単位で宣言する](adr/0054-per-provider-embed-sandbox.md)
 - [ADR-0060 描画範囲をatomで区切り、フロントエンドの予算を実測で守る](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)
+- [ADR-0064 再生をrouteの外へ出し、ライブラリを一覧と原稿の2ペインにする](adr/0064-persistent-playback-outside-the-router-outlet.md)

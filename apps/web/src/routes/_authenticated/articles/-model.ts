@@ -5,6 +5,11 @@ import {
   publishedAtLabel,
   type Article,
 } from "@/features/articles"
+import {
+  dateGroupKey,
+  groupByDate,
+  type DateGroupKey,
+} from "@/shared/lib/date-group"
 
 export type { Article }
 export type ArticleFacets = components["schemas"]["ArticleFacets"]
@@ -115,31 +120,8 @@ export function archiveMetaLabel(
 
 export { articleTimestamp, publishedAtLabel }
 
-export type DateGroupKey = "today" | "yesterday" | "thisWeek" | "older"
-
-const dateGroupLabels: Record<DateGroupKey, string> = {
-  today: "今日",
-  yesterday: "昨日",
-  thisWeek: "今週",
-  older: "それ以前",
-}
-
-function startOfDay(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-}
-
-export function dateGroupKey(
-  iso: string,
-  now: Date = new Date()
-): DateGroupKey {
-  const diffDays = Math.round(
-    (startOfDay(now) - startOfDay(new Date(iso))) / (24 * 60 * 60 * 1000)
-  )
-  if (diffDays <= 0) return "today"
-  if (diffDays === 1) return "yesterday"
-  if (diffDays <= 7) return "thisWeek"
-  return "older"
-}
+export { dateGroupKey }
+export type { DateGroupKey }
 
 export type ArticleGroup = {
   readonly key: DateGroupKey
@@ -147,25 +129,16 @@ export type ArticleGroup = {
   readonly articles: readonly Article[]
 }
 
-/** 連続する同一グループをまとめる。APIが日時順で返す前提なので単純な走査で足りる。 */
+/** 括り方は記事も番組も同じ (`shared/lib/date-group`)。ここは呼び名だけを合わせる。 */
 export function groupArticlesByDate(
   articles: readonly Article[],
   now: Date = new Date()
 ): readonly ArticleGroup[] {
-  const groups: ArticleGroup[] = []
-  for (const article of articles) {
-    const key = dateGroupKey(articleTimestamp(article), now)
-    const last = groups.at(-1)
-    if (last && last.key === key) {
-      groups[groups.length - 1] = {
-        ...last,
-        articles: [...last.articles, article],
-      }
-    } else {
-      groups.push({ key, label: dateGroupLabels[key], articles: [article] })
-    }
-  }
-  return groups
+  return groupByDate(articles, articleTimestamp, now).map((group) => ({
+    key: group.key,
+    label: group.label,
+    articles: group.items,
+  }))
 }
 
 /** `/v1/me/articles`へ渡す、サーバが実際に適用できるクエリ。 */

@@ -1,3 +1,6 @@
+import { useSetAtom } from "jotai"
+
+import { playEpisodeAtom } from "@/features/player"
 import { Panel } from "@/shared/components/panel"
 import { useArticlePicker } from "../hooks/use-article-picker"
 import { useGeneration } from "../hooks/use-generation"
@@ -29,11 +32,24 @@ export function GenerationDashboard() {
   } = useGeneration()
   // 候補の取得はダイアログを開くまで走らせない。
   const picker = useArticlePicker(pickerOpen, pickerInitialArticleIds)
+  // 完成した番組をその場で鳴らす。音を出すのは下端のバー (`PlayerHost`) で、
+  // ここは「どれを載せるか」を渡すだけ。
+  const play = useSetAtom(playEpisodeAtom)
+  const latest = generation.episode
 
   return (
     <>
       <PodcastDashboard
         {...generation}
+        onPlayEpisode={
+          latest &&
+          (() =>
+            play({
+              episodeId: latest.id,
+              title: latest.title,
+              createdAt: latest.createdAt,
+            }))
+        }
         settingsSlot={
           <Panel
             fallback={<GenerationSettingsSummarySkeleton />}

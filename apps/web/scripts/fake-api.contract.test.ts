@@ -145,6 +145,10 @@ const cases = [
   { template: "/v1/me/settings", path: "/v1/me/settings" },
   { template: "/v1/episodes", path: "/v1/episodes" },
   {
+    template: "/v1/episodes/{episodeId}",
+    path: `/v1/episodes/${fakeApiIdentifiers.episodeId}`,
+  },
+  {
     template: "/v1/episodes/{episodeId}/audio",
     path: "/v1/episodes/00000000-0000-4000-8000-000000000099/audio",
   },

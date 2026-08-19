@@ -55,11 +55,24 @@ const targets: readonly Target[] = [
     },
   },
   {
+    // ライブラリはdesktopでページ見出しを持たない (2ペイン)。番組の行が
+    // 出たことをもって検査の基準にする。
     path: "/library",
     name: "ライブラリ",
     ready: async (page) => {
       await expect(
-        page.getByRole("heading", { name: "ライブラリ" }).first()
+        page.getByRole("button", { name: /今日の開発ニュース/ }).first()
+      ).toBeVisible()
+    },
+  },
+  {
+    // 原稿と出典を開いた状態。右レールと折りたたみの器が同時に出るので、
+    // ランドマークの重複 (landmark-unique) はここでしか見えない。
+    path: "/library?episode=00000000-0000-4000-8000-000000000030",
+    name: "ライブラリ (番組を開いた状態)",
+    ready: async (page) => {
+      await expect(
+        page.getByText("こんばんは。今日の開発ニュースをお届けします。")
       ).toBeVisible()
     },
   },

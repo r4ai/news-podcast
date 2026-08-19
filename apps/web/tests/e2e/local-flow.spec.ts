@@ -709,19 +709,47 @@ test("development login to generated episode playback completes", async ({
   await expect(page.getByText("試行 1/4", { exact: true })).toBeVisible()
 
   await page.getByRole("link", { name: "ライブラリ" }).click()
-  await expect(
-    page.getByRole("heading", { name: "今日の開発ニュース" })
-  ).toBeVisible()
-  await page.getByRole("button", { name: "再生" }).click()
+  // 生成した番組が一覧の先頭に並ぶ。行には「開く」と「鳴らす」の2つのボタンが
+  // あり、鳴らす方は絵だけなので、文字を持つ方で絞る。
+  const generated = page
+    .getByRole("button", { name: /今日の開発ニュース/ })
+    .filter({ hasText: "今日の開発ニュース" })
+  await expect(generated.first()).toBeVisible()
+
+  // 行の再生ボタンで、画面下端のバーへ載せる。
+  await page
+    .getByRole("button", { name: /今日の開発ニュースを再生/ })
+    .first()
+    .click()
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await expect(bar).toBeVisible()
   // 公開音声契約はsame-originの `GET /v1/episodes/{id}/audio` (ADR-0055)。
   await expect(page.locator("audio")).toHaveAttribute(
     "src",
     /\/v1\/episodes\/[^/]+\/audio$/
   )
-  await page.getByRole("button", { name: "出典を確認" }).click()
+
+  // 番組を開くと、原稿と出典の両方がその場で読める。
+  await generated.first().click()
   await expect(
-    page.getByRole("link", { name: "ローカルE2Eニュース" })
+    page.getByText("ローカル環境の生成フローが正常に完了しました。")
+  ).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: /ローカルE2Eニュース/ }).first()
   ).toHaveAttribute("href", "https://example.com/local-news")
+
+  // 再生バーはページを跨いで残り、音も止まらない (ADR-0064)。
+  // バーに載った番組の題名もリンクなので、ナビゲーションは完全一致で選ぶ。
+  await page.getByRole("link", { name: "今日", exact: true }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  await expect(bar).toBeVisible()
+  await expect(page.locator("audio")).toHaveAttribute(
+    "src",
+    /\/v1\/episodes\/[^/]+\/audio$/
+  )
+  await expect(page.locator("audio")).toHaveJSProperty("paused", false)
 })
 
 test("selecting articles generates an episode and streams its progress", async ({
@@ -775,4 +803,47 @@ test("selecting articles generates an episode and streams its progress", async (
   await expect(
     page.getByText("今日の開発ニュース", { exact: true })
   ).toBeVisible()
+})
+
+test("switching episodes shows the next script from its beginning", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+
+  await page.getByRole("link", { name: "ライブラリ", exact: true }).click()
+  const rows = page
+    .getByRole("button", { name: /: / })
+    .filter({ hasText: "・" })
+
+  // 長い台本の番組を開いて、詳細を末尾まで送る。
+  await rows.filter({ hasText: "先週の総まとめ" }).first().click()
+  await expect(page.getByText("今週は以上です。").first()).toBeVisible()
+  const scroller = page.locator("[data-detail-pane]")
+  await scroller.evaluate((node) => {
+    node.scrollTop = node.scrollHeight
+  })
+  expect(await scroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+
+  // 別の番組へ切り替えると、題名と再生ボタンから読み始められる。
+  await rows.filter({ hasText: "今日の開発ニュース" }).first().click()
+  await expect(
+    page.getByRole("heading", { name: /Durable ObjectsとTypeScript/ })
+  ).toBeVisible()
+  await expect(
+    page.getByText("こんばんは。今日の開発ニュースをお届けします。")
+  ).toBeVisible()
+  const [top, max] = await scroller.evaluate((node) => [
+    node.scrollTop,
+    node.scrollHeight - node.clientHeight,
+  ])
+  // 切り替え先も溢れる長さでなければ、ブラウザ側の丸めで0に戻ってしまい、
+  // 位置が残る回帰を見逃す。
+  expect(max).toBeGreaterThan(0)
+  expect(top).toBe(0)
 })

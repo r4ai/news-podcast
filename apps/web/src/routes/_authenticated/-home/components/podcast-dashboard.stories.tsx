@@ -52,6 +52,7 @@ export const Running: Story = {
 export const Succeeded: Story = {
   args: {
     episode: {
+      id: "00000000-0000-4000-8000-000000000001",
       title: "今日のテックニュース",
       createdAt: "2026-08-09T07:30:00.000Z",
       sourceCount: 3,

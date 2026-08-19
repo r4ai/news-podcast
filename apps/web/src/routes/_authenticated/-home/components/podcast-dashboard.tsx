@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Library,
   ListMusic,
+  Play,
   RotateCcw,
   Square,
 } from "lucide-react"
@@ -62,10 +63,13 @@ export type PodcastDashboardProps = {
   readonly retryLabel?: string
   readonly failure?: string
   readonly episode?: {
+    readonly id: string
     readonly title: string
     readonly createdAt: string
     readonly sourceCount: number
   }
+  /** 最新の番組を下端のバーで鳴らす。実際の再生はplayer featureが持つ。 */
+  readonly onPlayEpisode?: () => void
   readonly onGenerate?: () => void
   readonly onCancel?: () => void
   readonly onRetry?: () => void
@@ -357,7 +361,10 @@ function GenerationStatus({
   )
 }
 
-function LatestEpisode({ episode }: Pick<PodcastDashboardProps, "episode">) {
+function LatestEpisode({
+  episode,
+  onPlayEpisode,
+}: Pick<PodcastDashboardProps, "episode" | "onPlayEpisode">) {
   return (
     <Card>
       <CardHeader>
@@ -376,12 +383,22 @@ function LatestEpisode({ episode }: Pick<PodcastDashboardProps, "episode">) {
       </CardHeader>
       <CardContent>
         {episode ? (
-          <div className="flex flex-col gap-1">
-            <p className="font-medium">{episode.title}</p>
-            <p className="text-sm text-muted-foreground">
-              {new Date(episode.createdAt).toLocaleString("ja-JP")} ・ 出典
-              {episode.sourceCount}件
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="font-medium">{episode.title}</p>
+              <p className="text-sm text-muted-foreground">
+                {new Date(episode.createdAt).toLocaleString("ja-JP")} ・ 出典
+                {episode.sourceCount}件
+              </p>
+            </div>
+            <Button
+              className="min-h-11 sm:min-h-9"
+              disabled={!onPlayEpisode}
+              onClick={onPlayEpisode}
+            >
+              <Play aria-hidden="true" data-icon="inline-start" />
+              再生
+            </Button>
           </div>
         ) : (
           <Empty className="border border-dashed">
@@ -424,7 +441,10 @@ export function PodcastDashboard({
         <div className="flex min-w-0 flex-col gap-6">
           <GenerationStatus {...props} />
           {timelineSlot}
-          <LatestEpisode episode={props.episode} />
+          <LatestEpisode
+            episode={props.episode}
+            onPlayEpisode={props.onPlayEpisode}
+          />
         </div>
         {settingsSlot}
       </div>
