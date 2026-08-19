@@ -160,9 +160,6 @@ jobs:
 
       - name: Run browser E2E
         run: pnpm test:e2e
-        env:
-          E2E_API_PORT: 3310
-          E2E_WEB_PORT: 4374
 
       - name: Measure Web Vitals against the production build
         id: perf_vitals

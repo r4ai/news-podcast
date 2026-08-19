@@ -30,6 +30,15 @@ pnpm dev:up
 | SeaweedFS S3 | <http://localhost:8333> |
 | VOICEVOX | <http://localhost:50021> |
 
+テスト用サーバーは通常構成とポートを共有しない。ローカルとCIは同じ既定値を使い、並列実行時だけ環境変数で上書きする。
+
+| テストサーバー | 既定ポート | 上書き |
+| --- | ---: | --- |
+| Web E2E fake API | 3310 | `E2E_API_PORT` |
+| Web E2E Vite | 4273 | `E2E_WEB_PORT` |
+| Web Vitals fake API | 4100 | `PERF_API_PORT` |
+| Web Vitals preview | 4473 | `PERF_WEB_PORT` |
+
 開発ログインは`.env`の`DEV_AUTH_PASSWORD`を使う。`APP_ENV=production`では開発ログインとfake providerを有効にできない。
 
 終了時はvolumeを残して停止する。
