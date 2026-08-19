@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import type { FeedFetchError, RssFeedReader } from "./ports/article-catalog.js"
 import {
   ArchiveCommandSchema,
+  type Sha256,
   type ArchiveRequestId,
   type ArticleId,
 } from "../domain/article.js"
@@ -55,6 +56,7 @@ export type PollSubscriptionsPorts = Readonly<{
   readonly deriveArticleIdentity: (input: {
     readonly feedId: FeedId
     readonly externalId: string
+    readonly captureFingerprint: Sha256
   }) => DeepReadonly<{
     readonly archiveRequestId: ArchiveRequestId
     readonly articleId: ArticleId
@@ -125,6 +127,7 @@ export const pollFeed =
             const identity = ports.deriveArticleIdentity({
               feedId: feed.feedId,
               externalId: item.externalId,
+              captureFingerprint: item.captureFingerprint,
             })
             return parseArchiveCommand({
               ...identity,

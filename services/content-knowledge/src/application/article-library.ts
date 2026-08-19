@@ -171,7 +171,10 @@ export type TriggerOwnerArticleArchiveResult = DeepReadonly<
 export const triggerOwnerArticleArchive =
   (ports: {
     readonly articles: Pick<ArticleLibraryRepository, "find">
-    readonly deriveArchiveRequestId: (articleId: ArticleId) => ArchiveRequestId
+    readonly deriveArchiveRequestId: (input: {
+      readonly articleId: ArticleId
+      readonly messageId: ArchiveMessageContext["messageId"]
+    }) => ArchiveRequestId
     readonly archive: (
       invocation: ArchiveArticleInvocation
     ) => Effect.Effect<ArchiveArticleResult, ArchiveStoreError | CaptureError>
@@ -192,7 +195,10 @@ export const triggerOwnerArticleArchive =
           )
         }
         return parse(ArchiveCommandSchema)({
-          archiveRequestId: ports.deriveArchiveRequestId(input.articleId),
+          archiveRequestId: ports.deriveArchiveRequestId({
+            articleId: input.articleId,
+            messageId: input.context.messageId,
+          }),
           articleId: lookup.article.articleId,
           sourceUrl: lookup.article.sourceUrl,
           title: lookup.article.title,

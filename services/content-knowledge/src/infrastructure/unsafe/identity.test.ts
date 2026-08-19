@@ -1,9 +1,11 @@
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
+import { MessageIdSchema } from "@news-podcast/protocols"
 
 import {
   ArchiveRequestIdSchema,
   ArticleIdSchema,
+  Sha256Schema,
 } from "../../domain/article.js"
 import { FeedIdSchema } from "../../domain/subscription.js"
 import {
@@ -18,6 +20,9 @@ describe("RSS item identities", () => {
         "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd"
       ),
       externalId: "entry-1",
+      captureFingerprint: Schema.decodeUnknownSync(Sha256Schema)(
+        "a".repeat(64)
+      ),
     }
     const first = deriveArticleIdentityUnsafe(input)
 
@@ -32,15 +37,38 @@ describe("RSS item identities", () => {
     expect(
       deriveArticleIdentityUnsafe({ ...input, externalId: "entry-2" })
     ).not.toEqual(first)
+
+    const updated = deriveArticleIdentityUnsafe({
+      ...input,
+      captureFingerprint: Schema.decodeUnknownSync(Sha256Schema)(
+        "b".repeat(64)
+      ),
+    })
+    expect(updated.articleId).toBe(first.articleId)
+    expect(updated.archiveRequestId).not.toBe(first.archiveRequestId)
   })
 
-  it("derives a stable manual archive intent from an article", () => {
+  it("keeps a manual retry idempotent but gives each explicit refresh a new intent", () => {
     const articleId = Schema.decodeUnknownSync(ArticleIdSchema)(
       "5af55f2e-ff0b-475c-866a-f2cff48c101d"
     )
-    const first = deriveManualArchiveRequestIdUnsafe(articleId)
+    const firstInput = {
+      articleId,
+      messageId: Schema.decodeUnknownSync(MessageIdSchema)(
+        "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4"
+      ),
+    } as const
+    const first = deriveManualArchiveRequestIdUnsafe(firstInput)
 
-    expect(deriveManualArchiveRequestIdUnsafe(articleId)).toBe(first)
+    expect(deriveManualArchiveRequestIdUnsafe(firstInput)).toBe(first)
+    expect(
+      deriveManualArchiveRequestIdUnsafe({
+        articleId,
+        messageId: Schema.decodeUnknownSync(MessageIdSchema)(
+          "ea122752-73d0-4851-9664-7d3e63e76859"
+        ),
+      })
+    ).not.toBe(first)
     expect(() =>
       Schema.decodeUnknownSync(ArchiveRequestIdSchema)(first)
     ).not.toThrow()

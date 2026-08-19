@@ -249,7 +249,21 @@ stateDiagram-v2
 
 `running`中のstageは`selecting_articles`、`materializing_articles`、`generating_script`、`preparing_pronunciation`、`synthesizing_audio`、`storing_episode`に限定する。
 
-### 4.4 記事archive objectの回収
+### 4.4 記事更新とsnapshot
+
+```mermaid
+stateDiagram-v2
+  [*] --> FirstCapture: 新しいfeed + GUID
+  FirstCapture --> SameSnapshot: 同じcapture fingerprint
+  SameSnapshot --> SameSnapshot: retry / 定期poll
+  FirstCapture --> NewSnapshot: URL・title・日時・本文fingerprint更新
+  SameSnapshot --> NewSnapshot: 更新を検知
+  NewSnapshot --> SameSnapshot: 更新版のretry
+```
+
+`articleId`はfeed + GUIDで安定させ、`archiveRequestId`だけをRSS capture fingerprintでversion化する。新snapshot追加後も既存Episodeはcheckpoint済み`articleId + snapshotId`を維持し、新しい生成のlatest queryだけが更新版を選ぶ。手動archiveはRPC message IDをrefresh intentに含める（[ADR-0073](adr/0073-version-article-capture-intents.md)）。
+
+### 4.5 記事archive objectの回収
 
 ```mermaid
 flowchart LR
@@ -392,4 +406,5 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0070: Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
 - [ADR-0071: ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
 - [ADR-0072: Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
+- [ADR-0073: 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

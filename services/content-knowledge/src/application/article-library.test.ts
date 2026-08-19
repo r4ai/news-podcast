@@ -43,10 +43,13 @@ describe("triggerOwnerArticleArchive", () => {
     expect(archive).not.toHaveBeenCalled()
   })
 
-  it("derives a stable request identity and delegates a trusted command", async () => {
+  it("derives a refresh intent from article and RPC message identity", async () => {
     const snapshot = { articleId: "unused" }
     const archive = vi.fn(() =>
       Effect.succeed({ _tag: "AlreadyArchived", snapshot } as never)
+    )
+    const deriveArchiveRequestId = vi.fn(
+      () => "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93" as never
     )
     const result = await Effect.runPromise(
       triggerOwnerArticleArchive({
@@ -61,8 +64,7 @@ describe("triggerOwnerArticleArchive", () => {
               },
             } as never),
         },
-        deriveArchiveRequestId: () =>
-          "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93" as never,
+        deriveArchiveRequestId,
         archive,
       })({
         ownerId: "owner-a" as never,
@@ -72,6 +74,10 @@ describe("triggerOwnerArticleArchive", () => {
     )
 
     expect(result).toEqual({ _tag: "AlreadyArchived", snapshot })
+    expect(deriveArchiveRequestId).toHaveBeenCalledWith({
+      articleId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+      messageId: "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4",
+    })
     expect(archive).toHaveBeenCalledWith({
       command: {
         archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",

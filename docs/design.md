@@ -64,6 +64,8 @@ flowchart LR
 
 RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease tokenでfenceしたworkerで進める。claim・完了ごとに現在時刻を再取得し、期限切れleaseのworkerによる完了上書きを拒否する。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。feed取得・catalog永続化・worker基盤の失敗だけを`failed`として最大4回の試行上限へ数え、個別記事のvalidation・archive失敗は件数とerrorを持つdegradedな`succeeded`として試行回数を引き継がず、次回の定期同期を継続する。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。degraded時は失敗記事数を警告し、runtimeは`rss.sync.degraded`、feed scope failureは`rss.sync.failed`を記録する。詳細は[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)を正本とする。
 
+RSS記事の`articleId`は`feedId + GUID`で安定させ、capture intentだけをcanonical URL・title・published/updated時刻・本文系fieldのSHA-256 fingerprintでversion化する。同じ配送retryは既存snapshotへ収束し、同じGUIDの実更新はimmutable snapshotを追加してlatest参照を更新する。手動archiveはRPC message IDごとに明示refreshし、同じdelivery retryだけを冪等にする。詳細は[ADR-0073](adr/0073-version-article-capture-intents.md)を正本とする。
+
 購読は将来の同期・自動生成対象、`article_owner_access`はownerが一度取り込んだ記事への恒久的な参照権として分離する。RSS itemのcatalog登録時に現在の購読ownerへaccessを付与し、既存feedへの購読時は保存済みitemをbackfillする。購読解除ではaccess、記事状態、snapshotを削除しないため、一覧・詳細・Markdown・手動生成の保存版出典は引き続き参照できる。一方、自動生成候補は有効な購読とのjoinを維持する。詳細は[ADR-0069](adr/0069-separate-subscription-from-article-access.md)を正本とする。
 
 任意登録feedはprivate-by-defaultとし、`/v1/feeds`はrequest owner自身が購読するfeedと`public_feed_listings`へ明示掲載したfeedだけを返す。query/path tokenを文字列判定やredactionで加工せず、DB可視性条件で別ownerから閉じる。既存feedはmigrationで公開推測せず全件privateにする。将来の公開化は、認証なしの取得可能性・credential非包含・owner同意を検証するworkflowができるまで提供しない（[ADR-0071](adr/0071-keep-user-registered-feed-urls-private.md)）。
@@ -395,3 +397,4 @@ flowchart TD
 - [ADR-0070 Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
 - [ADR-0071 ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
 - [ADR-0072 Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
+- [ADR-0073 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)

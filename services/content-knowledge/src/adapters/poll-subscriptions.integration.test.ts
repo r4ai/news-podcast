@@ -24,6 +24,7 @@ import {
 } from "../domain/subscription.js"
 import { createHttpRssFeedReader } from "./providers/rss/http-feed-reader.js"
 import { createArchiveStore } from "./persistence/archive/repository.js"
+import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
 import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
 import { openTestDatabase } from "./persistence/testing.js"
 import {
@@ -32,6 +33,7 @@ import {
 } from "../infrastructure/unsafe/json.js"
 import { archiveArticle } from "../application/archive-article.js"
 import { pollSubscriptions } from "../application/poll-subscriptions.js"
+import { deriveArticleIdentityUnsafe } from "../infrastructure/unsafe/identity.js"
 
 const servers: Array<ReturnType<typeof createServer>> = []
 afterEach(async () => {
@@ -50,11 +52,13 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(
 ) => Schema.decodeUnknownSync(schema)(value)
 
 describe("pollSubscriptions integration", () => {
-  it("polls real RSS HTTP and archives duplicate items exactly once", async () => {
+  it("keeps retries idempotent but snapshots an updated same-GUID item", async () => {
+    let version = "v1"
     const server = createServer((_request, response) =>
       response.end(`
-      <rss><channel><item><guid>same-entry</guid><title>Stable item</title>
-      <link>https://news.example.com/stable</link></item></channel></rss>`)
+      <rss><channel><item><guid>same-entry</guid><title>Item ${version}</title>
+      <description>Body ${version}</description>
+      <link>https://news.example.com/${version}</link></item></channel></rss>`)
     )
     servers.push(server)
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -72,6 +76,9 @@ describe("pollSubscriptions integration", () => {
           parse: parseJsonUnsafe,
           stringify: stringifyJsonUnsafe,
         })
+      )
+      const catalog = await Effect.runPromise(
+        createArticleCatalog(database.db, { parse: parseJsonUnsafe })
       )
       await Effect.runPromise(
         subscriptions.add({
@@ -113,25 +120,30 @@ describe("pollSubscriptions integration", () => {
         assets: [],
       })
       const captureArticle = vi.fn(() => Effect.succeed(capture))
+      const snapshotIds = [
+        decode(SnapshotIdSchema, "46c2eef5-a205-4526-8640-dc3ea84d88b4"),
+        decode(SnapshotIdSchema, "56c2eef5-a205-4526-8640-dc3ea84d88b4"),
+      ]
+      const capturedAts = [
+        decode(CapturedAtSchema, "2026-08-13T01:02:00.000Z"),
+        decode(CapturedAtSchema, "2026-08-13T01:03:00.000Z"),
+      ]
+      let snapshotIndex = 0
       const archive = archiveArticle({
         ...archiveStore,
         capture: captureArticle,
-        newSnapshotId: () =>
-          decode(SnapshotIdSchema, "46c2eef5-a205-4526-8640-dc3ea84d88b4"),
-        now: () => decode(CapturedAtSchema, "2026-08-13T01:02:00.000Z"),
+        newSnapshotId: () => snapshotIds[snapshotIndex]!,
+        now: () => capturedAts[snapshotIndex++]!,
       })
       const poll = pollSubscriptions({
         subscriptions,
+        catalog,
         reader: createHttpRssFeedReader({
           timeoutMillis: 1_000,
           maximumBytes: 8_192,
         }),
         archive,
-        deriveArticleIdentity: () =>
-          deepFreeze({
-            archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93" as never,
-            articleId: "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never,
-          }),
+        deriveArticleIdentity: deriveArticleIdentityUnsafe,
         newContext: () =>
           deepFreeze({
             messageId: decode(
@@ -164,10 +176,32 @@ describe("pollSubscriptions integration", () => {
         alreadyArchived: 1,
         failed: 0,
       })
-      expect(captureArticle).toHaveBeenCalledOnce()
+      version = "v2"
+      expect(await Effect.runPromise(poll())).toMatchObject({
+        archived: 1,
+        alreadyArchived: 0,
+        failed: 0,
+      })
+      expect(await Effect.runPromise(poll())).toMatchObject({
+        archived: 0,
+        alreadyArchived: 1,
+        failed: 0,
+      })
+      expect(captureArticle).toHaveBeenCalledTimes(2)
       expect(
         database.getSql("SELECT COUNT(*) AS count FROM article_snapshots")
-      ).toEqual({ count: 1 })
+      ).toEqual({ count: 2 })
+      expect(
+        await Effect.runPromise(
+          catalog.findAutomatic(decode(OwnerIdSchema, "owner-a"), 10)
+        )
+      ).toEqual([
+        expect.objectContaining({
+          snapshotId: snapshotIds[1],
+          title: "Item v2",
+          sourceUrl: "https://news.example.com/v2",
+        }),
+      ])
     } finally {
       database.close()
     }
