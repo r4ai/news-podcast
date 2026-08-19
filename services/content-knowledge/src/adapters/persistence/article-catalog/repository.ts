@@ -20,6 +20,7 @@ import type {
 import { ArticleSnapshotSchema } from "../../../domain/article.js"
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
 import type { JsonInterop } from "../json-interop.js"
+import { latestSnapshotOfArticle } from "../latest-article-snapshot.js"
 
 const RowSchema = Schema.Struct({
   articleId: Schema.String,
@@ -77,7 +78,10 @@ export const createArticleCatalog = (
         )
         .innerJoin(
           articleSnapshots,
-          eq(articleSnapshots.articleId, feedItems.articleId)
+          and(
+            eq(articleSnapshots.articleId, feedItems.articleId),
+            latestSnapshotOfArticle
+          )
         )
         .where(
           and(

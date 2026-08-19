@@ -278,7 +278,7 @@ AG-UI timelineは標準`RUN_ERROR`と`RUN_FINISHED`で未完了stepを閉じる�
 
 ### 8.4 GenerationPlanとdurable進捗
 
-自動生成はContent Knowledgeが所有する最新InterestProfileと、有効な購読に属し成功済み自動Planで未使用の記事metadataから選定し、本文取得前にGenerationPlanを固定する。手動生成は使用済みかどうかに関係なく指定記事を全件維持し、profileは台本の重点にだけ利用する。完成eventの各sourceは`articleId`と`snapshotId`を持ち、Libraryが外部URL失効後も保存記事まで追跡できるようにする。
+自動生成はContent Knowledgeが所有する最新InterestProfileと、有効な購読に属し成功済み自動Planで未使用の記事metadataから選定し、本文取得前にGenerationPlanを固定する。候補取得・手動選択・本文materializeは、`captured_at DESC, snapshot_id DESC`で決める記事ごとの最新snapshotだけを共通述語で参照し、再archive後も同じ`articleId`を重複候補へ出さない。手動生成は使用済みかどうかに関係なく指定記事を全件維持し、profileは台本の重点にだけ利用する。完成eventの各sourceは`articleId`と`snapshotId`を持ち、Libraryが外部URL失効後も保存記事まで追跡できるようにする。
 
 ```mermaid
 flowchart LR
