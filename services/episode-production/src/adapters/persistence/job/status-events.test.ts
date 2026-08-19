@@ -69,6 +69,7 @@ const eventTypes = (
 const save = (handle: ReturnType<typeof makeJobHandle>) =>
   handle.saveIdempotently({
     ownerId,
+    idempotencyScope: "create",
     idempotencyKey: "key-1",
     requestFingerprint: "fingerprint",
     jobId,

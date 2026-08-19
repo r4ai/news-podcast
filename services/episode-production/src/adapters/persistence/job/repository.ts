@@ -35,7 +35,11 @@ const decodeDocument = (document: string) =>
   }).pipe(Effect.flatMap(parseJob))
 
 const repositoryFromHandle = (handle: SqliteJobHandle) => {
-  const save = (job: QueuedJob, scheduledFirstWriteWins: boolean) => {
+  const save = (
+    job: QueuedJob,
+    scheduledFirstWriteWins: boolean,
+    idempotencyScope: string
+  ) => {
     const encoded = encodeJob(job)
     const requestFingerprint = JSON.stringify(encoded.request)
 
@@ -43,6 +47,7 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
       try: () =>
         handle.saveIdempotently({
           ownerId: encoded.request.ownerId,
+          idempotencyScope,
           idempotencyKey: encoded.request.idempotencyKey,
           requestFingerprint,
           jobId: encoded.jobId,
@@ -84,9 +89,11 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
   }
 
   return {
-    saveIdempotently: (job: QueuedJob) => save(job, false),
+    saveIdempotently: (job: QueuedJob) => save(job, false, "create"),
+    saveRetryIdempotently: (sourceJobId: JobId, job: QueuedJob) =>
+      save(job, false, `retry:${sourceJobId}`),
     /** A scheduled local date is one logical request; the first accepted article set stays authoritative. */
-    saveScheduledIdempotently: (job: QueuedJob) => save(job, true),
+    saveScheduledIdempotently: (job: QueuedJob) => save(job, true, "create"),
     findById: (jobId: JobId): Effect.Effect<EpisodeJob | undefined, unknown> =>
       Effect.try({
         try: () => handle.findById(jobId),

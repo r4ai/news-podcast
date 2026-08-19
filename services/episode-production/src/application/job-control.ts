@@ -45,7 +45,10 @@ export type RetryFailedJobPorts<
   ) => Effect.Effect<EpisodeJob | undefined, FindError>
   nextJobId: Effect.Effect<JobId>
   now: Effect.Effect<UtcTimestamp>
-  saveIdempotently: (job: QueuedJob) => Effect.Effect<EpisodeJob, SaveError>
+  saveRetryIdempotently: (
+    sourceJobId: JobId,
+    job: QueuedJob
+  ) => Effect.Effect<EpisodeJob, SaveError>
 }>
 
 export const getOwnedJob = <Error>(
@@ -93,7 +96,8 @@ export const retryFailedJob = <FindError, SaveError>(
         }
         return Effect.all([ports.nextJobId, ports.now]).pipe(
           Effect.flatMap(([nextJobId, now]) =>
-            ports.saveIdempotently(
+            ports.saveRetryIdempotently(
+              jobId,
               newQueuedJob({
                 jobId: nextJobId,
                 ownerId,

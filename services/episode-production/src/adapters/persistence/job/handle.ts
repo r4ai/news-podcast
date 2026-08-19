@@ -478,6 +478,7 @@ export const makeJobHandle = (
           .where(
             and(
               eq(episodeJobs.ownerId, input.ownerId),
+              eq(episodeJobs.idempotencyScope, input.idempotencyScope),
               eq(episodeJobs.idempotencyKey, input.idempotencyKey)
             )
           )
@@ -491,7 +492,10 @@ export const makeJobHandle = (
         }
 
         const row = documentToRow(input.document)
-        database.insert(episodeJobs).values(row).run()
+        database
+          .insert(episodeJobs)
+          .values({ ...row, idempotencyScope: input.idempotencyScope })
+          .run()
 
         const articleIds = documentArticleIds(input.document)
         if (articleIds.length > 0) {

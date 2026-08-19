@@ -13,7 +13,7 @@ RSS取得、LLM要約、TTSはHTTP要求中に完了させるには重く、再�
 
 ## 決定
 
-YAML OpenAPIをHTTP契約の正本とする。生成開始は `POST /v1/episode-jobs` が `202 + Location` を返し、必須 `Idempotency-Key` と状態 `queued/running/succeeded/failed/canceled` を契約化する。失敗jobのretryは別jobを作り、省略されたretry用キーは呼び出しごとにGatewayが発行する。明示キーの再送は、そのキーで作成済みのjobがterminal stateでも同じjobへ収束する。owner scope、Problem Details、cursor paging、短期音声URLを共通契約に含める。
+YAML OpenAPIをHTTP契約の正本とする。生成開始は `POST /v1/episode-jobs` が `202 + Location` を返し、必須 `Idempotency-Key` と状態 `queued/running/succeeded/failed/canceled` を契約化する。失敗jobのretryは別jobを作り、省略されたretry用キーは呼び出しごとにGatewayが発行する。永続化の一意性は`owner + operation scope + key`で判定し、retry scopeには元job IDを含める。明示キーの再送は、そのscopeで作成済みのjobがterminal stateでも同じjobへ収束する。owner scope、Problem Details、cursor paging、短期音声URLを共通契約に含める。
 
 ## 判断要因
 
@@ -48,7 +48,7 @@ YAML OpenAPIをHTTP契約の正本とする。生成開始は `POST /v1/episode-
 | ドメイン/ユースケース | 状態機械 | Done | `packages/domain/src/episode-job.ts` |
 | OpenAPI/外部契約 | 202/Location/headers/errors | Done | OpenAPI JSON（ADR-0008） |
 | コード/ポート | create/cancel/retry routeとterminal replay | Done | Gateway handler、Episode Production RPC |
-| データ/ストレージ | unique idempotency + outbox | Done | migration 0001 |
+| データ/ストレージ | operation-scoped unique idempotency + outbox | Done | Episode Production migrations |
 | 実行/配備 | Worker分離 | Done | `apps/worker` |
 | 認証/セキュリティ | owner scope | Done | OpenAPI descriptions |
 | フロント/品質保証 | polling states | Pending | 機能画面の承認後 |
