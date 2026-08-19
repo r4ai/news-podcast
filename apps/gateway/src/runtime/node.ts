@@ -44,6 +44,12 @@ export const NodeGatewayConfigSchema = Schema.Struct({
   requestTimeoutMillis: Schema.Int.check(
     Schema.isBetween({ minimum: 1, maximum: 30_000 })
   ),
+  archiveExecutionTimeoutMillis: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: 300_000 })
+  ),
+  archiveRequestTimeoutMillis: Schema.Int.check(
+    Schema.isBetween({ minimum: 1, maximum: 305_000 })
+  ),
   loginMethods: Schema.Struct({
     development: Schema.Boolean,
     google: Schema.Boolean,
@@ -65,7 +71,14 @@ export const NodeGatewayConfigSchema = Schema.Struct({
   telemetryProxyMaximumResponseBytes: Schema.Int.check(
     Schema.isBetween({ minimum: 1, maximum: 1_048_576 })
   ),
-})
+}).check(
+  Schema.makeFilter((config) =>
+    config.archiveRequestTimeoutMillis >=
+    config.archiveExecutionTimeoutMillis + 1_000
+      ? undefined
+      : "Archive RPC timeout must leave at least one second to deliver the deadline reply"
+  )
+)
 export const parseNodeGatewayConfig = parse(NodeGatewayConfigSchema)
 
 export type UnsafeGatewayHttpServer = DeepReadonly<{

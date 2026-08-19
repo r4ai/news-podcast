@@ -50,7 +50,11 @@ const makeAdapter = (
     ...makeEpisodeJobPorts(transport),
     ...makeEpisodeLibraryPorts(transport),
     ...makeFeedPorts(transport),
-    ...makeArticlePorts(transport),
+    ...makeArticlePorts(
+      transport,
+      options.archiveExecutionTimeoutMillis,
+      options.archiveRequestTimeoutMillis
+    ),
     ...makeSettingsPorts(transport),
     ...makeTaxonomyPorts(transport),
     ...makeReadingDictionaryPorts(transport),
@@ -64,6 +68,8 @@ export const makeNatsGatewayPorts = (
 ): GatewayPorts =>
   makeAdapter(client, dependencies, {
     requestTimeoutMillis: 2_000,
+    archiveExecutionTimeoutMillis: 30_000,
+    archiveRequestTimeoutMillis: 35_000,
     loginMethods: { development: false, google: true },
   })
 
@@ -71,6 +77,8 @@ export const acquireNatsGatewayPorts = (
   config: Readonly<{
     natsServers: readonly string[]
     requestTimeoutMillis: number
+    archiveExecutionTimeoutMillis: number
+    archiveRequestTimeoutMillis: number
     loginMethods: { readonly development: boolean; readonly google: boolean }
   }>,
   dependencies: Dependencies & {

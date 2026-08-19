@@ -149,4 +149,54 @@ describe("article library RPC handler", () => {
       code: "INVALID_REQUEST",
     })
   })
+
+  it("rejects an expired archive deadline without starting capture", async () => {
+    const archive = vi.fn(() => Effect.die("must not run"))
+    const reply = vi.fn((_payload: string) => Effect.void)
+    await Effect.runPromise(
+      makeArticleLibraryRpcHandler(
+        { archive } as never,
+        dependencies
+      )({
+        subject: subjects.content.articleLibrary,
+        payload: request({
+          operation: "Archive",
+          articleId,
+          deadlineAt: "2026-08-13T00:00:00.500Z",
+        }),
+        reply,
+      })
+    )
+
+    expect(archive).not.toHaveBeenCalled()
+    expect(JSON.parse(reply.mock.calls[0]![0]).payload).toEqual({
+      _tag: "Rejected",
+      code: "STORAGE_FAILURE",
+    })
+  })
+
+  it("interrupts archive work when its end-to-end deadline expires", async () => {
+    const archive = vi.fn(() => Effect.never)
+    const reply = vi.fn((_payload: string) => Effect.void)
+    await Effect.runPromise(
+      makeArticleLibraryRpcHandler(
+        { archive } as never,
+        dependencies
+      )({
+        subject: subjects.content.articleLibrary,
+        payload: request({
+          operation: "Archive",
+          articleId,
+          deadlineAt: "2026-08-13T00:00:01.010Z",
+        }),
+        reply,
+      })
+    )
+
+    expect(archive).toHaveBeenCalledOnce()
+    expect(JSON.parse(reply.mock.calls[0]![0]).payload).toEqual({
+      _tag: "Rejected",
+      code: "STORAGE_FAILURE",
+    })
+  })
 })

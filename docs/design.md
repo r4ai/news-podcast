@@ -76,6 +76,7 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
 - 401はセッション欠落/失効、403は認証済みだが許可されない操作。エラーはRFC 9457 Problem Details。
 - 一覧はopaque cursor、`limit` 1..100、安定順序、filterに束縛する。`totalCount`は初期契約に入れない。
   - 記事一覧`GET /v1/me/articles`は`cursor`クエリと`page.hasMore` / `page.nextCursor`で継続する。cursorは`(公開日時 ?? 発見日時, articleId)`のkeyset位置をbase64urlへ畳んだ不透明tokenで、Content Knowledgeだけが解釈する。OFFSETと違い、ページを跨いで記事が増減しても重複・欠落しない。復号できないcursorは不正要求として閉じる。
+- 手動archive `POST /v1/me/articles/{articleId}/archive` は同期結果を返す。GatewayはContent captureと同じ30秒のend-to-end deadlineを送り、archive RPCだけ5秒の返信余裕を加えて待つ。Contentは期限切れ処理を中断してcommitしないため、Gatewayの失敗後にarchiveだけ成功する状態を作らない。詳細は[ADR-0065](adr/0065-bound-manual-archive-rpc-deadline.md)を正本とする。
 - Episodeへ署名URLを保存・公開しない。`GET /v1/episodes/{episodeId}/audio`はGatewayがowner認可後にprivate S3からRange streamし、`Cache-Control: private, no-store`を返す。
 - Better Authの `/api/auth/**` はBetter Auth側の生成契約を正本とし、アプリOpenAPIへ複製しない。Google tokenを `/v1` のbearer tokenとして扱わない。
 
@@ -371,3 +372,4 @@ flowchart TD
 - [ADR-0054 埋め込みのsandbox権限をprovider単位で宣言する](adr/0054-per-provider-embed-sandbox.md)
 - [ADR-0060 描画範囲をatomで区切り、フロントエンドの予算を実測で守る](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)
 - [ADR-0064 再生をrouteの外へ出し、ライブラリを一覧と原稿の2ペインにする](adr/0064-persistent-playback-outside-the-router-outlet.md)
+- [ADR-0065 手動記事archiveをend-to-end RPC deadlineで拘束する](adr/0065-bound-manual-archive-rpc-deadline.md)

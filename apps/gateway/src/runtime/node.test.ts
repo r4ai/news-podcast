@@ -13,6 +13,8 @@ const validConfig = {
   port: 4100,
   natsServers: ["nats://nats:4222"],
   requestTimeoutMillis: 2_000,
+  archiveExecutionTimeoutMillis: 30_000,
+  archiveRequestTimeoutMillis: 35_000,
   loginMethods: { development: true, google: false },
   identityHttpOrigin: "http://identity-access:4002",
   authProxyTimeoutMillis: 5_000,
@@ -30,6 +32,30 @@ describe("Gateway Node runtime", () => {
     )
 
     expect(failure).toBeDefined()
+  })
+
+  it("rejects an archive RPC timeout without reply margin", async () => {
+    const failure = await Effect.runPromise(
+      parseNodeGatewayConfig({
+        ...validConfig,
+        archiveRequestTimeoutMillis: validConfig.archiveExecutionTimeoutMillis,
+      }).pipe(Effect.flip)
+    )
+
+    expect(failure).toBeDefined()
+  })
+
+  it("accepts the content service's maximum archive timeout with reply margin", async () => {
+    const config = await Effect.runPromise(
+      parseNodeGatewayConfig({
+        ...validConfig,
+        archiveExecutionTimeoutMillis: 300_000,
+        archiveRequestTimeoutMillis: 305_000,
+      })
+    )
+
+    expect(config.archiveExecutionTimeoutMillis).toBe(300_000)
+    expect(config.archiveRequestTimeoutMillis).toBe(305_000)
   })
 
   it("serves the API and drains HTTP then NATS when interrupted", async () => {

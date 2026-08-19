@@ -38,6 +38,8 @@ export type RequestLineage = Readonly<{
 
 export type AdapterOptions = Readonly<{
   requestTimeoutMillis: number
+  archiveExecutionTimeoutMillis: number
+  archiveRequestTimeoutMillis: number
   loginMethods: { readonly development: boolean; readonly google: boolean }
 }>
 
@@ -60,7 +62,8 @@ export const makeTransport = (
     subject: string,
     actor: Actor,
     payload: unknown,
-    lineage: RequestLineage
+    lineage: RequestLineage,
+    requestTimeoutMillis = options.requestTimeoutMillis
   ) => {
     const operation = Effect.currentSpan.pipe(
       Effect.flatMap((span) =>
@@ -83,8 +86,7 @@ export const makeTransport = (
       ),
       Effect.flatMap((encoded) =>
         Effect.tryPromise({
-          try: () =>
-            client.request(subject, encoded, options.requestTimeoutMillis),
+          try: () => client.request(subject, encoded, requestTimeoutMillis),
           catch: unavailable,
         })
       ),
@@ -130,9 +132,10 @@ export const makeTransport = (
     expectedProducer: string,
     actor: Actor,
     payload: unknown,
-    lineage: RequestLineage
+    lineage: RequestLineage,
+    requestTimeoutMillis = options.requestTimeoutMillis
   ) =>
-    send(subject, actor, payload, lineage).pipe(
+    send(subject, actor, payload, lineage, requestTimeoutMillis).pipe(
       Effect.flatMap((reply) =>
         receive(reply, subject, expectedProducer, lineage)
       )
@@ -194,12 +197,20 @@ export const makeTransport = (
     subject: string,
     producer: string,
     payload: unknown,
-    decode: (value: unknown) => Effect.Effect<Value, unknown, never>
+    decode: (value: unknown) => Effect.Effect<Value, unknown, never>,
+    requestTimeoutMillis = options.requestTimeoutMillis
   ) =>
     authenticated(headers).pipe(
       Effect.flatMap(({ actor, lineage: parent }) => {
         const lineage = childLineage(parent, dependencies.nextMessageId())
-        return rpc(subject, producer, actor, payload, lineage).pipe(
+        return rpc(
+          subject,
+          producer,
+          actor,
+          payload,
+          lineage,
+          requestTimeoutMillis
+        ).pipe(
           Effect.flatMap((reply) => decode(reply.payload)),
           Effect.mapError(unavailable)
         )

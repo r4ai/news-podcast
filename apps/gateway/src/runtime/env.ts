@@ -29,12 +29,17 @@ export const readGatewayConfig = (
       .split(",")
       .map((value) => value.trim())
       .filter((value) => value.length > 0)
+    const archiveCaptureTimeoutMillis = Number(
+      env.CONTENT_ARCHIVE_TIMEOUT_MS ?? "30000"
+    )
 
     return yield* parseNodeGatewayConfig({
       hostname: env.GATEWAY_HOST?.trim() || "0.0.0.0",
       port: Number(env.GATEWAY_PORT ?? "4001"),
       natsServers: servers,
       requestTimeoutMillis: Number(env.NATS_REQUEST_TIMEOUT_MS ?? "2000"),
+      archiveExecutionTimeoutMillis: archiveCaptureTimeoutMillis,
+      archiveRequestTimeoutMillis: archiveCaptureTimeoutMillis + 5_000,
       loginMethods: {
         development,
         google: Boolean(env.GOOGLE_CLIENT_ID?.trim()),

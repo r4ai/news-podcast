@@ -73,6 +73,9 @@ const storageCode = (
   return "STORAGE_FAILURE"
 }
 
+const archiveDeadlineExceeded = () =>
+  deepFreeze({ _tag: "ArchiveDeadlineExceeded" as const })
+
 /** Enforces owner identity at the message boundary; payloads can never select a tenant. */
 export const makeArticleLibraryRpcHandler =
   (library: Library, dependencies: Dependencies) =>
@@ -178,6 +181,11 @@ export const makeArticleLibraryRpcHandler =
                         )
                       )
                   case "Archive":
+                    const remainingMillis =
+                      Date.parse(command.deadlineAt) -
+                      Date.parse(dependencies.now())
+                    if (remainingMillis <= 0)
+                      return Effect.fail(archiveDeadlineExceeded())
                     return library
                       .archive(
                         { ownerId, articleId: command.articleId },
@@ -189,6 +197,10 @@ export const makeArticleLibraryRpcHandler =
                         }
                       )
                       .pipe(
+                        Effect.timeoutOrElse({
+                          duration: remainingMillis,
+                          orElse: () => Effect.fail(archiveDeadlineExceeded()),
+                        }),
                         Effect.map((value) =>
                           value._tag === "NotFound"
                             ? deepFreeze({ _tag: "NotFound" })
