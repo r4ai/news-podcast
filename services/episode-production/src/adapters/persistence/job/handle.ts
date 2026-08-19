@@ -209,6 +209,7 @@ const writeJobDocument = (
   runner
     .update(episodeJobs)
     .set({
+      createdAt: row.createdAt,
       status: row.status,
       attempt: row.attempt,
       enqueuedAt: row.enqueuedAt,

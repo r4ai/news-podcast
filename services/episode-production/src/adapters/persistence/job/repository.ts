@@ -71,7 +71,7 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
                 _tag: "Queued",
                 jobId: existing.jobId,
                 request: existing.request,
-                createdAt: existing.createdAt,
+                createdAt: job.enqueuedAt,
                 attempt: 0,
                 enqueuedAt: job.enqueuedAt,
               })

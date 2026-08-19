@@ -97,6 +97,14 @@ export const retryFailedJob = <FindError, SaveError>(
             deepFreeze({ _tag: "NotFailed" as const })
           )
         }
+        if (
+          original.request.trigger === "scheduled" &&
+          original.failure.code === "no_generation_candidates"
+        ) {
+          return Effect.succeed<RetryFailedJobResult>(
+            deepFreeze({ _tag: "NotFailed" as const })
+          )
+        }
         return Effect.all([ports.nextJobId, ports.now]).pipe(
           Effect.flatMap(([nextJobId, now]) =>
             ports.saveRetryIdempotently(

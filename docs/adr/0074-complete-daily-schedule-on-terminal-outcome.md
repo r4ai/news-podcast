@@ -33,7 +33,7 @@ stateDiagram-v2
 | `Canceled(service_shutdown)` | 同じjobを再queueして再起動後に回復 | `retrying` / 再調整中 |
 | RPC / storage失敗 | dueを維持して次tickで再調整 | `failed` metric |
 
-候補なしの再queueはSQLite transactionで既存scheduled jobだけを更新する。job IDと日次冪等キーを維持するため同日重複生成はなく、再起動後もDBのFailed状態から回復できる。新しいQueued AG-UI snapshotには再投入時刻を含む一意event keyを付ける。
+候補なしの再queueはSQLite transactionで既存scheduled jobだけを更新し、`createdAt / enqueuedAt`を再投入時刻へ進めて各回の30分deadlineを更新する。job IDと日次冪等キーを維持するため同日重複生成はなく、再起動後もDBのFailed状態から回復できる。自動回復対象への手動retryは拒否して別jobとの競合を防ぐ。新しいQueued AG-UI snapshotには再投入時刻を含む一意event keyを付ける。
 
 ## 却下案
 

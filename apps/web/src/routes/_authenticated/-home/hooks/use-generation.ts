@@ -135,13 +135,15 @@ export function useGeneration() {
     retryDelay: PROJECTION_RETRY_DELAY_MS,
   })
   const presentationState =
-    projectionEpisodeId === undefined
-      ? state
-      : projection.data
-        ? "succeeded"
-        : projection.isError
-          ? "projection-failed"
-          : "projecting"
+    latestJob?.scheduleStatus === "retrying"
+      ? "retrying"
+      : projectionEpisodeId === undefined
+        ? state
+        : projection.data
+          ? "succeeded"
+          : projection.isError
+            ? "projection-failed"
+            : "projecting"
   const latestEpisode = projection.data ?? episodes.items[0]
 
   // 対象Episodeが読めた時点で一覧も再取得する。詳細を画面へ即時表示しつつ、

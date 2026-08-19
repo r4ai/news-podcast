@@ -117,6 +117,43 @@ describe("episode job control", () => {
     )
   })
 
+  it("rejects manual retry for an auto-recoverable scheduled candidate miss", async () => {
+    const failed = failRunningJob(
+      leaseQueuedJob(queued, {
+        token: "lease-1" as never,
+        startedAt: now,
+        leasedUntil: now,
+      }),
+      {
+        failedAt: now,
+        failure: {
+          code: "no_generation_candidates" as never,
+          retryable: false,
+        },
+      }
+    )
+    const saveRetryIdempotently = vi.fn((_sourceJobId, job) =>
+      Effect.succeed(job)
+    )
+
+    const result = await Effect.runPromise(
+      retryFailedJob(
+        {
+          findOwned: () => Effect.succeed(failed),
+          nextJobId: Effect.succeed(retriedId),
+          now: Effect.succeed(now),
+          saveRetryIdempotently,
+        },
+        command.ownerId,
+        originalId,
+        "manual-retry-1" as never
+      )
+    )
+
+    expect(result).toEqual({ _tag: "NotFailed" })
+    expect(saveRetryIdempotently).not.toHaveBeenCalled()
+  })
+
   it("does not retry missing or non-failed jobs", async () => {
     const common = {
       nextJobId: Effect.succeed(retriedId),

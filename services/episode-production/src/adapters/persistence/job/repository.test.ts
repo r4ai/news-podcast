@@ -26,11 +26,15 @@ const command = Schema.decodeUnknownSync(CreateJobCommandSchema)({
 const at = Schema.decodeUnknownSync(UtcTimestampSchema)(
   "2026-08-12T00:00:00.000Z"
 )
+const later = Schema.decodeUnknownSync(UtcTimestampSchema)(
+  "2026-08-12T01:00:00.000Z"
+)
 const job = (
   id: string,
   trigger: "manual" | "scheduled" = "manual",
   articleIds?: readonly string[],
-  idempotencyKey: string = command.idempotencyKey
+  idempotencyKey: string = command.idempotencyKey,
+  enqueuedAt = at
 ) =>
   newQueuedJob({
     jobId: Schema.decodeUnknownSync(JobIdSchema)(id),
@@ -47,7 +51,7 @@ const job = (
             Schema.decodeUnknownSync(ArticleIdSchema)(id)
           ),
         }),
-    enqueuedAt: at,
+    enqueuedAt,
   })
 
 describe("SQLite job repository", () => {
@@ -293,7 +297,8 @@ describe("SQLite job repository", () => {
               "6518412b-ce2f-4641-9f2c-a02dd515bc31",
               "scheduled",
               undefined,
-              "scheduled:owner:2026-08-15"
+              "scheduled:owner:2026-08-15",
+              later
             )
           )
         })
@@ -303,6 +308,8 @@ describe("SQLite job repository", () => {
         _tag: "Queued",
         jobId: scheduled.jobId,
         attempt: 0,
+        createdAt: later,
+        enqueuedAt: later,
       })
     } finally {
       restarted.close()
