@@ -187,12 +187,7 @@ export const createArticleCatalog = (
             const owners = tx
               .select({ ownerId: feedSubscriptions.ownerId })
               .from(feedSubscriptions)
-              .where(
-                and(
-                  eq(feedSubscriptions.feedId, input.feedId),
-                  eq(feedSubscriptions.enabled, 1)
-                )
-              )
+              .where(eq(feedSubscriptions.feedId, input.feedId))
               .all()
             if (owners.length > 0)
               tx.insert(articleOwnerAccess)

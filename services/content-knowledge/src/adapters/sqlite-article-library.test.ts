@@ -46,6 +46,7 @@ const ids = {
   feedB: decode(FeedIdSchema, "c7f32a8b-5358-4f4b-837b-b8b21965e65a"),
   articleA: "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never,
   articleB: "04b51d15-f488-4076-b99a-3c98f1feab05" as never,
+  articleC: "e057741b-8e37-4f74-9a4b-989a1575072d" as never,
 }
 
 const setup = async () => {
@@ -173,6 +174,56 @@ const query = (overrides: Record<string, unknown> = {}) =>
 const capturedAt = (value: string) => decode(CapturedAtSchema, value)
 
 describe("SQLite article library", () => {
+  it("grants shared-feed items while a subscriber pauses and resumes", async () => {
+    const { articles, catalog, database, subscriptions } = await setup()
+    await Effect.runPromise(
+      subscriptions.setEnabled(
+        ids.ownerA,
+        decode(SubscriptionIdSchema, "9aa2225d-07e7-4af4-a8e6-e4788f801a91"),
+        false
+      )
+    )
+    await Effect.runPromise(
+      subscriptions.add({
+        subscriptionId: decode(
+          SubscriptionIdSchema,
+          "89278c92-78bf-4913-aa6f-27e7a2847154"
+        ),
+        feedId: ids.feedA,
+        ownerId: ids.ownerB,
+        feedUrl: decode(FeedUrlSchema, "https://feeds.example.com/a.xml"),
+        createdAt: decode(CreatedAtSchema, "2026-08-13T02:00:00.000Z"),
+      })
+    )
+    await Effect.runPromise(
+      catalog.upsert({
+        articleId: ids.articleC,
+        feedId: ids.feedA,
+        externalId: "entry-c",
+        sourceUrl: "https://news.example.com/c" as never,
+        title: "Shared feed article" as never,
+        discoveredAt: "2026-08-13T02:01:00.000Z",
+      })
+    )
+    await Effect.runPromise(
+      subscriptions.setEnabled(
+        ids.ownerA,
+        decode(SubscriptionIdSchema, "9aa2225d-07e7-4af4-a8e6-e4788f801a91"),
+        true
+      )
+    )
+
+    await expect(
+      Effect.runPromise(articles.find(ids.ownerA, ids.articleC))
+    ).resolves.toMatchObject({ _tag: "Found" })
+    expect(
+      database.getSql(
+        `SELECT count(*) AS count FROM article_owner_access
+         WHERE article_id = '${ids.articleC}'`
+      )
+    ).toEqual({ count: 2 })
+  })
+
   it("keeps acquired articles readable after unsubscribe and re-subscribe", async () => {
     const { articles, catalog, database, subscriptions } = await setup()
     await Effect.runPromise(
