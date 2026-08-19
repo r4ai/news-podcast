@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-const sessionCookie = "news-podcast-e2e=session"
+const sessionCookieName = "news-podcast-e2e"
 const ownerId = "00000000-0000-4000-8000-000000000100"
 const feedId = "00000000-0000-4000-8000-000000000001"
 const subscriptionId = "00000000-0000-4000-8000-000000000002"
@@ -9,7 +9,6 @@ const createdAt = "2026-08-10T00:00:00.000Z"
 const seededEpisodeId = "00000000-0000-4000-8000-000000000030"
 
 export const fakeApiIdentifiers = {
-  sessionCookie,
   ownerId,
   feedId,
   subscriptionId,
@@ -283,6 +282,7 @@ export type FakeApi = {
  */
 export function createFakeApi(): FakeApi {
   const articles = seedArticles()
+  const sessions = new Set<string>()
   const state = {
     subscription: { id: subscriptionId, feedId, enabled: true, createdAt },
     settings: {
@@ -312,7 +312,7 @@ export function createFakeApi(): FakeApi {
     if (path === "/health") return json({ status: "ok" })
     if (path === "/api/auth/state") {
       return json(
-        authenticated(request)
+        authenticated(request, sessions)
           ? {
               authenticated: true,
               userId: ownerId,
@@ -329,11 +329,15 @@ export function createFakeApi(): FakeApi {
       if ((body as { password?: string }).password !== "e2e-password") {
         return json({ error: "invalid credentials" }, 401)
       }
+      const sessionId = randomUUID()
+      sessions.add(sessionId)
       return json({ authenticated: true }, 200, {
-        "Set-Cookie": `${sessionCookie}; Path=/; HttpOnly; SameSite=Lax`,
+        "Set-Cookie": `${sessionCookieName}=${sessionId}; Path=/; HttpOnly; SameSite=Lax`,
       })
     }
-    if (!authenticated(request)) return json({ error: "unauthorized" }, 401)
+    if (!authenticated(request, sessions)) {
+      return json({ error: "unauthorized" }, 401)
+    }
 
     if (path === "/v1/feeds" && request.method === "GET") {
       return json({
@@ -661,8 +665,17 @@ function eventStream(job: Job, articles: FakeApi["articles"]): Response {
   })
 }
 
-function authenticated(request: Request): boolean {
-  return request.headers.get("cookie")?.includes(sessionCookie) ?? false
+function authenticated(
+  request: Request,
+  sessions: ReadonlySet<string>
+): boolean {
+  const sessionId = request.headers
+    .get("cookie")
+    ?.split(";")
+    .map((cookie) => cookie.trim().split("="))
+    .find(([name]) => name === sessionCookieName)?.[1]
+
+  return sessionId !== undefined && sessions.has(sessionId)
 }
 
 function json(

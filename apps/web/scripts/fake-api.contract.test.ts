@@ -128,6 +128,19 @@ function successMediaTypes(template: string, method: string) {
 
 const articleId = "00000000-0000-4000-8000-000000000010"
 
+async function login(api: ReturnType<typeof createFakeApi>): Promise<string> {
+  const response = await api.fetch(
+    new Request("http://127.0.0.1:4000/api/dev/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: "e2e-password" }),
+    })
+  )
+
+  expect(response.status).toBe(200)
+  return response.headers.get("set-cookie") ?? ""
+}
+
 /** 偽Gatewayが実装していて、OpenAPIにも定義があるGETの組。 */
 const cases = [
   { template: "/v1/me/articles", path: "/v1/me/articles" },
@@ -157,9 +170,10 @@ const cases = [
 
 async function get(path: string): Promise<Response> {
   const api = createFakeApi()
+  const cookie = await login(api)
   return api.fetch(
     new Request(`http://127.0.0.1:4000${path}`, {
-      headers: { cookie: fakeApiIdentifiers.sessionCookie },
+      headers: { cookie },
     })
   )
 }
@@ -200,7 +214,7 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
   it("serves a generated episode from the detail endpoint", async () => {
     const api = createFakeApi()
     const headers = {
-      cookie: fakeApiIdentifiers.sessionCookie,
+      cookie: await login(api),
       "content-type": "application/json",
     }
     const created = await api.fetch(
@@ -225,5 +239,29 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
       media["application/json"]!.schema!,
       "/v1/episodes/{episodeId}"
     )
+  })
+})
+
+describe("fake gateway authentication sessions", () => {
+  it("issues a distinct session for each browser context", async () => {
+    const api = createFakeApi()
+
+    const firstSession = await login(api)
+    const secondSession = await login(api)
+
+    expect(firstSession).not.toBe(secondSession)
+  })
+
+  it("does not authenticate an unissued session identifier", async () => {
+    const api = createFakeApi()
+    const response = await api.fetch(
+      new Request("http://127.0.0.1:4000/api/auth/state", {
+        headers: { cookie: "news-podcast-e2e=not-issued" },
+      })
+    )
+
+    await expect(response.json()).resolves.toMatchObject({
+      authenticated: false,
+    })
   })
 })
