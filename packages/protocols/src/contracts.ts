@@ -59,7 +59,8 @@ export const CreateEpisodeJobRequestSchema = Schema.Struct({
   trigger: Schema.Literal("manual"),
   articleIds: Schema.Array(uuid("ArticleId")).check(
     Schema.isMinLength(1),
-    Schema.isMaxLength(20)
+    Schema.isMaxLength(20),
+    Schema.isUnique()
   ),
 })
 export type CreateEpisodeJobRequest = Schema.Schema.Type<

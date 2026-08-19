@@ -4592,6 +4592,9 @@
               },
               {
                 "maxItems": 20
+              },
+              {
+                "uniqueItems": true
               }
             ]
           }

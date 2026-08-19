@@ -177,6 +177,10 @@ describe("gateway HttpApi contract", () => {
       { trigger: "manual", articleIds: ["article-1"] },
       {
         trigger: "manual",
+        articleIds: [validArticleId, validArticleId],
+      },
+      {
+        trigger: "manual",
         articleIds: Array.from({ length: 21 }, () => validArticleId),
       },
     ]) {

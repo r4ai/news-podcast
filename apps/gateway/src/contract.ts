@@ -135,7 +135,8 @@ export const CreateEpisodeJobRequestSchema = Schema.Struct({
   trigger: Schema.Literal("manual"),
   articleIds: Schema.Array(ArticleIdSchema).check(
     Schema.isMinLength(1),
-    Schema.isMaxLength(20)
+    Schema.isMaxLength(20),
+    Schema.isUnique()
   ),
 }).annotate({ identifier: "CreateEpisodeJobRequest" })
 

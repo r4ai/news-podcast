@@ -583,7 +583,7 @@ export interface components {
         CreateEpisodeJobRequest: {
             /** @enum {string} */
             trigger: "manual";
-            articleIds: (string & unknown)[] & (unknown & unknown);
+            articleIds: (string & unknown)[] & (unknown & unknown & unknown);
         };
         /** @enum {string} */
         JobStatus: "queued" | "running" | "retrying" | "succeeded" | "failed" | "canceled";

@@ -26,6 +26,10 @@ describe("parseCreateJobCommand", () => {
     ["empty article selection", { ...valid, articleIds: [] }],
     ["non-UUID article", { ...valid, articleIds: ["article-1"] }],
     [
+      "duplicate selected articles",
+      { ...valid, articleIds: [valid.articleIds[0], valid.articleIds[0]] },
+    ],
+    [
       "too many selected articles",
       {
         ...valid,
