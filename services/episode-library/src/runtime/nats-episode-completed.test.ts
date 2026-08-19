@@ -124,20 +124,22 @@ describe("NATS EpisodeCompleted runtime", () => {
       materialize,
       saveOnce: () => Effect.succeed("Stored"),
     }
+    const ack = vi.fn()
     const nack = vi.fn()
 
     const exit = await Effect.runPromiseExit(
       handleNatsEpisodeCompleted(ports)({
         data: new TextEncoder().encode("not-json"),
-        ack: Effect.void,
+        ack: Effect.sync(ack).pipe(Effect.asVoid),
         deliveryCount: 50,
         nack: (delayMillis) =>
           Effect.sync(() => nack(delayMillis)).pipe(Effect.asVoid),
       })
     )
 
-    expect(exit._tag).toBe("Failure")
-    expect(nack).toHaveBeenCalledWith(30_000)
+    expect(exit._tag).toBe("Success")
+    expect(ack).toHaveBeenCalledOnce()
+    expect(nack).not.toHaveBeenCalled()
     expect(materialize).not.toHaveBeenCalled()
   })
 

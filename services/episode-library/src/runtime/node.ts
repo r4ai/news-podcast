@@ -344,8 +344,6 @@ export const runNodeEpisodeLibraryService = (
                   stream: config.completionConsumer.stream,
                   durableName: config.completionConsumer.durableName,
                   ackWaitMillis: config.completionConsumer.ackWaitMillis,
-                  maximumDeliveries:
-                    config.completionConsumer.maximumDeliveries,
                 }),
               catch: () => runtimeError("Nats"),
             }),

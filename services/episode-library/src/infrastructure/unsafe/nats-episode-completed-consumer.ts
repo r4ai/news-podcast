@@ -26,7 +26,6 @@ export type UnsafeEpisodeCompletedConsumerConfig = DeepReadonly<{
   readonly stream: string
   readonly durableName: string
   readonly ackWaitMillis: number
-  readonly maximumDeliveries: number
 }>
 
 /** All mutable JetStream iterator and acknowledgement operations stay here. */
@@ -45,7 +44,9 @@ export const connectEpisodeCompletedConsumerUnsafe = async (
       replay_policy: ReplayPolicy.Instant,
       filter_subject: subjects.production.jobCompletedV2,
       ack_wait: config.ackWaitMillis * 1_000_000,
-      max_deliver: config.maximumDeliveries,
+      // Persistence failures must outlive the operational alert threshold.
+      // Terminal payload failures are acknowledged by the application layer.
+      max_deliver: -1,
       max_ack_pending: 1,
     })
     const consumer = await client.consumers.get(

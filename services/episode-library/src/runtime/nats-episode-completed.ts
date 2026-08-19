@@ -10,6 +10,7 @@ import {
   consumeEpisodeCompleted,
   type EpisodeCompletionPorts,
 } from "../application/index.js"
+import type { CompletionStoreFailure } from "../application/ports/completion.js"
 
 export type NatsPayloadDecodeFailure = Readonly<{
   _tag: "NatsPayloadDecodeFailure"
@@ -52,6 +53,16 @@ const decodeJson = (data: Uint8Array) =>
     }),
   })
 
+const isTransientPersistenceFailure = (
+  failure: unknown
+): failure is CompletionStoreFailure =>
+  typeof failure === "object" &&
+  failure !== null &&
+  "_tag" in failure &&
+  failure._tag === "CompletionStoreFailure"
+
+export type EpisodeCompletedHandlingResult = "Committed" | "Discarded"
+
 export const handleNatsEpisodeCompleted = (
   ports: EpisodeCompletionPorts,
   nackBackoff: EpisodeCompletedNackBackoff = defaultNackBackoff
@@ -84,16 +95,30 @@ export const handleNatsEpisodeCompleted = (
         )
       )
     )
+    type ConsumeFailure = Effect.Error<typeof consume>
 
-    return yield* consume.pipe(
-      Effect.matchEffect({
-        onFailure: (failure) =>
-          delivery
-            .nack(
-              episodeCompletedNackDelay(delivery.deliveryCount, nackBackoff)
-            )
-            .pipe(Effect.andThen(Effect.fail(failure))),
-        onSuccess: () => delivery.ack,
-      })
+    const result = yield* consume.pipe(
+      Effect.as("Consumed" as const),
+      Effect.catch(
+        (
+          failure: ConsumeFailure
+        ): Effect.Effect<
+          "Discarded",
+          ConsumeFailure | AckError | NackError
+        > => {
+          if (isTransientPersistenceFailure(failure)) {
+            return delivery
+              .nack(
+                episodeCompletedNackDelay(delivery.deliveryCount, nackBackoff)
+              )
+              .pipe(Effect.andThen(Effect.fail(failure)))
+          }
+          return delivery.ack.pipe(Effect.as("Discarded" as const))
+        }
+      )
     )
+    if (result === "Discarded") return result
+
+    yield* delivery.ack
+    return "Committed" as const
   })
