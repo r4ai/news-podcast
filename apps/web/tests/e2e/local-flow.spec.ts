@@ -908,3 +908,102 @@ test("switching episodes shows the next script from its beginning", async ({
   expect(max).toBeGreaterThan(0)
   expect(top).toBe(0)
 })
+
+test("opening an article on one column never moves the page after it renders", async ({
+  page,
+}) => {
+  // 1カラム (lg未満) では一覧と本文がページのスクロールを共有する。一覧を送って
+  // から記事を開くと、描き終えた後にスクロールが動き、先に出ていた「一覧へ戻る」
+  // が上へ飛んでから元の位置へ戻る = レイアウトシフトになっていた。
+  const many = Array.from({ length: 40 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-0000000005${String(index).padStart(2, "0")}`,
+    feedId: "00000000-0000-4000-8000-000000000001",
+    sourceName: "Example Feed",
+    title: `送り記事 ${index}`,
+    url: `https://example.com/shift-${index}`,
+    publishedAt: `2026-08-${index < 20 ? "10" : "09"}T00:00:00.000Z`,
+    discoveredAt: "2026-08-10T00:01:00.000Z",
+    archiveStatus: "succeeded",
+    snapshotId: "00000000-0000-4000-8000-000000000021",
+    read: false,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  }))
+  // 画面に収まらない長さの本文。短いと、本文が届いた後にスクロールが動く余地
+  // 自体が無くなり、回帰を見逃す。
+  const markdown = Array.from(
+    { length: 60 },
+    (_, index) => `## 見出し ${index}\n\n本文の段落です。${"あ".repeat(120)}\n`
+  ).join("\n")
+
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles",
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({ items: many, page: { hasMore: false } }),
+        contentType: "application/json",
+      })
+  )
+  await page.route(/\/v1\/me\/articles\/[0-9a-f-]{36}$/, (route) =>
+    route.fulfill({
+      body: JSON.stringify(
+        many.find((item) => route.request().url().includes(item.id)) ?? many[0]
+      ),
+      contentType: "application/json",
+    })
+  )
+  await page.route(/\/v1\/me\/articles\/[0-9a-f-]{36}\/markdown$/, (route) =>
+    route.fulfill({
+      body: JSON.stringify({ markdown }),
+      contentType: "application/json",
+    })
+  )
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/articles")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  const row = page.getByRole("button", { name: /^送り記事 30/ })
+  await expect(row).toBeVisible()
+  await row.scrollIntoViewIfNeeded()
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+
+  // 「一覧へ戻る」がDOMへ入った後に起きたスクロールだけを数える。開く前に
+  // 位置を寄せていれば、本文が出てからページが動くことはない。
+  await page.evaluate(() => {
+    const probe = window as typeof window & {
+      readerShown?: boolean
+      scrollsAfterReader?: number[]
+    }
+    probe.readerShown = false
+    probe.scrollsAfterReader = []
+    const shown = () =>
+      [...document.querySelectorAll("button")].some((button) =>
+        button.textContent?.includes("一覧へ戻る")
+      )
+    new MutationObserver(() => {
+      if (shown()) probe.readerShown = true
+    }).observe(document.documentElement, { childList: true, subtree: true })
+    window.addEventListener("scroll", () => {
+      if (probe.readerShown) probe.scrollsAfterReader!.push(window.scrollY)
+    })
+  })
+
+  await row.click()
+  await expect(page.getByRole("button", { name: "一覧へ戻る" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "送り記事 30" })).toBeVisible()
+  // 本文はremark/rehypeの非同期パイプラインを通ってから差し替わる。伸びきった
+  // 後まで見て、そこまでにページが動いていないことを確かめる。
+  await expect(page.getByRole("heading", { name: "見出し 59" })).toBeVisible()
+
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { scrollsAfterReader?: number[] })
+          .scrollsAfterReader
+    )
+  ).toEqual([])
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+})

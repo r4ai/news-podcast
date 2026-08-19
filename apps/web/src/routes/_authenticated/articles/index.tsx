@@ -50,6 +50,12 @@ function ArticlesRoute() {
   }
 
   function selectArticle(id: string | undefined) {
+    // 1カラム (lg未満) では一覧と本文がページのスクロールを共有する。前の画面の
+    // 位置を持ち越したまま切り替えると、描き終えた後にブラウザ (末尾の切り詰め)
+    // やrouterのリセットがスクロールを動かし、一度出た「一覧へ戻る」が上へ飛んで
+    // から戻る。切り替えの前にこちらで先頭へ寄せて、描いた後に動く余地を消す。
+    // 2カラムではページ自身がスクロールしないので、これは何もしない。
+    window.scrollTo({ top: 0 })
     onSearchChange({ article: id })
   }
 

@@ -192,3 +192,18 @@ describe("ArticleReaderView table of contents", () => {
     expect(screen.queryByRole("navigation", { name: "目次" })).toBeNull()
   })
 })
+
+describe("ArticleReaderView の1カラム時のfocus", () => {
+  it("本文へ現在地を移すが、ページの位置は動かさない", async () => {
+    // 1カラムでは一覧と本文がページのスクロールを共有する。focusにスクロール
+    // まで任せると、記事が画面へ収まらない時にブラウザが本文を見える所まで送り、
+    // 上に居る「一覧へ戻る」が飛ぶ。
+    const focus = vi.spyOn(HTMLElement.prototype, "focus")
+    renderReader("# 章\n\n本文")
+
+    await waitFor(() => expect(focus).toHaveBeenCalled())
+    const target = focus.mock.instances.at(-1) as HTMLElement
+    expect(target.tagName).toBe("ARTICLE")
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+  })
+})
