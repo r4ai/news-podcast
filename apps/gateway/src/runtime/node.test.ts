@@ -13,6 +13,8 @@ const validConfig = {
   port: 4100,
   natsServers: ["nats://nats:4222"],
   requestTimeoutMillis: 2_000,
+  archiveExecutionTimeoutMillis: 30_000,
+  archiveRequestTimeoutMillis: 35_000,
   loginMethods: { development: true, google: false },
   identityHttpOrigin: "http://identity-access:4002",
   authProxyTimeoutMillis: 5_000,
@@ -27,6 +29,17 @@ describe("Gateway Node runtime", () => {
   it("rejects invalid external configuration before acquiring resources", async () => {
     const failure = await Effect.runPromise(
       parseNodeGatewayConfig({ ...validConfig, port: 70_000 }).pipe(Effect.flip)
+    )
+
+    expect(failure).toBeDefined()
+  })
+
+  it("rejects an archive RPC timeout without reply margin", async () => {
+    const failure = await Effect.runPromise(
+      parseNodeGatewayConfig({
+        ...validConfig,
+        archiveRequestTimeoutMillis: validConfig.archiveExecutionTimeoutMillis,
+      }).pipe(Effect.flip)
     )
 
     expect(failure).toBeDefined()

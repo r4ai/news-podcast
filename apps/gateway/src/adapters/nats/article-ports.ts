@@ -100,17 +100,23 @@ type ArticlePorts = Pick<
   | "enrichArticle"
 >
 
-export const makeArticlePorts = (transport: Transport): ArticlePorts => {
+export const makeArticlePorts = (
+  transport: Transport,
+  archiveExecutionTimeoutMillis: number,
+  archiveRequestTimeoutMillis: number
+): ArticlePorts => {
   const libraryRpc = (
     headers: Parameters<GatewayPorts["getArticle"]>[0]["headers"],
-    payload: unknown
+    payload: unknown,
+    requestTimeoutMillis?: number
   ) =>
     transport.ownerRpc(
       headers,
       subjects.content.articleLibrary,
       "content-knowledge",
       payload,
-      parseArticleLibraryReply
+      parseArticleLibraryReply,
+      requestTimeoutMillis
     )
 
   const personalizationRpc = (
@@ -241,7 +247,17 @@ export const makeArticlePorts = (transport: Transport): ArticlePorts => {
         Effect.mapError(normalizeProblem)
       ),
     archiveArticle: ({ headers, articleId }) =>
-      libraryRpc(headers, { operation: "Archive", articleId }).pipe(
+      libraryRpc(
+        headers,
+        {
+          operation: "Archive",
+          articleId,
+          deadlineAt: new Date(
+            Date.parse(transport.now()) + archiveExecutionTimeoutMillis
+          ).toISOString(),
+        },
+        archiveRequestTimeoutMillis
+      ).pipe(
         Effect.flatMap((reply) =>
           reply._tag === "ArchiveTriggered"
             ? parse(ArticleArchiveResultSchema)({

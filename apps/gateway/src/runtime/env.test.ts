@@ -11,6 +11,7 @@ describe("Gateway environment configuration", () => {
         GATEWAY_PORT: "4100",
         NATS_SERVERS: "nats://nats-a:4222, nats://nats-b:4222",
         NATS_REQUEST_TIMEOUT_MS: "2500",
+        CONTENT_ARCHIVE_TIMEOUT_MS: "20000",
         DEV_AUTH_ENABLED: "true",
         GOOGLE_CLIENT_ID: "client-id",
       })
@@ -21,6 +22,8 @@ describe("Gateway environment configuration", () => {
       port: 4100,
       natsServers: ["nats://nats-a:4222", "nats://nats-b:4222"],
       requestTimeoutMillis: 2500,
+      archiveExecutionTimeoutMillis: 20000,
+      archiveRequestTimeoutMillis: 25000,
       loginMethods: { development: true, google: true },
       identityHttpOrigin: "http://identity-access:4002",
       authProxyTimeoutMillis: 5000,

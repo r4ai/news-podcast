@@ -147,6 +147,22 @@ describe("NATS GatewayPorts adapter", () => {
     expect(facets.states.all).toBe(1)
     expect(archived.status).toBe("already_archived")
     expect(requests).toHaveLength(7)
+    const archiveRequest = requests.find(
+      ({ envelope }) =>
+        (envelope.payload as { operation?: string }).operation === "Archive"
+    )
+    expect(archiveRequest?.timeoutMillis).toBe(35_000)
+    expect(archiveRequest?.envelope.payload).toMatchObject({
+      deadlineAt: "2026-08-12T00:00:30.000Z",
+    })
+    expect(
+      requests
+        .filter(
+          ({ envelope }) =>
+            (envelope.payload as { operation?: string }).operation !== "Archive"
+        )
+        .every(({ timeoutMillis }) => timeoutMillis === 2_000)
+    ).toBe(true)
 
     // 受け取ったカーソルをそのまま返すと、上流へ透過し、最終ページで畳まれる。
     const continued = await Effect.runPromise(
@@ -1342,6 +1358,8 @@ describe("NATS GatewayPorts adapter", () => {
           {
             natsServers: ["nats://127.0.0.1:4222"],
             requestTimeoutMillis: 2_000,
+            archiveExecutionTimeoutMillis: 30_000,
+            archiveRequestTimeoutMillis: 35_000,
             loginMethods: { development: false, google: true },
           },
           { ...dependencies(), connect }

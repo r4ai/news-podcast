@@ -109,6 +109,7 @@ export const ArticleLibraryRequestSchema = Schema.Union([
   Schema.Struct({
     operation: Schema.Literal("Archive"),
     articleId: ArticleIdSchema,
+    deadlineAt: utc,
   }),
 ])
 
