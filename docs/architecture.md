@@ -61,6 +61,7 @@ flowchart LR
 - 手動生成は選択記事IDを必須とする。定期生成は記事IDなしでjobを作り、worker開始時の最新InterestProfileから選定したGenerationPlanをfirst-write-winsで固定する。
 - 台本が返す出典URLは、ownerが選択しContentが版固定した入力記事だけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
+- 任意登録feedはprivateとし、媒体カタログはowner自身の購読または明示的なpublic listingだけを返す。
 - 署名付き音声URLは永続化・公開せず、Gatewayがアクセス要求ごとに内部発行してRange streamする。
 
 ## 3. レイヤー構成と依存方向
@@ -284,7 +285,7 @@ erDiagram
 
 | データ | 設計上の意味 |
 | --- | --- |
-| `feed_catalog` / `feed_subscriptions` | 共通の媒体カタログとユーザーの選択を分離 |
+| `feed_catalog` / `feed_subscriptions` / `public_feed_listings` | 内部canonical feed、ownerのprivate購読、明示公開listingを分離 |
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。個別記事失敗はdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_owner_access` | 購読解除後も残る、ownerが一度取り込んだ記事への恒久アクセス権 |
@@ -384,4 +385,5 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0068: 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
 - [ADR-0069: 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070: Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
+- [ADR-0071: ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

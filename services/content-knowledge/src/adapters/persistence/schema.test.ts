@@ -19,6 +19,7 @@ const schemaSql = (): ReadonlyMap<string, string> => {
 
 const TABLES = [
   "feed_catalog",
+  "public_feed_listings",
   "feed_subscriptions",
   "feed_items",
   "article_owner_states",
@@ -197,6 +198,41 @@ describe("content-knowledge migrated schema", () => {
           )
           .all()
       ).toEqual([{ owner_id: "owner-1", article_id: "article-1" }])
+      expect(database.prepare("PRAGMA integrity_check").get()).toEqual({
+        integrity_check: "ok",
+      })
+    } finally {
+      database.close()
+    }
+  })
+
+  it("migrates every existing feed to private-by-default listing state", () => {
+    const database = new DatabaseSync(":memory:")
+    try {
+      for (const migration of [
+        "20260815015622_init",
+        "20260815070952_sudden_leo",
+        "20260815135150_jittery_makkari",
+        "20260816162331_eminent_forge",
+        "20260819135811_yielding_queen_noir",
+      ])
+        database.exec(readMigration(migration))
+      database.exec(`
+        INSERT INTO feed_catalog VALUES
+          ('feed-private', 'https://example.test/feed.xml?token=secret',
+           '2026-08-19T00:00:00Z');
+      `)
+
+      database.exec(readMigration("20260819151002_sleepy_khan"))
+
+      expect(
+        database.prepare("SELECT count(*) AS count FROM feed_catalog").get()
+      ).toEqual({ count: 1 })
+      expect(
+        database
+          .prepare("SELECT count(*) AS count FROM public_feed_listings")
+          .get()
+      ).toEqual({ count: 0 })
       expect(database.prepare("PRAGMA integrity_check").get()).toEqual({
         integrity_check: "ok",
       })

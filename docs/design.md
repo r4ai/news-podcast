@@ -66,6 +66,8 @@ RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs
 
 購読は将来の同期・自動生成対象、`article_owner_access`はownerが一度取り込んだ記事への恒久的な参照権として分離する。RSS itemのcatalog登録時に現在の購読ownerへaccessを付与し、既存feedへの購読時は保存済みitemをbackfillする。購読解除ではaccess、記事状態、snapshotを削除しないため、一覧・詳細・Markdown・手動生成の保存版出典は引き続き参照できる。一方、自動生成候補は有効な購読とのjoinを維持する。詳細は[ADR-0069](adr/0069-separate-subscription-from-article-access.md)を正本とする。
 
+任意登録feedはprivate-by-defaultとし、`/v1/feeds`はrequest owner自身が購読するfeedと`public_feed_listings`へ明示掲載したfeedだけを返す。query/path tokenを文字列判定やredactionで加工せず、DB可視性条件で別ownerから閉じる。既存feedはmigrationで公開推測せず全件privateにする。将来の公開化は、認証なしの取得可能性・credential非包含・owner同意を検証するworkflowができるまで提供しない（[ADR-0071](adr/0071-keep-user-registered-feed-urls-private.md)）。
+
 AI記事補完のキュー、結果、タグ、日次使用量はすべてowner単位である。workerはownerごとに`CONTENT_ENRICH_DAILY_LIMIT`の使用量を読み、枯渇したownerだけをskipして次のownerを処理する。成功完了時刻からUTC日付を導出し、成功確定と`(owner_id, local_date)`使用量の加算を同じtransactionで行うため、外部処理が日付をまたいでも開始日へ誤計上しない。開発用リセットも認証actorのownerだけを対象にする。詳細は[ADR-0063](adr/0063-scope-enrichment-daily-budget-by-owner.md)を正本とする。
 
 Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
@@ -391,3 +393,4 @@ flowchart TD
 - [ADR-0068 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
 - [ADR-0069 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070 Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
+- [ADR-0071 ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
