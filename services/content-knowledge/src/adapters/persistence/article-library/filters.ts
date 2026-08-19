@@ -1,6 +1,13 @@
-import { and, eq, gt, inArray, like, lt, or, sql, type SQL } from "drizzle-orm"
+import { and, eq, gt, inArray, lt, or, sql, type SQL } from "drizzle-orm"
 
-import { articleOwnerStates, feedItems } from "../../../../drizzle/schema.js"
+import {
+  articleOwnerStates,
+  articleSnapshots,
+  contentArticleTags,
+  contentTags,
+  feedItems,
+  feedSubscriptions,
+} from "../../../../drizzle/schema.js"
 import type { ArticleListQuery } from "../../../application/article-library.js"
 import { decodeArticleCursor } from "../../../domain/article-library.js"
 import { escapeLikePattern } from "../like.js"
@@ -37,8 +44,24 @@ export const queryFilters = (query: LibraryFilter): readonly SQL[] => {
     const pattern = `%${escapeLikePattern(query.q)}%`
     filters.push(
       or(
-        like(feedItems.title, sql`${pattern} ESCAPE '\\'`),
-        like(feedItems.sourceUrl, sql`${pattern} ESCAPE '\\'`)
+        sql`COALESCE(
+          json_extract(${articleSnapshots.snapshotJson}, '$.title'),
+          ${feedItems.title}
+        ) LIKE ${pattern} ESCAPE '\\'`,
+        sql`COALESCE(
+          json_extract(${articleSnapshots.snapshotJson}, '$.sourceUrl'),
+          ${feedItems.sourceUrl}
+        ) LIKE ${pattern} ESCAPE '\\'`,
+        sql`EXISTS (
+          SELECT 1
+          FROM ${contentArticleTags}
+          INNER JOIN ${contentTags}
+            ON ${contentTags.ownerId} = ${contentArticleTags.ownerId}
+           AND ${contentTags.tagId} = ${contentArticleTags.tagId}
+          WHERE ${contentArticleTags.ownerId} = ${feedSubscriptions.ownerId}
+            AND ${contentArticleTags.articleId} = ${feedItems.articleId}
+            AND ${contentTags.name} LIKE ${pattern} ESCAPE '\\'
+        )`
       ) as SQL
     )
   }

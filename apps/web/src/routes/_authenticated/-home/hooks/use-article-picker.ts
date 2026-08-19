@@ -1,5 +1,9 @@
-import { infiniteQueryOptions, useInfiniteQuery } from "@tanstack/react-query"
-import { useEffect, useRef, useState } from "react"
+import {
+  infiniteQueryOptions,
+  keepPreviousData,
+  useInfiniteQuery,
+} from "@tanstack/react-query"
+import { useDeferredValue, useEffect, useRef, useState } from "react"
 
 import type { paths } from "@news-podcast/contracts/openapi"
 
@@ -31,6 +35,9 @@ export function useArticlePicker(
   initialSelectedIds: readonly string[] = EMPTY_SELECTION
 ) {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
+  const normalizedSearchQuery = searchQuery.trim()
+  const deferredSearchQuery = useDeferredValue(normalizedSearchQuery)
   const initialSelectionKey = initialSelectedIds.join(",")
   const initialSelectedIdsRef = useRef(initialSelectedIds)
   initialSelectedIdsRef.current = initialSelectedIds
@@ -43,15 +50,20 @@ export function useArticlePicker(
     setSelectedIds([...initialSelectedIdsRef.current])
   }, [enabled, initialSelectionKey])
 
+  const requestQuery = {
+    ...ARTICLE_PICKER_QUERY,
+    ...(deferredSearchQuery === "" ? {} : { q: deferredSearchQuery }),
+  } satisfies ArticleListQuery
+
   const listQuery = useInfiniteQuery({
     ...infiniteQueryOptions({
-      queryKey: ["article-picker", ARTICLE_PICKER_QUERY] as const,
+      queryKey: ["article-picker", requestQuery] as const,
       queryFn: async ({ pageParam, signal }) => {
         const { data, error } = await fetchClient.GET("/v1/me/articles", {
           signal,
           params: {
             query: {
-              ...ARTICLE_PICKER_QUERY,
+              ...requestQuery,
               ...(pageParam === undefined ? {} : { cursor: pageParam }),
             },
           },
@@ -62,6 +74,7 @@ export function useArticlePicker(
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (last) =>
         last.page.hasMore ? last.page.nextCursor : undefined,
+      placeholderData: keepPreviousData,
     }),
     enabled,
   })
@@ -72,6 +85,9 @@ export function useArticlePicker(
 
   const selected = new Set(selectedIds)
   const atLimit = selectedIds.length >= MAX_SELECTED_ARTICLES
+  const isSearching =
+    normalizedSearchQuery !== "" &&
+    (normalizedSearchQuery !== deferredSearchQuery || listQuery.isFetching)
 
   // 候補一覧を読み切った時点で、候補に出ていない選択IDを外す。購読停止で
   // 消えた記事だけでなく、記事は残っていてもアーカイブがpending/failedで
@@ -81,6 +97,7 @@ export function useArticlePicker(
   const pages = listQuery.data?.pages
   useEffect(() => {
     if (!enabled) return
+    if (deferredSearchQuery !== "") return
     if (listQuery.isLoading) return
     if (listQuery.hasNextPage !== false) return
     // 画面に出ている候補と同じ条件で絞る (`articles`と同一の判定)。
@@ -94,7 +111,13 @@ export function useArticlePicker(
       const filtered = current.filter((id) => loadedIds.has(id))
       return filtered.length !== current.length ? filtered : current
     })
-  }, [enabled, pages, listQuery.isLoading, listQuery.hasNextPage])
+  }, [
+    deferredSearchQuery,
+    enabled,
+    pages,
+    listQuery.isLoading,
+    listQuery.hasNextPage,
+  ])
 
   function toggle(articleId: string) {
     setSelectedIds((current) =>
@@ -119,15 +142,19 @@ export function useArticlePicker(
 
   return {
     articles,
+    searchQuery,
+    hasSearchQuery: normalizedSearchQuery !== "",
+    isSearching,
     selectedIds,
     selected,
     atLimit,
     isLoading: listQuery.isLoading,
     isError: listQuery.isError,
-    hasNextPage: listQuery.hasNextPage,
+    hasNextPage: isSearching ? false : listQuery.hasNextPage,
     isFetchingNextPage: listQuery.isFetchingNextPage,
     onLoadMore: () => void listQuery.fetchNextPage(),
     onRetry: () => void listQuery.refetch(),
+    onSearchChange: setSearchQuery,
     onToggle: toggle,
     onSelectTop: selectTop,
     onClear: clear,

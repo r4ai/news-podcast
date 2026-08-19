@@ -156,7 +156,7 @@ const setup = async () => {
     })
   )
   const articles = await Effect.runPromise(createArticleLibrary(database.db))
-  return { articles, archiveStore, catalog, snapshot }
+  return { articles, archiveStore, catalog, database, snapshot }
 }
 
 const query = (overrides: Record<string, unknown> = {}) =>
@@ -243,6 +243,37 @@ describe("SQLite article library", () => {
       title: "Owner A article",
       sourceUrl: "https://news.example.com/a",
     })
+    const bySnapshotTitle = await Effect.runPromise(
+      articles.list(ids.ownerA, await query({ q: "Owner A article" }))
+    )
+    expect(bySnapshotTitle.items).toHaveLength(1)
+    const byMutableFeedTitle = await Effect.runPromise(
+      articles.list(ids.ownerA, await query({ q: "Updated feed title" }))
+    )
+    expect(byMutableFeedTitle.items).toEqual([])
+  })
+
+  it("finds an article by an owner-scoped tag name", async () => {
+    const { articles, database } = await setup()
+    const tagId = "ce2690a0-3d85-4ac7-a731-1a0d087c0584"
+    database.execSql(`
+      INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at, enabled)
+      VALUES ('1c625b13-a15f-4834-b00b-9b44b28bcd18', 'owner-b', '${ids.feedA}', '2026-08-13T02:00:00.000Z', 1);
+      INSERT INTO content_tags(tag_id, owner_id, name, created_at)
+      VALUES ('${tagId}', 'owner-a', 'observability', '2026-08-13T02:00:00.000Z');
+      INSERT INTO content_article_tags(owner_id, article_id, tag_id, source, confidence, created_at)
+      VALUES ('owner-a', '${ids.articleA}', '${tagId}', 'Manual', NULL, '2026-08-13T02:00:00.000Z');
+    `)
+
+    const found = await Effect.runPromise(
+      articles.list(ids.ownerA, await query({ q: "observability" }))
+    )
+
+    expect(found.items.map((item) => item.articleId)).toEqual([ids.articleA])
+    const otherOwner = await Effect.runPromise(
+      articles.list(ids.ownerB, await query({ q: "observability" }))
+    )
+    expect(otherOwner.items).toEqual([])
   })
 
   it("uses the latest snapshot once for automatic and selected generation", async () => {

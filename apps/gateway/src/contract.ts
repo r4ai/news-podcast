@@ -494,11 +494,14 @@ export const ArticleFacetsSchema = Schema.Struct({
   ),
   aiPending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ identifier: "ArticleFacets" })
+const ArticleSearchQuerySchema = boundedText(200).annotate({
+  description: "Matches article title, source URL, or owner tag name.",
+})
 export const BulkArticleStateSchema = Schema.Struct({
   state: Schema.optional(ArticleStateFilterSchema),
   includeHidden: Schema.optional(Schema.Boolean),
   feedIds: Schema.optional(Schema.Array(FeedIdSchema)),
-  q: Schema.optional(boundedText(200)),
+  q: Schema.optional(ArticleSearchQuerySchema),
   ...ArticleStatePatchFields,
 }).check(
   Schema.makeFilter(
@@ -1051,7 +1054,7 @@ const ArticleListFilterSchema = Schema.Struct({
   state: Schema.optional(ArticleStateFilterSchema),
   includeHidden: Schema.optional(Schema.Boolean),
   feedIds: Schema.optional(Schema.Array(FeedIdSchema)),
-  q: Schema.optional(boundedText(200)),
+  q: Schema.optional(ArticleSearchQuerySchema),
   sort: Schema.optional(Schema.Literals(["newest", "oldest"])),
   /** 直前ページの`page.nextCursor`。絞り込みを変えたら破棄する。 */
   cursor: Schema.optional(ArticleCursorSchema),
@@ -1059,7 +1062,7 @@ const ArticleListFilterSchema = Schema.Struct({
 const ArticleFacetsQuerySchema = Schema.Struct({
   includeHidden: Schema.optional(Schema.Boolean),
   feedIds: Schema.optional(Schema.Array(FeedIdSchema)),
-  q: Schema.optional(boundedText(200)),
+  q: Schema.optional(ArticleSearchQuerySchema),
 })
 export const listArticlesEndpoint = HttpApiEndpoint.get(
   "listArticles",

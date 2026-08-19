@@ -71,6 +71,63 @@ describe("useArticlePicker", () => {
     expect(calls[0]?.search.has("archiveStatus")).toBe(false)
   })
 
+  it("searches the server without paging through already loaded candidates", async () => {
+    const older = { ...article("target"), title: "target-older-article" }
+    const { calls } = stubFetch([
+      {
+        path: "/v1/me/articles",
+        query: { q: undefined },
+        body: {
+          items: Array.from({ length: 30 }, (_, index) =>
+            article(`recent-${index}`)
+          ),
+          page: { hasMore: true, nextCursor: "next-page" },
+        },
+      },
+      {
+        path: "/v1/me/articles",
+        query: { q: "target-older-article", cursor: undefined },
+        body: { items: [older], page: { hasMore: false } },
+      },
+    ])
+    const { result } = renderHookWithProviders(() => useArticlePicker(true))
+    await waitFor(() => expect(result.current.articles).toHaveLength(30))
+
+    act(() => result.current.onSearchChange("target-older-article"))
+
+    await waitFor(() =>
+      expect(result.current.articles.map((item) => item.id)).toEqual(["target"])
+    )
+    const searchCall = calls.find(
+      (call) => call.search.get("q") === "target-older-article"
+    )
+    expect(searchCall?.search.has("cursor")).toBe(false)
+  })
+
+  it("exposes a failed server search without treating it as an empty result", async () => {
+    stubFetch([
+      {
+        path: "/v1/me/articles",
+        query: { q: undefined },
+        body: { items: [article("recent")], page: { hasMore: false } },
+      },
+      {
+        path: "/v1/me/articles",
+        query: { q: "offline" },
+        status: 503,
+        body: { title: "unavailable" },
+      },
+    ])
+    const { result } = renderHookWithProviders(() => useArticlePicker(true))
+    await waitFor(() => expect(result.current.articles).toHaveLength(1))
+
+    act(() => result.current.onSearchChange("offline"))
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.hasSearchQuery).toBe(true)
+    expect(result.current.isSearching).toBe(false)
+  })
+
   it("toggles a selection on and off", async () => {
     stubArticles(3)
     const { result } = renderHookWithProviders(() => useArticlePicker(true))

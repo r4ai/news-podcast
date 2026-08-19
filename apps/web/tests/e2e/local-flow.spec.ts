@@ -805,6 +805,32 @@ test("selecting articles generates an episode and streams its progress", async (
   ).toBeVisible()
 })
 
+test("article picker searches server candidates by tag", async ({ page }) => {
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await page.getByRole("button", { name: "番組を生成" }).click()
+
+  const response = page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url())
+    return (
+      url.pathname === "/v1/me/articles" &&
+      url.searchParams.get("q") === "observability"
+    )
+  })
+  await page
+    .getByRole("searchbox", { name: "候補記事を検索" })
+    .fill("observability")
+  await response
+
+  await expect(
+    page.getByText("Durable Objectsが東京リージョンに対応")
+  ).toBeVisible()
+  await expect(
+    page.getByText("TypeScript 6.0のリリース候補が公開")
+  ).toHaveCount(0)
+})
+
 test("switching episodes shows the next script from its beginning", async ({
   page,
 }) => {

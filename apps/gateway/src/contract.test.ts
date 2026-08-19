@@ -135,6 +135,9 @@ describe("gateway HttpApi contract", () => {
       "sort",
       "state",
     ])
+    expect(JSON.stringify(specification.components?.schemas)).toContain(
+      "Matches article title, source URL, or owner tag name."
+    )
     const article = specification.components?.schemas?.Article
     expect(JSON.stringify(article)).not.toContain("usedInEpisode")
     expect(JSON.stringify(article)).not.toContain('"tags"')

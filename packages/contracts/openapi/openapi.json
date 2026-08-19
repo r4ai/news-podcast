@@ -1986,25 +1986,7 @@
             "name": "q",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    },
-                    {
-                      "pattern": "\\S"
-                    },
-                    {
-                      "maxLength": 200
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_4"
             },
             "required": false
           },
@@ -2167,25 +2149,7 @@
             "name": "q",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    },
-                    {
-                      "pattern": "\\S"
-                    },
-                    {
-                      "maxLength": 200
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Union_4"
             },
             "required": false
           }
@@ -2420,16 +2384,16 @@
                 "type": "object",
                 "properties": {
                   "read": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "saved": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "readLater": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "hidden": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   }
                 },
                 "additionalProperties": false
@@ -2657,7 +2621,7 @@
                     ]
                   },
                   "includeHidden": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "feedIds": {
                     "anyOf": [
@@ -2679,37 +2643,19 @@
                     ]
                   },
                   "q": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          },
-                          {
-                            "pattern": "\\S"
-                          },
-                          {
-                            "maxLength": 200
-                          }
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "$ref": "#/components/schemas/Union_4"
                   },
                   "read": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "saved": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "readLater": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   },
                   "hidden": {
-                    "$ref": "#/components/schemas/Union_4"
+                    "$ref": "#/components/schemas/Union_5"
                   }
                 },
                 "additionalProperties": false
@@ -4005,7 +3951,7 @@
                         ]
                       },
                       "reading": {
-                        "$ref": "#/components/schemas/Union_5"
+                        "$ref": "#/components/schemas/Union_6"
                       },
                       "accentType": {
                         "anyOf": [
@@ -4033,7 +3979,7 @@
                     "type": "object",
                     "properties": {
                       "surface": {
-                        "$ref": "#/components/schemas/Union_5"
+                        "$ref": "#/components/schemas/Union_6"
                       },
                       "reading": {
                         "type": "string",
@@ -4075,10 +4021,10 @@
                     "type": "object",
                     "properties": {
                       "surface": {
-                        "$ref": "#/components/schemas/Union_5"
+                        "$ref": "#/components/schemas/Union_6"
                       },
                       "reading": {
-                        "$ref": "#/components/schemas/Union_5"
+                        "$ref": "#/components/schemas/Union_6"
                       },
                       "accentType": {
                         "type": "integer",
@@ -5869,6 +5815,28 @@
         ],
         "additionalProperties": false
       },
+      "Union_4": {
+        "anyOf": [
+          {
+            "type": "string",
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "\\S"
+              },
+              {
+                "maxLength": 200,
+                "description": "Matches article title, source URL, or owner tag name."
+              }
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "Article": {
         "type": "object",
         "properties": {
@@ -6171,7 +6139,7 @@
         ],
         "additionalProperties": false
       },
-      "Union_4": {
+      "Union_5": {
         "anyOf": [
           {
             "type": "boolean"
@@ -6827,7 +6795,7 @@
         ],
         "additionalProperties": false
       },
-      "Union_5": {
+      "Union_6": {
         "anyOf": [
           {
             "type": "string",
