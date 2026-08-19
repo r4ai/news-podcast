@@ -29,7 +29,11 @@ import type {
 export type FeedPollFailure = DeepReadonly<{
   readonly _tag: "FeedPollFailed"
   readonly scope: "Feed" | "Item"
-  readonly reason: FeedFetchError["reason"] | "ArchiveFailed" | "InvalidItem"
+  readonly reason:
+    | FeedFetchError["reason"]
+    | "ArchiveFailed"
+    | "InvalidItem"
+    | "CatalogFailed"
 }>
 
 export type FeedPollResult = DeepReadonly<{
@@ -95,6 +99,20 @@ const oneFailure = (
 
 const parseArchiveCommand = parse(ArchiveCommandSchema)
 
+const classifyItemProcessingFailure = (
+  failure: unknown
+): Pick<FeedPollFailure, "reason" | "scope"> => {
+  const tag =
+    typeof failure === "object" && failure !== null && "_tag" in failure
+      ? failure._tag
+      : undefined
+  if (tag === "ArticleCatalogFailed")
+    return { reason: "CatalogFailed", scope: "Feed" }
+  if (tag === "ArchiveStoreFailed" || tag === "CaptureFailed")
+    return { reason: "ArchiveFailed", scope: "Item" }
+  return { reason: "InvalidItem", scope: "Item" }
+}
+
 /** Polls one feed; item-level failures are reported without aborting the feed. */
 export const pollFeed =
   (ports: PollSubscriptionsPorts) =>
@@ -139,16 +157,10 @@ export const pollFeed =
                 )
               ),
               Effect.match({
-                onFailure: (failure): FeedPollResult =>
-                  oneFailure(
-                    typeof failure === "object" &&
-                      failure !== null &&
-                      "_tag" in failure
-                      ? "ArchiveFailed"
-                      : "InvalidItem",
-                    "Item",
-                    1
-                  ),
+                onFailure: (failure): FeedPollResult => {
+                  const classified = classifyItemProcessingFailure(failure)
+                  return oneFailure(classified.reason, classified.scope, 1)
+                },
                 onSuccess: (result): FeedPollResult =>
                   deepFreeze({
                     ...empty(),

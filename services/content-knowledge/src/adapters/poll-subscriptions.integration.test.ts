@@ -265,4 +265,60 @@ describe("pollSubscriptions integration", () => {
       ],
     })
   })
+
+  it("classifies catalog persistence failure as a feed failure", async () => {
+    let archiveExecuted = false
+    const archive = vi.fn(() =>
+      Effect.sync(() => {
+        archiveExecuted = true
+        return { _tag: "Archived" } as never
+      })
+    )
+    const result = await Effect.runPromise(
+      pollSubscriptions({
+        subscriptions: {
+          listFeedsForPolling: () =>
+            Effect.succeed([
+              { feedId: "feed-1", feedUrl: "https://feed.test" },
+            ] as never),
+        },
+        catalog: {
+          upsert: () =>
+            Effect.fail({
+              _tag: "ArticleCatalogFailed",
+              operation: "Upsert",
+              reason: "Unavailable",
+            }),
+        },
+        reader: {
+          read: () =>
+            Effect.succeed([
+              {
+                externalId: "item-1",
+                url: "https://news.example.com/item-1",
+                title: "Catalog write failure",
+              },
+            ] as never),
+        },
+        archive,
+        deriveArticleIdentity: () =>
+          deepFreeze({
+            archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93" as never,
+            articleId: "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never,
+          }),
+        newContext: vi.fn(),
+        now: () => "2026-08-13T01:01:00.000Z",
+      })()
+    )
+
+    expect(result).toMatchObject({
+      discovered: 1,
+      archived: 0,
+      failed: 1,
+      failures: [
+        { _tag: "FeedPollFailed", scope: "Feed", reason: "CatalogFailed" },
+      ],
+    })
+    expect(archiveExecuted).toBe(false)
+  })
 })

@@ -32,6 +32,15 @@ export type FeedPollWakeup = Readonly<{
   readonly wait: () => Effect.Effect<void>
 }>
 
+export const classifyFeedPollTelemetry = (
+  outcome: Pick<FeedPollResult, "failed" | "failures">
+): "content.feed.poll" | "rss.sync.degraded" | "rss.sync.failed" =>
+  outcome.failed === 0
+    ? "content.feed.poll"
+    : outcome.failures.some((failure) => failure.scope === "Feed")
+      ? "rss.sync.failed"
+      : "rss.sync.degraded"
+
 /** Allows a newly queued feed to interrupt the long periodic scheduler delay. */
 export const makeFeedPollWakeup = (): FeedPollWakeup => {
   let pending = false
@@ -59,33 +68,37 @@ export const makeFeedPollWakeup = (): FeedPollWakeup => {
 
 const liveRuntime: FeedPollLoopRuntime = Object.freeze({
   wait: (delayMillis) => Effect.sleep(delayMillis),
-  observe: (outcome) =>
-    outcome._tag === "FeedPollCycleSucceeded"
-      ? outcome.failed === 0
-        ? Effect.logInfo("content feed poll cycle succeeded", {
-            event_name: "content.feed.poll",
+  observe: (outcome) => {
+    if (outcome._tag === "FeedPollCycleFailed")
+      return Effect.logWarning("content feed poll cycle failed", {
+        event_name: "content.feed.poll",
+        consecutive_failures: outcome.consecutiveFailures,
+        next_delay_ms: outcome.nextDelayMillis,
+      })
+
+    const eventName = classifyFeedPollTelemetry(outcome)
+    return eventName === "content.feed.poll"
+      ? Effect.logInfo("content feed poll cycle succeeded", {
+          event_name: eventName,
+          feeds: outcome.feeds,
+          discovered: outcome.discovered,
+          archived: outcome.archived,
+          failed: outcome.failed,
+        })
+      : Effect.logWarning(
+          eventName === "rss.sync.degraded"
+            ? "content feed poll cycle degraded"
+            : "content feed poll cycle failed",
+          {
+            event_name: eventName,
             feeds: outcome.feeds,
             discovered: outcome.discovered,
             archived: outcome.archived,
             failed: outcome.failed,
-          })
-        : Effect.logWarning("content feed poll cycle degraded", {
-            event_name: "rss.sync.degraded",
-            feeds: outcome.feeds,
-            discovered: outcome.discovered,
-            archived: outcome.archived,
-            failed: outcome.failed,
-            "failure.stage": outcome.failures.some(
-              (failure) => failure.scope === "Feed"
-            )
-              ? "feed"
-              : "item",
-          })
-      : Effect.logWarning("content feed poll cycle failed", {
-          event_name: "content.feed.poll",
-          consecutive_failures: outcome.consecutiveFailures,
-          next_delay_ms: outcome.nextDelayMillis,
-        }),
+            "failure.stage": eventName === "rss.sync.failed" ? "feed" : "item",
+          }
+        )
+  },
 })
 
 /** Runs a single non-overlapping scheduler with capped infrastructure backoff. */

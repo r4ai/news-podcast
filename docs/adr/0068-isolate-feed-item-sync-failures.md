@@ -28,10 +28,10 @@ flowchart TD
   Schedule --> Claim
 ```
 
-- feed取得失敗とworkerの未捕捉失敗は`Feed` scopeとし、jobを`Failed`へ遷移させる。既存どおり試行回数を引き継ぎ、初回を含む最大4回で停止する。
+- feed取得失敗、catalog永続化失敗、workerの未捕捉失敗は`Feed` scopeとし、jobを`Failed`へ遷移させる。既存どおり試行回数を引き継ぎ、初回を含む最大4回で停止する。
 - 個別記事のvalidation・archive失敗は`Item` scopeとし、成功件数・失敗件数・errorを保持したdegradedな`Succeeded`へ遷移させる。次回enqueueでは試行回数をリセットし、定期同期を継続する。
 - Webは`Succeeded && failed > 0`を警告表示し、失敗記事数を利用者へ示す。`Failed`はfeed全体の失敗表示を維持する。
-- runtimeはdegraded completionをwarningの`rss.sync.degraded`として記録し、`failure.stage=item`を付ける。記事URLやIDは記録しない。
+- runtimeはdegraded completionをwarningの`rss.sync.degraded`、feed scope failureを`rss.sync.failed`として記録し、それぞれ`failure.stage=item / feed`を付ける。記事URLやIDは記録しない。
 - 公開status enum、HTTP/NATS契約、DB schemaは変更しない。既存の`status`、`failed`、`error`で表現する。
 
 ## 判断要因

@@ -1,9 +1,44 @@
 import { Effect, Fiber } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
-import { makeFeedPollWakeup, runFeedPollLoop } from "./feed-poll.js"
+import {
+  classifyFeedPollTelemetry,
+  makeFeedPollWakeup,
+  runFeedPollLoop,
+} from "./feed-poll.js"
 
 describe("feed polling scheduler", () => {
+  it("separates feed failures from item-level degradation in telemetry", () => {
+    const result = {
+      feeds: 1,
+      discovered: 1,
+      archived: 0,
+      alreadyArchived: 0,
+      failed: 1,
+      failures: [
+        {
+          _tag: "FeedPollFailed" as const,
+          scope: "Feed" as const,
+          reason: "Timeout" as const,
+        },
+      ],
+    }
+
+    expect(classifyFeedPollTelemetry(result)).toBe("rss.sync.failed")
+    expect(
+      classifyFeedPollTelemetry({
+        ...result,
+        failures: [
+          {
+            _tag: "FeedPollFailed" as const,
+            scope: "Item" as const,
+            reason: "ArchiveFailed" as const,
+          },
+        ],
+      })
+    ).toBe("rss.sync.degraded")
+  })
+
   it("serializes cycles and backs off after a runtime failure", async () => {
     const delays: number[] = []
     const outcomes: string[] = []
