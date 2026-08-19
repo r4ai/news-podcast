@@ -166,6 +166,18 @@ describe("integration contracts", () => {
         }),
     ],
     [
+      "command with duplicate selected articles",
+      () =>
+        parseCreateEpisodeJobRequest({
+          idempotencyKey: "key",
+          trigger: "manual",
+          articleIds: [
+            "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+            "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+          ],
+        }),
+    ],
+    [
       "command with more than twenty selected articles",
       () =>
         parseCreateEpisodeJobRequest({
