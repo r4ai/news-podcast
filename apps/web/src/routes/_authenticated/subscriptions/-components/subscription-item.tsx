@@ -139,7 +139,8 @@ export function SubscriptionItem({
           <AlertDialogHeader>
             <AlertDialogTitle>購読を削除しますか？</AlertDialogTitle>
             <AlertDialogDescription>
-              {feedName}は次回以降の番組へ含まれなくなります。
+              {feedName}
+              は次回以降の同期と番組へ含まれなくなります。保存済みの記事と過去のエピソードの出典は残ります。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

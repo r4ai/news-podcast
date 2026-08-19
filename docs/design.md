@@ -64,6 +64,8 @@ flowchart LR
 
 RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease tokenでfenceしたworkerで進める。claim・完了ごとに現在時刻を再取得し、期限切れleaseのworkerによる完了上書きを拒否する。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。feed取得・catalog永続化・worker基盤の失敗だけを`failed`として最大4回の試行上限へ数え、個別記事のvalidation・archive失敗は件数とerrorを持つdegradedな`succeeded`として試行回数を引き継がず、次回の定期同期を継続する。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。degraded時は失敗記事数を警告し、runtimeは`rss.sync.degraded`、feed scope failureは`rss.sync.failed`を記録する。詳細は[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)を正本とする。
 
+購読は将来の同期・自動生成対象、`article_owner_access`はownerが一度取り込んだ記事への恒久的な参照権として分離する。RSS itemのcatalog登録時に現在の購読ownerへaccessを付与し、既存feedへの購読時は保存済みitemをbackfillする。購読解除ではaccess、記事状態、snapshotを削除しないため、一覧・詳細・Markdown・手動生成の保存版出典は引き続き参照できる。一方、自動生成候補は有効な購読とのjoinを維持する。詳細は[ADR-0069](adr/0069-separate-subscription-from-article-access.md)を正本とする。
+
 AI記事補完のキュー、結果、タグ、日次使用量はすべてowner単位である。workerはownerごとに`CONTENT_ENRICH_DAILY_LIMIT`の使用量を読み、枯渇したownerだけをskipして次のownerを処理する。成功完了時刻からUTC日付を導出し、成功確定と`(owner_id, local_date)`使用量の加算を同じtransactionで行うため、外部処理が日付をまたいでも開始日へ誤計上しない。開発用リセットも認証actorのownerだけを対象にする。詳細は[ADR-0063](adr/0063-scope-enrichment-daily-budget-by-owner.md)を正本とする。
 
 Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
@@ -385,3 +387,4 @@ flowchart TD
 - [ADR-0065 手動記事archiveをend-to-end RPC deadlineで拘束する](adr/0065-bound-manual-archive-rpc-deadline.md)
 - [ADR-0067 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)
 - [ADR-0068 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
+- [ADR-0069 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)

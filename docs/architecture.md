@@ -265,6 +265,8 @@ erDiagram
   FEED_CATALOG ||--o{ FEED_SYNC_JOB : queues
   FEED_CATALOG ||--o{ FEED_ITEM : publishes
   FEED_ITEM ||--o{ ARTICLE_SNAPSHOT : archived_as
+  USER ||--o{ ARTICLE_OWNER_ACCESS : acquired
+  FEED_ITEM ||--o{ ARTICLE_OWNER_ACCESS : grants
   USER ||--o{ ARTICLE_USER_STATE : tracks
   FEED_ITEM ||--o{ ARTICLE_USER_STATE : has_state
   USER ||--o| USER_SETTINGS : configures
@@ -283,7 +285,8 @@ erDiagram
 | `feed_catalog` / `feed_subscriptions` | 共通の媒体カタログとユーザーの選択を分離 |
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。個別記事失敗はdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
-| `article_user_states` | ユーザーごとの既読・保存状態 |
+| `article_owner_access` | 購読解除後も残る、ownerが一度取り込んだ記事への恒久アクセス権 |
+| `article_owner_states` | ユーザーごとの既読・保存状態 |
 | `episode_jobs` / `episode_generation_plans` / `episode_job_articles` | 状態、lease、retry、冪等性、初回実行時に固定した嗜好・記事集合 |
 | `episodes` / `episode_sources` | 台本・音声keyと、`articleId`・snapshot・入力RSSへ遡れるprovenance。legacy sourceだけ`articleId`がnullable |
 | `episode_job_agui_events` | 公式AG-UI event envelopeを保存する再開可能な進捗ログ |
@@ -377,4 +380,5 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0038: 保存済み出典による有界な構造化生成](adr/0038-bounded-structured-production-generation.md)
 - [ADR-0067: 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)
 - [ADR-0068: 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
+- [ADR-0069: 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

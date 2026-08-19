@@ -3,9 +3,9 @@ import { and, eq, exists, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
+  articleOwnerAccess,
   articleSnapshots,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type { EnrichmentQueueError } from "../../../application/enrichment.js"
 import type { QueryRunner } from "../../../infrastructure/unsafe/drizzle/open.js"
@@ -62,7 +62,7 @@ export const hasSnapshot = (runner: QueryRunner) =>
       .where(eq(articleSnapshots.articleId, feedItems.articleId))
   )
 
-/** 購読を通じて所有し、かつアーカイブ済みの記事だけが対象になる。 */
+/** 恒久アクセス権を持ち、かつアーカイブ済みの記事だけが対象になる。 */
 export const ownerHasArchivedArticle = (
   runner: QueryRunner,
   ownerId: string,
@@ -72,12 +72,12 @@ export const ownerHasArchivedArticle = (
     .select({ articleId: feedItems.articleId })
     .from(feedItems)
     .innerJoin(
-      feedSubscriptions,
-      eq(feedSubscriptions.feedId, feedItems.feedId)
+      articleOwnerAccess,
+      eq(articleOwnerAccess.articleId, feedItems.articleId)
     )
     .where(
       and(
-        eq(feedSubscriptions.ownerId, ownerId),
+        eq(articleOwnerAccess.ownerId, ownerId),
         eq(feedItems.articleId, articleId),
         hasSnapshot(runner)
       )

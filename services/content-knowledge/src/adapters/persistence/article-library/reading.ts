@@ -3,10 +3,10 @@ import { and, asc, desc, eq } from "drizzle-orm"
 import { Effect } from "effect"
 
 import {
+  articleOwnerAccess,
   articleOwnerStates,
   articleSnapshots,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type {
   ArticleLibraryError,
@@ -24,11 +24,11 @@ import { ObjectKeySchema } from "../../../domain/article.js"
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
 import { keysetFilters, queryFilters } from "./filters.js"
 import {
+  accessibleByOwner,
   articleProjection,
   decodeArticle,
   failure,
   latestSnapshotOfArticle,
-  ownedBySubscription,
   ownerStateOfArticle,
   parseArticleRow,
   sortKeyExpression,
@@ -56,12 +56,12 @@ export const makeReading = (database: ContentKnowledgeDatabase): Reading => {
         database
           .select(articleProjection)
           .from(feedItems)
-          .innerJoin(feedSubscriptions, ownedBySubscription)
+          .innerJoin(articleOwnerAccess, accessibleByOwner)
           .leftJoin(articleOwnerStates, ownerStateOfArticle)
           .leftJoin(articleSnapshots, latestSnapshotOfArticle)
           .where(
             and(
-              eq(feedSubscriptions.ownerId, ownerId),
+              eq(articleOwnerAccess.ownerId, ownerId),
               ...queryFilters(query),
               ...keysetFilters(query)
             )
@@ -99,12 +99,12 @@ export const makeReading = (database: ContentKnowledgeDatabase): Reading => {
         database
           .select(articleProjection)
           .from(feedItems)
-          .innerJoin(feedSubscriptions, ownedBySubscription)
+          .innerJoin(articleOwnerAccess, accessibleByOwner)
           .leftJoin(articleOwnerStates, ownerStateOfArticle)
           .leftJoin(articleSnapshots, latestSnapshotOfArticle)
           .where(
             and(
-              eq(feedSubscriptions.ownerId, ownerId),
+              eq(articleOwnerAccess.ownerId, ownerId),
               eq(feedItems.articleId, articleId)
             )
           )

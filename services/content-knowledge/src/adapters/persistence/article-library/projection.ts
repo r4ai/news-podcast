@@ -3,10 +3,10 @@ import { and, eq, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
+  articleOwnerAccess,
   articleOwnerStates,
   articleSnapshots,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type { ArticleLibraryError } from "../../../application/article-library.js"
 import { ArticleViewSchema } from "../../../domain/article-library.js"
@@ -83,17 +83,17 @@ export const articleProjection = {
 }
 
 /**
- * 購読を通じた所有と、最新スナップショットの結合条件。
+ * 恒久アクセス権と、最新スナップショットの結合条件。
  * 結合の連鎖自体は各呼び出し側に書くが、述語はここに集約して
  * 「所有」の定義がぶれないようにする。
  */
-export const ownedBySubscription = eq(
-  feedSubscriptions.feedId,
-  feedItems.feedId
+export const accessibleByOwner = eq(
+  articleOwnerAccess.articleId,
+  feedItems.articleId
 )
 
 export const ownerStateOfArticle = and(
-  eq(articleOwnerStates.ownerId, feedSubscriptions.ownerId),
+  eq(articleOwnerStates.ownerId, articleOwnerAccess.ownerId),
   eq(articleOwnerStates.articleId, feedItems.articleId)
 )
 

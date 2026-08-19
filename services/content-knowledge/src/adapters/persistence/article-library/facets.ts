@@ -3,11 +3,11 @@ import { and, asc, eq, sql } from "drizzle-orm"
 import { Effect } from "effect"
 
 import {
+  articleOwnerAccess,
   articleOwnerStates,
   articleSnapshots,
   feedCatalog,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type {
   ArticleFacets,
@@ -17,11 +17,11 @@ import { FeedIdSchema } from "../../../domain/subscription.js"
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
 import { queryFilters } from "./filters.js"
 import {
+  accessibleByOwner,
   CountRowSchema,
   failure,
   FeedCountRowSchema,
   latestSnapshotOfArticle,
-  ownedBySubscription,
   ownerStateOfArticle,
   stateFlag,
 } from "./projection.js"
@@ -38,7 +38,7 @@ export const makeFacets = (database: ContentKnowledgeDatabase): Facets => ({
   facets: (ownerId, query) => {
     // 状態別の件数を出すのが目的なので、状態での絞り込みは外して数える。
     const where = and(
-      eq(feedSubscriptions.ownerId, ownerId),
+      eq(articleOwnerAccess.ownerId, ownerId),
       ...queryFilters({ ...query, state: "All" })
     )
 
@@ -58,7 +58,7 @@ export const makeFacets = (database: ContentKnowledgeDatabase): Facets => ({
             ).as("laterCount"),
           })
           .from(feedItems)
-          .innerJoin(feedSubscriptions, ownedBySubscription)
+          .innerJoin(articleOwnerAccess, accessibleByOwner)
           .leftJoin(articleOwnerStates, ownerStateOfArticle)
           .leftJoin(articleSnapshots, latestSnapshotOfArticle)
           .where(where)
@@ -71,7 +71,7 @@ export const makeFacets = (database: ContentKnowledgeDatabase): Facets => ({
           })
           .from(feedItems)
           .innerJoin(feedCatalog, eq(feedCatalog.feedId, feedItems.feedId))
-          .innerJoin(feedSubscriptions, ownedBySubscription)
+          .innerJoin(articleOwnerAccess, accessibleByOwner)
           .leftJoin(articleOwnerStates, ownerStateOfArticle)
           .leftJoin(articleSnapshots, latestSnapshotOfArticle)
           .where(where)

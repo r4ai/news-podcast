@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Content Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: ADR-0011、RSS Reader API
+- Related: ADR-0011、ADR-0069、RSS Reader API
 
 ## コンテキストと変更契機
 

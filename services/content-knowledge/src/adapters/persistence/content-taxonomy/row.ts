@@ -3,9 +3,9 @@ import { and, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
+  articleOwnerAccess,
   contentTags,
   feedItems,
-  feedSubscriptions,
 } from "../../../../drizzle/schema.js"
 import type { ContentTaxonomyError } from "../../../application/content-taxonomy.js"
 import {
@@ -72,7 +72,7 @@ export const decodeArticleTag = (
     Effect.mapError(() => failure(operation, "CorruptRecord"))
   )
 
-/** 購読を通じて所有している記事にだけ、タグを付け外しできる。 */
+/** 恒久アクセス権を持つ記事にだけ、タグを付け外しできる。 */
 export const ownerHasArticle = (
   runner: QueryRunner,
   ownerId: string,
@@ -82,12 +82,12 @@ export const ownerHasArticle = (
     .select({ articleId: feedItems.articleId })
     .from(feedItems)
     .innerJoin(
-      feedSubscriptions,
-      eq(feedSubscriptions.feedId, feedItems.feedId)
+      articleOwnerAccess,
+      eq(articleOwnerAccess.articleId, feedItems.articleId)
     )
     .where(
       and(
-        eq(feedSubscriptions.ownerId, ownerId),
+        eq(articleOwnerAccess.ownerId, ownerId),
         eq(feedItems.articleId, articleId)
       )
     )

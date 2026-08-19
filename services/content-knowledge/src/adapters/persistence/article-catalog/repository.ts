@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, notInArray, sql, type SQL } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
+  articleOwnerAccess,
   articleOwnerStates,
   articleSnapshots,
   contentArticleTags,
@@ -57,11 +58,7 @@ export const createArticleCatalog = (
      * 購読を通じた所有と、アーカイブ済みであることの結合。
      * 非表示にした記事は生成対象に含めない。
      */
-    const ownedArchived = (
-      ownerId: string,
-      extra?: SQL,
-      requireEnabled = false
-    ) =>
+    const subscribedArchived = (ownerId: string, extra?: SQL) =>
       database
         .select(projection)
         .from(feedItems)
@@ -86,7 +83,37 @@ export const createArticleCatalog = (
         .where(
           and(
             eq(feedSubscriptions.ownerId, ownerId),
-            ...(requireEnabled ? [eq(feedSubscriptions.enabled, 1)] : []),
+            eq(feedSubscriptions.enabled, 1),
+            sql`COALESCE(${articleOwnerStates.hidden}, 0) = 0`,
+            ...(extra === undefined ? [] : [extra])
+          )
+        )
+
+    const accessibleArchived = (ownerId: string, extra?: SQL) =>
+      database
+        .select(projection)
+        .from(feedItems)
+        .innerJoin(
+          articleOwnerAccess,
+          eq(articleOwnerAccess.articleId, feedItems.articleId)
+        )
+        .leftJoin(
+          articleOwnerStates,
+          and(
+            eq(articleOwnerStates.ownerId, articleOwnerAccess.ownerId),
+            eq(articleOwnerStates.articleId, feedItems.articleId)
+          )
+        )
+        .innerJoin(
+          articleSnapshots,
+          and(
+            eq(articleSnapshots.articleId, feedItems.articleId),
+            latestSnapshotOfArticle
+          )
+        )
+        .where(
+          and(
+            eq(articleOwnerAccess.ownerId, ownerId),
             sql`COALESCE(${articleOwnerStates.hidden}, 0) = 0`,
             ...(extra === undefined ? [] : [extra])
           )
@@ -124,26 +151,56 @@ export const createArticleCatalog = (
     const upsert: ArticleCatalog["upsert"] = (input) =>
       Effect.try({
         try: () =>
-          database
-            .insert(feedItems)
-            .values({
-              articleId: input.articleId,
-              feedId: input.feedId,
-              externalId: input.externalId,
-              sourceUrl: input.sourceUrl,
-              title: input.title,
-              publishedAt: input.publishedAt ?? null,
-              discoveredAt: input.discoveredAt,
-            })
-            .onConflictDoUpdate({
-              target: [feedItems.feedId, feedItems.externalId],
-              set: {
+          database.transaction((tx) => {
+            tx.insert(feedItems)
+              .values({
+                articleId: input.articleId,
+                feedId: input.feedId,
+                externalId: input.externalId,
                 sourceUrl: input.sourceUrl,
                 title: input.title,
                 publishedAt: input.publishedAt ?? null,
-              },
-            })
-            .run(),
+                discoveredAt: input.discoveredAt,
+              })
+              .onConflictDoUpdate({
+                target: [feedItems.feedId, feedItems.externalId],
+                set: {
+                  sourceUrl: input.sourceUrl,
+                  title: input.title,
+                  publishedAt: input.publishedAt ?? null,
+                },
+              })
+              .run()
+
+            const article = tx
+              .select({ articleId: feedItems.articleId })
+              .from(feedItems)
+              .where(
+                and(
+                  eq(feedItems.feedId, input.feedId),
+                  eq(feedItems.externalId, input.externalId)
+                )
+              )
+              .get()
+            if (article === undefined) throw new Error("article unavailable")
+
+            const owners = tx
+              .select({ ownerId: feedSubscriptions.ownerId })
+              .from(feedSubscriptions)
+              .where(eq(feedSubscriptions.feedId, input.feedId))
+              .all()
+            if (owners.length > 0)
+              tx.insert(articleOwnerAccess)
+                .values(
+                  owners.map(({ ownerId }) => ({
+                    ownerId,
+                    articleId: article.articleId,
+                    acquiredAt: input.discoveredAt,
+                  }))
+                )
+                .onConflictDoNothing()
+                .run()
+          }),
         catch: () => failure("Upsert"),
       }).pipe(Effect.asVoid)
 
@@ -156,12 +213,11 @@ export const createArticleCatalog = (
     ) =>
       Effect.try({
         try: () =>
-          ownedArchived(
+          subscribedArchived(
             ownerId,
             excludedArticleIds.length === 0
               ? undefined
-              : notInArray(feedItems.articleId, [...excludedArticleIds]),
-            true
+              : notInArray(feedItems.articleId, [...excludedArticleIds])
           )
             .orderBy(desc(sortKey), desc(feedItems.articleId))
             .limit(limit)
@@ -177,7 +233,7 @@ export const createArticleCatalog = (
       if (articleIds.length === 0) return Effect.succeed([])
       return Effect.try({
         try: () =>
-          ownedArchived(
+          accessibleArchived(
             ownerId,
             inArray(feedItems.articleId, [...articleIds])
           ).all(),
