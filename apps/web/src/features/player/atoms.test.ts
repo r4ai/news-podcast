@@ -380,6 +380,62 @@ describe("音量", () => {
   })
 })
 
+/**
+ * 別タブの書き込みを取り込んでよいのは、その値が単独で意味を持つ場合だけ。
+ * `<audio>`と対で意味を持つ値を取り込むと、写しだけが動いて要素が置き去りになる。
+ */
+describe("別タブからの書き込み", () => {
+  /** `atomWithStorage`のsubscribeは購読が付いている間しか働かない。 */
+  function mounted(
+    store: ReturnType<typeof setup>["store"],
+    ...atoms: readonly Parameters<ReturnType<typeof setup>["store"]["sub"]>[0][]
+  ) {
+    const unsubscribe = atoms.map((target) => store.sub(target, () => {}))
+    return () => {
+      for (const stop of unsubscribe) stop()
+    }
+  }
+
+  function writeFromAnotherTab(key: string, value: unknown) {
+    localStorage.setItem(key, JSON.stringify(value))
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key,
+        newValue: JSON.stringify(value),
+        storageArea: localStorage,
+      })
+    )
+  }
+
+  it("再生記録は取り込む。どの番組をどこまで聴いたかは単独で意味を持つ", () => {
+    const { store } = setup()
+    const stop = mounted(store, progressMapAtom)
+
+    writeFromAnotherTab("player.progress", {
+      "episode-z": { position: 42, duration: 600, updatedAt: 1 },
+    })
+
+    expect(store.get(progressMapAtom)["episode-z"]?.position).toBe(42)
+    stop()
+  })
+
+  it("速度・音量・消音は取り込まない。要素へ届かない写しだけが動く", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    const stop = mounted(store, playbackRateAtom, volumeAtom, mutedAtom)
+
+    writeFromAnotherTab("player.rate", 2)
+    writeFromAnotherTab("player.volume", 0.1)
+    writeFromAnotherTab("player.muted", true)
+
+    // 目盛りと消音の印が、耳に届く音と食い違わない。
+    expect(store.get(playbackRateAtom)).toBe(audio.playbackRate)
+    expect(store.get(volumeAtom)).toBe(audio.volume)
+    expect(store.get(mutedAtom)).toBe(audio.muted)
+    stop()
+  })
+})
+
 describe("handleEndedAtom", () => {
   it("末尾まで鳴ったら再生済みとして記録する", () => {
     const { store, audio } = setup()

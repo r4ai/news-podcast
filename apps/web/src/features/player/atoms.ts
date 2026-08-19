@@ -32,10 +32,14 @@ export function episodeAudioUrl(episodeId: string): string {
  * 読めなければ初期値へ落とす。
  *
  * `crossTab`は「別タブの書き込みを取り込むか」。取り込んでよいのは、その値が
- * 単独で意味を持つもの (再生記録・速度) だけ。**今どの番組を鳴らしているか**は
- * このタブの`<audio>`と対で意味を持つので取り込まない。取り込むと、鳴っている
- * 音は前の番組のまま見出しだけが差し替わり、その位置を別の番組の記録として
- * 保存してしまう。
+ * **単独で意味を持つもの**だけで、それに当たるのは再生記録 (どの番組をどこまで
+ * 聴いたか) だけ。載っている番組・速度・音量・消音はいずれもこのタブの
+ * `<audio>`と対で初めて意味を持つので取り込まない。
+ *
+ * 取り込むと、値だけが動いて要素が置き去りになる。載っている番組なら、鳴って
+ * いる音は前の番組のまま見出しだけが差し替わり、その位置を別の番組の記録として
+ * 保存してしまう。速度・音量・消音なら、目盛りと消音の印だけが別タブの値へ
+ * 変わり、耳に届く音は変わらない。
  */
 function localStorageWith<Value>(
   parse: (raw: unknown) => Value | undefined,
@@ -101,36 +105,40 @@ export const currentTrackAtom = atomWithStorage<PlayerTrack | null>(
   { getOnInit: true }
 )
 
+/**
+ * 速度・音量・消音。個人ではなく端末の設定なので、番組を跨いで残す。
+ *
+ * 正本は`<audio>`側で、atomはその写しを配るだけ。写しを動かす道は
+ * `set...Atom`だけに限る。別タブの書き込みを取り込むと、要素へ届けないまま
+ * 写しだけが動いて、目盛りと消音の印が耳に届く音と食い違う。
+ */
 export const playbackRateAtom = atomWithStorage<PlaybackRate>(
   RATE_STORAGE_KEY,
   1,
-  localStorageWith((raw) =>
-    typeof raw === "number" ? normalizePlaybackRate(raw) : undefined
+  localStorageWith(
+    (raw) => (typeof raw === "number" ? normalizePlaybackRate(raw) : undefined),
+    { crossTab: false }
   ),
   { getOnInit: true }
 )
 
-/**
- * 音量。速度と同じく個人ではなく端末の設定なので、番組を跨いで残す。
- *
- * `<audio>`の`volume`は0〜1で、これも要素側が正本。atomは写しを配るだけ。
- */
 export const volumeAtom = atomWithStorage<number>(
   VOLUME_STORAGE_KEY,
   1,
-  localStorageWith((raw) =>
-    typeof raw === "number" ? clampVolume(raw) : undefined
+  localStorageWith(
+    (raw) => (typeof raw === "number" ? clampVolume(raw) : undefined),
+    { crossTab: false }
   ),
   { getOnInit: true }
 )
 
-/**
- * 消音。音量とは別に持つ。0へ絞って消すと、戻したときの音量が判らなくなる。
- */
+/** 音量とは別に持つ。0へ絞って消すと、戻したときの音量が判らなくなる。 */
 export const mutedAtom = atomWithStorage<boolean>(
   MUTED_STORAGE_KEY,
   false,
-  localStorageWith((raw) => (typeof raw === "boolean" ? raw : undefined)),
+  localStorageWith((raw) => (typeof raw === "boolean" ? raw : undefined), {
+    crossTab: false,
+  }),
   { getOnInit: true }
 )
 
