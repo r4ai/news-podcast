@@ -20,9 +20,23 @@ export type EpisodeCompletedConsumerOutcome = DeepReadonly<
       readonly deliveryCount: number
       readonly delayMillis: number
     }
+  | {
+      readonly _tag: "EpisodeCompletedRedeliveryThresholdExceeded"
+      readonly deliveryCount: number
+      readonly delayMillis: number
+    }
+  | {
+      readonly _tag: "EpisodeCompletedDiscarded"
+      readonly deliveryCount: number
+      readonly reason: string
+      readonly messageId?: string
+      readonly correlationId?: string
+      readonly episodeId?: string
+    }
 >
 
 export type EpisodeCompletedConsumerLoopConfig = DeepReadonly<{
+  readonly maximumDeliveries: number
   readonly initialNackDelayMillis: number
   readonly maximumNackDelayMillis: number
   readonly observe?: (
@@ -41,11 +55,20 @@ const logOutcome = (outcome: EpisodeCompletedConsumerOutcome) =>
         event_name: "episode_library.completion.acknowledged",
         delivery_count: outcome.deliveryCount,
       })
-    : Effect.logWarning("episode completion nacked", {
-        event_name: "episode_library.completion.nacked",
-        delivery_count: outcome.deliveryCount,
-        retry_delay_ms: outcome.delayMillis,
-      })
+    : outcome._tag === "EpisodeCompletedDiscarded"
+      ? Effect.void
+      : outcome._tag === "EpisodeCompletedRedeliveryThresholdExceeded"
+        ? Effect.logError("episode completion redelivery threshold exceeded", {
+            event_name:
+              "episode_library.completion.redelivery_threshold_exceeded",
+            delivery_count: outcome.deliveryCount,
+            retry_delay_ms: outcome.delayMillis,
+          })
+        : Effect.logWarning("episode completion nacked", {
+            event_name: "episode_library.completion.nacked",
+            delivery_count: outcome.deliveryCount,
+            retry_delay_ms: outcome.delayMillis,
+          })
 
 /** Sequential pull processing preserves SQLite transaction ordering and backpressure. */
 export const runEpisodeCompletedConsumerLoop = (
@@ -85,8 +108,12 @@ export const runEpisodeCompletedConsumerLoop = (
               if (failure._tag === "EpisodeCompletedConsumerIoFailure") {
                 return Effect.fail(failure)
               }
+              const thresholdExceeded =
+                delivery.deliveryCount >= config.maximumDeliveries
               const outcome = deepFreeze({
-                _tag: "EpisodeCompletedNacked" as const,
+                _tag: thresholdExceeded
+                  ? ("EpisodeCompletedRedeliveryThresholdExceeded" as const)
+                  : ("EpisodeCompletedNacked" as const),
                 deliveryCount: delivery.deliveryCount,
                 delayMillis: nackDelayMillis ?? config.maximumNackDelayMillis,
               })
@@ -95,11 +122,18 @@ export const runEpisodeCompletedConsumerLoop = (
                 Effect.andThen(loop())
               )
             },
-            onSuccess: () => {
-              const outcome = deepFreeze({
-                _tag: "EpisodeCompletedAcknowledged" as const,
-                deliveryCount: delivery.deliveryCount,
-              })
+            onSuccess: (result) => {
+              const outcome =
+                result === "Committed"
+                  ? deepFreeze({
+                      _tag: "EpisodeCompletedAcknowledged" as const,
+                      deliveryCount: delivery.deliveryCount,
+                    })
+                  : deepFreeze({
+                      ...result,
+                      _tag: "EpisodeCompletedDiscarded" as const,
+                      deliveryCount: delivery.deliveryCount,
+                    })
               return logOutcome(outcome).pipe(
                 Effect.andThen(observe(outcome)),
                 Effect.andThen(loop())

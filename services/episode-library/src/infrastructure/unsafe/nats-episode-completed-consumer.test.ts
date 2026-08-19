@@ -21,7 +21,6 @@ const config = {
   stream: "EPISODE_PRODUCTION",
   durableName: "episode-library-completions",
   ackWaitMillis: 30_000,
-  maximumDeliveries: 10,
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -71,7 +70,7 @@ describe("unsafe JetStream EpisodeCompleted boundary", () => {
       replay_policy: "instant",
       filter_subject: subjects.production.jobCompletedV2,
       ack_wait: 30_000_000_000,
-      max_deliver: 10,
+      max_deliver: -1,
       max_ack_pending: 1,
     })
     expect(get).toHaveBeenCalledWith(config.stream, config.durableName)

@@ -10,6 +10,7 @@ import {
   consumeEpisodeCompleted,
   type EpisodeCompletionPorts,
 } from "../application/index.js"
+import type { CompletionStoreFailure } from "../application/ports/completion.js"
 
 export type NatsPayloadDecodeFailure = Readonly<{
   _tag: "NatsPayloadDecodeFailure"
@@ -52,6 +53,65 @@ const decodeJson = (data: Uint8Array) =>
     }),
   })
 
+const isTransientPersistenceFailure = (
+  failure: unknown
+): failure is CompletionStoreFailure =>
+  typeof failure === "object" &&
+  failure !== null &&
+  "_tag" in failure &&
+  failure._tag === "CompletionStoreFailure"
+
+export type DiscardedEpisodeCompletion = Readonly<{
+  readonly _tag: "Discarded"
+  readonly reason: string
+  readonly messageId?: string
+  readonly correlationId?: string
+  readonly episodeId?: string
+}>
+
+export type EpisodeCompletedHandlingResult =
+  | "Committed"
+  | DiscardedEpisodeCompletion
+
+type CompletionIdentity = Omit<DiscardedEpisodeCompletion, "_tag" | "reason">
+
+const failureReason = (failure: unknown): string =>
+  typeof failure === "object" &&
+  failure !== null &&
+  "_tag" in failure &&
+  typeof failure._tag === "string"
+    ? failure._tag
+    : "UnknownEpisodeCompletionFailure"
+
+const discardedCompletion = (
+  failure: unknown,
+  identity: CompletionIdentity
+): DiscardedEpisodeCompletion =>
+  Object.freeze({
+    _tag: "Discarded",
+    reason: failureReason(failure),
+    ...identity,
+  })
+
+const logDiscardedCompletion = (
+  discarded: DiscardedEpisodeCompletion,
+  deliveryCount: number
+) =>
+  Effect.logError("terminal episode completion discarded", {
+    event_name: "episode_library.completion.discarded",
+    delivery_count: deliveryCount,
+    failure_tag: discarded.reason,
+    ...(discarded.messageId === undefined
+      ? {}
+      : { message_id: discarded.messageId }),
+    ...(discarded.correlationId === undefined
+      ? {}
+      : { correlation_id: discarded.correlationId }),
+    ...(discarded.episodeId === undefined
+      ? {}
+      : { episode_id: discarded.episodeId }),
+  })
+
 export const handleNatsEpisodeCompleted = (
   ports: EpisodeCompletionPorts,
   nackBackoff: EpisodeCompletedNackBackoff = defaultNackBackoff
@@ -60,13 +120,26 @@ export const handleNatsEpisodeCompleted = (
     AckError,
     NackError,
   >(delivery: NatsEpisodeCompletedDelivery<AckError, NackError>) {
+    let identity: CompletionIdentity = Object.freeze({})
     const consume = decodeJson(delivery.data).pipe(
       Effect.flatMap((input) =>
         parseMessageEnvelope(input).pipe(
-          Effect.flatMap((envelope) =>
-            withRemoteTraceparent(
+          Effect.flatMap((envelope) => {
+            identity = Object.freeze({
+              messageId: envelope.messageId,
+              correlationId: envelope.correlationId,
+            })
+            return withRemoteTraceparent(
               withMessagingSpan(
                 parseEpisodeCompletedMessage(input).pipe(
+                  Effect.tap((notice) =>
+                    Effect.sync(() => {
+                      identity = Object.freeze({
+                        ...identity,
+                        episodeId: notice.episodeId,
+                      })
+                    })
+                  ),
                   Effect.flatMap(consumeEpisodeCompleted(ports)),
                   Effect.tap(() =>
                     Effect.logInfo("episode completion committed", {
@@ -80,20 +153,38 @@ export const handleNatsEpisodeCompleted = (
               ),
               envelope.traceparent
             )
-          )
+          })
         )
       )
     )
+    type ConsumeFailure = Effect.Error<typeof consume>
 
-    return yield* consume.pipe(
-      Effect.matchEffect({
-        onFailure: (failure) =>
-          delivery
-            .nack(
-              episodeCompletedNackDelay(delivery.deliveryCount, nackBackoff)
-            )
-            .pipe(Effect.andThen(Effect.fail(failure))),
-        onSuccess: () => delivery.ack,
-      })
+    const result = yield* consume.pipe(
+      Effect.as("Consumed" as const),
+      Effect.catch(
+        (
+          failure: ConsumeFailure
+        ): Effect.Effect<
+          DiscardedEpisodeCompletion,
+          ConsumeFailure | AckError | NackError
+        > => {
+          if (isTransientPersistenceFailure(failure)) {
+            return delivery
+              .nack(
+                episodeCompletedNackDelay(delivery.deliveryCount, nackBackoff)
+              )
+              .pipe(Effect.andThen(Effect.fail(failure)))
+          }
+          const discarded = discardedCompletion(failure, identity)
+          return logDiscardedCompletion(discarded, delivery.deliveryCount).pipe(
+            Effect.andThen(delivery.ack),
+            Effect.as(discarded)
+          )
+        }
+      )
     )
+    if (result !== "Consumed") return result
+
+    yield* delivery.ack
+    return "Committed" as const
   })

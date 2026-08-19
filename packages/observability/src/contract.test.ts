@@ -10,6 +10,12 @@ describe("observability contract", () => {
     expect(telemetryEventNames).toContain("episode.failed")
     expect(telemetryEventNames).toContain("article.enrich.summary.degraded")
     expect(telemetryEventNames).toContain("rss.sync.degraded")
+    expect(telemetryEventNames).toContain(
+      "episode_library.completion.redelivery_threshold_exceeded"
+    )
+    expect(telemetryEventNames).toContain(
+      "episode_library.completion.discarded"
+    )
     expect(telemetryEventNames).toContain("process.uncaught_exception")
     expect(metricNames).toContain("http.server.duration")
     expect(metricNames).toContain("trace.entry.synthesized")
