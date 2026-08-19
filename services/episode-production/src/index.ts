@@ -109,6 +109,7 @@ export {
   parseNodeCreateJobRpcConfig,
   runNodeCreateJobRpc,
   runNodeProductionRpc,
+  runProductionRpcWithDatabase,
   type NodeCreateJobRpcDependencies,
   type NodeCreateJobRpcError,
 } from "./runtime/node.js"
