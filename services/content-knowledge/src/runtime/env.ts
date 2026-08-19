@@ -112,6 +112,16 @@ export const readContentKnowledgeConfig = (
         env.CONTENT_ARCHIVE_MAX_ASSET_TOTAL_BYTES,
         100 * 1_024 * 1_024
       ),
+      cleanup: {
+        intervalMillis: decimalInteger(
+          env.CONTENT_ARCHIVE_CLEANUP_INTERVAL_MS,
+          6 * 60 * 60 * 1_000
+        ),
+        retentionMillis: decimalInteger(
+          env.CONTENT_ARCHIVE_ORPHAN_RETENTION_MS,
+          24 * 60 * 60 * 1_000
+        ),
+      },
     },
   }).pipe(Effect.mapError(configFailure))
 }

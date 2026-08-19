@@ -1,8 +1,13 @@
 import { createHash } from "node:crypto"
 
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import {
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { JSDOM } from "jsdom"
 import postcss, { type Root } from "postcss"
 
@@ -10,7 +15,7 @@ import type {
   ArchiveArticlePorts,
   CaptureError,
 } from "../../application/ports/archive.js"
-import { ArchiveCaptureSchema } from "../../domain/article.js"
+import { ArchiveCaptureSchema, SnapshotIdSchema } from "../../domain/article.js"
 import { createArticleArchiveArtifacts } from "./article-markdown-parser.js"
 import { createNodeSafeFetcher } from "./safe-fetch.js"
 
@@ -43,10 +48,30 @@ export type HttpS3ArticleCaptureDependencies = Readonly<{
 
 export type HttpS3ArticleCaptureResource = Readonly<{
   readonly capture: ArchiveArticlePorts["capture"]
+  readonly cleanupOrphans: (input: {
+    readonly referencedSnapshotIds: ReadonlySet<string>
+    readonly olderThan: Date
+  }) => Effect.Effect<ArchiveObjectCleanupOutcome, CaptureError>
   /** The same DNS-pinned fetch boundary is reused by the RSS reader. */
   readonly fetcher: typeof fetch
   readonly close: Effect.Effect<void>
 }>
+
+export type ArchiveObjectCleanupOutcome = DeepReadonly<{
+  readonly trigger: "capture_failure" | "retention_sweep"
+  readonly attempted: number
+  readonly deleted: number
+  readonly failed: number
+}>
+
+export type HttpS3ArticleCaptureObserver = Readonly<{
+  readonly cleanup: (outcome: ArchiveObjectCleanupOutcome) => void
+}>
+
+const noopObserver: HttpS3ArticleCaptureObserver = Object.freeze({
+  cleanup: () => undefined,
+})
+const DELETE_CONCURRENCY = 16
 
 const defaultDependencies: HttpS3ArticleCaptureDependencies = Object.freeze({
   createS3: (config) => {
@@ -556,13 +581,60 @@ const blockedFetchFailure = (error: unknown): boolean =>
     error.message.toLowerCase().includes(term)
   )
 
+const isSnapshotId = Schema.is(SnapshotIdSchema)
+const snapshotIdFromArticleKey = (key: string): string | undefined => {
+  const [namespace, candidate, ...objectPath] = key.split("/")
+  return namespace === "articles" &&
+    candidate !== undefined &&
+    objectPath.length > 0 &&
+    isSnapshotId(candidate)
+    ? candidate
+    : undefined
+}
+
 /** Owns the Node DNS-pinned fetcher and S3 client used by RSS and article capture. */
 export const openHttpS3ArticleCaptureUnsafe = (
   config: HttpS3ArticleCaptureConfig,
-  dependencies: HttpS3ArticleCaptureDependencies = defaultDependencies
+  dependencies: HttpS3ArticleCaptureDependencies = defaultDependencies,
+  observer: HttpS3ArticleCaptureObserver = noopObserver
 ): HttpS3ArticleCaptureResource => {
   const s3 = dependencies.createS3(config)
   const safe = dependencies.createSafeFetch()
+  const cleanupKeys = async (
+    keys: readonly string[],
+    trigger: ArchiveObjectCleanupOutcome["trigger"]
+  ): Promise<ArchiveObjectCleanupOutcome> => {
+    const cleanupSignal = AbortSignal.timeout(
+      Math.min(config.timeoutMillis, 10_000)
+    )
+    let deleted = 0
+    for (let offset = 0; offset < keys.length; offset += DELETE_CONCURRENCY) {
+      const batch = keys.slice(offset, offset + DELETE_CONCURRENCY)
+      const results = await Promise.allSettled(
+        batch.map((key) =>
+          s3.client.send(
+            new DeleteObjectCommand({ Bucket: config.bucket, Key: key }),
+            { abortSignal: cleanupSignal }
+          )
+        )
+      )
+      deleted += results.filter(
+        (result) => result.status === "fulfilled"
+      ).length
+    }
+    const outcome = deepFreeze({
+      trigger,
+      attempted: keys.length,
+      deleted,
+      failed: keys.length - deleted,
+    })
+    try {
+      observer.cleanup(outcome)
+    } catch {
+      // Telemetry must never replace the capture result.
+    }
+    return outcome
+  }
   const capture: ArchiveArticlePorts["capture"] = ({ sourceUrl, snapshotId }) =>
     Effect.tryPromise({
       try: async (effectSignal) => {
@@ -621,7 +693,7 @@ export const openHttpS3ArticleCaptureUnsafe = (
               mediaType: asset.mediaType,
             })),
           ]
-          await Promise.all(
+          const results = await Promise.allSettled(
             values.map((value) =>
               s3.client.send(
                 new PutObjectCommand({
@@ -635,6 +707,13 @@ export const openHttpS3ArticleCaptureUnsafe = (
               )
             )
           )
+          const successfulKeys = values.flatMap((value, index) =>
+            results[index]?.status === "fulfilled" ? [value.key] : []
+          )
+          if (results.some((result) => result.status === "rejected")) {
+            await cleanupKeys(successfulKeys, "capture_failure")
+            throw failure("Unavailable")
+          }
           return parse(ArchiveCaptureSchema)({
             rawResponse: {
               _tag: values[0]._tag,
@@ -677,8 +756,50 @@ export const openHttpS3ArticleCaptureUnsafe = (
         isCaptureError(error) ? error : failure("Unavailable"),
     }).pipe(Effect.flatten)
 
+  const cleanupOrphans: HttpS3ArticleCaptureResource["cleanupOrphans"] = (
+    input
+  ) =>
+    Effect.tryPromise({
+      try: async () => {
+        const keys: string[] = []
+        const seenTokens = new Set<string>()
+        let continuationToken: string | undefined
+        for (;;) {
+          const page = await s3.client.send(
+            new ListObjectsV2Command({
+              Bucket: config.bucket,
+              Prefix: "articles/",
+              ...(continuationToken === undefined
+                ? {}
+                : { ContinuationToken: continuationToken }),
+            })
+          )
+          for (const object of page.Contents ?? []) {
+            const key = object.Key
+            const lastModified = object.LastModified
+            if (key === undefined || lastModified === undefined) continue
+            const snapshotId = snapshotIdFromArticleKey(key)
+            if (snapshotId === undefined) continue
+            if (input.referencedSnapshotIds.has(snapshotId)) continue
+            if (lastModified >= input.olderThan) continue
+            keys.push(key)
+          }
+          if (!page.IsTruncated) break
+          const next = page.NextContinuationToken
+          if (next === undefined || seenTokens.has(next)) {
+            throw failure("Unavailable")
+          }
+          seenTokens.add(next)
+          continuationToken = next
+        }
+        return cleanupKeys(keys, "retention_sweep")
+      },
+      catch: () => failure("Unavailable"),
+    })
+
   return Object.freeze({
     capture,
+    cleanupOrphans,
     fetcher: safe.fetch,
     close: Effect.all([
       Effect.tryPromise(() => safe.close()).pipe(Effect.ignore),

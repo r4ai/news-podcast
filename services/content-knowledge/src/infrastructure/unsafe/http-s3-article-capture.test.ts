@@ -1,5 +1,10 @@
 import { createServer } from "node:http"
 
+import {
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3"
 import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -357,6 +362,140 @@ describe("HTTP to S3 article capture", () => {
       )
     ).resolves.toEqual({ _tag: "CaptureFailed", reason: "ResourceLimit" })
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it("settles every artifact write and deletes successful keys after a partial S3 failure", async () => {
+    const written: string[] = []
+    const deleted: string[] = []
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof PutObjectCommand) {
+        const key = command.input.Key!
+        written.push(key)
+        if (key.endsWith("/replay/index.html")) throw new Error("put failed")
+        return {}
+      }
+      if (command instanceof DeleteObjectCommand) {
+        deleted.push(command.input.Key!)
+        return {}
+      }
+      throw new Error("unexpected S3 command")
+    })
+    const resource = openHttpS3ArticleCaptureUnsafe(config, {
+      createS3: () => ({ client: { send } as never, close: vi.fn() }),
+      createSafeFetch: () => ({
+        fetch: vi.fn(
+          async () =>
+            new Response("<article><h1>Cleanup</h1></article>", {
+              headers: { "content-type": "text/html" },
+            })
+        ) as never,
+        close: vi.fn(async () => undefined),
+      }),
+    })
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          resource.capture({
+            sourceUrl: "https://news.example.com/partial" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
+          })
+        )
+      )
+    ).resolves.toEqual({ _tag: "CaptureFailed", reason: "Unavailable" })
+    expect(written).toEqual([
+      "articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/raw/response.html",
+      "articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/replay/index.html",
+      "articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/markdown/article.md",
+    ])
+    expect(deleted).toEqual([
+      "articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/raw/response.html",
+      "articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/markdown/article.md",
+    ])
+  })
+
+  it("sweeps only expired snapshot prefixes that have no database reference", async () => {
+    const referenced = "46c2eef5-a205-4526-8640-dc3ea84d88b4"
+    const orphan = "2b949c5b-a79f-45f3-8b4b-8f1ea62ad23f"
+    const recent = "b98ac5ca-2b33-40e8-8173-69f875782d11"
+    const deleted: string[] = []
+    const cleanup = vi.fn()
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof ListObjectsV2Command) {
+        if (command.input.ContinuationToken === "page-2") {
+          return {
+            Contents: [
+              {
+                Key: `articles/${orphan}/markdown/article.md`,
+                LastModified: new Date("2026-08-17T00:00:00.000Z"),
+              },
+            ],
+            IsTruncated: false,
+          }
+        }
+        return {
+          Contents: [
+            {
+              Key: `articles/${referenced}/raw/response.html`,
+              LastModified: new Date("2026-08-17T00:00:00.000Z"),
+            },
+            {
+              Key: `articles/${orphan}/raw/response.html`,
+              LastModified: new Date("2026-08-17T00:00:00.000Z"),
+            },
+            {
+              Key: `articles/${recent}/raw/response.html`,
+              LastModified: new Date("2026-08-19T11:59:59.000Z"),
+            },
+            {
+              Key: "articles/not-a-snapshot/raw/response.html",
+              LastModified: new Date("2026-08-17T00:00:00.000Z"),
+            },
+          ],
+          IsTruncated: true,
+          NextContinuationToken: "page-2",
+        }
+      }
+      if (command instanceof DeleteObjectCommand) {
+        const key = command.input.Key!
+        deleted.push(key)
+        if (key.endsWith("/markdown/article.md")) {
+          throw new Error("delete failed")
+        }
+        return {}
+      }
+      throw new Error("unexpected S3 command")
+    })
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      config,
+      {
+        createS3: () => ({ client: { send } as never, close: vi.fn() }),
+        createSafeFetch: () => ({
+          fetch: vi.fn() as never,
+          close: vi.fn(async () => undefined),
+        }),
+      },
+      { cleanup }
+    )
+
+    const outcome = await Effect.runPromise(
+      resource.cleanupOrphans({
+        referencedSnapshotIds: new Set([referenced]),
+        olderThan: new Date("2026-08-19T00:00:00.000Z"),
+      })
+    )
+
+    expect(deleted).toEqual([
+      `articles/${orphan}/raw/response.html`,
+      `articles/${orphan}/markdown/article.md`,
+    ])
+    expect(outcome).toEqual({
+      trigger: "retention_sweep",
+      attempted: 2,
+      deleted: 1,
+      failed: 1,
+    })
+    expect(cleanup).toHaveBeenCalledWith(outcome)
   })
 
   it("classifies the safe-fetch SSRF denial without leaking its target", async () => {

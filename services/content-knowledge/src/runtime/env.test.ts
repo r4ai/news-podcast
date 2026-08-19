@@ -63,6 +63,10 @@ describe("content-knowledge environment boundary", () => {
         maximumAssetBytes: 20_971_520,
         maximumAssetCount: 512,
         maximumAssetTotalBytes: 104_857_600,
+        cleanup: {
+          intervalMillis: 21_600_000,
+          retentionMillis: 86_400_000,
+        },
       },
     })
     expect(Object.isFrozen(config)).toBe(true)
@@ -93,6 +97,13 @@ describe("content-knowledge environment boundary", () => {
     [
       "out-of-range enrichment budget",
       { ...validEnvironment, CONTENT_ENRICH_DAILY_LIMIT: "10001" },
+    ],
+    [
+      "orphan retention shorter than an in-flight capture",
+      {
+        ...validEnvironment,
+        CONTENT_ARCHIVE_ORPHAN_RETENTION_MS: "10000",
+      },
     ],
     [
       "partial OpenAI configuration",

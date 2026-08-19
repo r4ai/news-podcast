@@ -27,6 +27,7 @@ const core = readContentKnowledgeConfig(process.env)
     Effect.flatMap((config) =>
       runNodeService(config, {
         ...defaultNodeServiceDependencies,
+        observability,
         onReady: () => health.ready("rpc"),
       })
     )

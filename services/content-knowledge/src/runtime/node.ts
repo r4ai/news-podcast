@@ -1,4 +1,8 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
+import {
+  noopObservability,
+  type Observability,
+} from "@news-podcast/observability"
 import { Effect, Schema } from "effect"
 
 import {
@@ -29,6 +33,7 @@ import { archiveArticle } from "../application/archive-article.js"
 import {
   openHttpS3ArticleCaptureUnsafe,
   type HttpS3ArticleCaptureConfig,
+  type HttpS3ArticleCaptureObserver,
   type HttpS3ArticleCaptureResource,
 } from "../infrastructure/unsafe/http-s3-article-capture.js"
 import { openS3MarkdownObjectReaderUnsafe } from "../infrastructure/unsafe/s3-markdown-object-reader.js"
@@ -59,6 +64,11 @@ import {
 import { runEnrichmentWorkerLoop } from "./loops/enrichment-worker.js"
 import { makeFeedPollWakeup } from "./loops/feed-poll.js"
 import { makeOpenAiArticleSelector } from "../adapters/providers/generation-planning/openai/selector.js"
+import {
+  runArchiveCleanupCycle,
+  runArchiveCleanupLoop,
+} from "./loops/archive-cleanup.js"
+import { makeArchiveCleanupObserver } from "./archive-cleanup-observability.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -112,6 +122,14 @@ const HttpEndpointSchema = Schema.String.check(
 const ProviderAttemptSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(5)
+)
+const ArchiveCleanupIntervalSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(24 * 60 * 60 * 1_000)
+)
+const ArchiveRetentionSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(365 * 24 * 60 * 60 * 1_000)
 )
 export const NodeServiceConfigSchema = Schema.Struct({
   sqlitePath: SqlitePathSchema,
@@ -167,6 +185,10 @@ export const NodeServiceConfigSchema = Schema.Struct({
       Schema.isLessThanOrEqualTo(512)
     ),
     maximumAssetTotalBytes: AssetBytesSchema,
+    cleanup: Schema.Struct({
+      intervalMillis: ArchiveCleanupIntervalSchema,
+      retentionMillis: ArchiveRetentionSchema,
+    }),
   }),
 })
 const parseNodeServiceStructure = parse(NodeServiceConfigSchema)
@@ -178,6 +200,7 @@ export const parseNodeServiceConfig = (input: unknown) =>
           config.feedPoller.loop.maximumBackoffMillis &&
         config.enrichment.loop.initialBackoffMillis <=
           config.enrichment.loop.maximumBackoffMillis &&
+        config.archive.cleanup.retentionMillis > config.archive.timeoutMillis &&
         (config.enrichment.provider === null ||
           config.enrichment.provider.baseDelayMillis <=
             config.enrichment.provider.maximumDelayMillis),
@@ -219,13 +242,16 @@ export type NodeServiceDependencies = Readonly<{
     input: unknown
   ) => Effect.Effect<NodeContentKnowledgeRuntime, NodeRuntimeError>
   readonly openCapture: (
-    config: HttpS3ArticleCaptureConfig
+    config: HttpS3ArticleCaptureConfig,
+    observer: HttpS3ArticleCaptureObserver
   ) => HttpS3ArticleCaptureResource
   readonly openMarkdownReader: typeof openS3MarkdownObjectReaderUnsafe
   readonly runRpc: typeof runNatsContentKnowledgeRpc
   readonly runPoller: typeof runContentFeedPoller
   readonly enrichmentProvider?: EnrichmentProvider
   readonly runEnrichment: typeof runEnrichmentWorkerLoop
+  readonly runArchiveCleanup: typeof runArchiveCleanupLoop
+  readonly observability?: Observability
   readonly onReady?: () => void
 }>
 
@@ -342,11 +368,14 @@ export const startNodeRuntime = (
 export const defaultNodeServiceDependencies: NodeServiceDependencies =
   Object.freeze({
     startRuntime: startNodeRuntime,
-    openCapture: openHttpS3ArticleCaptureUnsafe,
+    openCapture: (config, observer) =>
+      openHttpS3ArticleCaptureUnsafe(config, undefined, observer),
     openMarkdownReader: openS3MarkdownObjectReaderUnsafe,
     runRpc: runNatsContentKnowledgeRpc,
     runPoller: runContentFeedPoller,
     runEnrichment: runEnrichmentWorkerLoop,
+    runArchiveCleanup: runArchiveCleanupLoop,
+    observability: noopObservability,
   })
 
 /** Owns the continuously running RPC and worker resources. */
@@ -377,7 +406,13 @@ export const runNodeService = (
           Effect.flatMap((runtime) =>
             Effect.acquireRelease(
               Effect.try({
-                try: () => dependencies.openCapture(config.archive),
+                try: () =>
+                  dependencies.openCapture(
+                    config.archive,
+                    makeArchiveCleanupObserver(
+                      dependencies.observability ?? noopObservability
+                    )
+                  ),
                 catch: () => runtimeError("ObjectStore"),
               }),
               (capture) => capture.close
@@ -473,6 +508,15 @@ export const runNodeService = (
                         dependencies.runEnrichment(
                           config.enrichment.loop,
                           enrichment.runCycle
+                        ),
+                        dependencies.runArchiveCleanup(
+                          config.archive.cleanup,
+                          () =>
+                            runArchiveCleanupCycle(config.archive.cleanup, {
+                              listReferencedSnapshotIds:
+                                runtime.store.listReferencedSnapshotIds,
+                              cleanupOrphans: capture.cleanupOrphans,
+                            })
                         ),
                       ],
                       { concurrency: "unbounded", discard: true }
