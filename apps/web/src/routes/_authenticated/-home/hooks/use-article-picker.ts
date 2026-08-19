@@ -31,17 +31,17 @@ export function useArticlePicker(
   initialSelectedIds: readonly string[] = EMPTY_SELECTION
 ) {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
-
-  const syncedKeyRef = useRef<string>("")
+  const initialSelectionKey = initialSelectedIds.join(",")
+  const initialSelectedIdsRef = useRef(initialSelectedIds)
+  initialSelectedIdsRef.current = initialSelectedIds
 
   useEffect(() => {
     if (!enabled) return
-    // 参照ではなく値で比較し、同一内容ならスキップして再レンダーの連鎖を防ぐ。
-    const key = initialSelectedIds.join(",")
-    if (key === syncedKeyRef.current) return
-    syncedKeyRef.current = key
-    setSelectedIds([...initialSelectedIds])
-  }, [enabled, initialSelectedIds])
+    // `enabled`のfalse→trueが選択セッションの境界。同じ初期値でも、開く
+    // たびにキャンセル前の編集を捨ててfresh/retry双方の契約へ戻す。依存は
+    // UUID列の値へ狭め、呼び出し側の配列参照だけが変わっても再実行しない。
+    setSelectedIds([...initialSelectedIdsRef.current])
+  }, [enabled, initialSelectionKey])
 
   const listQuery = useInfiniteQuery({
     ...infiniteQueryOptions({
