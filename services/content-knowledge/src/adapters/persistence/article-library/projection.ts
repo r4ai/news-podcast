@@ -10,6 +10,7 @@ import {
 } from "../../../../drizzle/schema.js"
 import type { ArticleLibraryError } from "../../../application/article-library.js"
 import { ArticleViewSchema } from "../../../domain/article-library.js"
+import { latestSnapshotOfArticle } from "../latest-article-snapshot.js"
 
 const ArticleRowSchema = Schema.Struct({
   articleId: Schema.String,
@@ -52,18 +53,6 @@ export const stateFlag = (column: typeof articleOwnerStates.read) =>
 
 /** ORDER BYとカーソル比較で同じ式を使い、並びと継続位置がずれないようにする。 */
 export const sortKeyExpression = sql`COALESCE(${feedItems.publishedAt}, ${feedItems.discoveredAt})`
-
-/**
- * 記事ごとの最新スナップショット。article_id が実カラムになったため
- * article_snapshots_latest インデックスで解決できる。
- */
-const latestSnapshotId = sql`(
-  SELECT candidate.snapshot_id
-    FROM article_snapshots AS candidate
-   WHERE candidate.article_id = ${feedItems.articleId}
-   ORDER BY candidate.captured_at DESC, candidate.snapshot_id DESC
-   LIMIT 1
-)`
 
 export const articleProjection = {
   articleId: feedItems.articleId,
@@ -108,10 +97,7 @@ export const ownerStateOfArticle = and(
   eq(articleOwnerStates.articleId, feedItems.articleId)
 )
 
-export const latestSnapshotOfArticle = eq(
-  articleSnapshots.snapshotId,
-  latestSnapshotId
-)
+export { latestSnapshotOfArticle }
 
 export const decodeArticle = (
   row: unknown,

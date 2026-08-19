@@ -156,7 +156,7 @@ const setup = async () => {
     })
   )
   const articles = await Effect.runPromise(createArticleLibrary(database.db))
-  return { articles, catalog, snapshot }
+  return { articles, archiveStore, catalog, snapshot }
 }
 
 const query = (overrides: Record<string, unknown> = {}) =>
@@ -243,6 +243,68 @@ describe("SQLite article library", () => {
       title: "Owner A article",
       sourceUrl: "https://news.example.com/a",
     })
+  })
+
+  it("uses the latest snapshot once for automatic and selected generation", async () => {
+    const { archiveStore, catalog } = await setup()
+    const command = decode(ArchiveCommandSchema, {
+      archiveRequestId: "27b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
+      articleId: ids.articleA,
+      sourceUrl: "https://news.example.com/a-latest",
+      title: "Latest archived article",
+    })
+    const latest = createArticleSnapshot({
+      command,
+      snapshotId: decode(
+        SnapshotIdSchema,
+        "56c2eef5-a205-4526-8640-dc3ea84d88b4"
+      ),
+      capturedAt: decode(CapturedAtSchema, "2026-08-13T02:03:00.000Z"),
+      capture: decode(ArchiveCaptureSchema, {
+        rawResponse: {
+          _tag: "RawResponse",
+          key: "articles/a/latest.raw.html",
+          sha256: "4".repeat(64),
+          mediaType: "text/html",
+          byteLength: 20,
+        },
+        replay: {
+          _tag: "Replay",
+          key: "articles/a/latest.replay.html",
+          sha256: "5".repeat(64),
+          mediaType: "text/html",
+          byteLength: 20,
+        },
+        markdown: {
+          _tag: "Markdown",
+          key: "articles/a/latest.md",
+          sha256: "6".repeat(64),
+          mediaType: "text/markdown",
+          byteLength: 20,
+        },
+        assets: [],
+      }),
+    })
+    await Effect.runPromise(archiveStore.commit({ snapshot: latest }))
+
+    const [automatic, selected, candidates] = await Effect.runPromise(
+      Effect.all([
+        catalog.findAutomatic(ids.ownerA, 20),
+        catalog.findSelected(ids.ownerA, [ids.articleA]),
+        catalog.listGenerationCandidates(ids.ownerA, 20, []),
+      ])
+    )
+
+    expect(automatic).toEqual([
+      expect.objectContaining({
+        articleId: ids.articleA,
+        snapshotId: latest.snapshotId,
+        markdownKey: "articles/a/latest.md",
+      }),
+    ])
+    expect(selected).toEqual(automatic)
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]?.articleId).toBe(ids.articleA)
   })
 
   it("patches hidden/read state per owner and excludes hidden generation candidates", async () => {
