@@ -91,6 +91,7 @@ export type SqliteJobHandle = Readonly<{
     | { readonly _tag: "Terminal" }
   saveIdempotently: (input: {
     readonly ownerId: string
+    readonly idempotencyScope: string
     readonly idempotencyKey: string
     readonly requestFingerprint: string
     readonly jobId: string

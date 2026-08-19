@@ -32,6 +32,7 @@ export const episodeJobs = sqliteTable(
   {
     jobId: text("job_id").primaryKey(),
     ownerId: text("owner_id").notNull(),
+    idempotencyScope: text("idempotency_scope").notNull().default("create"),
     idempotencyKey: text("idempotency_key").notNull(),
     requestFingerprint: text("request_fingerprint").notNull(),
     trigger: text("trigger", { enum: ["manual", "scheduled"] }).notNull(),
@@ -72,8 +73,9 @@ export const episodeJobs = sqliteTable(
     stageProgressTotal: integer("stage_progress_total"),
   },
   (table) => [
-    unique("episode_jobs_owner_idempotency").on(
+    unique("episode_jobs_owner_scope_idempotency").on(
       table.ownerId,
+      table.idempotencyScope,
       table.idempotencyKey
     ),
     // 実行待ちの探索。式インデックスを置き換える。

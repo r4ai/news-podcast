@@ -73,7 +73,9 @@ describe("episode job control", () => {
         failure: { code: "provider-timeout" as never, retryable: false },
       }
     )
-    const saveIdempotently = vi.fn((job) => Effect.succeed(job))
+    const saveRetryIdempotently = vi.fn((_sourceJobId, job) =>
+      Effect.succeed(job)
+    )
 
     const retried = await Effect.runPromise(
       retryFailedJob(
@@ -81,7 +83,7 @@ describe("episode job control", () => {
           findOwned: () => Effect.succeed(failed),
           nextJobId: Effect.succeed(retriedId),
           now: Effect.succeed(now),
-          saveIdempotently,
+          saveRetryIdempotently,
         },
         command.ownerId,
         originalId,
@@ -98,14 +100,17 @@ describe("episode job control", () => {
         articleIds: command.articleIds,
       },
     })
-    expect(saveIdempotently).toHaveBeenCalledOnce()
+    expect(saveRetryIdempotently).toHaveBeenCalledWith(
+      originalId,
+      expect.objectContaining({ jobId: retriedId })
+    )
   })
 
   it("does not retry missing or non-failed jobs", async () => {
     const common = {
       nextJobId: Effect.succeed(retriedId),
       now: Effect.succeed(now),
-      saveIdempotently: vi.fn((job) => Effect.succeed(job)),
+      saveRetryIdempotently: vi.fn((_sourceJobId, job) => Effect.succeed(job)),
     }
     const missing = await Effect.runPromise(
       retryFailedJob(
@@ -126,6 +131,6 @@ describe("episode job control", () => {
 
     expect(missing).toEqual({ _tag: "NotFound" })
     expect(conflict).toEqual({ _tag: "NotFailed" })
-    expect(common.saveIdempotently).not.toHaveBeenCalled()
+    expect(common.saveRetryIdempotently).not.toHaveBeenCalled()
   })
 })

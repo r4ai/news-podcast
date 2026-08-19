@@ -227,7 +227,7 @@ export const runNodeProductionRpc = (
                       findOwned: repository.findOwned,
                       nextJobId: Effect.sync(dependencies.newJobId),
                       now,
-                      saveIdempotently: repository.saveIdempotently,
+                      saveRetryIdempotently: repository.saveRetryIdempotently,
                     },
                     ownerId,
                     jobId,
