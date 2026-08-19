@@ -10,7 +10,6 @@ import type {
   PipelineFailure,
   StoredAudioCheckpoint,
 } from "../../../application/ports/execution.js"
-import type { GeneratedScript } from "../../../application/ports/script-generator.js"
 import {
   GenerationPlanSchema,
   type GenerationPlan,
@@ -44,6 +43,17 @@ const ScriptSchema = Schema.Struct({
   title: Schema.String,
   script: Schema.String,
   sourceUrls: Schema.Array(Schema.String),
+})
+const ScriptSourceProvenanceSchema = Schema.Struct({
+  articleId: Schema.String,
+  snapshotId: Schema.String,
+  title: Schema.String,
+  url: Schema.String,
+  publishedAt: Schema.optional(Schema.String),
+})
+const ScriptCheckpointSchema = Schema.Struct({
+  script: ScriptSchema,
+  sources: Schema.NonEmptyArray(ScriptSourceProvenanceSchema),
 })
 const AudioSchema = Schema.Struct({
   episodeId: EpisodeIdSchema,
@@ -179,9 +189,9 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             "decode_checkpoint",
             () =>
               deepFreeze({
-                script: Schema.decodeUnknownSync(ScriptSchema)(
+                ...Schema.decodeUnknownSync(ScriptCheckpointSchema)(
                   parseJson(row.script)
-                ) as GeneratedScript,
+                ),
                 ...(row.audio === undefined
                   ? {}
                   : {
@@ -278,7 +288,7 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
         handle.saveScriptCheckpoint({
           jobId: input.jobId,
           leaseToken: input.leaseToken,
-          script: stringify(input.script),
+          script: stringify({ script: input.script, sources: input.sources }),
         })
       ).pipe(
         Effect.flatMap((applied) =>

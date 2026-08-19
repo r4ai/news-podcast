@@ -133,7 +133,11 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
       ),
       saveScriptCheckpoint: vi.fn((input) =>
         Effect.sync(() => {
-          checkpoint = { ...checkpoint, script: input.script }
+          checkpoint = {
+            ...checkpoint,
+            script: input.script,
+            sources: input.sources,
+          }
         })
       ),
       saveAudioCheckpoint: vi.fn((input) =>
@@ -292,10 +296,13 @@ describe("executeEpisodeJob", () => {
 
     const savedScript = vi.mocked(first.persistence.saveScriptCheckpoint).mock
       .calls[0]![0].script
+    const savedSources = vi.mocked(first.persistence.saveScriptCheckpoint).mock
+      .calls[0]![0].sources
     const resumed = makePorts({
       persistence: {
         ...first.persistence,
-        loadCheckpoint: () => Effect.succeed({ script: savedScript }),
+        loadCheckpoint: () =>
+          Effect.succeed({ script: savedScript, sources: savedSources }),
       },
     })
     const outcome = await Effect.runPromise(
@@ -303,6 +310,47 @@ describe("executeEpisodeJob", () => {
     )
     expect(outcome._tag).toBe("Succeeded")
     expect(resumed.script.generate).not.toHaveBeenCalled()
+  })
+
+  it("keeps completion provenance on the snapshot used by a checkpointed script", async () => {
+    const first = makePorts()
+    vi.mocked(first.speech.synthesize).mockReturnValueOnce(
+      Effect.fail({ _tag: "TransportFailure" })
+    )
+
+    expect(
+      (await Effect.runPromise(executeEpisodeJob(first)({ job: running })))._tag
+    ).toBe("Retrying")
+
+    const newerArticle = {
+      ...article,
+      snapshotId: "f932fa8e-84ad-4a77-896f-129498e7460f",
+      markdown: "Changed body",
+    } as const
+    const resumed = makePorts({
+      articles: {
+        materialize: vi.fn(() => Effect.succeed([newerArticle] as const)),
+      },
+      persistence: {
+        ...first.persistence,
+        completeWithOutbox: vi.fn(() => Effect.succeed("Applied" as const)),
+      },
+    })
+
+    expect(
+      (await Effect.runPromise(executeEpisodeJob(resumed)({ job: running })))
+        ._tag
+    ).toBe("Succeeded")
+    expect(resumed.persistence.completeWithOutbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completion: expect.objectContaining({
+          sources: [
+            expect.objectContaining({ snapshotId: article.snapshotId }),
+          ],
+        }),
+      })
+    )
+    expect(resumed.articles.materialize).not.toHaveBeenCalled()
   })
 
   it("propagates cancellation and never starts provider work", async () => {

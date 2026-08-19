@@ -59,6 +59,14 @@ describe("SQLite execution repository", () => {
       script: "Hello",
       sourceUrls: ["https://example.com/article"],
     }
+    const sources = [
+      {
+        articleId,
+        snapshotId: "snapshot-1",
+        url: script.sourceUrls[0]!,
+        title: "Article",
+      },
+    ] as const
     const audio = {
       episodeId,
       objectKey: "episodes/daily.mp3",
@@ -157,6 +165,7 @@ describe("SQLite execution repository", () => {
             jobId,
             leaseToken: token("lease-1"),
             script,
+            sources,
           })
           yield* execution.saveAudioCheckpoint({
             jobId,
@@ -168,6 +177,7 @@ describe("SQLite execution repository", () => {
               jobId,
               leaseToken: token("stale"),
               script: { ...script, title: "must-not-win" },
+              sources,
             })
           )
           const checkpoint = yield* execution.loadCheckpoint(jobId)
@@ -241,7 +251,7 @@ describe("SQLite execution repository", () => {
     expect(result.loadedDictionary?.fingerprint).toBe("a".repeat(64))
     expect(Object.isFrozen(result.loadedDictionary)).toBe(true)
     expect(Object.isFrozen(result.loadedDictionary?.entries)).toBe(true)
-    expect(result.checkpoint).toEqual({ script, audio })
+    expect(result.checkpoint).toEqual({ script, sources, audio })
     expect(result.applied).toBe("Applied")
     expect(result.duplicate).toBe("Duplicate")
     expect(result.outbox?.episodeId).toBe(episodeId)
