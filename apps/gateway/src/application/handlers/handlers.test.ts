@@ -60,10 +60,22 @@ const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
   createdAt: "2026-08-12T00:00:00.000Z",
 })
 const unavailable = {
-  type: "about:blank",
-  title: "Unavailable",
+  type: "about:blank" as const,
+  title: "Upstream unavailable" as const,
   status: 503 as const,
-  code: "unavailable",
+  code: "upstream_unavailable" as const,
+}
+const episodeJobNotFound = {
+  type: "about:blank" as const,
+  title: "Episode job not found" as const,
+  status: 404 as const,
+  code: "episode_job_not_found" as const,
+}
+const episodeNotFound = {
+  type: "about:blank" as const,
+  title: "Episode not found" as const,
+  status: 404 as const,
+  code: "episode_not_found" as const,
 }
 
 const makePorts = (): GatewayPorts => ({
@@ -72,36 +84,12 @@ const makePorts = (): GatewayPorts => ({
   createEpisodeJob: () => Effect.succeed(jobReceipt),
   listEpisodeJobs: () =>
     Effect.succeed({ items: [], page: { hasMore: false } }),
-  getEpisodeJob: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
-  cancelEpisodeJob: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
+  getEpisodeJob: () => Effect.fail(episodeJobNotFound),
+  cancelEpisodeJob: () => Effect.fail(episodeJobNotFound),
   retryEpisodeJob: () => Effect.succeed(jobReceipt),
-  replayEpisodeJobEvents: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
+  replayEpisodeJobEvents: () => Effect.fail(episodeJobNotFound),
   listEpisodes: () => Effect.succeed({ items: [], page: { hasMore: false } }),
-  getEpisode: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
+  getEpisode: () => Effect.fail(episodeNotFound),
   createAudioAccess: () => Effect.succeed(audioAccess),
   addFeedSubscription: () => Effect.succeed(subscription),
   listFeedSubscriptions: () =>

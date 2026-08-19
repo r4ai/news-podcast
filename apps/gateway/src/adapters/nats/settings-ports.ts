@@ -49,13 +49,12 @@ export const makeSettingsPorts = (transport: Transport): SettingsPorts => {
   ) =>
     parts.pipe(
       Effect.flatMap(([identity, content]) =>
-        (identity._tag === "Settings" && content._tag === "InterestProfile"
+        identity._tag === "Settings" && content._tag === "InterestProfile"
           ? parse(UserSettingsSchema)({
               generationSchedule: identity.generationSchedule,
               interestProfile: content.interestProfile,
-            })
+            }).pipe(Effect.mapError(unavailable))
           : Effect.fail(unavailable())
-        ).pipe(Effect.mapError(normalizeProblem))
       ),
       Effect.mapError(normalizeProblem)
     )

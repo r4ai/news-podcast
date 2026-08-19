@@ -18,10 +18,10 @@ import type { GatewayPorts } from "../application/ports.js"
 import { makeGatewayWebHandler } from "./http.js"
 
 const unavailable = {
-  type: "about:blank",
-  title: "Unavailable",
+  type: "about:blank" as const,
+  title: "Upstream unavailable" as const,
   status: 503 as const,
-  code: "unavailable",
+  code: "upstream_unavailable" as const,
 }
 
 const ports: GatewayPorts = {

@@ -40,21 +40,19 @@ const toPublicQueueItem = (
 
 export const makeEnrichmentPorts = (transport: Transport): EnrichmentPorts => {
   const personalizationRpc = (headers: Headers, payload: unknown) =>
-    transport
-      .ownerRpc(
-        headers,
-        subjects.content.personalization,
-        "content-knowledge",
-        payload,
-        parseContentPersonalizationReply
-      )
-      .pipe(Effect.mapError(normalizeProblem))
+    transport.ownerRpc(
+      headers,
+      subjects.content.personalization,
+      "content-knowledge",
+      payload,
+      parseContentPersonalizationReply
+    )
 
   return {
     getEnrichQueue: (headers) =>
       personalizationRpc(headers, { operation: "GetEnrichmentQueue" }).pipe(
         Effect.flatMap((reply) =>
-          (reply._tag === "EnrichmentQueue"
+          reply._tag === "EnrichmentQueue"
             ? parse(EnrichQueueSchema)({
                 ...reply.queue,
                 processing: reply.queue.processing.map(toPublicQueueItem),
@@ -67,9 +65,8 @@ export const makeEnrichmentPorts = (transport: Transport): EnrichmentPorts => {
                   items: reply.queue.failed.items.map(toPublicQueueItem),
                 },
                 recent: reply.queue.recent.map(toPublicQueueItem),
-              })
+              }).pipe(Effect.mapError(unavailable))
             : Effect.fail(unavailable())
-          ).pipe(Effect.mapError(normalizeProblem))
         ),
         Effect.mapError(normalizeProblem)
       ),

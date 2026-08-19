@@ -4464,20 +4464,15 @@
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Upstream unavailable"
             ]
           },
           "status": {
@@ -4488,20 +4483,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "upstream_unavailable"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -4609,20 +4593,15 @@
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Invalid subscription request"
             ]
           },
           "status": {
@@ -4633,20 +4612,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "invalid_subscription_request"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -4661,20 +4629,15 @@
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Authentication required"
             ]
           },
           "status": {
@@ -4685,20 +4648,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "authentication_required"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -4710,75 +4662,166 @@
         "additionalProperties": false
       },
       "ConflictProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Idempotency conflict"
+                ]
               },
-              {
-                "maxLength": 200
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "idempotency_conflict"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "status": {
-            "type": "number",
-            "enum": [
-              409
-            ]
-          },
-          "code": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Resource conflict"
+                ]
               },
-              {
-                "maxLength": 100
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "resource_conflict"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode job state conflict"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_terminal"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode job state conflict"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_not_failed"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "type",
-          "title",
-          "status",
-          "code"
-        ],
-        "additionalProperties": false
+        ]
       },
       "UnprocessableProblem": {
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Feed subscription rejected"
             ]
           },
           "status": {
@@ -4789,20 +4832,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "feed_subscription_rejected"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -5077,56 +5109,188 @@
         "additionalProperties": false
       },
       "NotFoundProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode not found"
+                ]
               },
-              {
-                "maxLength": 200
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "episode_not_found"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "status": {
-            "type": "number",
-            "enum": [
-              404
-            ]
-          },
-          "code": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Feed subscription not found"
+                ]
               },
-              {
-                "maxLength": 100
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "feed_subscription_not_found"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Resource not found"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "resource_not_found"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Article not found"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "article_not_found"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode job not found"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "episode_job_not_found"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "type",
-          "title",
-          "status",
-          "code"
-        ],
-        "additionalProperties": false
+        ]
       },
       "EpisodeSource": {
         "type": "object",

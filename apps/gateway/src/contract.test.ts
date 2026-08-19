@@ -118,6 +118,36 @@ describe("gateway HttpApi contract", () => {
     expect(generateOpenApi()).toEqual(OpenApi.fromApi(gatewayApi))
   })
 
+  it("publishes only the closed public HTTP Problem variants", () => {
+    const schemas = generateOpenApi().components?.schemas
+    const problems = JSON.stringify({
+      badRequest: schemas?.BadRequestProblem,
+      unauthorized: schemas?.UnauthorizedProblem,
+      notFound: schemas?.NotFoundProblem,
+      conflict: schemas?.ConflictProblem,
+      unprocessable: schemas?.UnprocessableProblem,
+      unavailable: schemas?.UnavailableProblem,
+    })
+
+    for (const code of [
+      "invalid_subscription_request",
+      "authentication_required",
+      "episode_not_found",
+      "feed_subscription_not_found",
+      "resource_not_found",
+      "article_not_found",
+      "episode_job_not_found",
+      "idempotency_conflict",
+      "resource_conflict",
+      "job_terminal",
+      "job_not_failed",
+      "feed_subscription_rejected",
+      "upstream_unavailable",
+    ])
+      expect(problems).toContain(code)
+    expect(problems).not.toContain('"detail"')
+  })
+
   it("publishes only article list capabilities implemented end to end", () => {
     const specification = generateOpenApi()
     const operation = specification.paths["/v1/me/articles"]?.get

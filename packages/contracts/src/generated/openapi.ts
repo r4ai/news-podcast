@@ -573,12 +573,14 @@ export interface components {
             loginMethods: components["schemas"]["LoginMethods"];
         };
         UnavailableProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Upstream unavailable";
             /** @enum {number} */
             status: 503;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "upstream_unavailable";
         };
         CreateEpisodeJobRequest: {
             /** @enum {string} */
@@ -596,36 +598,71 @@ export interface components {
             maxAttempts: 4;
         };
         BadRequestProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Invalid subscription request";
             /** @enum {number} */
             status: 400;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "invalid_subscription_request";
         };
         UnauthorizedProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Authentication required";
             /** @enum {number} */
             status: 401;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "authentication_required";
         };
         ConflictProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Idempotency conflict";
             /** @enum {number} */
             status: 409;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "idempotency_conflict";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Resource conflict";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "resource_conflict";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode job state conflict";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "job_terminal";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode job state conflict";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "job_not_failed";
         };
         UnprocessableProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Feed subscription rejected";
             /** @enum {number} */
             status: 422;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "feed_subscription_rejected";
         };
         /** @enum {string} */
         JobStage: "selecting_articles" | "materializing_articles" | "generating_script" | "preparing_pronunciation" | "synthesizing_audio" | "storing_episode";
@@ -667,12 +704,50 @@ export interface components {
             };
         };
         NotFoundProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode not found";
             /** @enum {number} */
             status: 404;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "episode_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Feed subscription not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "feed_subscription_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Resource not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "resource_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Article not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "article_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode job not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "episode_job_not_found";
         };
         EpisodeSource: {
             articleId?: (string & unknown) | null;
