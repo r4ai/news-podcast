@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import {
   newQueuedJob,
   type CreateJobCommand,
+  type EpisodeJob,
   type JobId,
   type QueuedJob,
   type UtcTimestamp,
@@ -11,7 +12,7 @@ import {
 export type CreateJobPorts<SaveError = never> = Readonly<{
   nextJobId: Effect.Effect<JobId>
   now: Effect.Effect<UtcTimestamp>
-  saveIdempotently: (job: QueuedJob) => Effect.Effect<QueuedJob, SaveError>
+  saveIdempotently: (job: QueuedJob) => Effect.Effect<EpisodeJob, SaveError>
 }>
 
 export type CreateJobInput = CreateJobCommand

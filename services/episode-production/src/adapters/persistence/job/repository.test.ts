@@ -13,6 +13,7 @@ import {
   LeaseTokenSchema,
   CreateJobCommandSchema,
   JobIdSchema,
+  failRunningJob,
   newQueuedJob,
   UtcTimestampSchema,
 } from "../../../domain/episode-job.js"
@@ -107,6 +108,49 @@ describe("SQLite job repository", () => {
     expect(saved.jobId).toBe(original.jobId)
     expect(repeated.jobId).toBe(original.jobId)
     expect(Object.isFrozen(repeated)).toBe(true)
+  })
+
+  it("replays a terminal job without narrowing it to queued", async () => {
+    const original = job("10e2d4e1-c127-479f-a124-2ea037bd9319")
+    const replay = job("6518412b-ce2f-4641-9f2c-a02dd515bc31")
+    const leaseToken = Schema.decodeUnknownSync(LeaseTokenSchema)("lease-1")
+
+    const repeated = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = openProductionDatabaseUnsafe(":memory:").database
+          const repository = yield* jobRepository(database)
+          const execution = yield* executionRepository(database)
+          yield* repository.saveIdempotently(original)
+          const leased = yield* execution.leaseNext({
+            now: at,
+            leasedUntil: at,
+            leaseToken,
+          })
+          if (leased?.job._tag !== "Running") {
+            return yield* Effect.die("expected a running lease")
+          }
+          yield* execution.transition({
+            jobId: original.jobId,
+            leaseToken,
+            state: failRunningJob(leased.job, {
+              failedAt: at,
+              failure: {
+                code: "provider-timeout" as never,
+                retryable: false,
+              },
+            }),
+          })
+          return yield* repository.saveIdempotently(replay)
+        })
+      )
+    )
+
+    expect(repeated).toMatchObject({
+      _tag: "Failed",
+      jobId: original.jobId,
+      failure: { code: "provider-timeout" },
+    })
   })
 
   it("rejects reuse of a key for a different request", async () => {

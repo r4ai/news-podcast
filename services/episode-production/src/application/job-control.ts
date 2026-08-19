@@ -45,7 +45,7 @@ export type RetryFailedJobPorts<
   ) => Effect.Effect<EpisodeJob | undefined, FindError>
   nextJobId: Effect.Effect<JobId>
   now: Effect.Effect<UtcTimestamp>
-  saveIdempotently: (job: QueuedJob) => Effect.Effect<QueuedJob, SaveError>
+  saveIdempotently: (job: QueuedJob) => Effect.Effect<EpisodeJob, SaveError>
 }>
 
 export const getOwnedJob = <Error>(
@@ -68,7 +68,7 @@ export const cancelOwnedJob = <Error>(
 ) => ports.cancelOwned(ownerId, jobId, canceledAt)
 
 export type RetryFailedJobResult =
-  | QueuedJob
+  | EpisodeJob
   | Readonly<{ readonly _tag: "NotFound" }>
   | Readonly<{ readonly _tag: "NotFailed" }>
 

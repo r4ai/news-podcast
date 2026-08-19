@@ -11,10 +11,18 @@ import { routeApiDocs } from "./api-docs.js"
 export const makeGatewayWebHandler = (
   ports: GatewayPorts,
   telemetry: Layer.Layer<never, never, never> = Layer.empty,
-  options: { readonly fetcher?: typeof globalThis.fetch } = {}
+  options: {
+    readonly fetcher?: typeof globalThis.fetch
+    readonly nextRetryIdempotencyKey?: () => string
+  } = {}
 ) => {
+  const handlerOptions = {
+    ...options,
+    nextRetryIdempotencyKey:
+      options.nextRetryIdempotencyKey ?? (() => crypto.randomUUID()),
+  }
   const apiLayer = HttpApiBuilder.layer(gatewayApi).pipe(
-    Layer.provide(makeGatewayHandlerLayer(ports, options)),
+    Layer.provide(makeGatewayHandlerLayer(ports, handlerOptions)),
     Layer.provide(HttpServer.layerServices),
     Layer.provideMerge(telemetry)
   )
