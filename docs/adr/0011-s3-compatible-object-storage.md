@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: ADR-0003のローカル音声保存方式
 - Superseded by: N/A
-- Related: `docs/design.md` オブジェクトストレージ節
+- Related: `docs/design.md` オブジェクトストレージ節、ADR-0075
 
 ## コンテキストと変更契機
 
@@ -55,7 +55,7 @@ flowchart LR
 ### 欠点とリスク
 
 - Composeへ永続サービスが一つ増える。
-- SQLiteとObjectStoreの更新は単一transactionにならず、失敗時に孤児objectが残り得る。現在は冪等なkeyと再試行で利用経路を保護し、孤児回収は運用機能として追加する。
+- SQLiteとObjectStoreの更新は単一transactionにならず、失敗時に孤児objectが残り得る。利用経路は冪等keyと再試行、平常時は孤児回収、災害復旧時はADR-0075の同一世代manifestと参照検証で保護する。
 
 ## 影響と同期
 
@@ -69,7 +69,7 @@ flowchart LR
 | 実行/配備 | SeaweedFS service | Done | `compose.yaml` |
 | 認証/セキュリティ | private bucket、owner認可 | Done | article/audio access services、API tests |
 | フロント/品質保証 | N/A — HTTP契約の内側 | Done | N/A |
-| テスト/運用 | S3 contract、backup・孤児回収手順 | Partial | 実体put/get/delete smoke済み。運用手順は今後追加 |
+| テスト/運用 | S3 contract、coordinated backup、restore drill、孤児回収 | Done | `apps/state-backup`、`docs/operations/service-state-recovery.md`、ADR-0075 |
 
 ## 再検討条件
 

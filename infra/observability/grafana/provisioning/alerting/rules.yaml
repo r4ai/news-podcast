@@ -2,6 +2,113 @@ apiVersion: 1
 
 groups:
   - orgId: 1
+    name: coordinated-backup
+    folder: News Podcast
+    interval: 1m
+    rules:
+      - uid: np-backup-rpo
+        title: Coordinated backup exceeded its RPO
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              editorMode: code
+              expr: '(news_podcast_backup_generation_age_seconds < bool 0) + (news_podcast_backup_generation_age_seconds > bool 90000)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Coordinated backup has no generation inside the 24-hour RPO
+          description: Inspect state-backup logs and the immutable destination, then follow the coordinated recovery runbook. Do not accept an uncommitted generation.
+        labels: { severity: critical, team: platform }
+
+      - uid: np-backup-failure
+        title: Coordinated backup or restore drill failed
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum(increase(news_podcast_backup_failures_total[5m])) + sum(increase(news_podcast_restore_drill_failures_total[5m]))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Coordinated backup or restore drill failed
+          description: Inspect the structured state-backup failure event; a partial generation has no commit marker and must not be restored.
+        labels: { severity: critical, team: platform }
+
+      - uid: np-backup-drill-stale
+        title: Restore drill is overdue
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              editorMode: code
+              expr: 'time() - news_podcast_restore_drill_last_success_timestamp_seconds > 691200'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: No successful restore drill in eight days
+          description: Restore the latest committed generation and verify all article archive and Episode audio references before clearing this alert.
+        labels: { severity: critical, team: platform }
+
+  - orgId: 1
     name: service-reliability
     folder: News Podcast
     interval: 1m

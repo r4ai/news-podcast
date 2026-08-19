@@ -29,3 +29,6 @@ scrape_configs:
   - job_name: news-podcast-watchdog
     static_configs:
       - targets: [watchdog:4199]
+  - job_name: news-podcast-state-backup
+    static_configs:
+      - targets: [state-backup:4198]

@@ -30,6 +30,9 @@ services:
       WATCHDOG_COLLECTOR_METRICS_URL: http://otel-collector:8888/metrics
     networks: [default, observability]
 
+  state-backup:
+    networks: [default, observability]
+
 networks:
   observability:
     external: true

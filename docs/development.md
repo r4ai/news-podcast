@@ -259,7 +259,7 @@ pnpm parser:check
 
 ## State backupと復旧
 
-online backup、別pathへの検証restore、offline cutover、rollbackは[Service state backup / restore](operations/service-state-recovery.md)を正本とする。既存DBへの上書きと別serviceのbackup復元はCLIが拒否する。
+4 SQLiteとSeaweedFSを同一世代へ束ねる自動backup、週次restore drill、別pathへの検証restore、offline cutover、rollbackは[Coordinated service state backup / restore](operations/service-state-recovery.md)を正本とする。既存DBへの上書きと別serviceのbackup復元はCLIが拒否する。
 
 ## Observability
 
