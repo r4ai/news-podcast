@@ -1,7 +1,10 @@
 export {
   MarkdownToc,
+  MarkdownTocHeader,
+  MarkdownTocList,
   tocEntries,
   type MarkdownTocProps,
+  type TocEntry,
 } from "./components/markdown-toc"
 export { useActiveHeading } from "./hooks/use-active-heading"
 export {

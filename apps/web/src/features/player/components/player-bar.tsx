@@ -4,22 +4,21 @@ import { X } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 
-import {
-  closePlayerAtom,
-  currentTrackAtom,
-  cyclePlaybackRateAtom,
-  playbackRateAtom,
-  type PlayerTrack,
-} from "../atoms"
-import { PlaybackScrubber } from "./playback-scrubber"
+import { closePlayerAtom, currentTrackAtom, type PlayerTrack } from "../atoms"
+import { PlaybackRateSelect } from "./playback-rate-select"
+import { PlaybackScrubber, PlaybackTimeReadout } from "./playback-scrubber"
 import { TransportControls } from "./transport-controls"
+import { VolumeControl } from "./volume-control"
 
 /**
  * 画面下端に居座る再生バー。
  *
  * routeの外 (`AppShell`) に立っているので、ページを移っても音は途切れない。
- * ここが購読するのは「今どの番組が載っているか」だけで、位置と再生状態は
- * それぞれ目盛りと操作ボタンが自分で購読する。
+ * ここが購読するのは「今どの番組が載っているか」だけで、位置・再生状態・
+ * 速度・音量はそれぞれを描くcomponentが自分で購読する。
+ *
+ * 段は2つ。上段が「何を、どこまで」、下段が「どう鳴らすか」。1段に詰めると、
+ * 狭い幅では題名か操作のどちらかが潰れる。
  */
 export function PlayerBar() {
   const track = useAtomValue(currentTrackAtom)
@@ -28,19 +27,35 @@ export function PlayerBar() {
   return (
     <div
       aria-label="再生中の番組"
-      // モバイルは下部ナビの上へ載せる。ナビの実高は`--app-nav-h`が持つ。
-      className="fixed inset-x-0 bottom-[var(--app-nav-h)] z-30 border-t bg-background/95 backdrop-blur md:bottom-0"
+      className={
+        // モバイルは下部ナビの上へ載せる。ナビの実高は`--app-nav-h`が持つ。
+        // 背景は透かさない。目盛りが毎秒数回動く面をbackdrop-filterの下に
+        // 置くと、その都度この帯ごと再描画される。
+        "fixed inset-x-0 bottom-[var(--app-nav-h)] z-30 border-t bg-background md:bottom-0"
+      }
       // `AppShell`がこの印を`:has()`で見て、本文末尾の余白を確保する。
       data-slot="player-bar"
       role="region"
     >
-      {/* 目盛りは狭い幅でこの箱の上端へ重なるので、位置の基準をここに置く。 */}
-      <div className="relative mx-auto flex items-center gap-2 px-2 py-1.5 md:gap-4 md:py-2 md:pr-6 md:pl-[15rem]">
-        <TrackSummary track={track} />
-        <TransportControls />
-        <PlaybackScrubber className="md:max-w-2xl md:flex-1" />
-        <PlaybackRateButton />
-        <CloseButton />
+      {/* 目盛りはこの箱の上端の縁に重なるので、位置の基準をここに置く。 */}
+      <PlaybackScrubber />
+
+      <div className="mx-auto flex flex-col gap-1 px-3 pt-2 pb-1.5 md:pr-6 md:pl-[15rem]">
+        {/* 上段: 何を鳴らしていて、どこまで来たか。 */}
+        <div className="flex items-center gap-3">
+          <TrackSummary track={track} />
+          <PlaybackTimeReadout />
+          <CloseButton />
+        </div>
+
+        {/* 下段: どう鳴らすか。 */}
+        <div className="flex items-center gap-2">
+          <TransportControls />
+          <div className="ml-auto flex items-center gap-2">
+            <PlaybackRateSelect />
+            <VolumeControl />
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -52,7 +67,7 @@ export function PlayerBar() {
  */
 function TrackSummary({ track }: { readonly track: PlayerTrack }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col md:w-56 md:flex-none">
+    <div className="flex min-w-0 flex-1 items-baseline gap-2">
       <Link
         className="truncate rounded-sm text-sm font-medium outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
         search={{ episode: track.episodeId }}
@@ -61,26 +76,10 @@ function TrackSummary({ track }: { readonly track: PlayerTrack }) {
       >
         {track.title}
       </Link>
-      <span className="truncate text-xs text-muted-foreground">
+      <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
         {new Date(track.createdAt).toLocaleString("ja-JP")}
       </span>
     </div>
-  )
-}
-
-function PlaybackRateButton() {
-  const rate = useAtomValue(playbackRateAtom)
-  const cycle = useSetAtom(cyclePlaybackRateAtom)
-
-  return (
-    <Button
-      aria-label={`再生速度を変える (現在 ${rate}倍)`}
-      className="h-11 w-11 shrink-0 tabular-nums md:h-9 md:w-12"
-      onClick={() => cycle()}
-      variant="ghost"
-    >
-      {rate}×
-    </Button>
   )
 }
 
@@ -90,8 +89,9 @@ function CloseButton() {
   return (
     <Button
       aria-label="再生を終了してバーを閉じる"
-      className="h-11 w-10 shrink-0 md:size-9"
+      className="size-8 shrink-0"
       onClick={() => close()}
+      size="icon"
       variant="ghost"
     >
       <X aria-hidden="true" />

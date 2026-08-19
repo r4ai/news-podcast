@@ -116,7 +116,6 @@ function readerArgs(
     markUnread: fn(),
     recalculateAi: fn(),
     isRecalculating: false,
-    onBack: fn(),
     ...overrides,
   }
 }

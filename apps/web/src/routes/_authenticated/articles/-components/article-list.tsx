@@ -34,8 +34,9 @@ export type ArticleListProps = {
 }
 
 /**
- * 一覧パネル全体。ツールバーと行を1つの枠の中へ収め、枠線が行だけを囲って
- * 浮く状態を無くす。
+ * 一覧パネル全体。カードとして浮かせず、区切り線だけで本文と分ける領域にする
+ * (docs/design.md §7.1)。狭い幅では主領域の余白ごと打ち消して端まで広げる
+ * ので、ここに横の余白は持たせない。
  *
  * ここ自身はserver stateを一切購読しない。購読は「その値を実際に描く場所」
  * まで下ろしてある。ここで受け取って配ると、件数が動いただけで記事行まで
@@ -57,7 +58,7 @@ export function ArticleList({
       aria-labelledby="article-list-heading"
       // stickyの基準になる高さはここで一度だけ宣言し、ヘッダーと日付見出しが
       // 同じ値を見るようにする。`overflow-hidden`はstickyを殺すので使わない。
-      className={`flex min-h-full flex-col rounded-xl border bg-background ${ARTICLE_HEADER_HEIGHT}`}
+      className={`flex min-h-full flex-col bg-background ${ARTICLE_HEADER_HEIGHT}`}
     >
       {/* 日付見出し(h3)の親として見出し階層を繋ぐ。視覚には出さない。 */}
       <h2 className="sr-only" id="article-list-heading">

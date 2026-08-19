@@ -13,8 +13,22 @@ export const FINISH_TAIL_SECONDS = 15
 export const SKIP_BACK_SECONDS = 15
 export const SKIP_FORWARD_SECONDS = 30
 
-export const PLAYBACK_RATES = [1, 1.25, 1.5, 1.75, 2, 0.75] as const
+/** 選べる速度。選択肢として並べるので、巡回の順ではなく遅い順に持つ。 */
+export const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const
 export type PlaybackRate = (typeof PLAYBACK_RATES)[number]
+
+/** 端末に残る速度は過去の版が書いた値かもしれない。候補外は等倍へ落とす。 */
+export function normalizePlaybackRate(value: unknown): PlaybackRate {
+  return PLAYBACK_RATES.includes(value as PlaybackRate)
+    ? (value as PlaybackRate)
+    : 1
+}
+
+/** `<audio>`の音量は0〜1。範囲外を書くと要素が例外を投げる。 */
+export function clampVolume(value: number): number {
+  if (!Number.isFinite(value)) return 1
+  return Math.min(1, Math.max(0, value))
+}
 
 /** 端末に残す再生記録。1番組につき1件。 */
 export type PlaybackEntry = {
@@ -105,13 +119,6 @@ export function progressRatio(
 ): number {
   if (!isKnownTime(duration) || duration <= 0) return 0
   return Math.min(1, Math.max(0, position / duration))
-}
-
-export function nextPlaybackRate(rate: number): PlaybackRate {
-  const index = PLAYBACK_RATES.indexOf(rate as PlaybackRate)
-  // 候補外の値は等倍へ戻す。保存値が古い候補のまま残っても操作が詰まらない。
-  if (index < 0) return 1
-  return PLAYBACK_RATES[(index + 1) % PLAYBACK_RATES.length]!
 }
 
 function isFinished(entry: PlaybackEntry): boolean {

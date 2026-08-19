@@ -1,4 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
+import { ArrowLeft } from "lucide-react"
+
+import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { Panel } from "@/shared/components/panel"
@@ -53,11 +56,21 @@ function ArticlesRoute() {
   const hasSelection = search.article !== undefined
 
   return (
-    // lgでは一覧とリーダーがそれぞれ独立したスクロール領域になる (docs/design.md §7.1)。
-    // モバイルは1カラムで、選択の有無でどちらか一方だけを見せる。
-    // `--app-bar-h`はAppShellのモバイルapp barの実高 (py-2 + min-h-11)。
-    // 一覧ヘッダーがapp barの下へ潜らないよう、吸着の基準をここで一度だけ決める。
-    <div className="flex flex-col [--app-bar-h:3.75rem] lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-6">
+    /*
+      lgでは一覧とリーダーがそれぞれ独立したスクロール領域になる (docs/design.md §7.1)。
+      モバイルは1カラムで、選択の有無でどちらか一方だけを見せる。
+
+      主領域の余白はこのページでは打ち消す。一覧は「線で区切られた領域」で
+      あって浮かぶカードではないので、区切り線は画面の端から端まで通す。
+      余白を丸ごと打ち消すので、この枠の高さは「viewportから`AppShell`が
+      下端に空けている分(`--player-h` + 1rem)を引いた値」がちょうど収まる高さに
+      なる。ここがずれると、2つのスクロール領域の外側にページ自身のスクロールが
+      生まれる。
+
+      `--app-bar-h`はAppShellのモバイルapp barの実高 (py-2 + min-h-11)。
+      一覧ヘッダーがapp barの下へ潜らないよう、吸着の基準をここで一度だけ決める。
+    */
+    <div className="-m-4 flex flex-col [--app-bar-h:3.75rem] sm:-m-6 lg:-m-8 lg:h-[calc(100dvh-var(--player-h)-1rem)] lg:min-h-0 lg:flex-row lg:items-stretch">
       {/*
         desktopではページヘッダーを置かない設計 (docs/design.md §7.1) だが、
         ページには必ずlevel-1見出しが要る。視覚には出さず、支援技術へだけ渡す。
@@ -65,7 +78,7 @@ function ArticlesRoute() {
       <h1 className="sr-only">記事</h1>
       <div
         className={cn(
-          "lg:min-h-0 lg:w-[380px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-[420px]",
+          "lg:min-h-0 lg:w-[380px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:border-r xl:w-[420px]",
           hasSelection && "hidden lg:block"
         )}
       >
@@ -83,10 +96,25 @@ function ArticlesRoute() {
       </div>
       <div
         className={cn(
-          "flex flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain",
+          "flex flex-1 flex-col p-4 sm:p-6 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:p-8",
           !hasSelection && "hidden lg:flex"
         )}
       >
+        {/*
+          一覧へ戻る導線は取得を待たない。表示境界の外に置くことで、記事を
+          開いた瞬間から押せて、本文が届いても位置が動かない。
+        */}
+        {hasSelection ? (
+          <Button
+            className="mb-3 self-start lg:hidden"
+            onClick={() => selectArticle(undefined)}
+            size="sm"
+            variant="ghost"
+          >
+            <ArrowLeft aria-hidden="true" data-icon="inline-start" />
+            一覧へ戻る
+          </Button>
+        ) : null}
         <Panel fallback={<ReaderSkeleton />} name="article-reader">
           {search.article === undefined ? (
             <EmptySelection />
@@ -97,7 +125,6 @@ function ArticlesRoute() {
               articleId={search.article}
               includeHidden={search.includeHidden}
               key={search.article}
-              onBack={() => selectArticle(undefined)}
             />
           )}
         </Panel>

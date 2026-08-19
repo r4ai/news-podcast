@@ -104,7 +104,7 @@ export function ArticleListHeaderView({
   ...filterProps
 }: ArticleListHeaderViewProps) {
   return (
-    <div className="sticky top-[var(--app-bar-h)] z-20 flex h-[var(--article-header-h)] shrink-0 flex-col justify-center gap-2 rounded-t-xl border-b bg-background/70 px-3 backdrop-blur-xl md:top-0">
+    <div className="sticky top-[var(--app-bar-h)] z-20 flex h-[var(--article-header-h)] shrink-0 flex-col justify-center gap-2 border-b bg-background/70 px-3 backdrop-blur-xl md:top-0">
       {/* 1段目: 探す操作。パネル幅が狭いので、常設するのは検索だけにする。 */}
       <div className="flex items-center gap-1">
         <ArticleSearchField onCommit={onQCommit} q={search.q} />
