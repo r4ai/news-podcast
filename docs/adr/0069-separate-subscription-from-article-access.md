@@ -93,5 +93,6 @@ stateDiagram-v2
 
 - Red: 購読削除後、保存記事一覧が空になり、詳細・Markdown・手動出典もNotFoundになった。
 - Green: durable accessで解除後も参照でき、自動生成候補だけは空になる。再購読後も記事は1件のまま。
+- Review regression: pause中に別ownerの共有同期で発見した記事もaccessへ付与し、resume後に参照できる。
 - migration backfill、owner isolation、Content Knowledge/Webのunit/integration test。
 - `pnpm lint` / `pnpm architecture:check` / `pnpm format:check` / functional E2E。
