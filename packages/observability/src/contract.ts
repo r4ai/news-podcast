@@ -75,6 +75,7 @@ export const telemetryEventNames = [
   "worker.tick.failed",
   "api.heartbeat",
   "rss.sync.succeeded",
+  "rss.sync.degraded",
   "rss.sync.failed",
   "article.archive.succeeded",
   "article.archive.failed",

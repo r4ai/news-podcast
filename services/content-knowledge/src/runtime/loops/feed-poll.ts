@@ -61,13 +61,26 @@ const liveRuntime: FeedPollLoopRuntime = Object.freeze({
   wait: (delayMillis) => Effect.sleep(delayMillis),
   observe: (outcome) =>
     outcome._tag === "FeedPollCycleSucceeded"
-      ? Effect.logInfo("content feed poll cycle succeeded", {
-          event_name: "content.feed.poll",
-          feeds: outcome.feeds,
-          discovered: outcome.discovered,
-          archived: outcome.archived,
-          failed: outcome.failed,
-        })
+      ? outcome.failed === 0
+        ? Effect.logInfo("content feed poll cycle succeeded", {
+            event_name: "content.feed.poll",
+            feeds: outcome.feeds,
+            discovered: outcome.discovered,
+            archived: outcome.archived,
+            failed: outcome.failed,
+          })
+        : Effect.logWarning("content feed poll cycle degraded", {
+            event_name: "rss.sync.degraded",
+            feeds: outcome.feeds,
+            discovered: outcome.discovered,
+            archived: outcome.archived,
+            failed: outcome.failed,
+            "failure.stage": outcome.failures.some(
+              (failure) => failure.scope === "Feed"
+            )
+              ? "feed"
+              : "item",
+          })
       : Effect.logWarning("content feed poll cycle failed", {
           event_name: "content.feed.poll",
           consecutive_failures: outcome.consecutiveFailures,

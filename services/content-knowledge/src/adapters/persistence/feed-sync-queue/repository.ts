@@ -266,7 +266,10 @@ export const createFeedSyncQueue = (
           const updated = database
             .update(feedSyncJobs)
             .set({
-              status: outcome.failed > 0 ? "Failed" : "Succeeded",
+              status:
+                outcome.failed > 0 && outcome.failureScope !== "Item"
+                  ? "Failed"
+                  : "Succeeded",
               leaseToken: null,
               leaseExpiresAt: null,
               discovered: outcome.discovered,

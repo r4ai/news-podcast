@@ -28,6 +28,7 @@ import type {
 
 export type FeedPollFailure = DeepReadonly<{
   readonly _tag: "FeedPollFailed"
+  readonly scope: "Feed" | "Item"
   readonly reason: FeedFetchError["reason"] | "ArchiveFailed" | "InvalidItem"
 }>
 
@@ -80,6 +81,7 @@ const combine = (left: FeedPollResult, right: FeedPollResult): FeedPollResult =>
 
 const oneFailure = (
   reason: FeedPollFailure["reason"],
+  scope: FeedPollFailure["scope"],
   discovered = 0
 ): FeedPollResult =>
   deepFreeze({
@@ -88,7 +90,7 @@ const oneFailure = (
     archived: 0,
     alreadyArchived: 0,
     failed: 1,
-    failures: [deepFreeze({ _tag: "FeedPollFailed" as const, reason })],
+    failures: [deepFreeze({ _tag: "FeedPollFailed" as const, scope, reason })],
   })
 
 const parseArchiveCommand = parse(ArchiveCommandSchema)
@@ -144,6 +146,7 @@ export const pollFeed =
                       "_tag" in failure
                       ? "ArchiveFailed"
                       : "InvalidItem",
+                    "Item",
                     1
                   ),
                 onSuccess: (result): FeedPollResult =>
@@ -162,7 +165,7 @@ export const pollFeed =
       Effect.match({
         onFailure: (failure): FeedPollResult =>
           deepFreeze({
-            ...oneFailure(failure.reason),
+            ...oneFailure(failure.reason, "Feed"),
             feeds: 1,
           }),
         onSuccess: (result): FeedPollResult =>

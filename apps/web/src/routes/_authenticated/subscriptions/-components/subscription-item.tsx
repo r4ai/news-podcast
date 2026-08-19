@@ -53,6 +53,8 @@ export type SubscriptionItemProps = {
 function statusText(subscription: Subscription, job: FeedSyncJob | undefined) {
   if (job && isFeedSyncActive(job)) return "同期中…"
   if (job?.status === "failed") return "前回の同期に失敗しました"
+  if (job?.status === "succeeded" && job.failed > 0)
+    return `前回の同期で${job.failed}件の記事を取得できませんでした`
   return subscription.enabled ? "生成対象" : "一時停止中"
 }
 
@@ -68,6 +70,7 @@ export function SubscriptionItem({
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const syncing = job !== undefined && isFeedSyncActive(job)
+  const degraded = job?.status === "succeeded" && job.failed > 0
 
   return (
     <Item role="listitem" variant="outline">
@@ -78,9 +81,12 @@ export function SubscriptionItem({
             className="animate-spin text-muted-foreground"
           />
         </ItemMedia>
-      ) : job?.status === "failed" ? (
+      ) : job?.status === "failed" || degraded ? (
         <ItemMedia variant="icon">
-          <AlertCircle aria-hidden="true" className="text-destructive" />
+          <AlertCircle
+            aria-hidden="true"
+            className={degraded ? "text-amber-600" : "text-destructive"}
+          />
         </ItemMedia>
       ) : null}
       <ItemContent>

@@ -103,4 +103,22 @@ describe("SubscriptionItem", () => {
 
     expect(screen.getByText("前回の同期に失敗しました")).toBeTruthy()
   })
+
+  it("shows the isolated item failure count after a degraded success", () => {
+    render(
+      <SubscriptionItem
+        disabled={false}
+        feedName="Zenn"
+        job={{ ...job("succeeded"), archived: 1, failed: 2 }}
+        onRemove={vi.fn()}
+        onSync={vi.fn()}
+        onToggle={vi.fn()}
+        subscription={subscription}
+      />
+    )
+
+    expect(
+      screen.getByText("前回の同期で2件の記事を取得できませんでした")
+    ).toBeTruthy()
+  })
 })
