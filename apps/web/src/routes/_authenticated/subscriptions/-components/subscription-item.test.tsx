@@ -126,4 +126,28 @@ describe("SubscriptionItem", () => {
       screen.getByText("前回の同期で2件の記事を取得できませんでした")
     ).toBeTruthy()
   })
+
+  it("shows a sanitized invalid-item reason after a degraded sync", () => {
+    render(
+      <SubscriptionItem
+        disabled={false}
+        feedName="Zenn"
+        job={{
+          ...job("succeeded"),
+          failed: 1,
+          error: "MissingLink",
+        }}
+        onRemove={vi.fn()}
+        onSync={vi.fn()}
+        onToggle={vi.fn()}
+        subscription={subscription}
+      />
+    )
+
+    expect(
+      screen.getByText(
+        "前回の同期で1件の記事を取得できませんでした（理由: リンク欠落）"
+      )
+    ).toBeTruthy()
+  })
 })

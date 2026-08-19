@@ -20,6 +20,21 @@ export type FeedItem = DeepReadonly<{
   readonly publishedAt?: string
 }>
 
+export type FeedItemValidationFailure = DeepReadonly<{
+  readonly _tag: "FeedItemValidationFailed"
+  readonly reason:
+    | "InvalidItem"
+    | "InvalidUrl"
+    | "MissingLink"
+    | "MissingTitle"
+    | "TitleTooLong"
+}>
+
+export type FeedReadResult = DeepReadonly<{
+  readonly items: readonly FeedItem[]
+  readonly failures: readonly FeedItemValidationFailure[]
+}>
+
 export type FeedFetchError = DeepReadonly<{
   readonly _tag: "FeedFetchFailed"
   readonly reason:
@@ -34,7 +49,7 @@ export type FeedFetchError = DeepReadonly<{
 export type RssFeedReader = DeepReadonly<{
   readonly read: (
     url: import("../../domain/subscription.js").FeedUrl
-  ) => Effect.Effect<readonly FeedItem[], FeedFetchError>
+  ) => Effect.Effect<FeedReadResult, FeedFetchError>
 }>
 
 export type CatalogArticle = DeepReadonly<{

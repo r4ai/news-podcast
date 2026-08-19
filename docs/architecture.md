@@ -263,6 +263,8 @@ stateDiagram-v2
 
 `articleId`はfeed + GUIDで安定させ、`archiveRequestId`だけをRSS capture fingerprintでversion化する。fingerprintはXHTMLのelement・属性もcanonical化し、archive成功後にだけcatalogへ記録する。既存のfingerprint未記録記事はlatest URL・title一致時に再取得せずbaseline化する。新snapshot追加後も既存Episodeはcheckpoint済み`articleId + snapshotId`を維持し、新しい生成のlatest queryだけが更新版を選ぶ。手動archiveはRPC message IDをrefresh intentに含める（[ADR-0073](adr/0073-version-article-capture-intents.md)）。
 
+RSS parserはitemを無言で破棄せず、valid itemとsanitized validation failureに分ける。不正itemも同期jobの`discovered`/`failed`へ反映し、定数reasonだけを既存`error`へ保存する。mixed feedはvalid itemを処理し、全件不正はdegradedな`Succeeded`として運用警告とAPI/UIに現れる（[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)）。
+
 ### 4.5 記事archive objectの回収
 
 ```mermaid
@@ -305,7 +307,7 @@ erDiagram
 | データ | 設計上の意味 |
 | --- | --- |
 | `feed_catalog` / `feed_subscriptions` / `public_feed_listings` | 内部canonical feed、ownerのprivate購読、明示公開listingを分離 |
-| `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。個別記事失敗はdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
+| `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。parser validationを含む個別記事失敗は件数とsanitized reasonをdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_owner_access` | 購読解除後も残る、ownerが一度取り込んだ記事への恒久アクセス権 |
 | `article_owner_states` | ユーザーごとの既読・保存状態 |
