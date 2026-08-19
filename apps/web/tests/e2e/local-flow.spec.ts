@@ -909,12 +909,13 @@ test("switching episodes shows the next script from its beginning", async ({
   expect(top).toBe(0)
 })
 
-test("opening an article on one column never moves the page after it renders", async ({
+test("switching between the list and the reader on one column keeps the page still", async ({
   page,
 }) => {
-  // 1カラム (lg未満) では一覧と本文がページのスクロールを共有する。一覧を送って
-  // から記事を開くと、描き終えた後にスクロールが動き、先に出ていた「一覧へ戻る」
-  // が上へ飛んでから元の位置へ戻る = レイアウトシフトになっていた。
+  // 1カラム (lg未満) では一覧と本文がページのスクロールを共有する。切り替えの
+  // 前後でページが動くと、先に出ている「一覧へ戻る」が飛んでから戻る =
+  // レイアウトシフトになる。位置が変わってよいのは「切り替え先が描き上がった
+  // その瞬間」だけで、その前 (まだ一覧が見えている間) にも後にも動かない。
   const many = Array.from({ length: 40 }, (_, index) => ({
     id: `00000000-0000-4000-8000-0000000005${String(index).padStart(2, "0")}`,
     feedId: "00000000-0000-4000-8000-000000000001",
@@ -945,14 +946,17 @@ test("opening an article on one column never moves the page after it renders", a
         contentType: "application/json",
       })
   )
-  await page.route(/\/v1\/me\/articles\/[0-9a-f-]{36}$/, (route) =>
-    route.fulfill({
+  // 本文は押した後に取りに行く。一覧が画面に残ったまま待つ時間を作らないと、
+  // 「まだ見えている一覧を動かしていないか」を確かめられない。
+  await page.route(/\/v1\/me\/articles\/[0-9a-f-]{36}$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await route.fulfill({
       body: JSON.stringify(
         many.find((item) => route.request().url().includes(item.id)) ?? many[0]
       ),
       contentType: "application/json",
     })
-  )
+  })
   await page.route(/\/v1\/me\/articles\/[0-9a-f-]{36}\/markdown$/, (route) =>
     route.fulfill({
       body: JSON.stringify({ markdown }),
@@ -968,29 +972,36 @@ test("opening an article on one column never moves the page after it renders", a
   const row = page.getByRole("button", { name: /^送り記事 30/ })
   await expect(row).toBeVisible()
   await row.scrollIntoViewIfNeeded()
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  const listScroll = await page.evaluate(() => window.scrollY)
+  expect(listScroll).toBeGreaterThan(0)
 
-  // 「一覧へ戻る」がDOMへ入った後に起きたスクロールだけを数える。開く前に
-  // 位置を寄せていれば、本文が出てからページが動くことはない。
-  await page.evaluate(() => {
-    const probe = window as typeof window & {
-      readerShown?: boolean
-      scrollsAfterReader?: number[]
-    }
-    probe.readerShown = false
-    probe.scrollsAfterReader = []
-    const shown = () =>
-      [...document.querySelectorAll("button")].some((button) =>
-        button.textContent?.includes("一覧へ戻る")
-      )
-    new MutationObserver(() => {
-      if (shown()) probe.readerShown = true
-    }).observe(document.documentElement, { childList: true, subtree: true })
-    window.addEventListener("scroll", () => {
-      if (probe.readerShown) probe.scrollsAfterReader!.push(window.scrollY)
+  // 描かれた各フレームのスクロール位置と、その時「一覧へ戻る」が居たかどうか。
+  type Frame = { readonly reader: boolean; readonly scrollY: number }
+  const record = () =>
+    page.evaluate(() => {
+      const probe = window as typeof window & { frames?: Frame[] }
+      probe.frames = []
+      const tick = () => {
+        probe.frames!.push({
+          reader: [...document.querySelectorAll("button")].some((button) =>
+            button.textContent?.includes("一覧へ戻る")
+          ),
+          scrollY: window.scrollY,
+        })
+        requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
     })
-  })
+  const framesWhere = async (reader: boolean) =>
+    (
+      await page.evaluate(
+        () => (window as typeof window & { frames?: Frame[] }).frames!
+      )
+    )
+      .filter((frame) => frame.reader === reader)
+      .map((frame) => frame.scrollY)
 
+  await record()
   await row.click()
   await expect(page.getByRole("button", { name: "一覧へ戻る" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "送り記事 30" })).toBeVisible()
@@ -998,12 +1009,22 @@ test("opening an article on one column never moves the page after it renders", a
   // 後まで見て、そこまでにページが動いていないことを確かめる。
   await expect(page.getByRole("heading", { name: "見出し 59" })).toBeVisible()
 
-  expect(
-    await page.evaluate(
-      () =>
-        (window as typeof window & { scrollsAfterReader?: number[] })
-          .scrollsAfterReader
-    )
-  ).toEqual([])
-  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+  // 一覧はまだ見えている間、押す前の位置に留まる。
+  const listFrames = await framesWhere(false)
+  expect(listFrames.length).toBeGreaterThan(0)
+  expect(listFrames).toEqual(listFrames.map(() => listScroll))
+  // 本文が出てからは先頭のまま動かない。
+  const readerFrames = await framesWhere(true)
+  expect(readerFrames.length).toBeGreaterThan(0)
+  expect(readerFrames).toEqual(readerFrames.map(() => 0))
+
+  // 戻った先は、記事を開いた時に見ていた一覧の位置。先頭へ放り出さない。
+  await record()
+  await page.getByRole("button", { name: "一覧へ戻る" }).click()
+  await expect(row).toBeVisible()
+  await expect(page.getByRole("button", { name: "一覧へ戻る" })).toHaveCount(0)
+  expect(await page.evaluate(() => window.scrollY)).toBe(listScroll)
+  // 戻る途中も、本文が見えている間は動かない。
+  const leavingFrames = await framesWhere(true)
+  expect(leavingFrames).toEqual(leavingFrames.map(() => 0))
 })
