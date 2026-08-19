@@ -13,10 +13,12 @@ import type {
 import type { EpisodeExecutionOutcome } from "../../application/execute-job.js"
 import {
   UtcTimestampSchema,
+  type JobId,
   type UtcTimestamp,
 } from "../../domain/episode-job.js"
 
 export const EPISODE_JOB_DEADLINE_MILLIS = 30 * 60_000
+export const MAX_CANCELLATION_POLL_MILLIS = 5_000
 const encodeTimestamp = Schema.encodeSync(UtcTimestampSchema)
 export const episodeJobDeadlineAt = (createdAt: UtcTimestamp): string =>
   new Date(
@@ -43,12 +45,23 @@ export type EpisodeWorkerEvent =
     }>
   | Readonly<{
       _tag: "WorkerFailed"
-      stage: "lease" | "heartbeat" | "execute"
+      stage: "lease" | "heartbeat" | "cancellation" | "execute"
       jobId?: string
       code: string
       retryable: boolean
     }>
   | Readonly<{ _tag: "WorkerStopped" }>
+
+export type CancellationPropagation = Readonly<{
+  jobId: JobId
+  source: "same_process" | "poll"
+  latencyMillis: number
+}>
+
+export type CancellationCheck =
+  | Readonly<{ _tag: "Current" }>
+  | Readonly<{ _tag: "StaleLease" }>
+  | Readonly<{ _tag: "Canceled"; canceledAt: UtcTimestamp }>
 
 export type EpisodeWorkerPorts = Readonly<{
   leaseNext: (
@@ -57,6 +70,14 @@ export type EpisodeWorkerPorts = Readonly<{
   renewLease: (
     input: RenewLeaseInput
   ) => Effect.Effect<LeaseRenewalResult, PipelineFailure>
+  checkCancellation?: (input: {
+    jobId: JobId
+    leaseToken: LeaseToken
+  }) => Effect.Effect<CancellationCheck, PipelineFailure>
+  subscribeCancellation?: (
+    jobId: JobId,
+    listener: (canceledAt: UtcTimestamp) => void
+  ) => () => void
   execute: (
     input: ExecuteEpisodeJobInput
   ) => Effect.Effect<EpisodeExecutionOutcome, PipelineFailure>
@@ -64,14 +85,16 @@ export type EpisodeWorkerPorts = Readonly<{
   leasedUntil: (now: UtcTimestamp) => UtcTimestamp
   nextLeaseToken: () => LeaseToken
   heartbeatMillis: number
+  cancellationPollMillis?: number
   backoffMillis: (consecutiveIdle: number) => number
   wait: (delayMillis: number, signal: AbortSignal) => Effect.Effect<void>
   observe: (event: EpisodeWorkerEvent) => Effect.Effect<void>
+  recordCancellationPropagation?: (event: CancellationPropagation) => void
 }>
 
 const observeFailure = (
   ports: EpisodeWorkerPorts,
-  stage: "lease" | "heartbeat" | "execute",
+  stage: "lease" | "heartbeat" | "cancellation" | "execute",
   failure: PipelineFailure,
   jobId?: string
 ) =>
@@ -93,6 +116,12 @@ const runWithHeartbeat = (
   Effect.gen(function* () {
     const controller = new AbortController()
     let leaseLost = false
+    let cancellationDetected = false
+    let cancellationReported = false
+    let resolveLocalCancellation: (() => void) | undefined
+    const localCancellation = new Promise<void>((resolve) => {
+      resolveLocalCancellation = resolve
+    })
     const abortExecution = () => controller.abort()
     if (processSignal.aborted) abortExecution()
     else processSignal.addEventListener("abort", abortExecution, { once: true })
@@ -107,6 +136,40 @@ const runWithHeartbeat = (
             deadlineDelay
           )
     if (deadlineDelay <= 0) controller.abort("job_deadline_exceeded")
+
+    const reportCancellation = (
+      source: CancellationPropagation["source"],
+      canceledAt: UtcTimestamp
+    ) => {
+      if (cancellationReported) return
+      cancellationReported = true
+      ports.recordCancellationPropagation?.(
+        deepFreeze({
+          jobId: leased.job.jobId,
+          source,
+          latencyMillis: Math.max(
+            0,
+            Date.parse(encodeTimestamp(ports.now())) -
+              Date.parse(encodeTimestamp(canceledAt))
+          ),
+        })
+      )
+    }
+    const propagateCancellation = (
+      source: CancellationPropagation["source"],
+      canceledAt: UtcTimestamp
+    ) => {
+      cancellationDetected = true
+      reportCancellation(source, canceledAt)
+      controller.abort("requested_by_user")
+    }
+    const unsubscribe = ports.subscribeCancellation?.(
+      leased.job.jobId,
+      (canceledAt) => {
+        propagateCancellation("same_process", canceledAt)
+        resolveLocalCancellation?.()
+      }
+    )
 
     const heartbeat = Effect.gen(function* () {
       while (!controller.signal.aborted) {
@@ -134,22 +197,71 @@ const runWithHeartbeat = (
       return yield* Effect.never
     })
 
+    const cancellationWatch =
+      ports.checkCancellation === undefined ||
+      ports.cancellationPollMillis === undefined
+        ? Effect.never
+        : Effect.gen(function* () {
+            while (!controller.signal.aborted) {
+              yield* ports.wait(
+                ports.cancellationPollMillis!,
+                controller.signal
+              )
+              if (controller.signal.aborted) return yield* Effect.never
+              const result = yield* ports.checkCancellation!({
+                jobId: leased.job.jobId,
+                leaseToken: leased.job.lease.token,
+              }).pipe(
+                Effect.tapError((failure) =>
+                  observeFailure(
+                    ports,
+                    "cancellation",
+                    failure,
+                    leased.job.jobId
+                  )
+                )
+              )
+              if (result._tag === "Canceled") {
+                propagateCancellation("poll", result.canceledAt)
+                return deepFreeze({ _tag: "Canceled" as const })
+              }
+              if (result._tag === "StaleLease") {
+                leaseLost = true
+                abortExecution()
+                return deepFreeze({ _tag: "StaleLease" as const })
+              }
+            }
+            return yield* Effect.never
+          })
+
+    const localCancellationWatch = Effect.promise(() => localCancellation).pipe(
+      Effect.as(deepFreeze({ _tag: "Canceled" as const }))
+    )
+
     return yield* Effect.raceFirst(
-      ports
-        .execute({ job: leased.job, signal: controller.signal })
-        .pipe(
-          Effect.tapError((failure) =>
-            observeFailure(ports, "execute", failure, leased.job.jobId)
-          )
-        ),
-      heartbeat
+      Effect.raceFirst(
+        ports
+          .execute({ job: leased.job, signal: controller.signal })
+          .pipe(
+            Effect.tapError((failure) =>
+              observeFailure(ports, "execute", failure, leased.job.jobId)
+            )
+          ),
+        heartbeat
+      ),
+      Effect.raceFirst(cancellationWatch, localCancellationWatch)
     ).pipe(
       Effect.map((outcome) =>
-        leaseLost ? deepFreeze({ _tag: "StaleLease" as const }) : outcome
+        cancellationDetected
+          ? deepFreeze({ _tag: "Canceled" as const })
+          : leaseLost
+            ? deepFreeze({ _tag: "StaleLease" as const })
+            : outcome
       ),
       Effect.ensuring(
         Effect.sync(() => {
           if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
+          unsubscribe?.()
           processSignal.removeEventListener("abort", abortExecution)
           abortExecution()
         })

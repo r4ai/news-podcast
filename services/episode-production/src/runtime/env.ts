@@ -113,6 +113,10 @@ export const readEpisodeProductionServiceConfig = (
         worker: {
           leaseMillis: integer(env.EPISODE_WORKER_LEASE_MS, 300_000),
           heartbeatMillis: integer(env.EPISODE_WORKER_HEARTBEAT_MS, 60_000),
+          cancellationPollMillis: integer(
+            env.EPISODE_WORKER_CANCELLATION_POLL_MS,
+            250
+          ),
           retryDelayMillis: integer(env.EPISODE_WORKER_RETRY_DELAY_MS, 30_000),
           idleMillis: integer(env.EPISODE_WORKER_IDLE_MS, 1_000),
         },

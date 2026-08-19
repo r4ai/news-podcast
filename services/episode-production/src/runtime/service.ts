@@ -45,10 +45,15 @@ import {
   runNodeProductionRpc,
 } from "./node.js"
 import {
+  MAX_CANCELLATION_POLL_MILLIS,
   runEpisodeWorkerLoop,
   type EpisodeWorkerEvent,
 } from "./loops/worker.js"
-import { recordEpisodeWorkerEvent } from "./worker-observability.js"
+import {
+  recordCancellationPropagation,
+  recordEpisodeWorkerEvent,
+} from "./worker-observability.js"
+import { makeJobCancellationRegistry } from "./job-cancellation-registry.js"
 
 const positive = (maximum: number) =>
   Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(maximum))
@@ -107,6 +112,7 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
   worker: Schema.Struct({
     leaseMillis: positive(3_600_000),
     heartbeatMillis: positive(1_200_000),
+    cancellationPollMillis: positive(MAX_CANCELLATION_POLL_MILLIS),
     retryDelayMillis: positive(3_600_000),
     idleMillis: positive(60_000),
   }).check(
@@ -212,6 +218,7 @@ export const runNodeEpisodeProductionService = (
             Effect.sync(() => new AbortController()),
             (resource) => Effect.sync(() => resource.abort())
           )
+          const cancellations = makeJobCancellationRegistry()
           const now = currentUtcTimestampUnsafe
           const articles = makeContentArticleMaterializer(content, {
             newMessageId: randomUUID,
@@ -333,15 +340,20 @@ export const runNodeEpisodeProductionService = (
             {
               leaseNext: execution.leaseNext,
               renewLease: execution.renewLease,
+              checkCancellation: execution.checkCancellation,
+              subscribeCancellation: cancellations.subscribe,
               execute,
               now,
               leasedUntil: (instant) =>
                 addMillis(instant, config.worker.leaseMillis),
               nextLeaseToken: randomLeaseTokenUnsafe,
               heartbeatMillis: config.worker.heartbeatMillis,
+              cancellationPollMillis: config.worker.cancellationPollMillis,
               backoffMillis: () => config.worker.idleMillis,
               wait: (delay) => Effect.sleep(delay),
               observe: observeWorkerEvent,
+              recordCancellationPropagation: (event) =>
+                recordCancellationPropagation(observability, event),
             },
             controller.signal
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
@@ -407,6 +419,8 @@ export const runNodeEpisodeProductionService = (
           const rpc = runNodeProductionRpc(config.rpc, {
             ...defaultNodeCreateJobRpcDependencies,
             onReady,
+            onJobCanceled: (job) =>
+              void cancellations.notify(job.jobId, job.canceledAt),
           }).pipe(Effect.mapError(() => runtimeError("Execution")))
 
           yield* Effect.all([rpc, worker, relay, scheduler], {

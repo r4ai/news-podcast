@@ -8,6 +8,7 @@ import {
   retryFailedJob,
 } from "./job-control.js"
 import {
+  cancelJob,
   CreateJobCommandSchema,
   JobIdSchema,
   UtcTimestampSchema,
@@ -42,7 +43,17 @@ describe("episode job control", () => {
     const findOwned = vi.fn(() => Effect.succeed(queued))
     const listOwned = vi.fn(() => Effect.succeed([queued]))
     const cancelOwned = vi.fn(() =>
-      Effect.succeed({ _tag: "Canceled" as const, job: queued })
+      Effect.succeed({
+        _tag: "Canceled" as const,
+        job: cancelJob(
+          leaseQueuedJob(queued, {
+            token: "lease-cancel" as never,
+            startedAt: now,
+            leasedUntil: now,
+          }),
+          { canceledAt: now, reason: "requested_by_user" }
+        ),
+      })
     )
     const ports = { findOwned, listOwned, cancelOwned }
 

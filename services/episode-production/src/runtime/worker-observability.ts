@@ -4,8 +4,20 @@ import type {
 } from "@news-podcast/observability"
 
 import type { EpisodeWorkerEvent } from "./loops/worker.js"
+import type { CancellationPropagation } from "./loops/worker.js"
 
 type WorkerTelemetry = Pick<Observability, "count" | "log">
+
+export const recordCancellationPropagation = (
+  observability: Pick<Observability, "measure">,
+  event: CancellationPropagation
+): void => {
+  observability.measure(
+    "episode.cancellation.propagation.duration",
+    event.latencyMillis,
+    { source: event.source }
+  )
+}
 
 const failureAttributes = (
   event: Extract<EpisodeWorkerEvent, { _tag: "JobFinished" }>

@@ -21,6 +21,7 @@ describe("observability contract", () => {
     expect(metricNames).toContain("trace.entry.synthesized")
     expect(metricNames).toContain("http.server.error")
     expect(metricNames).toContain("process.error")
+    expect(metricNames).toContain("episode.cancellation.propagation.duration")
     expect(Object.keys(metricUnits).sort()).toEqual([...metricNames].sort())
   })
 
