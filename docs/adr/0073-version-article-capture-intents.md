@@ -28,6 +28,8 @@ flowchart LR
 - `articleId = hash(feedId, GUID)`は更新前後で不変にする。
 - RSSのcanonical URL、title、published/updated時刻、description/content/encoded/summaryを正規化JSONにし、SHA-256 fingerprintを作る。
 - feed captureの`archiveRequestId = hash(feedId, GUID, fingerprint)`とする。
+- `feed_items.capture_fingerprint`はnullableで保持し、archive成功後にだけ更新する。失敗時は旧fingerprintを残して次回pollで再試行する。
+- migration直後の`NULL`は、latest snapshotのURL・titleが現在値と一致すれば既存版をbaselineとして再取得せずfingerprintだけを記録する。不一致なら更新とみなして新snapshotを作る。
 - 手動refreshは`articleId + RPC messageId`からrequest IDを作る。同じdelivery retryは冪等、新しい利用者操作は新snapshotになる。
 - snapshotは追記のみとし、latest queryは既存の`captured_at DESC, snapshot_id DESC`を維持する。
 - Episodeのcheckpoint済みsnapshot provenanceは更新せず、新しい生成だけが新しいlatest snapshotを選ぶ。
@@ -38,6 +40,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | 同じGUID・同じfingerprintのretry | 同じ | 同じ | `AlreadyArchived` |
 | 同じGUID・fingerprint更新 | 同じ | 新規 | 新snapshotを追加 |
+| legacy `NULL`・latest URL/title一致 | 同じ | 既存 | 再取得せずfingerprintをbaseline化 |
+| legacy `NULL`・latest URL/title不一致 | 同じ | 新規 | 新snapshotを追加 |
 | 新しいGUID | 新規 | 新規 | 新記事・新snapshot |
 | 同じmanual RPC deliveryのretry | 同じ | 同じ | `AlreadyArchived` |
 | 新しいmanual refresh操作 | 同じ | 新規 | 新snapshotを追加 |
@@ -47,7 +51,7 @@ flowchart LR
 - GUIDを記事identityとして保ち、一覧・owner access・Episode provenanceを分断しないこと。
 - 実更新とtransport retryを決定的に区別すること。
 - RSS本文をDBやtelemetryへ複製せず、固定長fingerprintだけをintent導出に使うこと。
-- 既存snapshot schemaとlatest queryを再利用すること。
+- 既存snapshot schemaとlatest queryを再利用しつつ、nullable fingerprint列で段階移行すること。
 
 ## 却下案
 
@@ -71,6 +75,7 @@ flowchart LR
 - RSSがcapture関連fieldを一切変えずorigin本文だけを変えた場合は検知できない。
 - 意味のないupdated時刻変更でも新snapshotになる。
 - 手動refresh連打は操作ごとに意図どおりsnapshotを追加する。
+- legacy baselineではURL・title以外の過去RSS fieldを復元できないため、その2項目が一致する既存snapshotを現在版として扱う。
 
 ## 影響と同期
 
@@ -80,7 +85,7 @@ flowchart LR
 | ドメイン/ユースケース | FeedItemへSHA-256 fingerprintを追加 | Done | RSS parser / poll use case |
 | OpenAPI/外部契約 | N/A — endpoint / response不変 | Done | protocol差分なし |
 | コード/ポート | feed/manual request ID導出をversion化 | Done | identity / article library ports |
-| データ/ストレージ | N/A — 既存1:N snapshot schemaを利用 | Done | migration差分なし |
+| データ/ストレージ | nullable `capture_fingerprint`を追加し、成功後更新・legacy baselineを行う | Done | Drizzle migration / article catalog repository |
 | Observability | N/A — 本文/fingerprintをtelemetryへ出さない | Done | metric/log差分なし |
 | テスト | update/retry/manual/latest/provenance回帰 | Done | parser / identity / polling integration / existing generation tests |
 
@@ -97,5 +102,6 @@ flowchart LR
 ## 検証証拠
 
 - Red: fingerprint変更後も同じarchive request、manual操作も固定request、本文fingerprintなし。
-- Green: v1→retry→v2→retryでsnapshot数は`1→1→2→2`、latest queryはv2を返す。
+- Green: v1→legacy baseline→v2→retryでsnapshot数は`1→1→2→2`、latest queryはv2を返す。
+- Review regression: migration直後の全件再取得を防ぎ、Atom XHTMLのelement名・属性変更をfingerprintへ含める。
 - 既存のlatest automatic/selected generationとEpisode snapshot provenance testsを維持する。

@@ -164,6 +164,28 @@ describe("HTTP RSS feed reader", () => {
     expect(first.captureFingerprint).toMatch(/^[\da-f]{64}$/)
   })
 
+  it("fingerprints structured Atom content attributes and element names", async () => {
+    let href = "https://example.com/v1"
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/atom+xml")
+      response.end(`<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+        <id>entry-1</id><title>Stable</title>
+        <link href="https://example.com/article"/>
+        <content type="xhtml"><div><a href="${href}">same text</a></div></content>
+      </entry></feed>`)
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const first = (await Effect.runPromise(reader.read(url)))[0]!
+    href = "https://example.com/v2"
+    const updated = (await Effect.runPromise(reader.read(url)))[0]!
+
+    expect(updated.captureFingerprint).not.toBe(first.captureFingerprint)
+  })
+
   it("supports namespaced Atom entries and chooses the alternate link", async () => {
     const url = await serve((_request, response) => {
       response.setHeader("content-type", "application/atom+xml")

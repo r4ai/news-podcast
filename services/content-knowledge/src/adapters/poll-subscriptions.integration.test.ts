@@ -171,11 +171,19 @@ describe("pollSubscriptions integration", () => {
         alreadyArchived: 0,
         failed: 0,
       })
+      // Simulate a pre-fingerprint deployment: matching legacy metadata is
+      // baselined without a one-time recapture of every stored article.
+      database.runSql("UPDATE feed_items SET capture_fingerprint = NULL")
       expect(await Effect.runPromise(poll())).toMatchObject({
         archived: 0,
         alreadyArchived: 1,
         failed: 0,
       })
+      expect(
+        database.getSql(
+          "SELECT capture_fingerprint AS fingerprint FROM feed_items"
+        )
+      ).toEqual({ fingerprint: expect.stringMatching(/^[\da-f]{64}$/) })
       version = "v2"
       expect(await Effect.runPromise(poll())).toMatchObject({
         archived: 1,
@@ -250,6 +258,7 @@ describe("pollSubscriptions integration", () => {
   })
 
   it("classifies an archive failure as an isolated item failure", async () => {
+    const markCaptured = vi.fn(() => Effect.void)
     const result = await Effect.runPromise(
       pollSubscriptions({
         subscriptions: {
@@ -257,6 +266,10 @@ describe("pollSubscriptions integration", () => {
             Effect.succeed([
               { feedId: "feed-1", feedUrl: "https://feed.test" },
             ] as never),
+        },
+        catalog: {
+          upsert: () => Effect.succeed({ _tag: "CaptureRequired" as const }),
+          markCaptured,
         },
         reader: {
           read: () =>
@@ -298,6 +311,7 @@ describe("pollSubscriptions integration", () => {
         { _tag: "FeedPollFailed", scope: "Item", reason: "ArchiveFailed" },
       ],
     })
+    expect(markCaptured).not.toHaveBeenCalled()
   })
 
   it("classifies catalog persistence failure as a feed failure", async () => {

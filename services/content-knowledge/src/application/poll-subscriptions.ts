@@ -48,7 +48,8 @@ export type FeedPollResult = DeepReadonly<{
 
 export type PollSubscriptionsPorts = Readonly<{
   readonly subscriptions: Pick<SubscriptionRepository, "listFeedsForPolling">
-  readonly catalog?: Pick<ArticleCatalog, "upsert">
+  readonly catalog?: Pick<ArticleCatalog, "upsert"> &
+    Partial<Pick<ArticleCatalog, "markCaptured">>
   readonly reader: RssFeedReader
   readonly archive: (
     invocation: ArchiveArticleInvocation
@@ -136,7 +137,7 @@ export const pollFeed =
             }).pipe(
               Effect.flatMap((command) =>
                 (ports.catalog === undefined
-                  ? Effect.void
+                  ? Effect.succeed({ _tag: "CaptureRequired" as const })
                   : ports.catalog.upsert({
                       articleId: command.articleId,
                       feedId: feed.feedId,
@@ -147,15 +148,36 @@ export const pollFeed =
                         ? {}
                         : { publishedAt: item.publishedAt }),
                       discoveredAt: ports.now(),
+                      captureFingerprint: item.captureFingerprint,
                     })
                 ).pipe(
-                  Effect.andThen(
-                    ports.archive(
-                      deepFreeze({
-                        command,
-                        context: ports.newContext(),
-                      })
-                    )
+                  Effect.flatMap(
+                    (
+                      decision
+                    ): Effect.Effect<
+                      Readonly<{ _tag: "Archived" | "AlreadyArchived" }>,
+                      ArchiveStoreError | CaptureError
+                    > =>
+                      decision._tag === "Unchanged"
+                        ? Effect.succeed({ _tag: "AlreadyArchived" as const })
+                        : ports
+                            .archive(
+                              deepFreeze({
+                                command,
+                                context: ports.newContext(),
+                              })
+                            )
+                            .pipe(
+                              Effect.map((result) => ({ _tag: result._tag }))
+                            )
+                  ),
+                  Effect.tap(() =>
+                    ports.catalog?.markCaptured === undefined
+                      ? Effect.void
+                      : ports.catalog.markCaptured({
+                          articleId: command.articleId,
+                          captureFingerprint: item.captureFingerprint,
+                        })
                   )
                 )
               ),

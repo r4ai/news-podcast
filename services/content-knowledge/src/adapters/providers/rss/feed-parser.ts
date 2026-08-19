@@ -46,6 +46,21 @@ const attribute = (node: XmlObject, name: string): string | undefined => {
   return value === "" ? undefined : value
 }
 
+/** Preserves element names, attributes, array order, and text deterministically. */
+const canonicalXml = (value: unknown): unknown => {
+  if (value === undefined || value === null) return null
+  if (typeof value === "string" || typeof value === "number")
+    return String(value)
+  if (Array.isArray(value)) return value.map(canonicalXml)
+  const object = asObject(value)
+  if (object === undefined) return String(value)
+  return Object.fromEntries(
+    Object.keys(object)
+      .sort()
+      .map((key) => [key, canonicalXml(object[key])])
+  )
+}
+
 const parseDate = (value: string | undefined): string | undefined => {
   if (value === undefined) return undefined
   const date = new Date(value)
@@ -148,7 +163,7 @@ const parseItem = (node: XmlObject, feedUrl: FeedUrl): FeedItem | undefined => {
           publishedAt: explicitPublishedAt ?? null,
           updatedAt: updatedAt ?? null,
           content: ["description", "content", "encoded", "summary"].map(
-            (name) => textField(node, name) ?? null
+            (name) => ({ name, value: canonicalXml(node[name]) })
           ),
         })
       )

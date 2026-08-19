@@ -261,7 +261,7 @@ stateDiagram-v2
   NewSnapshot --> SameSnapshot: 更新版のretry
 ```
 
-`articleId`はfeed + GUIDで安定させ、`archiveRequestId`だけをRSS capture fingerprintでversion化する。新snapshot追加後も既存Episodeはcheckpoint済み`articleId + snapshotId`を維持し、新しい生成のlatest queryだけが更新版を選ぶ。手動archiveはRPC message IDをrefresh intentに含める（[ADR-0073](adr/0073-version-article-capture-intents.md)）。
+`articleId`はfeed + GUIDで安定させ、`archiveRequestId`だけをRSS capture fingerprintでversion化する。fingerprintはXHTMLのelement・属性もcanonical化し、archive成功後にだけcatalogへ記録する。既存のfingerprint未記録記事はlatest URL・title一致時に再取得せずbaseline化する。新snapshot追加後も既存Episodeはcheckpoint済み`articleId + snapshotId`を維持し、新しい生成のlatest queryだけが更新版を選ぶ。手動archiveはRPC message IDをrefresh intentに含める（[ADR-0073](adr/0073-version-article-capture-intents.md)）。
 
 ### 4.5 記事archive objectの回収
 

@@ -70,6 +70,14 @@ export type ArticleCatalog = DeepReadonly<{
     readonly title: ArticleTitle
     readonly publishedAt?: string
     readonly discoveredAt: string
+    readonly captureFingerprint?: Sha256
+  }) => Effect.Effect<
+    Readonly<{ _tag: "CaptureRequired" } | { _tag: "Unchanged" }>,
+    ArticleCatalogError
+  >
+  readonly markCaptured: (input: {
+    readonly articleId: ArticleId
+    readonly captureFingerprint: Sha256
   }) => Effect.Effect<void, ArticleCatalogError>
   readonly findAutomatic: (
     ownerId: OwnerId,

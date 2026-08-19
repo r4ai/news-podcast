@@ -1,0 +1,1 @@
+ALTER TABLE `feed_items` ADD `capture_fingerprint` text;

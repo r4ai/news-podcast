@@ -152,6 +152,34 @@ export const createArticleCatalog = (
       Effect.try({
         try: () =>
           database.transaction((tx) => {
+            const existing = tx
+              .select({ captureFingerprint: feedItems.captureFingerprint })
+              .from(feedItems)
+              .where(eq(feedItems.articleId, input.articleId))
+              .get()
+            const latest = tx
+              .select({ snapshotJson: articleSnapshots.snapshotJson })
+              .from(articleSnapshots)
+              .where(eq(articleSnapshots.articleId, input.articleId))
+              .orderBy(
+                desc(articleSnapshots.capturedAt),
+                desc(articleSnapshots.snapshotId)
+              )
+              .get()
+            const latestSnapshot =
+              latest === undefined
+                ? undefined
+                : Schema.decodeUnknownSync(ArticleSnapshotSchema)(
+                    jsonInterop.parse(latest.snapshotJson)
+                  )
+            const captureRequired =
+              input.captureFingerprint !== undefined &&
+              (latestSnapshot === undefined ||
+                (existing?.captureFingerprint === null
+                  ? latestSnapshot.sourceUrl !== input.sourceUrl ||
+                    latestSnapshot.title !== input.title
+                  : existing?.captureFingerprint !== input.captureFingerprint))
+
             tx.insert(feedItems)
               .values({
                 articleId: input.articleId,
@@ -161,6 +189,7 @@ export const createArticleCatalog = (
                 title: input.title,
                 publishedAt: input.publishedAt ?? null,
                 discoveredAt: input.discoveredAt,
+                captureFingerprint: null,
               })
               .onConflictDoUpdate({
                 target: [feedItems.feedId, feedItems.externalId],
@@ -200,7 +229,24 @@ export const createArticleCatalog = (
                 )
                 .onConflictDoNothing()
                 .run()
+
+            return deepFreeze({
+              _tag: captureRequired
+                ? ("CaptureRequired" as const)
+                : ("Unchanged" as const),
+            })
           }),
+        catch: () => failure("Upsert"),
+      })
+
+    const markCaptured: ArticleCatalog["markCaptured"] = (input) =>
+      Effect.try({
+        try: () =>
+          database
+            .update(feedItems)
+            .set({ captureFingerprint: input.captureFingerprint })
+            .where(eq(feedItems.articleId, input.articleId))
+            .run(),
         catch: () => failure("Upsert"),
       }).pipe(Effect.asVoid)
 
@@ -330,6 +376,7 @@ export const createArticleCatalog = (
 
     return deepFreeze({
       upsert,
+      markCaptured,
       findAutomatic,
       findSelected,
       listGenerationCandidates,
