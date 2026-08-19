@@ -42,7 +42,7 @@ import { runCompletionRelayLoop } from "./loops/completion-relay.js"
 import {
   defaultNodeCreateJobRpcDependencies,
   NodeCreateJobRpcConfigSchema,
-  runNodeProductionRpc,
+  runProductionRpcWithDatabase,
 } from "./node.js"
 import {
   MAX_CANCELLATION_POLL_MILLIS,
@@ -177,7 +177,7 @@ export const runNodeEpisodeProductionService = (
       Effect.scoped(
         Effect.gen(function* () {
           const observability = dependencies.observability ?? noopObservability
-          // 接続はプロセスにつき1本。以前は同じDBへ最大6本を開いていた。
+          // process rootだけがDBを所有し、RPC/worker/relay/schedulerへ共有する。
           const database = yield* Effect.acquireRelease(
             Effect.try({
               try: () => openProductionDatabaseUnsafe(config.rpc.sqlitePath),
@@ -423,12 +423,16 @@ export const runNodeEpisodeProductionService = (
             config.scheduler,
             controller.signal
           )
-          const rpc = runNodeProductionRpc(config.rpc, {
-            ...defaultNodeCreateJobRpcDependencies,
-            onReady,
-            onJobCanceled: (job) =>
-              void cancellations.notify(job.jobId, job.canceledAt),
-          }).pipe(Effect.mapError(() => runtimeError("Execution")))
+          const rpc = runProductionRpcWithDatabase(
+            config.rpc,
+            database.database,
+            {
+              ...defaultNodeCreateJobRpcDependencies,
+              onReady,
+              onJobCanceled: (job) =>
+                void cancellations.notify(job.jobId, job.canceledAt),
+            }
+          ).pipe(Effect.mapError(() => runtimeError("Execution")))
 
           yield* Effect.all([rpc, worker, relay, scheduler], {
             concurrency: "unbounded",

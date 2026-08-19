@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-15
+- Amended: 2026-08-20（Issue #44: Production RPCのnested connectionを除去）
 - Decision owners: Platform
 - Supersedes: N/A
 - Superseded by: N/A
@@ -32,6 +33,7 @@
 - DBエンジンはSQLiteのまま、境界づけられたコンテキストごとに4ファイルを維持する（ADR-0033）
 - サービスごとに独立した `drizzle/schema.ts` を持ち、サービス間で共有しない
 - 接続は**サービスプロセスにつき1本**。`@news-podcast/persistence` が確立規則を一元化する
+- Episode Productionのprocess rootが接続をopen/closeし、同居するRPC、worker、relay、schedulerは同じDrizzle databaseを注入で共有する。単独起動用RPCだけは自身のscopeで1本を所有する
 - 起動時DDLは全廃し、`bootstrap.ts` がマイグレーションを適用する
 - テストは本番と同一のマイグレーションでDBを構築する
 - drizzle-kit が生成できない `STRICT` はマイグレーションSQLへ手で追記し、
@@ -60,6 +62,7 @@
 - テスト用スキーマが本番から乖離する余地が構造的に無くなった
 - 接続確立・PRAGMA規則・DB span属性が1箇所に集約された
 - 接続跨ぎの外部キー宣言という不整合が解消した
+- RPCとworkerが同じconnectionとtransaction規則を共有し、同一pathのnested openを行わない
 - ネイティブ依存ゼロのため Dockerfile とサプライチェーン方針は無変更
 
 ### 欠点とリスク
@@ -77,12 +80,12 @@
 | 設計書 | 永続化層とディレクトリ構成の記述を更新 | Done | `docs/architecture.md` |
 | ドメイン/ユースケース | 変更なし（境界での再検証は維持） | Done | `services/*/src/domain` |
 | OpenAPI/外部契約 | 変更なし | Done | `pnpm contract:check` |
-| コード/ポート | 全サービスの永続化アダプタを移植 | Done | `services/*/src/adapters/persistence` |
+| コード/ポート | 全サービスの永続化アダプタを移植し、Production RPCへprocess-owned databaseを注入 | Done | `services/*/src/adapters/persistence`、`runtime/service.ts`、`runtime/node.ts` |
 | データ/ストレージ | 初期マイグレーションを各サービスに追加。既存volumeは作り直し | Done | `services/*/drizzle/migrations` |
 | 実行/配備 | Dockerfile は無変更。`packages/persistence` を COPY 対象へ追加 | Done | `infra/Dockerfile.node` |
 | 認証/セキュリティ | Better Auth は自身のテーブルを所有し続ける | Done | `services/identity-access/drizzle/schema.ts` |
 | フロント/品質保証 | 変更なし | Done | N/A |
-| テスト/運用 | schema.test.ts で STRICT/CHECK/索引を固定 | Done | `pnpm test` |
+| テスト/運用 | schemaと、prebuilt in-memory databaseへRPC結果が保存されることを固定 | Done | schema tests、`runtime/node.test.ts` |
 
 ## 再検討条件
 
@@ -98,3 +101,5 @@
 - `pnpm lint && pnpm typecheck && pnpm test`
 - `pnpm contract:check`（OpenAPI契約の非退行）
 - 各サービスの `src/adapters/persistence/schema.test.ts`
+- Red: process rootのDBをRPCへ渡す入口がなく、RPCが同じpathを再openした
+- Green: prebuilt in-memory DBで全RPC surfaceを実行し、同じconnectionへjobが保存された

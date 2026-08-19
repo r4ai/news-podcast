@@ -104,6 +104,8 @@ flowchart LR
 
 SIGINT/SIGTERMはresource drainとtelemetry flush後にexit 0、subscription/connection終了、初期化失敗、process fatalはexit 1である。NATS drainが1秒以内に終わらない場合はconnectionをcloseし、終了処理自体の停止を防ぐ。Docker healthは観測専用であり、回復不能状態はapplication自身が終了する。詳細は[ADR-0052](../adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)を参照する。
 
+SQLite接続は各serviceのprocess rootが1本だけopenし、停止時に子runtimeを終了してからcloseする。Episode ProductionではRPC、worker、completion relay、schedulerが同じconnectionを共有するため、同一pathへのnested connectionを前提にロック障害を調査しない。`SQLITE_BUSY`が継続する場合は別processのCLI、backup、旧containerが同じvolumeへ接続していないかを確認する。
+
 ## Article archive orphan cleanup
 
 Content Knowledgeは部分Put失敗時に成功済みobjectを即時削除し、さらに既定6時間ごとにS3とSQLiteを照合する。`CONTENT_ARCHIVE_ORPHAN_RETENTION_MS`（既定24時間）より古く、`article_snapshots`に参照がないUUID snapshot prefixだけが対象になる。

@@ -331,7 +331,7 @@ DBアクセスは全service で **Drizzle ORM** に統一する（[ADR-0043](adr
 | driver接触面 | `services/<svc>/src/infrastructure/unsafe/drizzle/open.ts` |
 | query | `services/<svc>/src/adapters/persistence/<集約>/` |
 
-接続はservice processにつき1本である。起動時DDL（`CREATE TABLE IF NOT EXISTS`）は存在せず、`bootstrap.ts` がmigrationを適用する。testも本番と同一のmigrationでDBを構築するため、test用schemaが本番から乖離する余地はない。
+接続はservice processにつき1本である。process composition rootだけがopen/closeを所有し、同居するRPC・worker・relay・schedulerへ同じDrizzle databaseを注入する。単独起動するruntimeは自身のscopeで1本だけを所有する。起動時DDL（`CREATE TABLE IF NOT EXISTS`）は存在せず、`bootstrap.ts` がmigrationを適用する。testも本番と同一のmigrationでDBを構築するため、test用schemaが本番から乖離する余地はない。
 
 drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`sqlite_master` を検査する `schema.test.ts` で固定する。
 

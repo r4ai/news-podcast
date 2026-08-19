@@ -1,10 +1,19 @@
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
 import { subjects } from "@news-podcast/protocols"
 import { Effect, Fiber, Schema } from "effect"
 import { afterAll, describe, expect, it, vi } from "vitest"
 
 import type { UnsafeNatsRpcServer } from "../infrastructure/unsafe/nats-rpc.js"
+import { openProductionDatabaseUnsafe } from "../infrastructure/unsafe/drizzle/open.js"
 import { UtcTimestampSchema } from "../domain/episode-job.js"
-import { runNodeCreateJobRpc, runNodeProductionRpc } from "./node.js"
+import {
+  runNodeCreateJobRpc,
+  runNodeProductionRpc,
+  runProductionRpcWithDatabase,
+} from "./node.js"
 
 const directory = mkdtempSync(join(tmpdir(), "production-rpc-"))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
@@ -154,7 +163,56 @@ describe("episode-production Node RPC runtime", () => {
     expect(connectionCount).toBe(1)
     expect(exit._tag).toBe("Failure")
   })
+
+  it("uses the process-owned database for the complete RPC surface", async () => {
+    const handle = openProductionDatabaseUnsafe(":memory:")
+    const pending = [
+      {
+        subject: subjects.production.createJob,
+        payload: JSON.stringify({
+          messageId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+          correlationId: "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
+          causationId: "3c4d046c-b47b-4047-a562-66ac7e74e995",
+          occurredAt: "2026-08-12T00:00:00.000Z",
+          producer: "gateway",
+          traceparent:
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          actor: {
+            _tag: "User",
+            userId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c",
+          },
+          payload: {
+            idempotencyKey: "shared-database",
+            trigger: "manual",
+            articleIds: ["f8f15e30-6877-4b4d-9568-76bfa3dc3e40"],
+          },
+        }),
+        reply: async () => undefined,
+      },
+    ]
+
+    try {
+      await Effect.runPromiseExit(
+        runProductionRpcWithDatabase(config, handle.database, {
+          connectNats: async () => ({
+            receive: async () => pending.shift(),
+            drain: async () => undefined,
+          }),
+          newJobId: () => "10e2d4e1-c127-479f-a124-2ea037bd9319" as never,
+          now: () =>
+            Schema.decodeUnknownSync(UtcTimestampSchema)(
+              "2026-08-12T00:00:00.000Z"
+            ),
+        })
+      )
+
+      expect(
+        handle.client
+          .prepare("SELECT COUNT(*) AS count FROM episode_jobs")
+          .get()
+      ).toEqual({ count: 1 })
+    } finally {
+      handle.close()
+    }
+  })
 })
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
