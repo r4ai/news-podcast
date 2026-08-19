@@ -7,7 +7,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { JSDOM } from "jsdom"
 import postcss, { type Root } from "postcss"
 
@@ -15,7 +15,7 @@ import type {
   ArchiveArticlePorts,
   CaptureError,
 } from "../../application/ports/archive.js"
-import { ArchiveCaptureSchema } from "../../domain/article.js"
+import { ArchiveCaptureSchema, SnapshotIdSchema } from "../../domain/article.js"
 import { createArticleArchiveArtifacts } from "./article-markdown-parser.js"
 import { createNodeSafeFetcher } from "./safe-fetch.js"
 
@@ -581,10 +581,16 @@ const blockedFetchFailure = (error: unknown): boolean =>
     error.message.toLowerCase().includes(term)
   )
 
-const snapshotIdFromArticleKey = (key: string): string | undefined =>
-  /^articles\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\//i.exec(
-    key
-  )?.[1]
+const isSnapshotId = Schema.is(SnapshotIdSchema)
+const snapshotIdFromArticleKey = (key: string): string | undefined => {
+  const [namespace, candidate, ...objectPath] = key.split("/")
+  return namespace === "articles" &&
+    candidate !== undefined &&
+    objectPath.length > 0 &&
+    isSnapshotId(candidate)
+    ? candidate
+    : undefined
+}
 
 /** Owns the Node DNS-pinned fetcher and S3 client used by RSS and article capture. */
 export const openHttpS3ArticleCaptureUnsafe = (
