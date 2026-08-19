@@ -154,7 +154,7 @@ export const createEnrichmentOperations = (input: {
   readonly newLeaseToken: () => string
 }) => {
   const processTarget = Effect.fn("contentKnowledge.enrichment.processTarget")(
-    function* (ownerId: OwnerId, target: EnrichmentTarget, date: string) {
+    function* (ownerId: OwnerId, target: EnrichmentTarget) {
       const completeFailure = (
         message: string,
         retryable: boolean
@@ -225,12 +225,13 @@ export const createEnrichmentOperations = (input: {
         )
         return false
       }
+      const completedAt = input.now()
       yield* input.queue.completeSuccess(
         ownerId,
         target,
         decoded.value,
-        input.now(),
-        date
+        completedAt,
+        localDate(completedAt)
       )
       return true
     }
@@ -258,7 +259,7 @@ export const createEnrichmentOperations = (input: {
           input.newLeaseToken()
         )
         for (const target of targets) {
-          if (yield* processTarget(ownerId, target, date)) {
+          if (yield* processTarget(ownerId, target)) {
             processed += 1
             used += 1
           }

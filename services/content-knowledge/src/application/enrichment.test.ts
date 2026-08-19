@@ -46,7 +46,8 @@ const queue = (budgetUsed = 0): EnrichmentQueueRepository =>
 
 const operations = (
   repository: EnrichmentQueueRepository,
-  enrich: (input: unknown) => Effect.Effect<unknown, EnrichmentProviderError>
+  enrich: (input: unknown) => Effect.Effect<unknown, EnrichmentProviderError>,
+  currentTime: () => typeof now = () => now
 ) =>
   createEnrichmentOperations({
     queue: repository,
@@ -65,7 +66,7 @@ const operations = (
     },
     provider: { enrich },
     dailyLimit: 200,
-    now: () => now,
+    now: currentTime,
     newLeaseToken: () => "lease-token-0001",
   })
 
@@ -93,6 +94,42 @@ describe("enrichment operations", () => {
       expect.objectContaining({ score: 90 }),
       now,
       "2026-08-13"
+    )
+  })
+
+  it("accounts a success against the UTC date when it completes", async () => {
+    const repository = queue()
+    const startedAt = Schema.decodeUnknownSync(CapturedAtSchema)(
+      "2026-08-17T23:59:59.000Z"
+    )
+    const completedAt = Schema.decodeUnknownSync(CapturedAtSchema)(
+      "2026-08-18T00:00:02.000Z"
+    )
+    const instants = [startedAt, completedAt]
+
+    await Effect.runPromise(
+      operations(
+        repository,
+        () =>
+          Effect.succeed({
+            summary: "summary",
+            score: 90,
+            reason: "matches",
+            tags: ["Known"],
+            suggestedTags: [],
+            tokensIn: 10,
+            tokensOut: 5,
+          }),
+        () => instants.shift() ?? completedAt
+      ).runCycle()
+    )
+
+    expect(repository.completeSuccess).toHaveBeenCalledWith(
+      ownerId,
+      target,
+      expect.objectContaining({ score: 90 }),
+      completedAt,
+      "2026-08-18"
     )
   })
 
