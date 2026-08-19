@@ -120,6 +120,9 @@ const wireEpisode = (episode: {
             url: source.url,
             title: source.title,
             snapshotId: source.snapshotId,
+            ...(source.articleId === undefined
+              ? {}
+              : { articleId: source.articleId }),
             ...(source.publishedAt === undefined
               ? {}
               : { publishedAt: source.publishedAt }),

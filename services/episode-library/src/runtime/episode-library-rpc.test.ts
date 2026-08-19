@@ -23,6 +23,8 @@ import { makeEpisodeLibraryRpcHandler } from "./episode-library-rpc.js"
 const ownerId = "better-auth-user_01"
 const otherOwnerId = "other-user"
 const episodeId = "8a76daf6-d3d7-47db-9644-228dc5328c84"
+const articleId = "f8f15e30-6877-4b4d-9568-76bfa3dc3e40"
+const snapshotId = "06c0200a-e447-4243-b5e7-f31e7464f2e4"
 
 const episode = (ownedBy = ownerId): CompletedEpisode =>
   Effect.runSync(
@@ -39,9 +41,11 @@ const episode = (ownedBy = ownerId): CompletedEpisode =>
       },
       sources: [
         {
-          _tag: "WebSource",
+          _tag: "RssSource",
+          articleId,
           url: "https://example.com/news/1",
           title: "News 1",
+          snapshotId,
         },
       ],
       createdAt: "2026-08-12T00:00:00.000Z",
@@ -99,7 +103,13 @@ describe("episode-library RPC handler", () => {
     expect(reader.findByOwner).toHaveBeenCalledWith(ownerId, episodeId)
     const { payload } = await replyPayload(replies[0]!)
     const parsed = await Effect.runPromise(parseGetEpisodeReply(payload))
-    expect(parsed).toMatchObject({ _tag: "Found", episode: { id: episodeId } })
+    expect(parsed).toMatchObject({
+      _tag: "Found",
+      episode: {
+        id: episodeId,
+        sources: [{ sourceKind: "rss", articleId, snapshotId }],
+      },
+    })
     expect(JSON.stringify(parsed)).not.toContain("ownerId")
     expect(JSON.stringify(parsed)).not.toContain("objectKey")
   })
@@ -148,7 +158,7 @@ describe("episode-library RPC handler", () => {
         items: [
           {
             id: episodeId,
-            sources: [{ sourceKind: "web" }],
+            sources: [{ sourceKind: "rss", articleId, snapshotId }],
           },
         ],
         page: { hasMore: false },

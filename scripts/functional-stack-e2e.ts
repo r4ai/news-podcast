@@ -411,6 +411,15 @@ const main = Effect.scoped(
           (episodes.items[0] as Record<string, unknown>).id === episodeId,
         "completed episode did not reach the owner library"
       )
+      assert(
+        Array.isArray(episodes.items) &&
+          (
+            (episodes.items[0] as Record<string, unknown>)[
+              "sources"
+            ] as readonly Record<string, unknown>[]
+          )[0]?.articleId === articleA,
+        "episode list did not retain the saved article link"
+      )
 
       const episodeResponse = await request(
         web.handler,
@@ -422,6 +431,12 @@ const main = Effect.scoped(
       assert(
         episodeDetail.id === episodeId,
         "episode detail returned another episode"
+      )
+      assert(
+        Array.isArray(episodeDetail.sources) &&
+          (episodeDetail.sources[0] as Record<string, unknown>).articleId ===
+            articleA,
+        "episode detail did not retain the saved article link"
       )
 
       // 署名URLはブラウザへ出さず、Gatewayがowner認可の後に中身を流す。
