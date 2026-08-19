@@ -22,6 +22,14 @@ export const feedCatalog = sqliteTable("feed_catalog", {
   createdAt: text("created_at").notNull(),
 })
 
+/** 明示的な公開判定を通過したfeedだけをcross-owner catalogへ掲載する。 */
+export const publicFeedListings = sqliteTable("public_feed_listings", {
+  feedId: text("feed_id")
+    .primaryKey()
+    .references(() => feedCatalog.feedId, { onDelete: "cascade" }),
+  listedAt: text("listed_at").notNull(),
+})
+
 export const feedSubscriptions = sqliteTable(
   "feed_subscriptions",
   {

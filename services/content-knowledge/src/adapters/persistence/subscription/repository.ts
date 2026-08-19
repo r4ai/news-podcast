@@ -1,5 +1,5 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
-import { and, asc, eq, exists, like, sql } from "drizzle-orm"
+import { and, asc, eq, exists, like, or, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
@@ -7,6 +7,7 @@ import {
   feedCatalog,
   feedItems,
   feedSubscriptions,
+  publicFeedListings,
 } from "../../../../drizzle/schema.js"
 import type {
   SubscriptionRepository,
@@ -254,20 +255,42 @@ export const createSubscriptionRepository = (
       )
 
     const listCatalog: SubscriptionRepository["listCatalog"] = (
-      _ownerId,
+      ownerId,
       query
-    ) =>
-      Effect.try({
+    ) => {
+      const visibleToOwner = or(
+        exists(
+          database
+            .select({ one: sql`1` })
+            .from(publicFeedListings)
+            .where(eq(publicFeedListings.feedId, feedCatalog.feedId))
+        ),
+        exists(
+          database
+            .select({ one: sql`1` })
+            .from(feedSubscriptions)
+            .where(
+              and(
+                eq(feedSubscriptions.feedId, feedCatalog.feedId),
+                eq(feedSubscriptions.ownerId, ownerId)
+              )
+            )
+        )
+      )
+      return Effect.try({
         try: () =>
           database
             .select(feedProjection)
             .from(feedCatalog)
             .where(
               query === undefined
-                ? undefined
-                : like(
-                    feedCatalog.feedUrl,
-                    sql`${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`
+                ? visibleToOwner
+                : and(
+                    visibleToOwner,
+                    like(
+                      feedCatalog.feedUrl,
+                      sql`${`%${escapeLikePattern(query)}%`} ESCAPE '\\'`
+                    )
                   )
             )
             .orderBy(asc(feedCatalog.feedUrl), asc(feedCatalog.feedId))
@@ -285,6 +308,7 @@ export const createSubscriptionRepository = (
         ),
         Effect.map(deepFreeze)
       )
+    }
 
     const listFeedsForPolling: SubscriptionRepository["listFeedsForPolling"] =
       () =>
