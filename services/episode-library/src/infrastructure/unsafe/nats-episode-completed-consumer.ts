@@ -28,6 +28,9 @@ export type UnsafeEpisodeCompletedConsumerConfig = DeepReadonly<{
   readonly ackWaitMillis: number
 }>
 
+const isConsumerNotFound = (cause: unknown): boolean =>
+  cause instanceof Error && /consumer not found/i.test(cause.message)
+
 /** All mutable JetStream iterator and acknowledgement operations stay here. */
 export const connectEpisodeCompletedConsumerUnsafe = async (
   config: UnsafeEpisodeCompletedConsumerConfig
@@ -36,19 +39,28 @@ export const connectEpisodeCompletedConsumerUnsafe = async (
   try {
     const client = jetstream(connection)
     const manager = await client.jetstreamManager()
-    await manager.consumers.add(config.stream, {
-      name: config.durableName,
-      durable_name: config.durableName,
-      ack_policy: AckPolicy.Explicit,
-      deliver_policy: DeliverPolicy.All,
-      replay_policy: ReplayPolicy.Instant,
-      filter_subject: subjects.production.jobCompletedV2,
-      ack_wait: config.ackWaitMillis * 1_000_000,
-      // Persistence failures must outlive the operational alert threshold.
-      // Terminal payload failures are acknowledged by the application layer.
-      max_deliver: -1,
-      max_ack_pending: 1,
-    })
+    const exists = await manager.consumers
+      .info(config.stream, config.durableName)
+      .then(() => true)
+      .catch((cause: unknown) => {
+        if (isConsumerNotFound(cause)) return false
+        throw cause
+      })
+    if (!exists) {
+      await manager.consumers.add(config.stream, {
+        name: config.durableName,
+        durable_name: config.durableName,
+        ack_policy: AckPolicy.Explicit,
+        deliver_policy: DeliverPolicy.All,
+        replay_policy: ReplayPolicy.Instant,
+        filter_subject: subjects.production.jobCompletedV2,
+        ack_wait: config.ackWaitMillis * 1_000_000,
+        // Persistence failures must outlive the operational alert threshold.
+        // Terminal payload failures are acknowledged by the application layer.
+        max_deliver: -1,
+        max_ack_pending: 1,
+      })
+    }
     const consumer = await client.consumers.get(
       config.stream,
       config.durableName
