@@ -1,7 +1,6 @@
-import { ArrowLeft, BookOpen } from "lucide-react"
+import { BookOpen } from "lucide-react"
 import { useEffect, useRef } from "react"
 
-import { Button } from "@workspace/ui/components/button"
 import {
   Empty,
   EmptyDescription,
@@ -26,11 +25,9 @@ import { ArticleAiBlock } from "./article-ai-block"
 import { ArticleReaderContent } from "./article-reader-content"
 import { ArticleReaderHeader } from "./article-reader-header"
 import { ArticleSourceTabs } from "./article-source-tabs"
+import { ArticleTocRail } from "./article-toc-rail"
 
-export type ArticleReaderViewProps = ReturnType<typeof useArticleReader> & {
-  /** モバイルの「一覧へ戻る」導線。 */
-  readonly onBack: () => void
-}
+export type ArticleReaderViewProps = ReturnType<typeof useArticleReader>
 
 /**
  * データ接続。`key={articleId}`でマウントされる前提なので、記事が変わると
@@ -40,11 +37,9 @@ export type ArticleReaderViewProps = ReturnType<typeof useArticleReader> & {
 export function ArticleReader({
   articleId,
   includeHidden,
-  onBack,
 }: {
   readonly articleId: string
   readonly includeHidden: boolean
-  readonly onBack: () => void
 }) {
   const reader = useArticleReader({ articleId, includeHidden })
 
@@ -57,21 +52,28 @@ export function ArticleReader({
     onMarkUnread: reader.markUnread,
   })
 
-  return <ArticleReaderView {...reader} onBack={onBack} />
+  return <ArticleReaderView {...reader} />
 }
 
-/** Panelのfallback。読み込み中も本文の骨格を保ち、切り替えで高さが飛ばない。 */
+/**
+ * Panelのfallback。
+ *
+ * 骨組みは「取得を待っている部分」だけに掛ける。一覧へ戻る導線や余白のように
+ * 取得を待たずに描けるものは境界の外にあり、ここには含めない。届く前と後で
+ * 位置が動かない最小の骨格 (題名2行・出典・本文の書き出し) だけを置く。
+ */
 export function ReaderSkeleton() {
   return (
     <div
       aria-label="記事を読み込み中"
-      className="flex w-full max-w-3xl flex-col gap-4"
+      className="flex w-full max-w-3xl flex-col gap-2"
       role="status"
     >
-      <Skeleton className="h-7 w-3/4" />
-      <Skeleton className="h-4 w-1/3" />
-      <Skeleton className="h-24 w-full rounded-lg" />
-      <Skeleton className="h-64 w-full" />
+      <Skeleton className="h-6 w-4/5" />
+      <Skeleton className="h-6 w-2/5" />
+      <Skeleton className="mt-1 h-3 w-32" />
+      <Skeleton className="mt-4 h-3 w-full" />
+      <Skeleton className="h-3 w-11/12" />
     </div>
   )
 }
@@ -126,7 +128,6 @@ export function ArticleReaderView({
   toggleHidden,
   recalculateAi,
   isRecalculating,
-  onBack,
 }: ArticleReaderViewProps) {
   const focusRef = useSingleColumnReaderFocus(articleId)
 
@@ -141,42 +142,31 @@ export function ArticleReaderView({
   // 器を出すかどうかは`outline`ではなく「実際に並ぶ項目」で決める。見出しが
   // 1つだけの記事では目次自体が何も描かないので、空のdisclosureと幅だけ取る
   // レールが残ってしまう。
-  const hasToc = tocEntries(outline).length > 0
+  const entries = tocEntries(outline)
   const activeHeadingId = useActiveHeading(outline)
 
   return (
-    /*
-      `self-start`は目次の吸着のためにある。この枠はスクロール領域(flex)の子
-      なので、既定では領域の高さまで引き伸ばされ、本文はそこから溢れて表示
-      される。stickyが動ける範囲は包む枠の中までなので、伸ばされたままだと
-      1画面ぶんで尽きてしまう。高さを中身に戻すことで、本文の長さいっぱいまで
-      追従できるようにする。
-    */
-    <div className="flex w-full gap-6 self-start">
-      {/* 下端の固定操作列と下部ナビはどちらもmdで消えるので、余白もmdで戻す。 */}
+    // 親は縦並びのスクロール領域なので、この枠の高さは中身の分に収まる。
+    // 目次の追従(sticky)が動ける範囲は包む枠の中までなので、本文の長さが
+    // そのまま追従できる長さになる。
+    <div className="flex w-full gap-6">
       <article
         aria-label={article.title}
-        className="flex w-full min-w-0 max-w-3xl flex-col gap-4 pb-24 outline-none md:pb-4"
+        className="flex w-full min-w-0 max-w-3xl flex-col gap-4 outline-none"
         ref={focusRef}
         tabIndex={-1}
       >
-        <Button
-          className="self-start lg:hidden"
-          onClick={onBack}
-          size="sm"
-          variant="ghost"
-        >
-          <ArrowLeft aria-hidden="true" data-icon="inline-start" />
-          一覧へ戻る
-        </Button>
-
         <ArticleReaderHeader article={article} />
 
+        {/*
+          記事に対する操作は題名のすぐ下へ置く。幅で置き場所を変えない。
+          以前は狭い幅だけ画面下端へ固定していたが、下端は下部ナビと再生バーの
+          場所で、鳴らし始めるとそれらと重なって宙に浮いていた。
+        */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <ArticleSourceTabs onSourceChange={setSource} source={source} />
           <ArticleActions
             article={article}
-            className="hidden md:flex"
             onToggleHidden={toggleHidden}
             onToggleReadLater={toggleReadLater}
             onToggleSaved={toggleSaved}
@@ -196,11 +186,11 @@ export function ArticleReaderView({
         />
 
         {/*
-          右レールが入らない幅では、目次を本文の前に畳んで置く。開いたままだと
-          記事を開くたびに本文が目次の分だけ下へ押される。畳んだ中身は
-          `hidden="until-found"`で残るので、Ctrl+Fの検索にも掛かる。
+          右へ格納できるレールが入らない幅では、目次を本文の前に畳んで置く。
+          開いたままだと記事を開くたびに本文が目次の分だけ下へ押される。
+          畳んだ中身は`hidden="until-found"`で残るので、Ctrl+Fの検索にも掛かる。
         */}
-        {hasToc ? (
+        {entries.length > 0 ? (
           <MarkdownToc
             activeId={activeHeadingId}
             className="xl:hidden"
@@ -219,31 +209,9 @@ export function ArticleReaderView({
           markdown={markdown}
           source={source}
         />
-
-        <ArticleActions
-          article={article}
-          className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-10 justify-center border-t bg-background/95 p-3 backdrop-blur md:hidden"
-          onToggleHidden={toggleHidden}
-          onToggleReadLater={toggleReadLater}
-          onToggleSaved={toggleSaved}
-        />
       </article>
 
-      {/*
-        幅に余裕がある時だけ、追従する目次を右へ出す。`<aside>`にはしない。
-        AppShellのサイドバーが既にcomplementaryランドマークを持っており、
-        2つ目を足すと区別が付かなくなる (axe: landmark-unique)。目次自身は
-        `MarkdownToc`が`nav[aria-label="目次"]`として名前付きで公開する。
-
-        stickyは器のこの`div`が持つ。flexの子は既定で親と同じ高さまで伸びるので、
-        中身側をstickyにすると追従できる範囲がその高さで尽きる。`self-start`で
-        高さを中身の分に戻し、動ける余地を本文の長さぶん残す。
-      */}
-      {hasToc ? (
-        <div className="sticky top-4 hidden max-h-[calc(100dvh-6rem)] w-56 shrink-0 self-start overflow-y-auto overscroll-contain xl:block">
-          <MarkdownToc activeId={activeHeadingId} outline={outline} />
-        </div>
-      ) : null}
+      <ArticleTocRail activeId={activeHeadingId} entries={entries} />
     </div>
   )
 }

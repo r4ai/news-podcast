@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { ReactNode } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   createTestQueryClient,
@@ -13,8 +13,10 @@ import {
   currentTrackAtom,
   playbackDurationAtom,
   playbackPositionAtom,
+  mutedAtom,
   playbackRateAtom,
   playbackStatusAtom,
+  volumeAtom,
 } from "../atoms"
 import { PlayerBar } from "./player-bar"
 
@@ -48,6 +50,8 @@ function fakeAudio() {
     duration: 600,
     paused: true,
     playbackRate: 1,
+    volume: 1,
+    muted: false,
     play: vi.fn(function (this: { paused: boolean }) {
       this.paused = false
       return Promise.resolve()
@@ -71,15 +75,18 @@ function renderBar(patch: { readonly playing?: boolean } = {}) {
     audio.paused = false
     store.set(playbackStatusAtom, "playing")
   }
-  render(
+  const view = render(
     <TestProviders queryClient={queryClient} store={store}>
       <PlayerBar />
     </TestProviders>
   )
-  return { audio, store }
+  return { audio, store, container: view.container }
 }
 
 describe("PlayerBar", () => {
+  // 速度と音量は端末に残る。前のテストの値が次のテストへ持ち越されない。
+  beforeEach(() => localStorage.clear())
+
   it("番組が載っていなければ何も描かない。空の枠が居座らない", () => {
     const queryClient = createTestQueryClient()
     render(
@@ -95,10 +102,17 @@ describe("PlayerBar", () => {
     expect(screen.getByRole("link", { name: track.title })).toBeDefined()
   })
 
-  it("経過と残りを両方出す。残りは負号を付けて区別する", () => {
+  it("経過・総時間・残りを1行に並べる", () => {
+    const { container } = renderBar()
+    expect(container.textContent).toContain("2:00 / 10:00 (残り 8:00)")
+  })
+
+  it("目盛りは幅いっぱいの縁に置く。狭い幅で数十pxまで縮まない", () => {
     renderBar()
-    expect(screen.getByText("2:00")).toBeDefined()
-    expect(screen.getByText("-8:00")).toBeDefined()
+    const scrubber = screen.getByRole("slider", { name: "再生位置" })
+    // 掴み代は帯より広く、バーの上端の縁に重ねる。
+    expect(scrubber.parentElement?.className).toContain("inset-x-0")
+    expect(scrubber.parentElement?.className).toContain("top-0")
   })
 
   it("再生中は一時停止として押せる", async () => {
@@ -141,15 +155,37 @@ describe("PlayerBar", () => {
     expect(audio.currentTime).toBe(300)
   })
 
-  it("速度は押すたびに巡回し、要素へも伝わる", async () => {
+  it("速度は候補から選ぶ。狙った速度へ1操作で着く", async () => {
     const user = userEvent.setup()
     const { audio, store } = renderBar()
 
-    await user.click(
-      screen.getByRole("button", { name: "再生速度を変える (現在 1倍)" })
-    )
-    expect(store.get(playbackRateAtom)).toBe(1.25)
-    expect(audio.playbackRate).toBe(1.25)
+    await user.click(screen.getByRole("combobox", { name: /再生速度/ }))
+    await user.click(await screen.findByRole("option", { name: "1.5×" }))
+
+    expect(store.get(playbackRateAtom)).toBe(1.5)
+    expect(audio.playbackRate).toBe(1.5)
+  })
+
+  it("音量は開く操作を挟まずに触れる", async () => {
+    const { audio, store } = renderBar()
+    const volume = screen.getByRole("slider", { name: "音量" })
+
+    Object.defineProperty(volume, "value", { value: "0.4", writable: true })
+    volume.dispatchEvent(new Event("change", { bubbles: true }))
+
+    expect(store.get(volumeAtom)).toBe(0.4)
+    expect(audio.volume).toBe(0.4)
+  })
+
+  it("消音は押して切り替える。音量の記憶は残る", async () => {
+    const user = userEvent.setup()
+    const { audio, store } = renderBar()
+
+    await user.click(screen.getByRole("button", { name: "消音にする" }))
+
+    expect(store.get(mutedAtom)).toBe(true)
+    expect(audio.muted).toBe(true)
+    expect(store.get(volumeAtom)).toBe(1)
   })
 
   it("閉じると音は止まり、バーも消える", async () => {

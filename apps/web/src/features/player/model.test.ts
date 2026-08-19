@@ -4,10 +4,11 @@ import {
   FINISH_TAIL_SECONDS,
   PLAYBACK_RATES,
   clampTime,
+  clampVolume,
   formatPlaybackTime,
   listeningLabel,
   listeningState,
-  nextPlaybackRate,
+  normalizePlaybackRate,
   parsePlayerTrack,
   parseProgressMap,
   progressRatio,
@@ -82,19 +83,34 @@ describe("progressRatio", () => {
   })
 })
 
-describe("nextPlaybackRate", () => {
-  it("候補を順に巡り、最後は先頭へ戻る", () => {
-    const visited = PLAYBACK_RATES.map((_, index) =>
-      PLAYBACK_RATES.slice(0, index + 1).reduce(
-        (rate) => nextPlaybackRate(rate),
-        PLAYBACK_RATES[0]!
-      )
-    )
-    expect(visited.at(-1)).toBe(PLAYBACK_RATES[0])
+describe("normalizePlaybackRate", () => {
+  it("候補の速度はそのまま通す", () => {
+    for (const rate of PLAYBACK_RATES) {
+      expect(normalizePlaybackRate(rate)).toBe(rate)
+    }
   })
 
-  it("候補に無い速度は等倍へ戻す", () => {
-    expect(nextPlaybackRate(3.3)).toBe(1)
+  it("候補に無い値と数値でない値は等倍へ落とす", () => {
+    // 端末に残る速度は過去の版が書いた候補かもしれない。
+    expect(normalizePlaybackRate(3.3)).toBe(1)
+    expect(normalizePlaybackRate("1.5")).toBe(1)
+    expect(normalizePlaybackRate(undefined)).toBe(1)
+  })
+
+  it("選択肢は遅い順に並ぶ。開いた時に順序を読み替えずに済む", () => {
+    expect(PLAYBACK_RATES).toEqual([...PLAYBACK_RATES].toSorted())
+  })
+})
+
+describe("clampVolume", () => {
+  it("0〜1へ収める。範囲外を`<audio>`へ書くと要素が例外を投げる", () => {
+    expect(clampVolume(-0.5)).toBe(0)
+    expect(clampVolume(1.5)).toBe(1)
+    expect(clampVolume(0.3)).toBe(0.3)
+  })
+
+  it("数でない値は最大音量へ倒す。保存値が壊れても無音にはしない", () => {
+    expect(clampVolume(Number.NaN)).toBe(1)
   })
 })
 

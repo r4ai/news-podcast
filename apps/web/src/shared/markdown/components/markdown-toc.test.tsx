@@ -18,10 +18,25 @@ describe("MarkdownToc", () => {
       <MarkdownToc outline={outline(["章", 3], ["節", 4])} />
     )
 
-    // 字下げは軸の罫からの距離なので、項目ではなくリンクが持つ。
+    // 字下げは項目ではなくリンクが持つ。深い方が必ず内側へ入る。
     const links = Array.from(container.querySelectorAll("a"))
-    expect(links[0]?.className).toContain("pl-3")
-    expect(links[1]?.className).toContain("pl-6")
+    expect(links[0]?.className).toContain("pl-1.5")
+    expect(links[1]?.className).toContain("pl-3")
+  })
+
+  it("marks depth with a per-item marker instead of one continuous rule", () => {
+    // 通しの罫は、どの項目がどの節に属するかを示さないまま丈だけ伸ばす。
+    const { container } = render(
+      <MarkdownToc outline={outline(["章", 3], ["節", 4])} />
+    )
+
+    const list = container.querySelector("ol")
+    expect(list?.className).not.toContain("border-l")
+    const markers = Array.from(container.querySelectorAll("a > [aria-hidden]"))
+    expect(markers).toHaveLength(2)
+    // 上位は点、下位はそれ自体では立たない短い線。同じ形だと重みが揃う。
+    expect(markers[0]?.className).toContain("w-1.5")
+    expect(markers[1]?.className).toContain("h-px")
   })
 
   it("omits headings deeper than two levels so the toc stays scannable", () => {

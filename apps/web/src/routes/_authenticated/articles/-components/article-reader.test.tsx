@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import { createTestQueryClient, TestProviders } from "@/shared/test/render"
@@ -45,7 +46,6 @@ function renderReader(markdown: string) {
         isRecalculating={false}
         markdown={markdown}
         markUnread={noop}
-        onBack={noop}
         recalculateAi={asyncNoop}
         setSource={noop}
         source="markdown"
@@ -64,6 +64,16 @@ function renderReader(markdown: string) {
  */
 const PIPELINE_TIMEOUT = { timeout: 5_000 } as const
 
+/**
+ * 本文の前に置く、畳める目次の見出し。右のレールにも「目次」を含む操作が
+ * あるので、開閉を持つ方 (`aria-expanded`) で選り分ける。
+ */
+function inBodyTocTrigger(): HTMLElement | undefined {
+  return screen
+    .getAllByRole("button", { name: /目次/ })
+    .find((button) => button.hasAttribute("aria-expanded"))
+}
+
 describe("ArticleReaderView table of contents", () => {
   it("shows the toc once the body has enough headings to navigate", async () => {
     renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
@@ -75,42 +85,67 @@ describe("ArticleReaderView table of contents", () => {
         ).toBeGreaterThan(0),
       PIPELINE_TIMEOUT
     )
-    // 幅の広い右レールと、本文の前に畳んで置く器の2つ。どちらが見えるかは幅次第。
-    expect(screen.getAllByRole("button", { name: /目次/ })).toHaveLength(2)
+    // 本文の前に畳んで置く器と、右へ格納できるレール。どちらが見えるかは幅次第。
+    expect(inBodyTocTrigger()).toBeDefined()
+    expect(
+      screen.getByRole("button", { name: "目次を開いて固定する" })
+    ).toBeTruthy()
   })
 
-  it("collapses the in-body toc and keeps the rail open", async () => {
-    // 本文の前の器は畳んでおく。開いたまま置くと、記事を開くたびに本文が
-    // 目次の分だけ下へ押される。右レールは本文と並ぶので開いたままでよい。
+  it("collapses the in-body toc so opening an article does not push the body down", async () => {
     renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
 
-    await waitFor(
-      () =>
-        expect(screen.getAllByRole("button", { name: /目次/ })).toHaveLength(2),
-      PIPELINE_TIMEOUT
-    )
-    const expanded = screen
-      .getAllByRole("button", { name: /目次/ })
-      .map((trigger) => trigger.getAttribute("aria-expanded"))
-    expect(expanded).toEqual(["false", "true"])
+    const trigger = await waitFor(() => {
+      const found = inBodyTocTrigger()
+      if (found === undefined) throw new Error("目次はまだ組み上がっていない")
+      return found
+    }, PIPELINE_TIMEOUT)
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
   })
 
-  it("pins the rail so the toc follows while the body scrolls", async () => {
+  it("keeps the rail out of the flow until it is pinned, so the body keeps the width", async () => {
+    // 縦に畳んでも空いた1列は空いたまま。畳む方向を横にして、格納中は
+    // 本文の並びから外す。
     const { container } = renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
+    const user = userEvent.setup()
 
-    await waitFor(
-      () =>
-        expect(
-          screen.getAllByRole("navigation", { name: "目次" }).length
-        ).toBeGreaterThan(0),
+    const handle = await waitFor(
+      () => screen.getByRole("button", { name: "目次を開いて固定する" }),
       PIPELINE_TIMEOUT
     )
-    const rail = container.querySelector(".w-56")
+    expect(container.querySelector(".w-60")).toBeNull()
+
+    await user.click(handle)
+
+    const rail = container.querySelector(".w-60")
     expect(rail).not.toBeNull()
-    // flexの子は既定で親の高さまで伸びる。伸びた器の中でstickyにすると
-    // 追従できる範囲がその高さで尽きるので、器自身をstickyにする。
+    // 追従は器のこの枠が持つ。中身側をstickyにすると、動ける範囲が器の
+    // 高さで尽きる。
     expect(rail?.className).toContain("sticky")
     expect(rail?.className).toContain("self-start")
+    expect(
+      screen.queryByRole("button", { name: "目次を開いて固定する" })
+    ).toBeNull()
+  })
+
+  it("sends the pinned rail back off-screen from the same place that pinned it", async () => {
+    const { container } = renderReader("# 章\n\n本文\n\n# 別の章\n\n本文")
+    const user = userEvent.setup()
+
+    await user.click(
+      await waitFor(
+        () => screen.getByRole("button", { name: "目次を開いて固定する" }),
+        PIPELINE_TIMEOUT
+      )
+    )
+    await user.click(
+      screen.getByRole("button", { name: "目次を画面外へ格納する" })
+    )
+
+    expect(container.querySelector(".w-60")).toBeNull()
+    expect(
+      screen.getByRole("button", { name: "目次を開いて固定する" })
+    ).toBeTruthy()
   })
 
   it("leaves out the disclosure and the rail when the toc would be empty", async () => {
@@ -124,7 +159,6 @@ describe("ArticleReaderView table of contents", () => {
     )
     expect(screen.queryByRole("navigation", { name: "目次" })).toBeNull()
     expect(screen.queryByRole("button", { name: /目次/ })).toBeNull()
-    expect(container.querySelector(".w-56")).toBeNull()
   })
 
   it("leaves out the toc while the archive source is selected", async () => {
@@ -141,7 +175,6 @@ describe("ArticleReaderView table of contents", () => {
           isRecalculating={false}
           markdown={"# 章\n\n本文\n\n# 別の章"}
           markUnread={() => {}}
-          onBack={() => {}}
           recalculateAi={async () => {}}
           setSource={() => {}}
           source="archive"

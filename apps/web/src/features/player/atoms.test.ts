@@ -6,23 +6,27 @@ import {
   clearPersistedPlayback,
   currentEpisodeIdAtom,
   currentTrackAtom,
-  cyclePlaybackRateAtom,
   episodeAudioUrl,
   handleEndedAtom,
   handleLoadedMetadataAtom,
   handleTimeUpdateAtom,
   isPlayingAtom,
+  mutedAtom,
   pausePlaybackAtom,
   playEpisodeAtom,
   playbackDurationAtom,
   playbackPositionAtom,
   playbackRateAtom,
   progressEntryAtomFamily,
-  resumePlaybackAtom,
   progressMapAtom,
+  resumePlaybackAtom,
   seekToAtom,
+  setPlaybackRateAtom,
+  setVolumeAtom,
   skipByAtom,
+  toggleMutedAtom,
   togglePlaybackAtom,
+  volumeAtom,
   type PlayerTrack,
 } from "./atoms"
 import { listeningState } from "./model"
@@ -37,6 +41,8 @@ class FakeAudio {
   duration = Number.NaN
   paused = true
   playbackRate = 1
+  volume = 1
+  muted = false
   readonly play = vi.fn(() => {
     this.paused = false
     return Promise.resolve()
@@ -295,15 +301,82 @@ describe("seekToAtom / skipByAtom", () => {
   })
 })
 
-describe("cyclePlaybackRateAtom", () => {
-  it("速度を巡回させ、要素と保存値の両方へ反映する", () => {
+describe("setPlaybackRateAtom", () => {
+  it("選んだ速度を要素と保存値の両方へ反映する", () => {
     const { store, audio } = setup()
     store.set(playEpisodeAtom, track)
 
-    store.set(cyclePlaybackRateAtom)
-    const rate = store.get(playbackRateAtom)
-    expect(rate).toBeGreaterThan(1)
-    expect(audio.playbackRate).toBe(rate)
+    store.set(setPlaybackRateAtom, 1.5)
+
+    expect(store.get(playbackRateAtom)).toBe(1.5)
+    expect(audio.playbackRate).toBe(1.5)
+  })
+})
+
+describe("音量", () => {
+  it("音量を決めると要素へ届く", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+
+    store.set(setVolumeAtom, 0.4)
+
+    expect(store.get(volumeAtom)).toBe(0.4)
+    expect(audio.volume).toBe(0.4)
+    expect(audio.muted).toBe(false)
+  })
+
+  it("0まで絞る操作は消音と同じ意味にする", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+
+    store.set(setVolumeAtom, 0)
+
+    expect(store.get(mutedAtom)).toBe(true)
+    expect(audio.muted).toBe(true)
+  })
+
+  it("消音を切り替えても音量の記憶は残る", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    store.set(setVolumeAtom, 0.6)
+
+    store.set(toggleMutedAtom)
+    expect(audio.muted).toBe(true)
+    expect(store.get(volumeAtom)).toBe(0.6)
+
+    store.set(toggleMutedAtom)
+    expect(audio.muted).toBe(false)
+    expect(audio.volume).toBe(0.6)
+  })
+
+  it("0まで絞ったまま消音を解いたら、聞こえる音量まで戻す", () => {
+    // 消音だけ解いても音量が0のままでは何も鳴らず、操作が効いていないように
+    // 見える。
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    store.set(setVolumeAtom, 0)
+
+    store.set(toggleMutedAtom)
+
+    expect(store.get(mutedAtom)).toBe(false)
+    expect(store.get(volumeAtom)).toBeGreaterThan(0)
+    expect(audio.volume).toBeGreaterThan(0)
+  })
+
+  it("要素を繋いだ時点で、既に決まっている音量と消音を要素へ載せる", () => {
+    // リロード直後は保存値だけがあり、要素は既定値のまま立ち上がる。
+    const { store } = setup()
+    store.set(setVolumeAtom, 0.25)
+    store.set(toggleMutedAtom)
+    const replacement = new FakeAudio()
+
+    store.set(
+      attachAudioElementAtom,
+      replacement as unknown as HTMLAudioElement
+    )
+
+    expect(replacement.volume).toBe(0.25)
+    expect(replacement.muted).toBe(true)
   })
 })
 

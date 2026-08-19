@@ -4,14 +4,16 @@ import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils"
 import { recordBrowserEvent } from "@/shared/observability/events"
 import {
   clampTime,
+  clampVolume,
   FINISH_TAIL_SECONDS,
-  nextPlaybackRate,
+  normalizePlaybackRate,
   parseProgressMap,
   parsePlayerTrack,
   recordProgress,
   resumePosition,
   seekBy,
   type PlaybackEntry,
+  type PlaybackRate,
   type PlayerTrack,
   type ProgressMap,
 } from "./model"
@@ -72,6 +74,8 @@ function localStorageWith<Value>(
 const PROGRESS_STORAGE_KEY = "player.progress"
 const TRACK_STORAGE_KEY = "player.track"
 const RATE_STORAGE_KEY = "player.rate"
+const VOLUME_STORAGE_KEY = "player.volume"
+const MUTED_STORAGE_KEY = "player.muted"
 
 /**
  * 番組ごとの再生位置。**リロードを跨いで続きから聴ける**ようにするための
@@ -97,10 +101,36 @@ export const currentTrackAtom = atomWithStorage<PlayerTrack | null>(
   { getOnInit: true }
 )
 
-export const playbackRateAtom = atomWithStorage<number>(
+export const playbackRateAtom = atomWithStorage<PlaybackRate>(
   RATE_STORAGE_KEY,
   1,
-  localStorageWith((raw) => (typeof raw === "number" ? raw : undefined)),
+  localStorageWith((raw) =>
+    typeof raw === "number" ? normalizePlaybackRate(raw) : undefined
+  ),
+  { getOnInit: true }
+)
+
+/**
+ * 音量。速度と同じく個人ではなく端末の設定なので、番組を跨いで残す。
+ *
+ * `<audio>`の`volume`は0〜1で、これも要素側が正本。atomは写しを配るだけ。
+ */
+export const volumeAtom = atomWithStorage<number>(
+  VOLUME_STORAGE_KEY,
+  1,
+  localStorageWith((raw) =>
+    typeof raw === "number" ? clampVolume(raw) : undefined
+  ),
+  { getOnInit: true }
+)
+
+/**
+ * 消音。音量とは別に持つ。0へ絞って消すと、戻したときの音量が判らなくなる。
+ */
+export const mutedAtom = atomWithStorage<boolean>(
+  MUTED_STORAGE_KEY,
+  false,
+  localStorageWith((raw) => (typeof raw === "boolean" ? raw : undefined)),
   { getOnInit: true }
 )
 
@@ -116,6 +146,9 @@ export function clearPersistedPlayback(): void {
   localStorage.removeItem(TRACK_STORAGE_KEY)
   localStorage.removeItem(PROGRESS_STORAGE_KEY)
 }
+
+/** 0まで絞った状態から消音を解いたときに戻す音量。 */
+const RESTORED_VOLUME = 0.5
 
 export type PlaybackStatus = "idle" | "playing" | "paused" | "error"
 
@@ -175,6 +208,8 @@ export const attachAudioElementAtom = atom(
     set(audioElementAtom, element)
     if (element === null) return
     element.playbackRate = get(playbackRateAtom)
+    element.volume = get(volumeAtom)
+    element.muted = get(mutedAtom)
 
     // リロード直後。前回の番組をバーへ戻し、押せば続きから鳴る状態にする。
     const track = get(currentTrackAtom)
@@ -300,11 +335,40 @@ export const skipByAtom = atom(null, (get, set, offset: number) => {
   set(playbackPositionAtom, next)
 })
 
-export const cyclePlaybackRateAtom = atom(null, (get, set) => {
-  const rate = nextPlaybackRate(get(playbackRateAtom))
-  set(playbackRateAtom, rate)
+export const setPlaybackRateAtom = atom(
+  null,
+  (get, set, rate: PlaybackRate) => {
+    set(playbackRateAtom, rate)
+    const element = get(audioElementAtom)
+    if (element !== null) element.playbackRate = rate
+  }
+)
+
+/** 音量を決める。0まで絞る操作は消音と同じ意味なので、印も合わせる。 */
+export const setVolumeAtom = atom(null, (get, set, value: number) => {
+  const volume = clampVolume(value)
+  set(volumeAtom, volume)
+  set(mutedAtom, volume === 0)
   const element = get(audioElementAtom)
-  if (element !== null) element.playbackRate = rate
+  if (element === null) return
+  element.volume = volume
+  element.muted = volume === 0
+})
+
+/**
+ * 消音の切り替え。0まで絞ったまま消音を解くと音が戻らないので、
+ * その場合だけ最小限の音量へ引き上げる。
+ */
+export const toggleMutedAtom = atom(null, (get, set) => {
+  const muted = !get(mutedAtom)
+  set(mutedAtom, muted)
+  const restored =
+    muted || get(volumeAtom) > 0 ? get(volumeAtom) : RESTORED_VOLUME
+  set(volumeAtom, restored)
+  const element = get(audioElementAtom)
+  if (element === null) return
+  element.muted = muted
+  element.volume = restored
 })
 
 /** バーから降ろす。鳴っているものは止め、位置は記録に残す。 */

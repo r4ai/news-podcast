@@ -450,20 +450,26 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
   await expect(page.locator(`iframe[title="${article.title}"]`)).toHaveCount(0)
   expect(archiveErrors).toEqual([])
 
+  // 狭い幅でも操作列は題名の直下に居る。以前は画面下端へ固定していたが、
+  // 下端は下部ナビと再生バーの場所で、鳴らし始めると宙に浮いていた。
   await page.setViewportSize({ width: 390, height: 844 })
-  const mobileNavigation = page.getByRole("navigation", {
-    name: "モバイルナビゲーション",
-  })
   const saveButton = page.getByRole("button", { name: "保存", exact: true })
-  const [navigationBox, saveButtonBox] = await Promise.all([
-    mobileNavigation.boundingBox(),
+  const [titleBox, saveButtonBox] = await Promise.all([
+    page.getByRole("heading", { name: "保存された記事" }).boundingBox(),
     saveButton.boundingBox(),
   ])
-  expect(navigationBox).not.toBeNull()
+  expect(titleBox).not.toBeNull()
   expect(saveButtonBox).not.toBeNull()
-  expect(saveButtonBox!.y + saveButtonBox!.height).toBeLessThanOrEqual(
-    navigationBox!.y
-  )
+  expect(saveButtonBox!.y).toBeGreaterThanOrEqual(titleBox!.y)
+  // 記事の枠の中に居る。下端に浮いていないことは、これで足りる。
+  expect(
+    await saveButton.evaluate((node) => node.closest("article") !== null)
+  ).toBe(true)
+
+  // 一覧へ戻る導線は取得を待たない。表示境界の外にあるので、骨組みが出る
+  // 間も押せる位置に居る。
+  await expect(page.getByRole("button", { name: "一覧へ戻る" })).toBeVisible()
+
   await saveButton.click()
   await expect(saveButton).toHaveAttribute("aria-pressed", "true")
 })
@@ -598,10 +604,14 @@ test("the list header and date headings stay pinned while scrolling", async ({
   expect(headingBox!.y).toBeGreaterThanOrEqual(before!.y)
 })
 
-test("the reader toc stays pinned while the body scrolls", async ({ page }) => {
-  // 追従は「包む枠の高さ」で決まる。スクロール領域のflexの子は既定で領域の
-  // 高さまでしか伸びないので、伸ばされたままだと1画面で追従が尽きる。
-  // 実際に長い本文を送ってみないと分からない回帰なので、ここで確かめる。
+test("the reader toc folds sideways and pins into a column", async ({
+  page,
+}) => {
+  /*
+    畳む方向は横。縦に畳んでも空いた1列は空いたままで、本文は広がらない。
+    格納中は本文の並びから外れ、固定すると列になって追従する。追従は
+    「包む枠の高さ」で決まるので、実際に長い本文を送って確かめる。
+  */
   const article = {
     id: "00000000-0000-4000-8000-000000000050",
     feedId: "00000000-0000-4000-8000-000000000001",
@@ -650,19 +660,39 @@ test("the reader toc stays pinned while the body scrolls", async ({ page }) => {
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
   await page.getByRole("button", { name: /^目次のある長い記事/ }).click()
+  const body = page.getByRole("article", { name: "目次のある長い記事" })
   await expect(
     page.getByRole("heading", { name: "目次のある長い記事" })
   ).toBeVisible()
 
-  // 幅が足りる時だけ出る右レール。本文の前に畳んである器と2つあるので、
-  // 実際に見えている方を掴む。
-  const toc = page
-    .getByRole("navigation", { name: "目次" })
-    .filter({ visible: true })
-    .last()
-  await expect(toc.getByRole("link", { name: "最後の節" })).toBeVisible()
-  const before = await toc.boundingBox()
+  // 格納中は目次の列が無いので、本文はその分だけ広い。
+  const handle = page.getByRole("button", { name: "目次を開いて固定する" })
+  await expect(handle).toBeVisible()
+  const wideBody = await body.boundingBox()
 
+  // 右端の掴み代へ触れると、覆いとして滑り出す。
+  await handle.hover()
+  const floating = page.getByRole("navigation", { name: "目次" })
+  await expect(floating.getByRole("link", { name: "最後の節" })).toBeVisible()
+  const viewport = page.viewportSize()!
+  // 滑り込みはtransformの補間なので、収まりきるまで待ってから測る。
+  await expect
+    .poll(async () => {
+      const box = await floating.boundingBox()
+      return box === null ? Number.POSITIVE_INFINITY : box.x + box.width
+    })
+    .toBeLessThanOrEqual(viewport.width + 1)
+  // 覆いなので、本文の幅はまだ変わらない。
+  expect((await body.boundingBox())!.width).toBe(wideBody!.width)
+
+  // 見出しの行を押すと列として固定され、本文はその分だけ狭くなる。
+  await page.getByRole("button", { name: "目次を固定して常に表示する" }).click()
+  await expect(handle).toHaveCount(0)
+  const pinnedBody = await body.boundingBox()
+  expect(pinnedBody!.width).toBeLessThan(wideBody!.width)
+
+  const toc = page.getByRole("navigation", { name: "目次" })
+  const before = await toc.boundingBox()
   const scrolled = await page.evaluate(() => {
     const reader = [...document.querySelectorAll("div")].find(
       (node) =>
@@ -680,6 +710,11 @@ test("the reader toc stays pinned while the body scrolls", async ({ page }) => {
   expect(after).not.toBeNull()
   expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(1)
   await expect(toc).toBeInViewport()
+
+  // 同じ場所を押すと画面外へ戻り、本文の幅も戻る。
+  await page.getByRole("button", { name: "目次を画面外へ格納する" }).click()
+  await expect(handle).toBeVisible()
+  expect((await body.boundingBox())!.width).toBe(wideBody!.width)
 })
 
 test("development login to generated episode playback completes", async ({
