@@ -52,11 +52,30 @@ export type SubscriptionItemProps = {
 
 function statusText(subscription: Subscription, job: FeedSyncJob | undefined) {
   if (job && isFeedSyncActive(job)) return "同期中…"
-  if (job?.status === "failed") return "前回の同期に失敗しました"
-  if (job?.status === "succeeded" && job.failed > 0)
-    return `前回の同期で${job.failed}件の記事を取得できませんでした`
+  const reason = syncFailureReason(job?.error)
+  if (job?.status === "failed")
+    return `前回の同期に失敗しました${reason === undefined ? "" : `（理由: ${reason}）`}`
+  if (job?.status === "succeeded" && job.failed > 0) {
+    const summary = `前回の同期で${job.failed}件の記事を取得できませんでした`
+    return `${summary}${reason === undefined ? "" : `（理由: ${reason}）`}`
+  }
   return subscription.enabled ? "生成対象" : "一時停止中"
 }
+
+const sanitizedFailureReasons: Readonly<Record<string, string>> = {
+  InvalidItem: "項目形式不正",
+  InvalidUrl: "URL不正",
+  MissingLink: "リンク欠落",
+  MissingTitle: "タイトル欠落",
+  TitleTooLong: "タイトル長超過",
+}
+
+const syncFailureReason = (
+  error: string | null | undefined
+): string | undefined =>
+  error === undefined || error === null
+    ? undefined
+    : sanitizedFailureReasons[error]
 
 export function SubscriptionItem({
   disabled,

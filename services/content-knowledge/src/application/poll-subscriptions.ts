@@ -1,7 +1,11 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
-import type { FeedFetchError, RssFeedReader } from "./ports/article-catalog.js"
+import type {
+  FeedFetchError,
+  FeedItemValidationFailure,
+  RssFeedReader,
+} from "./ports/article-catalog.js"
 import {
   ArchiveCommandSchema,
   type Sha256,
@@ -32,8 +36,8 @@ export type FeedPollFailure = DeepReadonly<{
   readonly scope: "Feed" | "Item"
   readonly reason:
     | FeedFetchError["reason"]
+    | FeedItemValidationFailure["reason"]
     | "ArchiveFailed"
-    | "InvalidItem"
     | "CatalogFailed"
 }>
 
@@ -121,9 +125,9 @@ export const pollFeed =
   (ports: PollSubscriptionsPorts) =>
   (feed: { readonly feedId: FeedId; readonly feedUrl: FeedUrl }) =>
     ports.reader.read(feed.feedUrl).pipe(
-      Effect.flatMap((items) =>
+      Effect.flatMap((readResult) =>
         Effect.forEach(
-          items,
+          readResult.items,
           (item) => {
             const identity = ports.deriveArticleIdentity({
               feedId: feed.feedId,
@@ -197,7 +201,15 @@ export const pollFeed =
             )
           },
           { concurrency: 1 }
-        ).pipe(Effect.map((results) => results.reduce(combine, empty())))
+        ).pipe(
+          Effect.map((results) =>
+            readResult.failures.reduce(
+              (result, failure) =>
+                combine(result, oneFailure(failure.reason, "Item", 1)),
+              results.reduce(combine, empty())
+            )
+          )
+        )
       ),
       Effect.match({
         onFailure: (failure): FeedPollResult =>

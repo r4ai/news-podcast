@@ -52,6 +52,78 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(
 ) => Schema.decodeUnknownSync(schema)(value)
 
 describe("pollSubscriptions integration", () => {
+  it("counts invalid RSS items without blocking valid siblings", async () => {
+    const server = createServer((_request, response) =>
+      response.end(`<rss><channel>
+        <item><guid>valid</guid><title>Valid</title><link>https://news.example.com/valid</link></item>
+        <item><guid>invalid</guid><title>Missing link</title></item>
+      </channel></rss>`)
+    )
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (address === null || typeof address === "string")
+      throw new Error("missing address")
+    const feedUrl = decode(
+      FeedUrlSchema,
+      `http://127.0.0.1:${address.port}/feed.xml`
+    )
+
+    const result = await Effect.runPromise(
+      pollSubscriptions({
+        subscriptions: {
+          listFeedsForPolling: () =>
+            Effect.succeed([
+              {
+                feedId: decode(
+                  FeedIdSchema,
+                  "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd"
+                ),
+                feedUrl,
+              },
+            ]),
+        },
+        reader: createHttpRssFeedReader({
+          timeoutMillis: 1_000,
+          maximumBytes: 8_192,
+        }),
+        archive: () => Effect.succeed({ _tag: "Archived" as const } as never),
+        deriveArticleIdentity: () =>
+          deepFreeze({
+            archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93" as never,
+            articleId: "5af55f2e-ff0b-475c-866a-f2cff48c101d" as never,
+          }),
+        newContext: () =>
+          deepFreeze({
+            messageId: "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4" as never,
+            correlationId: "ea122752-73d0-4851-9664-7d3e63e76859" as never,
+            traceparent:
+              "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" as never,
+            actor: {
+              _tag: "Service",
+              service: "content-knowledge",
+            } as never,
+          }),
+        now: () => "2026-08-13T01:01:00.000Z",
+      })()
+    )
+
+    expect(result).toEqual({
+      feeds: 1,
+      discovered: 2,
+      archived: 1,
+      alreadyArchived: 0,
+      failed: 1,
+      failures: [
+        {
+          _tag: "FeedPollFailed",
+          scope: "Item",
+          reason: "MissingLink",
+        },
+      ],
+    })
+  })
+
   it("keeps retries idempotent but snapshots an updated same-GUID item", async () => {
     let version = "v1"
     const server = createServer((_request, response) =>
@@ -234,7 +306,7 @@ describe("pollSubscriptions integration", () => {
       .mockReturnValueOnce(
         Effect.fail({ _tag: "FeedFetchFailed", reason: "Timeout" })
       )
-      .mockReturnValueOnce(Effect.succeed([]))
+      .mockReturnValueOnce(Effect.succeed({ items: [], failures: [] }))
     const result = await Effect.runPromise(
       pollSubscriptions({
         subscriptions: subscriptions as never,
@@ -273,13 +345,16 @@ describe("pollSubscriptions integration", () => {
         },
         reader: {
           read: () =>
-            Effect.succeed([
-              {
-                externalId: "item-1",
-                url: "https://news.example.com/item-1",
-                title: "Unavailable article",
-              },
-            ] as never),
+            Effect.succeed({
+              items: [
+                {
+                  externalId: "item-1",
+                  url: "https://news.example.com/item-1",
+                  title: "Unavailable article",
+                },
+              ],
+              failures: [],
+            } as never),
         },
         archive: () =>
           Effect.fail({ _tag: "CaptureFailed", reason: "Unavailable" }),
@@ -340,13 +415,16 @@ describe("pollSubscriptions integration", () => {
         },
         reader: {
           read: () =>
-            Effect.succeed([
-              {
-                externalId: "item-1",
-                url: "https://news.example.com/item-1",
-                title: "Catalog write failure",
-              },
-            ] as never),
+            Effect.succeed({
+              items: [
+                {
+                  externalId: "item-1",
+                  url: "https://news.example.com/item-1",
+                  title: "Catalog write failure",
+                },
+              ],
+              failures: [],
+            } as never),
         },
         archive,
         deriveArticleIdentity: () =>
