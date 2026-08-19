@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-15
 - Amended: 2026-08-20（Issue #44: Production RPCのnested connectionを除去）
+- Amended: 2026-08-20（Issue #5: persisted JSONのstrict decodingを共通化）
 - Decision owners: Platform
 - Supersedes: N/A
 - Superseded by: N/A
@@ -34,6 +35,7 @@
 - サービスごとに独立した `drizzle/schema.ts` を持ち、サービス間で共有しない
 - 接続は**サービスプロセスにつき1本**。`@news-podcast/persistence` が確立規則を一元化する
 - Episode Productionのprocess rootが接続をopen/closeし、同居するRPC、worker、relay、schedulerは同じDrizzle databaseを注入で共有する。単独起動用RPCだけは自身のscopeで1本を所有する
+- JSON保存値は `@news-podcast/persistence` の `decodePersistedJson` / `decodePersistedJsonSync` でJSON構文とEffect Schemaを同時検証し、excess propertyも拒否する。失敗には保存内容を含めず、`operation` と `CorruptRecord` だけを返す
 - 起動時DDLは全廃し、`bootstrap.ts` がマイグレーションを適用する
 - テストは本番と同一のマイグレーションでDBを構築する
 - drizzle-kit が生成できない `STRICT` はマイグレーションSQLへ手で追記し、
@@ -63,6 +65,7 @@
 - 接続確立・PRAGMA規則・DB span属性が1箇所に集約された
 - 接続跨ぎの外部キー宣言という不整合が解消した
 - RPCとworkerが同じconnectionとtransaction規則を共有し、同一pathのnested openを行わない
+- Productionのjob/plan/checkpoint/dictionary/event/outbox、Contentのarticle snapshot、watchdog stateが同じstrict decode規則とredacted failureを使う
 - ネイティブ依存ゼロのため Dockerfile とサプライチェーン方針は無変更
 
 ### 欠点とリスク
@@ -80,12 +83,12 @@
 | 設計書 | 永続化層とディレクトリ構成の記述を更新 | Done | `docs/architecture.md` |
 | ドメイン/ユースケース | 変更なし（境界での再検証は維持） | Done | `services/*/src/domain` |
 | OpenAPI/外部契約 | 変更なし | Done | `pnpm contract:check` |
-| コード/ポート | 全サービスの永続化アダプタを移植し、Production RPCへprocess-owned databaseを注入 | Done | `services/*/src/adapters/persistence`、`runtime/service.ts`、`runtime/node.ts` |
+| コード/ポート | 全サービスの永続化アダプタを移植し、Production RPCへprocess-owned databaseを注入。persisted JSON decoderを共通化 | Done | `services/*/src/adapters/persistence`、`packages/persistence/src/json.ts`、`runtime/service.ts`、`runtime/node.ts` |
 | データ/ストレージ | 初期マイグレーションを各サービスに追加。既存volumeは作り直し | Done | `services/*/drizzle/migrations` |
 | 実行/配備 | Dockerfile は無変更。`packages/persistence` を COPY 対象へ追加 | Done | `infra/Dockerfile.node` |
 | 認証/セキュリティ | Better Auth は自身のテーブルを所有し続ける | Done | `services/identity-access/drizzle/schema.ts` |
 | フロント/品質保証 | 変更なし | Done | N/A |
-| テスト/運用 | schemaと、prebuilt in-memory databaseへRPC結果が保存されることを固定 | Done | schema tests、`runtime/node.test.ts` |
+| テスト/運用 | schema、共有DB、正常・旧形式・破損JSONとredactionを固定 | Done | schema tests、`packages/persistence/src/json.test.ts`、`persisted-json.test.ts`、`runtime/node.test.ts` |
 
 ## 再検討条件
 
@@ -103,3 +106,11 @@
 - 各サービスの `src/adapters/persistence/schema.test.ts`
 - Red: process rootのDBをRPCへ渡す入口がなく、RPCが同じpathを再openした
 - Green: prebuilt in-memory DBで全RPC surfaceを実行し、同じconnectionへjobが保存された
+- Red: valid JSONだが不正形状の`selected_articles`と非UUIDの旧IDが下位境界を通過した
+- Green: 構文・Schema不一致を決定的な`CorruptRecord`へ変換し、failureから保存内容を除外した
+
+## JSON互換性方針
+
+- 現行Schemaと一致する保存値はbrand/日時変換を復元してdomainへ渡す
+- materialization導入前の `selected_articles=[]` は `selected_article_ids` から復元する既存互換経路を維持する
+- それ以外の旧形式、excess property、brand不一致、破損JSONは自動補正しない。非retryable `CorruptRecord` として停止し、backupからの復元または検証済みmigrationで修復する

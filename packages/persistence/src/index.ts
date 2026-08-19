@@ -11,7 +11,9 @@ export {
 export {
   classifyDatabaseFailure,
   databaseError,
+  isDatabaseError,
   type DatabaseError,
   type DatabaseFailureReason,
 } from "./errors.js"
+export { decodePersistedJson, decodePersistedJsonSync } from "./json.js"
 export { databaseSpanOptions, type DatabaseSpanOptions } from "./span.js"

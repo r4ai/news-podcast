@@ -1,4 +1,9 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
+import {
+  decodePersistedJson,
+  decodePersistedJsonSync,
+  isDatabaseError,
+} from "@news-podcast/persistence"
 import { and, desc, eq, inArray, notInArray, sql, type SQL } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
@@ -20,7 +25,6 @@ import type {
 } from "../../../application/ports/article-catalog.js"
 import { ArticleSnapshotSchema } from "../../../domain/article.js"
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
-import type { JsonInterop } from "../json-interop.js"
 import { latestSnapshotOfArticle } from "../latest-article-snapshot.js"
 
 const RowSchema = Schema.Struct({
@@ -50,8 +54,7 @@ const projection = {
 const sortKey = sql`COALESCE(${feedItems.publishedAt}, ${feedItems.discoveredAt})`
 
 export const createArticleCatalog = (
-  database: ContentKnowledgeDatabase,
-  jsonInterop: Pick<JsonInterop, "parse">
+  database: ContentKnowledgeDatabase
 ): Effect.Effect<ArticleCatalog, ArticleCatalogError> =>
   Effect.sync(() => {
     /**
@@ -123,11 +126,11 @@ export const createArticleCatalog = (
       Effect.forEach(rows, (row) =>
         parseRow(row).pipe(
           Effect.flatMap((parsed) =>
-            Effect.try({
-              try: () => jsonInterop.parse(parsed.snapshotJson),
-              catch: () => failure("Find", "CorruptRecord"),
-            }).pipe(
-              Effect.flatMap((json) => parse(ArticleSnapshotSchema)(json)),
+            decodePersistedJson(
+              "article_snapshots.snapshot_json",
+              ArticleSnapshotSchema,
+              parsed.snapshotJson
+            ).pipe(
               Effect.map((snapshot) => ({
                 snapshot,
                 publishedAt: parsed.publishedAt,
@@ -169,8 +172,10 @@ export const createArticleCatalog = (
             const latestSnapshot =
               latest === undefined
                 ? undefined
-                : Schema.decodeUnknownSync(ArticleSnapshotSchema)(
-                    jsonInterop.parse(latest.snapshotJson)
+                : decodePersistedJsonSync(
+                    "article_snapshots.snapshot_json",
+                    ArticleSnapshotSchema,
+                    latest.snapshotJson
                   )
             const captureRequired =
               input.captureFingerprint !== undefined &&
@@ -236,7 +241,13 @@ export const createArticleCatalog = (
                 : ("Unchanged" as const),
             })
           }),
-        catch: () => failure("Upsert"),
+        catch: (cause) =>
+          failure(
+            "Upsert",
+            isDatabaseError(cause) && cause.reason === "CorruptRecord"
+              ? "CorruptRecord"
+              : "Unavailable"
+          ),
       })
 
     const markCaptured: ArticleCatalog["markCaptured"] = (input) =>

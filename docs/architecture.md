@@ -330,10 +330,23 @@ DBアクセスは全service で **Drizzle ORM** に統一する（[ADR-0043](adr
 | 接続確立・PRAGMA・span属性 | `@news-podcast/persistence` |
 | driver接触面 | `services/<svc>/src/infrastructure/unsafe/drizzle/open.ts` |
 | query | `services/<svc>/src/adapters/persistence/<集約>/` |
+| JSON保存値の復号 | `@news-podcast/persistence` のstrict decoder（構文 + Schema + excess property拒否） |
 
 接続はservice processにつき1本である。process composition rootだけがopen/closeを所有し、同居するRPC・worker・relay・schedulerへ同じDrizzle databaseを注入する。単独起動するruntimeは自身のscopeで1本だけを所有する。起動時DDL（`CREATE TABLE IF NOT EXISTS`）は存在せず、`bootstrap.ts` がmigrationを適用する。testも本番と同一のmigrationでDBを構築するため、test用schemaが本番から乖離する余地はない。
 
 drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`sqlite_master` を検査する `schema.test.ts` で固定する。
+
+JSON保存値は読込直後にstrict decodeし、domainへ渡す前にowner/job/episode/articleなどのbrandと日時を復元する。構文不正・Schema不一致・未対応の旧形式は、値をログやfailureへ含めず`CorruptRecord`へ分類する。互換対応はfieldごとに明示し、Productionではmaterialization導入前の空`selected_articles`だけを`selected_article_ids`から復元する。
+
+```mermaid
+flowchart LR
+  Stored[SQLite / state file JSON] --> Syntax[JSON syntax]
+  Syntax --> Strict[Effect Schema strict decode]
+  Strict --> Brand[brand + domain value]
+  Syntax -->|failure| Corrupt[CorruptRecord]
+  Strict -->|failure| Corrupt
+  Corrupt --> Safe[operationのみ記録]
+```
 
 `episode_jobs`はjob状態機械を実カラムへ正規化しており、状態更新と`episode_job_agui_events`追記はtriggerではなく書き込み側が同一transactionで行う（[ADR-0044](adr/0044-normalized-episode-job-state.md)、[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)）。
 

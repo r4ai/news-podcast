@@ -21,6 +21,18 @@ export const databaseError = (
   reason: DatabaseFailureReason = "Unavailable"
 ): DatabaseError => deepFreeze({ _tag: "DatabaseFailed", operation, reason })
 
+export const isDatabaseError = (input: unknown): input is DatabaseError =>
+  typeof input === "object" &&
+  input !== null &&
+  "_tag" in input &&
+  input._tag === "DatabaseFailed" &&
+  "operation" in input &&
+  typeof input.operation === "string" &&
+  "reason" in input &&
+  ["Unavailable", "ConstraintViolated", "CorruptRecord"].includes(
+    String(input.reason)
+  )
+
 const constraintMarkers = [
   "SQLITE_CONSTRAINT",
   "UNIQUE constraint failed",

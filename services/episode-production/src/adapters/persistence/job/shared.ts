@@ -1,4 +1,6 @@
 import { and, asc, eq } from "drizzle-orm"
+import { decodePersistedJsonSync } from "@news-podcast/persistence"
+import { Schema } from "effect"
 
 import {
   runErrorEvent,
@@ -17,6 +19,7 @@ import {
   episodeJobAguiEvents,
 } from "../../../../drizzle/schema.js"
 import type { QueryRunner } from "../../../infrastructure/unsafe/drizzle/open.js"
+import { ArticleIdSchema } from "../../../domain/episode-job.js"
 import {
   documentToRow,
   rowToDocument,
@@ -25,6 +28,18 @@ import {
 
 /** 実行が進行しうる状態。ここに無い状態は終端で、もう遷移しない。 */
 export const ACTIVE_STATUSES = ["Queued", "Running", "Retrying"] as const
+
+const PersistedArticleIdsSchema = Schema.Array(ArticleIdSchema).check(
+  Schema.isMaxLength(20),
+  Schema.isUnique()
+)
+const PersistedSelectedArticlesSchema = Schema.Array(
+  Schema.Struct({
+    articleId: ArticleIdSchema,
+    title: Schema.String,
+    sourceName: Schema.String,
+  })
+).check(Schema.isMaxLength(20))
 
 export const selectJob = (runner: QueryRunner) =>
   runner.select().from(episodeJobs)
@@ -72,17 +87,19 @@ export const progressStateOf = (
   const plannedArticles =
     plan === undefined
       ? requestedIds.map((articleId) => ({ articleId }))
-      : (JSON.parse(plan.selectedArticles) as readonly Readonly<{
-          articleId: string
-          title: string
-          sourceName: string
-        }>[])
+      : decodePersistedJsonSync(
+          "episode_generation_plans.selected_articles",
+          PersistedSelectedArticlesSchema,
+          plan.selectedArticles
+        )
   const selectedArticles =
     plannedArticles.length > 0
       ? plannedArticles
-      : (JSON.parse(plan?.selectedArticleIds ?? "[]") as readonly string[]).map(
-          (articleId) => ({ articleId })
-        )
+      : decodePersistedJsonSync(
+          "episode_generation_plans.selected_article_ids",
+          PersistedArticleIdsSchema,
+          plan?.selectedArticleIds ?? "[]"
+        ).map((articleId) => ({ articleId }))
   const status = row.status.toLowerCase() as ProgressState["status"]
   return {
     jobId: row.jobId,

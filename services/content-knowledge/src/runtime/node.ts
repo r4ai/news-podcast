@@ -46,10 +46,7 @@ import {
   randomSyncJobIdUnsafe,
   randomTagIdUnsafe,
 } from "../infrastructure/unsafe/identity.js"
-import {
-  parseJsonUnsafe,
-  stringifyJsonUnsafe,
-} from "../infrastructure/unsafe/json.js"
+import { stringifyJsonUnsafe } from "../infrastructure/unsafe/json.js"
 import {
   openContentKnowledgeDatabaseUnsafe,
   type ContentKnowledgeDatabaseHandle,
@@ -263,7 +260,6 @@ const defaultDependencies: NodeRuntimeDependencies = deepFreeze({
   newEnrichmentLeaseToken: randomEnrichmentLeaseTokenUnsafe,
 })
 const jsonInterop = deepFreeze({
-  parse: parseJsonUnsafe,
   stringify: stringifyJsonUnsafe,
 })
 
@@ -296,7 +292,7 @@ export const startNodeRuntime = (
             Effect.mapError(() => runtimeError("Sqlite")),
             Effect.flatMap((store) =>
               Effect.all([
-                createArticleCatalog(handle.database, jsonInterop),
+                createArticleCatalog(handle.database),
                 createArticleLibrary(handle.database),
                 createSubscriptionRepository(handle.database),
                 createContentTaxonomyRepository(handle.database),

@@ -5,6 +5,7 @@ import { dirname } from "node:path"
 import { watchdogTargets } from "./config.js"
 import { watchdogMetrics } from "./metrics.js"
 import { createWatchdogNotifier } from "./notifier.js"
+import { decodeWatchdogState } from "./state.js"
 import { checkWatchdog, type WatchdogState } from "./watchdog.js"
 
 const statePath =
@@ -95,7 +96,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 async function loadState(): Promise<WatchdogState> {
   try {
-    return JSON.parse(await readFile(statePath, "utf8")) as WatchdogState
+    return decodeWatchdogState(await readFile(statePath, "utf8"))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT")
       return { failures: {} }

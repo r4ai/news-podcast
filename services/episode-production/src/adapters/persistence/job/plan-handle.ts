@@ -1,4 +1,6 @@
 import { and, eq } from "drizzle-orm"
+import { decodePersistedJsonSync } from "@news-podcast/persistence"
+import { Schema } from "effect"
 
 import {
   episodeDictionarySnapshots,
@@ -7,8 +9,17 @@ import {
   episodeJobs,
 } from "../../../../drizzle/schema.js"
 import type { ProductionDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
+import { ArticleIdSchema } from "../../../domain/episode-job.js"
+import { GenerationPlanSchema } from "../../../domain/generation-plan.js"
 import type { JobPlanHandle, StoredCheckpointRow } from "./ports.js"
 import { leaseHolder } from "./shared.js"
+
+const PersistedArticleIdsSchema = Schema.Array(ArticleIdSchema).check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(20),
+  Schema.isUnique()
+)
+const PersistedGenerationPlanSchema = Schema.toEncoded(GenerationPlanSchema)
 
 const generationPlanDocument = (row: {
   readonly jobId: string
@@ -28,7 +39,11 @@ const generationPlanDocument = (row: {
       include: row.profileInclude,
       exclude: row.profileExclude,
     },
-    selectedArticleIds: JSON.parse(row.selectedArticleIds) as unknown,
+    selectedArticleIds: decodePersistedJsonSync(
+      "episode_generation_plans.selected_article_ids",
+      PersistedArticleIdsSchema,
+      row.selectedArticleIds
+    ),
     model: row.model,
     createdAt: row.createdAt,
   })
@@ -78,7 +93,13 @@ export const makeJobPlanHandle = (
       .all()
     return [
       ...new Set(
-        rows.flatMap((row) => JSON.parse(row.articleIds) as readonly string[])
+        rows.flatMap((row) =>
+          decodePersistedJsonSync(
+            "episode_generation_plans.selected_article_ids",
+            PersistedArticleIdsSchema,
+            row.articleIds
+          )
+        )
       ),
     ]
   },
@@ -88,14 +109,11 @@ export const makeJobPlanHandle = (
       if (leaseHolder(tx, input.jobId, input.leaseToken) === undefined) {
         return { _tag: "StaleLease" as const }
       }
-      const plan = JSON.parse(input.plan) as {
-        ownerId: string
-        selectionMode: "automatic" | "manual"
-        interestProfile: { include: string; exclude: string }
-        selectedArticleIds: readonly string[]
-        model: string
-        createdAt: string
-      }
+      const plan = decodePersistedJsonSync(
+        "episode_generation_plans.plan",
+        PersistedGenerationPlanSchema,
+        input.plan
+      )
       tx.insert(episodeGenerationPlans)
         .values({
           jobId: input.jobId,
