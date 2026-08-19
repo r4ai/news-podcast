@@ -64,6 +64,7 @@ export const feedItems = sqliteTable(
     title: text("title").notNull(),
     publishedAt: text("published_at"),
     discoveredAt: text("discovered_at").notNull(),
+    captureFingerprint: text("capture_fingerprint"),
   },
   (table) => [
     unique("feed_items_feed_external").on(table.feedId, table.externalId),

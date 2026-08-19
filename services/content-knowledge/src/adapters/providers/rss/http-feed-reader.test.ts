@@ -48,6 +48,7 @@ describe("HTTP RSS feed reader", () => {
     expect(items).toEqual([
       {
         externalId: "entry-1",
+        captureFingerprint: expect.stringMatching(/^[\da-f]{64}$/),
         title: "One & Two",
         url: new URL("/articles/1", url).href,
       },
@@ -73,6 +74,7 @@ describe("HTTP RSS feed reader", () => {
     expect(items).toEqual([
       {
         externalId: "https://example.com/articles/1",
+        captureFingerprint: expect.stringMatching(/^[\da-f]{64}$/),
         title: "CDATA title",
         url: "https://example.com/articles/1",
       },
@@ -102,6 +104,7 @@ describe("HTTP RSS feed reader", () => {
     expect(items).toEqual([
       {
         externalId: "https://example.com/articles/1",
+        captureFingerprint: expect.stringMatching(/^[\da-f]{64}$/),
         title: "One & Two",
         url: "https://example.com/articles/1",
       },
@@ -128,10 +131,59 @@ describe("HTTP RSS feed reader", () => {
     expect(items).toEqual([
       {
         externalId: "entry-1",
+        captureFingerprint: expect.stringMatching(/^[\da-f]{64}$/),
         title: "Stable",
         url: "https://example.com/articles/1",
       },
     ])
+  })
+
+  it("changes the capture fingerprint when same-GUID RSS content is updated", async () => {
+    let version = "v1"
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/rss+xml")
+      response.end(`<rss><channel><item>
+        <guid>entry-1</guid><title>Stable identity</title>
+        <description>Body ${version}</description>
+        <link>https://example.com/articles/1</link>
+      </item></channel></rss>`)
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const first = (await Effect.runPromise(reader.read(url)))[0]!
+    const retry = (await Effect.runPromise(reader.read(url)))[0]!
+    version = "v2"
+    const updated = (await Effect.runPromise(reader.read(url)))[0]!
+
+    expect(retry.captureFingerprint).toBe(first.captureFingerprint)
+    expect(updated.externalId).toBe(first.externalId)
+    expect(updated.captureFingerprint).not.toBe(first.captureFingerprint)
+    expect(first.captureFingerprint).toMatch(/^[\da-f]{64}$/)
+  })
+
+  it("fingerprints structured Atom content attributes and element names", async () => {
+    let href = "https://example.com/v1"
+    const url = await serve((_request, response) => {
+      response.setHeader("content-type", "application/atom+xml")
+      response.end(`<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+        <id>entry-1</id><title>Stable</title>
+        <link href="https://example.com/article"/>
+        <content type="xhtml"><div><a href="${href}">same text</a></div></content>
+      </entry></feed>`)
+    })
+    const reader = createHttpRssFeedReader({
+      timeoutMillis: 1_000,
+      maximumBytes: 8_192,
+    })
+
+    const first = (await Effect.runPromise(reader.read(url)))[0]!
+    href = "https://example.com/v2"
+    const updated = (await Effect.runPromise(reader.read(url)))[0]!
+
+    expect(updated.captureFingerprint).not.toBe(first.captureFingerprint)
   })
 
   it("supports namespaced Atom entries and chooses the alternate link", async () => {
@@ -158,6 +210,7 @@ describe("HTTP RSS feed reader", () => {
     expect(items).toEqual([
       {
         externalId: "tag:example.com,2026:1",
+        captureFingerprint: expect.stringMatching(/^[\da-f]{64}$/),
         title: "Atom item",
         url: new URL("/articles/1", url).href,
         publishedAt: "2026-08-13T01:00:00.000Z",

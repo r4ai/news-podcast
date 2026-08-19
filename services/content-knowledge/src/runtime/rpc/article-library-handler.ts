@@ -90,9 +90,10 @@ export type ArticleLibraryHandlerDependencies = Readonly<{
   readonly articles: ArticleLibraryRepository
   readonly objects: MarkdownObjectReader
   readonly now: () => CapturedAt
-  readonly deriveArchiveRequestId: (
-    articleId: Schema.Schema.Type<typeof ArticleIdSchema>
-  ) => ArchiveRequestId
+  readonly deriveArchiveRequestId: (input: {
+    readonly articleId: Schema.Schema.Type<typeof ArticleIdSchema>
+    readonly messageId: ArchiveMessageContext["messageId"]
+  }) => ArchiveRequestId
   readonly archive: (
     invocation: ArchiveArticleInvocation
   ) => Effect.Effect<ArchiveArticleResult, ArchiveStoreError | CaptureError>

@@ -1,11 +1,13 @@
 import { XMLParser } from "fast-xml-parser"
 import { deepFreeze } from "@news-podcast/kernel"
+import { createHash } from "node:crypto"
 
 import type {
   FeedItem,
   FeedFetchError,
 } from "../../../application/ports/article-catalog.js"
 import type { FeedUrl } from "../../../domain/subscription.js"
+import type { Sha256 } from "../../../domain/article.js"
 
 type XmlObject = Readonly<Record<string, unknown>>
 
@@ -42,6 +44,21 @@ const textField = (node: XmlObject, name: string): string | undefined => {
 const attribute = (node: XmlObject, name: string): string | undefined => {
   const value = xmlText(node[`@_${name}`]).trim()
   return value === "" ? undefined : value
+}
+
+/** Preserves element names, attributes, array order, and text deterministically. */
+const canonicalXml = (value: unknown): unknown => {
+  if (value === undefined || value === null) return null
+  if (typeof value === "string" || typeof value === "number")
+    return String(value)
+  if (Array.isArray(value)) return value.map(canonicalXml)
+  const object = asObject(value)
+  if (object === undefined) return String(value)
+  return Object.fromEntries(
+    Object.keys(object)
+      .sort()
+      .map((key) => [key, canonicalXml(object[key])])
+  )
 }
 
 const parseDate = (value: string | undefined): string | undefined => {
@@ -131,14 +148,29 @@ const parseItem = (node: XmlObject, feedUrl: FeedUrl): FeedItem | undefined => {
       textField(node, "id") ??
       attribute(node, "about") ??
       url.href
-    const publishedAt = parseDate(
+    const explicitPublishedAt = parseDate(
       textField(node, "pubDate") ??
         textField(node, "published") ??
-        textField(node, "updated") ??
         textField(node, "date")
     )
+    const updatedAt = parseDate(textField(node, "updated"))
+    const publishedAt = explicitPublishedAt ?? updatedAt
+    const captureFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          title,
+          url: url.href,
+          publishedAt: explicitPublishedAt ?? null,
+          updatedAt: updatedAt ?? null,
+          content: ["description", "content", "encoded", "summary"].map(
+            (name) => ({ name, value: canonicalXml(node[name]) })
+          ),
+        })
+      )
+      .digest("hex") as Sha256
     return deepFreeze({
       externalId: externalId.slice(0, 2_048),
+      captureFingerprint,
       title,
       url: url.href,
       ...(publishedAt === undefined ? {} : { publishedAt }),

@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import type { FeedFetchError, RssFeedReader } from "./ports/article-catalog.js"
 import {
   ArchiveCommandSchema,
+  type Sha256,
   type ArchiveRequestId,
   type ArticleId,
 } from "../domain/article.js"
@@ -47,7 +48,8 @@ export type FeedPollResult = DeepReadonly<{
 
 export type PollSubscriptionsPorts = Readonly<{
   readonly subscriptions: Pick<SubscriptionRepository, "listFeedsForPolling">
-  readonly catalog?: Pick<ArticleCatalog, "upsert">
+  readonly catalog?: Pick<ArticleCatalog, "upsert"> &
+    Partial<Pick<ArticleCatalog, "markCaptured">>
   readonly reader: RssFeedReader
   readonly archive: (
     invocation: ArchiveArticleInvocation
@@ -55,6 +57,7 @@ export type PollSubscriptionsPorts = Readonly<{
   readonly deriveArticleIdentity: (input: {
     readonly feedId: FeedId
     readonly externalId: string
+    readonly captureFingerprint: Sha256
   }) => DeepReadonly<{
     readonly archiveRequestId: ArchiveRequestId
     readonly articleId: ArticleId
@@ -125,6 +128,7 @@ export const pollFeed =
             const identity = ports.deriveArticleIdentity({
               feedId: feed.feedId,
               externalId: item.externalId,
+              captureFingerprint: item.captureFingerprint,
             })
             return parseArchiveCommand({
               ...identity,
@@ -133,7 +137,7 @@ export const pollFeed =
             }).pipe(
               Effect.flatMap((command) =>
                 (ports.catalog === undefined
-                  ? Effect.void
+                  ? Effect.succeed({ _tag: "CaptureRequired" as const })
                   : ports.catalog.upsert({
                       articleId: command.articleId,
                       feedId: feed.feedId,
@@ -144,15 +148,36 @@ export const pollFeed =
                         ? {}
                         : { publishedAt: item.publishedAt }),
                       discoveredAt: ports.now(),
+                      captureFingerprint: item.captureFingerprint,
                     })
                 ).pipe(
-                  Effect.andThen(
-                    ports.archive(
-                      deepFreeze({
-                        command,
-                        context: ports.newContext(),
-                      })
-                    )
+                  Effect.flatMap(
+                    (
+                      decision
+                    ): Effect.Effect<
+                      Readonly<{ _tag: "Archived" | "AlreadyArchived" }>,
+                      ArchiveStoreError | CaptureError
+                    > =>
+                      decision._tag === "Unchanged"
+                        ? Effect.succeed({ _tag: "AlreadyArchived" as const })
+                        : ports
+                            .archive(
+                              deepFreeze({
+                                command,
+                                context: ports.newContext(),
+                              })
+                            )
+                            .pipe(
+                              Effect.map((result) => ({ _tag: result._tag }))
+                            )
+                  ),
+                  Effect.tap(() =>
+                    ports.catalog?.markCaptured === undefined
+                      ? Effect.void
+                      : ports.catalog.markCaptured({
+                          articleId: command.articleId,
+                          captureFingerprint: item.captureFingerprint,
+                        })
                   )
                 )
               ),

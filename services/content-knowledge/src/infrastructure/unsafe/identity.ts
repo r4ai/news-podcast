@@ -13,6 +13,7 @@ import type {
   ArticleId,
   CapturedAt,
   SnapshotId,
+  Sha256,
 } from "../../domain/article.js"
 import type { TagId } from "../../domain/content-taxonomy.js"
 import type { FeedId, SubscriptionId } from "../../domain/subscription.js"
@@ -69,22 +70,23 @@ const deterministicUuidV4 = (namespace: string, input: string): string => {
 export const deriveArticleIdentityUnsafe = (input: {
   readonly feedId: FeedId
   readonly externalId: string
+  readonly captureFingerprint: Sha256
 }) => {
-  const key = `${input.feedId}\0${input.externalId}`
+  const articleKey = `${input.feedId}\0${input.externalId}`
   return {
-    articleId: deterministicUuidV4("content-article", key) as ArticleId,
+    articleId: deterministicUuidV4("content-article", articleKey) as ArticleId,
     archiveRequestId: deterministicUuidV4(
       "content-archive-request",
-      key
+      `${articleKey}\0${input.captureFingerprint}`
     ) as ArchiveRequestId,
   }
 }
 
-/** Stable across retries while intentionally distinct from feed-poll capture intents. */
+/** Stable for one RPC delivery; a new explicit refresh receives a new message ID. */
 export const deriveManualArchiveRequestIdUnsafe = (
-  articleId: ArticleId
+  input: Readonly<{ articleId: ArticleId; messageId: MessageId }>
 ): ArchiveRequestId =>
   deterministicUuidV4(
     "content-manual-archive-request",
-    articleId
+    `${input.articleId}\0${input.messageId}`
   ) as ArchiveRequestId

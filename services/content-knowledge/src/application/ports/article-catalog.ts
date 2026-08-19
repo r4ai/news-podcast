@@ -3,6 +3,7 @@ import type { Effect } from "effect"
 
 import type {
   ObjectKey,
+  Sha256,
   ArticleId,
   ArticleTitle,
   ArticleUrl,
@@ -12,6 +13,8 @@ import type { FeedId, OwnerId } from "../../domain/subscription.js"
 
 export type FeedItem = DeepReadonly<{
   readonly externalId: string
+  /** Stable for retries; changes when capture-relevant feed metadata changes. */
+  readonly captureFingerprint: Sha256
   readonly title: string
   readonly url: string
   readonly publishedAt?: string
@@ -67,6 +70,14 @@ export type ArticleCatalog = DeepReadonly<{
     readonly title: ArticleTitle
     readonly publishedAt?: string
     readonly discoveredAt: string
+    readonly captureFingerprint?: Sha256
+  }) => Effect.Effect<
+    Readonly<{ _tag: "CaptureRequired" } | { _tag: "Unchanged" }>,
+    ArticleCatalogError
+  >
+  readonly markCaptured: (input: {
+    readonly articleId: ArticleId
+    readonly captureFingerprint: Sha256
   }) => Effect.Effect<void, ArticleCatalogError>
   readonly findAutomatic: (
     ownerId: OwnerId,
