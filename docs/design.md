@@ -62,6 +62,8 @@ flowchart LR
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 7. Webはjobの`succeeded`を生成完了として受け取った後、`episodeId`の詳細がLibraryから読めるまで初回を含む最大5回・500ms間隔で確認する。確認中は再生可能な「完成」と区別し、上限到達後は利用者の再確認操作で回復できる。
 
+日次予約はjob受付では完了しない。`scheduled:{ownerId}:{localDate}`をschedule intentの相関キーとして、active jobは`retrying`、Episode完成は`succeeded`、利用者cancelと回復対象外の終端失敗は`missed`として調整する。候補記事なしは同じjobを再queueし、後続feed同期後に同日中の生成へ回復する。REST/Webと`episode.schedule.outcomes` metricはこの3状態を同じ語彙で示す。詳細は[ADR-0074](adr/0074-complete-daily-schedule-on-terminal-outcome.md)を正本とする。
+
 RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease tokenでfenceしたworkerで進める。claim・完了ごとに現在時刻を再取得し、期限切れleaseのworkerによる完了上書きを拒否する。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。feed取得・catalog永続化・worker基盤の失敗だけを`failed`として最大4回の試行上限へ数え、個別記事のvalidation・archive失敗は件数とerrorを持つdegradedな`succeeded`として試行回数を引き継がず、次回の定期同期を継続する。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。degraded時は失敗記事数を警告し、runtimeは`rss.sync.degraded`、feed scope failureは`rss.sync.failed`を記録する。詳細は[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)を正本とする。
 
 RSS記事の`articleId`は`feedId + GUID`で安定させ、capture intentだけをcanonical URL・title・published/updated時刻・本文系field（XHTMLのelement・属性を含む）のSHA-256 fingerprintでversion化する。同じ配送retryは既存snapshotへ収束し、同じGUIDの実更新はimmutable snapshotを追加してlatest参照を更新する。fingerprint列追加前の既存記事はlatest URL・title一致時に再取得せずbaseline化し、archive成功後だけfingerprintを進める。手動archiveはRPC message IDごとに明示refreshし、同じdelivery retryだけを冪等にする。詳細は[ADR-0073](adr/0073-version-article-capture-intents.md)を正本とする。
@@ -398,3 +400,4 @@ flowchart TD
 - [ADR-0071 ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
 - [ADR-0072 Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
 - [ADR-0073 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
+- [ADR-0074 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)

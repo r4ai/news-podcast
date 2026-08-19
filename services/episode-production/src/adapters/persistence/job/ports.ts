@@ -89,6 +89,10 @@ export type SqliteJobHandle = Readonly<{
     | { readonly _tag: "Updated"; readonly document: string }
     | { readonly _tag: "NotFound" }
     | { readonly _tag: "Terminal" }
+  requeueRecoverableScheduled: (input: {
+    readonly jobId: string
+    readonly document: string
+  }) => void
   saveIdempotently: (input: {
     readonly ownerId: string
     readonly idempotencyScope: string

@@ -64,11 +64,13 @@ describe("observability privacy boundary", () => {
         "job.attempt": 2,
         "operation.stage": "synthesizing_audio",
         "provider.outcome": "timeout",
+        "schedule.outcome": "retrying",
       })
     ).toEqual({
       "job.attempt": 2,
       "operation.stage": "synthesizing_audio",
       "provider.outcome": "timeout",
+      "schedule.outcome": "retrying",
     })
   })
 

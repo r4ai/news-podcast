@@ -633,6 +633,9 @@ export interface components {
         EpisodeJob: {
             id: string & unknown;
             status: components["schemas"]["JobStatus"];
+            /** @enum {string} */
+            trigger: "manual" | "scheduled";
+            scheduleStatus?: ("retrying" | "succeeded" | "missed") | null;
             createdAt: string;
             articleIds?: (string & unknown)[] | null;
             attempt: number & unknown;

@@ -48,6 +48,7 @@ export type DashboardState =
 
 export type PodcastDashboardProps = {
   readonly state?: DashboardState
+  readonly scheduleStatus?: "retrying" | "succeeded" | "missed"
   readonly pending?: boolean
   readonly attempt?: number
   readonly maxAttempts?: number
@@ -136,6 +137,11 @@ const statusCopy: Record<
 }
 
 const activeStates = new Set<DashboardState>(["queued", "running", "retrying"])
+const scheduleStatusLabels = {
+  retrying: "日次予約: 再調整中",
+  succeeded: "日次予約: 完了",
+  missed: "日次予約: 未達",
+} as const
 
 function StatusDetails({
   failure,
@@ -297,6 +303,7 @@ function GenerationStatus({
   progress,
   retryAt,
   retryLabel,
+  scheduleStatus,
   stage,
   stageProgress,
   state = "ready",
@@ -332,6 +339,11 @@ function GenerationStatus({
         className="flex flex-col gap-4"
         role="status"
       >
+        {scheduleStatus ? (
+          <p className="text-sm font-medium">
+            {scheduleStatusLabels[scheduleStatus]}
+          </p>
+        ) : null}
         <p className="text-sm leading-6 text-muted-foreground">
           {copy.description}
         </p>

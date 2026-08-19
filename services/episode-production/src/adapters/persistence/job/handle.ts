@@ -181,7 +181,9 @@ const appendTransitionEvents = (
     stateSnapshotEvent(
       state,
       at,
-      `${row.jobId}:state:${row.status}:${row.attempt}`
+      row.status === "Queued" && previousStatus !== undefined
+        ? `${row.jobId}:state:${row.status}:${row.attempt}:${row.enqueuedAt}`
+        : `${row.jobId}:state:${row.status}:${row.attempt}`
     )
   )
   if (row.status === "Succeeded")
@@ -207,6 +209,7 @@ const writeJobDocument = (
   runner
     .update(episodeJobs)
     .set({
+      createdAt: row.createdAt,
       status: row.status,
       attempt: row.attempt,
       enqueuedAt: row.enqueuedAt,
@@ -223,6 +226,10 @@ const writeJobDocument = (
       cancelReason: row.cancelReason,
       currentStage:
         row.status === "Running" ? (previous?.currentStage ?? null) : null,
+      stageStartedAt: row.stageStartedAt,
+      lastProgressAt: row.lastProgressAt,
+      stageProgressCompleted: row.stageProgressCompleted,
+      stageProgressTotal: row.stageProgressTotal,
     })
     .where(eq(episodeJobs.jobId, jobId))
     .run()
@@ -470,6 +477,22 @@ export const makeJobHandle = (
         const document = input.replace(documentOfJob(tx, row))
         writeJobDocument(tx, input.jobId, document)
         return { _tag: "Updated" as const, document }
+      }),
+
+    requeueRecoverableScheduled: (input) =>
+      database.transaction((tx) => {
+        const row = selectJob(tx)
+          .where(eq(episodeJobs.jobId, input.jobId))
+          .get()
+        if (
+          row?.trigger === "scheduled" &&
+          ((row.status === "Failed" &&
+            row.failureCode === "no_generation_candidates") ||
+            (row.status === "Canceled" &&
+              row.cancelReason === "service_shutdown"))
+        ) {
+          writeJobDocument(tx, input.jobId, input.document)
+        }
       }),
 
     saveIdempotently: (input) =>

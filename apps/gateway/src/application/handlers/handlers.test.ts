@@ -249,6 +249,7 @@ describe("gateway port handlers", () => {
     const running = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: jobReceipt.id,
       status: "running",
+      trigger: "manual",
       createdAt: jobReceipt.createdAt,
       attempt: 1,
       maxAttempts: 4,
@@ -257,6 +258,7 @@ describe("gateway port handlers", () => {
     const succeeded = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: jobReceipt.id,
       status: "succeeded",
+      trigger: "manual",
       createdAt: jobReceipt.createdAt,
       attempt: 1,
       maxAttempts: 4,
@@ -313,6 +315,7 @@ describe("gateway port handlers", () => {
     const succeeded = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: jobReceipt.id,
       status: "succeeded",
+      trigger: "manual",
       createdAt: jobReceipt.createdAt,
       attempt: 1,
       maxAttempts: 4,

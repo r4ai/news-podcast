@@ -38,10 +38,44 @@ import {
   acquireNatsGatewayPorts,
   makeNatsGatewayPorts,
 } from "./nats-gateway-ports.js"
+import { toEpisodeJob } from "./nats/episode-job-ports.js"
 
 const episodeId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
 
 describe("NATS GatewayPorts adapter", () => {
+  it.each([
+    ["queued", "retrying"],
+    ["succeeded", "succeeded"],
+    ["canceled", "missed"],
+  ] as const)(
+    "projects scheduled %s jobs as %s daily intents",
+    async (status, scheduleStatus) => {
+      const projected = await Effect.runPromise(
+        toEpisodeJob({
+          jobId: ids[0],
+          trigger: "scheduled",
+          status,
+          attempt: status === "queued" ? 0 : 1,
+          maxAttempts: 4,
+          createdAt: "2026-08-12T00:00:00.000Z",
+          ...(status === "queued"
+            ? { enqueuedAt: "2026-08-12T00:00:00.000Z" }
+            : status === "succeeded"
+              ? {
+                  completedAt: "2026-08-12T00:01:00.000Z",
+                  episodeId: ids[1],
+                }
+              : {
+                  canceledAt: "2026-08-12T00:01:00.000Z",
+                  reason: "requested_by_user",
+                }),
+        } as never)
+      )
+
+      expect(projected).toMatchObject({ trigger: "scheduled", scheduleStatus })
+    }
+  )
+
   it("maps owner-scoped article operations without accepting an owner payload", async () => {
     const requests: CapturedRequest[] = []
     const article = {

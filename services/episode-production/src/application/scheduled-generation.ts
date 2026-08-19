@@ -1,13 +1,15 @@
 import { deepFreeze } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
+import type { EpisodeJob } from "../domain/episode-job.js"
+
 export type DueScheduledGeneration = Readonly<{
   ownerId: string
   localDate: string
 }>
 
 export type ScheduledGenerationEvent = Readonly<{
-  _tag: "Created" | "Failed"
+  _tag: "Succeeded" | "Retrying" | "Missed" | "Failed"
   ownerId: string
   localDate: string
 }>
@@ -17,12 +19,55 @@ export type ScheduledGenerationPorts<E = unknown> = Readonly<{
   create: (
     ownerId: string,
     idempotencyKey: string
-  ) => Effect.Effect<void, unknown>
+  ) => Effect.Effect<EpisodeJob, unknown>
   complete: (ownerId: string, localDate: string) => Effect.Effect<void, unknown>
   observe: (event: ScheduledGenerationEvent) => Effect.Effect<void>
 }>
 
-/** One bounded pass. A failed owner remains due and is retried on the next pass. */
+type ScheduleOutcome = "succeeded" | "retrying" | "missed" | "failed"
+
+const reconcileJob = (
+  ports: ScheduledGenerationPorts<unknown>,
+  schedule: DueScheduledGeneration,
+  job: EpisodeJob
+): Effect.Effect<Exclude<ScheduleOutcome, "failed">, unknown> => {
+  switch (job._tag) {
+    case "Queued":
+    case "Running":
+    case "Retrying":
+      return ports
+        .observe({ _tag: "Retrying", ...schedule })
+        .pipe(Effect.as("retrying" as const))
+    case "Succeeded":
+      return ports
+        .complete(schedule.ownerId, schedule.localDate)
+        .pipe(
+          Effect.andThen(ports.observe({ _tag: "Succeeded", ...schedule })),
+          Effect.as("succeeded" as const)
+        )
+    case "Canceled":
+      if (job.reason === "service_shutdown") {
+        return ports
+          .observe({ _tag: "Retrying", ...schedule })
+          .pipe(Effect.as("retrying" as const))
+      }
+      return ports
+        .complete(schedule.ownerId, schedule.localDate)
+        .pipe(
+          Effect.andThen(ports.observe({ _tag: "Missed", ...schedule })),
+          Effect.as("missed" as const)
+        )
+    case "Failed":
+      return ports
+        .complete(schedule.ownerId, schedule.localDate)
+        .pipe(
+          Effect.andThen(ports.observe({ _tag: "Missed", ...schedule })),
+          Effect.as("missed" as const)
+        )
+  }
+}
+
+/** One bounded pass. Active work remains due; only terminal outcomes close the local day. */
 export const runScheduledGenerationTick = <E>(
   ports: ScheduledGenerationPorts<E>
 ) =>
@@ -37,29 +82,26 @@ export const runScheduledGenerationTick = <E>(
               `scheduled:${schedule.ownerId}:${schedule.localDate}`
             )
             .pipe(
-              Effect.flatMap(() =>
-                ports.complete(schedule.ownerId, schedule.localDate)
-              ),
-              Effect.flatMap(() =>
-                ports.observe({ _tag: "Created", ...schedule })
-              ),
-              Effect.as(true),
+              Effect.flatMap((job) => reconcileJob(ports, schedule, job)),
               Effect.matchEffect({
                 onFailure: () =>
                   ports
                     .observe({ _tag: "Failed", ...schedule })
-                    .pipe(Effect.as(false)),
+                    .pipe(Effect.as("failed" as const)),
                 onSuccess: Effect.succeed,
               })
             ),
         { concurrency: 1 }
       ).pipe(
-        Effect.map((results) => {
-          const completed = results.filter(Boolean).length
+        Effect.map((results: readonly ScheduleOutcome[]) => {
+          const count = (outcome: ScheduleOutcome) =>
+            results.filter((result) => result === outcome).length
           return deepFreeze({
             discovered: due.length,
-            completed,
-            failed: due.length - completed,
+            succeeded: count("succeeded"),
+            retrying: count("retrying"),
+            missed: count("missed"),
+            failed: count("failed"),
           })
         })
       )
