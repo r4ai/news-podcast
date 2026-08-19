@@ -160,3 +160,46 @@ export type SqliteJobHandle = Readonly<{
   markCompletionPublished: (jobId: string, publishedAt: string) => boolean
   close: () => void
 }>
+
+export type JobReadHandle = Pick<
+  SqliteJobHandle,
+  | "findById"
+  | "findOwned"
+  | "listOwned"
+  | "statusSnapshot"
+  | "listOwnedAgUiEvents"
+>
+
+export type JobProgressHandle = Pick<
+  SqliteJobHandle,
+  | "markStep"
+  | "reportStageProgress"
+  | "recordSelectedArticles"
+  | "replaceOwnedActive"
+  | "requeueRecoverableScheduled"
+  | "saveIdempotently"
+  | "leaseNext"
+  | "hasLease"
+  | "renewLease"
+  | "transition"
+>
+
+export type JobPlanHandle = Pick<
+  SqliteJobHandle,
+  | "loadCheckpoint"
+  | "loadGenerationPlan"
+  | "listUsedAutomaticArticleIds"
+  | "saveGenerationPlan"
+  | "loadDictionarySnapshot"
+  | "saveDictionarySnapshot"
+  | "saveScriptCheckpoint"
+  | "saveAudioCheckpoint"
+>
+
+export type JobOutboxHandle = Pick<
+  SqliteJobHandle,
+  | "completeWithOutbox"
+  | "findCompletionOutbox"
+  | "listPendingCompletionOutbox"
+  | "markCompletionPublished"
+>

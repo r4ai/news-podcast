@@ -337,6 +337,22 @@ drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`
 
 `episode_jobs`はjob状態機械を実カラムへ正規化しており、状態更新と`episode_job_agui_events`追記はtriggerではなく書き込み側が同一transactionで行う（[ADR-0044](adr/0044-normalized-episode-job-state.md)、[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)）。
 
+Episode Productionのjob persistenceは、query-onlyの`read-handle`、状態遷移とleaseを担う`progress-handle`、生成計画・辞書・checkpointの`plan-handle`、完了遷移と配送を原子的に扱う`outbox-handle`へ分割する。4つは同じprocess-owned databaseを注入で共有し、`makeJobHandle`がapplication層向け互換契約を合成する。
+
+```mermaid
+flowchart LR
+  Application --> Facade[makeJobHandle]
+  Facade --> Read[read]
+  Facade --> Progress[progress]
+  Facade --> Plan[plan]
+  Facade --> Outbox[outbox]
+  Progress -->|state + durable event| Tx[(transaction)]
+  Plan -->|lease + immutable artifacts| Tx
+  Outbox -->|succeeded + event| Tx
+  Read --> DB[(Production SQLite)]
+  Tx --> DB
+```
+
 ## 6. 実行環境
 
 supported runtimeはNode self-hostだけである（[ADR-0039](adr/0039-support-node-self-host-runtime-only.md)）。
