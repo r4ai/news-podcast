@@ -19,7 +19,9 @@ import type {
   EpisodeExecutionPorts,
   ExecuteEpisodeJobInput,
   LeaseFailure,
+  MaterializedArticle,
   PipelineFailure,
+  ScriptSourceProvenance,
 } from "./ports/execution.js"
 
 export type EpisodeExecutionOutcome =
@@ -59,6 +61,19 @@ const jobDeadlineExceeded = (): PipelineFailure =>
     _tag: "PipelineFailure",
     code: "job_deadline_exceeded",
     retryable: false,
+  })
+
+const sourceProvenanceOf = (
+  source: MaterializedArticle
+): ScriptSourceProvenance =>
+  deepFreeze({
+    articleId: source.articleId,
+    snapshotId: source.snapshotId,
+    title: source.title,
+    url: source.url,
+    ...(source.publishedAt === undefined
+      ? {}
+      : { publishedAt: source.publishedAt }),
   })
 
 const failWhenCanceled = (
@@ -310,28 +325,43 @@ export const executeEpisodeJob =
         )
       }
       yield* markStep("materializing_articles", "started")
-      const articles = yield* ports.articles.materialize({
-        ownerId: job.request.ownerId,
-        selection: deepFreeze({
-          _tag: "Selected" as const,
-          articleIds: generationPlan.selectedArticleIds,
-        }),
-        ...(signal === undefined ? {} : { signal }),
-      })
-      yield* ports.persistence.recordSelectedArticles({
-        jobId: job.jobId,
-        leaseToken: job.lease.token,
-        articles: articles.map((article) => ({
-          articleId: article.articleId,
-          title: article.title,
-          sourceName: new URL(article.url).hostname,
-        })),
-        occurredAt: ports.now(),
-      })
+      const articles =
+        checkpoint === undefined
+          ? yield* ports.articles.materialize({
+              ownerId: job.request.ownerId,
+              selection: deepFreeze({
+                _tag: "Selected" as const,
+                articleIds: generationPlan.selectedArticleIds,
+              }),
+              ...(signal === undefined ? {} : { signal }),
+            })
+          : undefined
+      if (articles !== undefined) {
+        yield* ports.persistence.recordSelectedArticles({
+          jobId: job.jobId,
+          leaseToken: job.lease.token,
+          articles: articles.map((article) => ({
+            articleId: article.articleId,
+            title: article.title,
+            sourceName: new URL(article.url).hostname,
+          })),
+          occurredAt: ports.now(),
+        })
+      }
       yield* markStep("materializing_articles", "finished")
 
       let script = checkpoint?.script
+      let sourceProvenance = checkpoint?.sources
       if (script === undefined) {
+        if (articles === undefined) {
+          return yield* Effect.fail<PipelineFailure>(
+            deepFreeze({
+              _tag: "PipelineFailure",
+              code: "missing_materialized_articles",
+              retryable: false,
+            })
+          )
+        }
         yield* markStep("generating_script", "started")
         yield* assertLease()
         script = yield* ports.script
@@ -346,10 +376,38 @@ export const executeEpisodeJob =
           })
           .pipe(Effect.mapError(withProviderStage("script")))
         yield* assertLease()
+        const generatedSources = script.sourceUrls.map((url) =>
+          articles.find((candidate) => candidate.url === url)
+        )
+        const firstSource = generatedSources[0]
+        if (
+          firstSource === undefined ||
+          generatedSources.some((source) => source === undefined) ||
+          generatedSources.length === 0
+        ) {
+          return yield* Effect.fail<PipelineFailure>(
+            deepFreeze({
+              _tag: "PipelineFailure",
+              code: "invalid_script_sources",
+              retryable: false,
+            })
+          )
+        }
+        const generatedProvenance = [
+          sourceProvenanceOf(firstSource),
+          ...generatedSources
+            .slice(1)
+            .filter(
+              (source): source is MaterializedArticle => source !== undefined
+            )
+            .map(sourceProvenanceOf),
+        ] as const
+        sourceProvenance = generatedProvenance
         yield* ports.persistence.saveScriptCheckpoint({
           jobId: job.jobId,
           leaseToken: job.lease.token,
           script,
+          sources: generatedProvenance,
         })
         yield* markStep("generating_script", "finished")
       }
@@ -382,7 +440,7 @@ export const executeEpisodeJob =
       }
 
       const used = script.sourceUrls.map((url) =>
-        articles.find((candidate) => candidate.url === url)
+        sourceProvenance?.find((candidate) => candidate.url === url)
       )
       if (used.some((source) => source === undefined) || used.length === 0) {
         return yield* Effect.fail<PipelineFailure>(

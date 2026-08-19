@@ -298,7 +298,7 @@ AG-UI timelineは標準`RUN_ERROR`と`RUN_FINISHED`で未完了stepを閉じる�
 
 ### 8.4 GenerationPlanとdurable進捗
 
-自動生成はContent Knowledgeが所有する最新InterestProfileと、有効な購読に属し成功済み自動Planで未使用の記事metadataから選定し、本文取得前にGenerationPlanを固定する。候補取得・手動選択・本文materializeは、`captured_at DESC, snapshot_id DESC`で決める記事ごとの最新snapshotだけを共通述語で参照し、再archive後も同じ`articleId`を重複候補へ出さない。手動生成は使用済みかどうかに関係なく指定記事を全件維持し、profileは台本の重点にだけ利用する。完成eventの各sourceは`articleId`と`snapshotId`を持ち、Libraryが外部URL失効後も保存記事まで追跡できるようにする。
+自動生成はContent Knowledgeが所有する最新InterestProfileと、有効な購読に属し成功済み自動Planで未使用の記事metadataから選定し、本文取得前にGenerationPlanを固定する。候補取得・手動選択・初回の本文materializeは、`captured_at DESC, snapshot_id DESC`で決める記事ごとの最新snapshotだけを共通述語で参照し、再archive後も同じ`articleId`を重複候補へ出さない。手動生成は使用済みかどうかに関係なく指定記事を全件維持し、profileは台本の重点にだけ利用する。台本checkpointは採用sourceの`articleId`・`snapshotId`・URL・titleを同時に固定し、retryでは本文を再materializeしない。完成eventの各sourceはそのcheckpoint provenanceを使い、Libraryが外部URL失効後も台本生成時の保存記事まで追跡できるようにする。詳細は[ADR-0067](adr/0067-bind-script-checkpoints-to-source-snapshots.md)を正本とする。
 
 ```mermaid
 flowchart LR
@@ -306,12 +306,13 @@ flowchart LR
   Candidates["有効購読の未使用metadata 最大50件"] --> Select
   Select --> Plan[("GenerationPlan")]
   Plan --> Materialize["版固定snapshot"]
-  Materialize --> Pipeline["Script / Pronunciation / TTS / Store"]
+  Materialize --> Checkpoint[("Script + snapshot provenance")]
+  Checkpoint --> Pipeline["Pronunciation / TTS / Store"]
   Pipeline -.-> Events[("durable AG-UI events")]
   Events --> Web["SSE + Last-Event-ID"]
 ```
 
-旧Agent run/tool/memory監査は本番経路で使われないため、HTTP API、NATS subject、domain/application/adapters、5 tableを削除した。生成の再現性はGenerationPlan、checkpoint、完成outboxで、進捗監査はAG-UI event logで担う。詳細は[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)、[ADR-0059](adr/0059-latest-interest-profile-generation-plan.md)、[ADR-0061](adr/0061-exclude-used-articles-from-automatic-generation.md)、[ADR-0062](adr/0062-preserve-article-id-in-episode-provenance.md)を正本とする。
+旧Agent run/tool/memory監査は本番経路で使われないため、HTTP API、NATS subject、domain/application/adapters、5 tableを削除した。生成の再現性はGenerationPlan、source provenance付きcheckpoint、完成outboxで、進捗監査はAG-UI event logで担う。詳細は[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)、[ADR-0059](adr/0059-latest-interest-profile-generation-plan.md)、[ADR-0061](adr/0061-exclude-used-articles-from-automatic-generation.md)、[ADR-0062](adr/0062-preserve-article-id-in-episode-provenance.md)、[ADR-0067](adr/0067-bind-script-checkpoints-to-source-snapshots.md)を正本とする。
 
 ## 9. 実装と変更の順序
 
@@ -381,3 +382,4 @@ flowchart TD
 - [ADR-0060 描画範囲をatomで区切り、フロントエンドの予算を実測で守る](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)
 - [ADR-0064 再生をrouteの外へ出し、ライブラリを一覧と原稿の2ペインにする](adr/0064-persistent-playback-outside-the-router-outlet.md)
 - [ADR-0065 手動記事archiveをend-to-end RPC deadlineで拘束する](adr/0065-bound-manual-archive-rpc-deadline.md)
+- [ADR-0067 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)

@@ -29,6 +29,10 @@ export type MaterializedArticle = DeepReadonly<{
   publishedAt?: string
 }>
 
+export type ScriptSourceProvenance = DeepReadonly<
+  Omit<MaterializedArticle, "markdown">
+>
+
 export type ArticleSelection =
   | DeepReadonly<{ _tag: "Automatic" }>
   | DeepReadonly<{ _tag: "Selected"; articleIds: readonly ArticleId[] }>
@@ -49,8 +53,9 @@ export type StoredAudioCheckpoint = DeepReadonly<{
   contentType: "audio/wav" | "audio/mpeg"
 }>
 
-export type EpisodeExecutionCheckpoint = DeepReadonly<{
+export type EpisodeExecutionCheckpoint = Readonly<{
   script: GeneratedScript
+  sources: readonly [ScriptSourceProvenance, ...ScriptSourceProvenance[]]
   audio?: StoredAudioCheckpoint
 }>
 
@@ -212,6 +217,7 @@ export type EpisodeExecutionPorts = DeepReadonly<{
       jobId: JobId
       leaseToken: LeaseToken
       script: GeneratedScript
+      sources: readonly [ScriptSourceProvenance, ...ScriptSourceProvenance[]]
     }) => Effect.Effect<void, PipelineFailure | LeaseFailure>
     saveAudioCheckpoint: (input: {
       jobId: JobId

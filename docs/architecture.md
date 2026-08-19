@@ -217,7 +217,7 @@ flowchart LR
   Store --> Commit["Episode・出典・Jobをcommit"]
 ```
 
-外部provider由来の一時障害は設定済みの指数backoffと総経過時間で再試行する。初回を含めjobは最大4回試行し、DB制約も5回目のleaseを拒否する。既定300秒leaseは60秒ごとに更新し、全状態変更とEpisode確定をlease tokenでfenceする。停止したprocessのjobは期限後に再取得し、検証済み台本と音声checkpointから再開する。台本、各provider request、job、応答byteには上限を設ける。
+外部provider由来の一時障害は設定済みの指数backoffと総経過時間で再試行する。初回を含めjobは最大4回試行し、DB制約も5回目のleaseを拒否する。既定300秒leaseは60秒ごとに更新し、全状態変更とEpisode確定をlease tokenでfenceする。停止したprocessのjobは期限後に再取得し、検証済み台本・採用source snapshot provenance・音声checkpointから再開する。台本checkpointがあるretryでは最新記事を再materializeせず、生成時のsnapshotをcompletionまで維持する（[ADR-0067](adr/0067-bind-script-checkpoints-to-source-snapshots.md)）。台本、各provider request、job、応答byteには上限を設ける。
 
 外部契約はコード変更より先に公式仕様・稼働version/digest・匿名化した実応答を照合する。containerは検証済みdigestへ固定し、OpenAI alias変更は台本/補完の両smokeを必須にする（[ADR-0046](adr/0046-evidence-first-external-provider-contracts.md)）。
 
@@ -375,4 +375,5 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0033: Bounded Contextとサービスのコロケーション](adr/0033-colocate-bounded-context-with-service.md)
 - [ADR-0034: 関数型ドメインモデルとEffect境界](adr/0034-functional-domain-model-and-effect-boundaries.md)
 - [ADR-0038: 保存済み出典による有界な構造化生成](adr/0038-bounded-structured-production-generation.md)
+- [ADR-0067: 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

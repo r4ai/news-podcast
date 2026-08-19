@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: ADR-0002、ADR-0003、ADR-0010、ADR-0013、ADR-0015、ADR-0017、ADR-0049
+- Related: ADR-0002、ADR-0003、ADR-0010、ADR-0013、ADR-0015、ADR-0017、ADR-0049、ADR-0067
 
 ## コンテキストと変更契機
 
@@ -15,7 +15,7 @@ Episode生成は60秒のDB leaseを取得する一方、lease更新を行わず�
 
 ## 決定
 
-同一jobの自動試行を初回込み4回へ固定する。60秒leaseを15秒ごとに更新し、すべての状態変更と成果物確定を`status + lease token + lease expiry`でfenceする。入力、時間、応答byteを有界化し、台本とVOICEVOX chunkをdurable checkpointとして保存する。
+同一jobの自動試行を初回込み4回へ固定する。60秒leaseを15秒ごとに更新し、すべての状態変更と成果物確定を`status + lease token + lease expiry`でfenceする。入力、時間、応答byteを有界化し、台本・採用source snapshot provenanceとVOICEVOX chunkをdurable checkpointとして保存する。台本とsnapshotの再開時不変条件は[ADR-0067](0067-bind-script-checkpoints-to-source-snapshots.md)で補強する。
 
 | component | 実行場所 | trigger | durable state | terminal cleanup / recovery |
 | --- | --- | --- | --- | --- |
