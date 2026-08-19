@@ -45,10 +45,10 @@ export const NodeGatewayConfigSchema = Schema.Struct({
     Schema.isBetween({ minimum: 1, maximum: 30_000 })
   ),
   archiveExecutionTimeoutMillis: Schema.Int.check(
-    Schema.isBetween({ minimum: 1, maximum: 120_000 })
+    Schema.isBetween({ minimum: 1, maximum: 300_000 })
   ),
   archiveRequestTimeoutMillis: Schema.Int.check(
-    Schema.isBetween({ minimum: 1, maximum: 125_000 })
+    Schema.isBetween({ minimum: 1, maximum: 305_000 })
   ),
   loginMethods: Schema.Struct({
     development: Schema.Boolean,

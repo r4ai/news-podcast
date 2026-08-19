@@ -45,6 +45,19 @@ describe("Gateway Node runtime", () => {
     expect(failure).toBeDefined()
   })
 
+  it("accepts the content service's maximum archive timeout with reply margin", async () => {
+    const config = await Effect.runPromise(
+      parseNodeGatewayConfig({
+        ...validConfig,
+        archiveExecutionTimeoutMillis: 300_000,
+        archiveRequestTimeoutMillis: 305_000,
+      })
+    )
+
+    expect(config.archiveExecutionTimeoutMillis).toBe(300_000)
+    expect(config.archiveRequestTimeoutMillis).toBe(305_000)
+  })
+
   it("serves the API and drains HTTP then NATS when interrupted", async () => {
     const events: string[] = []
     let handler: ((request: Request) => Promise<Response>) | undefined
