@@ -31,7 +31,7 @@ stateDiagram-v2
 - JetStream consumerは`max_deliver=-1`とし、保存障害の再配送を打ち切らない。
 - `EPISODE_LIBRARY_COMPLETION_MAXIMUM_DELIVERIES`は配信停止上限ではなく、異常通知を開始する1-based delivery countとして扱う。
 - `CompletionStoreFailure`だけを一時障害とし、上限付き指数backoffでNACKする。
-- JSON、protocol、producer、materialization、domain contractの決定的エラーはACKして破棄し、`episode_library.completion.discarded`をerror記録する。
+- JSON、protocol、producer、materialization、domain contractの決定的エラーはACKして破棄し、`episode_library.completion.discarded`へfailure tagと、検証済みのmessage・correlation・episode IDを記録する。
 - 閾値到達後もNACKを継続し、各試行を`episode_library.completion.redelivery_threshold_exceeded`で検知可能にする。
 - LibraryのinboxとEpisode保存は同一transactionかつmessage IDで冪等なため、DB復旧後の再配送を重複なくcommitする。
 

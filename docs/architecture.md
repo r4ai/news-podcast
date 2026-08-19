@@ -203,7 +203,7 @@ sequenceDiagram
 
 定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はjob作成成功後だけ進める。
 
-completion consumerはLibrary保存transactionが成功してからACKする。DB保存失敗は上限付き指数backoffでNACKし、JetStream側では再配送を打ち切らない。設定済み回数は停止上限ではなくerror通知の開始閾値である。JSON・protocol・domain契約違反はACKして破棄し、poison payloadの無限再配送を防ぐ。詳細は[ADR-0070](adr/0070-recover-episode-completion-after-redelivery-threshold.md)を正本とする。
+completion consumerはLibrary保存transactionが成功してからACKする。DB保存失敗は上限付き指数backoffでNACKし、JetStream側では再配送を打ち切らない。設定済み回数は停止上限ではなくerror通知の開始閾値である。JSON・protocol・domain契約違反はACKして破棄し、failure tagと検証済み識別子をerror eventへ残してpoison payloadの無限再配送を防ぐ。詳細は[ADR-0070](adr/0070-recover-episode-completion-after-redelivery-threshold.md)を正本とする。
 
 ### 4.2 生成パイプライン
 

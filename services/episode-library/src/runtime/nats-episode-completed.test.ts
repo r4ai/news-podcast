@@ -118,7 +118,7 @@ describe("NATS EpisodeCompleted runtime", () => {
     expect(ack).not.toHaveBeenCalled()
   })
 
-  it("nacks invalid JSON or protocol data without materializing it", async () => {
+  it("discards invalid JSON without materializing it", async () => {
     const materialize = vi.fn()
     const ports: EpisodeCompletionPorts = {
       materialize,
@@ -127,7 +127,7 @@ describe("NATS EpisodeCompleted runtime", () => {
     const ack = vi.fn()
     const nack = vi.fn()
 
-    const exit = await Effect.runPromiseExit(
+    const result = await Effect.runPromise(
       handleNatsEpisodeCompleted(ports)({
         data: new TextEncoder().encode("not-json"),
         ack: Effect.sync(ack).pipe(Effect.asVoid),
@@ -137,10 +137,40 @@ describe("NATS EpisodeCompleted runtime", () => {
       })
     )
 
-    expect(exit._tag).toBe("Success")
+    expect(result).toEqual({
+      _tag: "Discarded",
+      reason: "NatsPayloadDecodeFailure",
+    })
     expect(ack).toHaveBeenCalledOnce()
     expect(nack).not.toHaveBeenCalled()
     expect(materialize).not.toHaveBeenCalled()
+  })
+
+  it("preserves safe completion identity and cause when discarding", async () => {
+    const ports: EpisodeCompletionPorts = {
+      materialize: () =>
+        Effect.fail({ _tag: "CompletionMaterializationFailure" }),
+      saveOnce: () => Effect.succeed("Stored"),
+    }
+    const ack = vi.fn()
+
+    const result = await Effect.runPromise(
+      handleNatsEpisodeCompleted(ports)({
+        data: data(validMessage),
+        ack: Effect.sync(ack).pipe(Effect.asVoid),
+        deliveryCount: 1,
+        nack: () => Effect.void,
+      })
+    )
+
+    expect(result).toEqual({
+      _tag: "Discarded",
+      reason: "CompletionMaterializationFailure",
+      messageId: validMessage.messageId,
+      correlationId: validMessage.correlationId,
+      episodeId: validMessage.payload.episodeId,
+    })
+    expect(ack).toHaveBeenCalledOnce()
   })
 
   it("uses the parsed message ID as the inbox dedupe key", async () => {

@@ -28,6 +28,10 @@ export type EpisodeCompletedConsumerOutcome = DeepReadonly<
   | {
       readonly _tag: "EpisodeCompletedDiscarded"
       readonly deliveryCount: number
+      readonly reason: string
+      readonly messageId?: string
+      readonly correlationId?: string
+      readonly episodeId?: string
     }
 >
 
@@ -52,10 +56,7 @@ const logOutcome = (outcome: EpisodeCompletedConsumerOutcome) =>
         delivery_count: outcome.deliveryCount,
       })
     : outcome._tag === "EpisodeCompletedDiscarded"
-      ? Effect.logError("terminal episode completion discarded", {
-          event_name: "episode_library.completion.discarded",
-          delivery_count: outcome.deliveryCount,
-        })
+      ? Effect.void
       : outcome._tag === "EpisodeCompletedRedeliveryThresholdExceeded"
         ? Effect.logError("episode completion redelivery threshold exceeded", {
             event_name:
@@ -122,13 +123,17 @@ export const runEpisodeCompletedConsumerLoop = (
               )
             },
             onSuccess: (result) => {
-              const outcome = deepFreeze({
-                _tag:
-                  result === "Discarded"
-                    ? ("EpisodeCompletedDiscarded" as const)
-                    : ("EpisodeCompletedAcknowledged" as const),
-                deliveryCount: delivery.deliveryCount,
-              })
+              const outcome =
+                result === "Committed"
+                  ? deepFreeze({
+                      _tag: "EpisodeCompletedAcknowledged" as const,
+                      deliveryCount: delivery.deliveryCount,
+                    })
+                  : deepFreeze({
+                      ...result,
+                      _tag: "EpisodeCompletedDiscarded" as const,
+                      deliveryCount: delivery.deliveryCount,
+                    })
               return logOutcome(outcome).pipe(
                 Effect.andThen(observe(outcome)),
                 Effect.andThen(loop())

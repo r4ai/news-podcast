@@ -148,6 +148,43 @@ describe("EpisodeCompleted durable consumer loop", () => {
     expect(nackExit._tag).toBe("Failure")
   })
 
+  it("observes safe identity and cause for a discarded completion", async () => {
+    const outcomes: EpisodeCompletedConsumerOutcome[] = []
+    const deliveries = [validDelivery([], 1)]
+    const terminalPorts: EpisodeCompletionPorts = {
+      materialize: () =>
+        Effect.fail({ _tag: "CompletionMaterializationFailure" }),
+      saveOnce: () => Effect.succeed("Stored"),
+    }
+
+    await Effect.runPromise(
+      runEpisodeCompletedConsumerLoop(
+        {
+          receive: async () => deliveries.shift(),
+          drain: async () => undefined,
+        },
+        terminalPorts,
+        {
+          maximumDeliveries: 3,
+          initialNackDelayMillis: 1,
+          maximumNackDelayMillis: 4,
+          observe: (outcome) => Effect.sync(() => void outcomes.push(outcome)),
+        }
+      )
+    )
+
+    expect(outcomes).toEqual([
+      {
+        _tag: "EpisodeCompletedDiscarded",
+        deliveryCount: 1,
+        reason: "CompletionMaterializationFailure",
+        messageId: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+        correlationId: "f8f15e30-6877-4b4d-9568-76bfa3dc3a40",
+        episodeId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+      },
+    ])
+  })
+
   it("recovers after persistence fails beyond the redelivery threshold", async () => {
     const events: string[] = []
     const outcomes: EpisodeCompletedConsumerOutcome[] = []
