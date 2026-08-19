@@ -1519,6 +1519,274 @@ const personalizationGroup = HttpApiGroup.make("personalization")
     enrichResetDailyEndpoint
   )
   .annotateMerge(OpenApi.annotations({ title: "Personalization" }))
+
+const operationDocumentation = {
+  health: {
+    summary: "Check Gateway health",
+    description:
+      "Returns the unauthenticated process health signal used by deployment probes.",
+  },
+  resolveSession: {
+    summary: "Resolve the current session",
+    description:
+      "Resolves the session cookie or authorization header and returns authentication state plus enabled login methods without exposing credentials.",
+  },
+  createEpisodeJob: {
+    summary: "Create an idempotent episode job",
+    description:
+      "Requires an authenticated owner and Idempotency-Key. Accepts 1 to 20 owned article IDs; replaying the same key and payload returns the same logical job, while a mismatched payload returns 409.",
+  },
+  listEpisodeJobs: {
+    summary: "List owned episode jobs",
+    description:
+      "Lists only jobs owned by the authenticated session, with an optional bounded result limit.",
+  },
+  getEpisodeJob: {
+    summary: "Get an owned episode job",
+    description:
+      "Returns one job in the authenticated owner scope. Missing and foreign job IDs are both reported as 404.",
+  },
+  cancelEpisodeJob: {
+    summary: "Cancel an owned episode job",
+    description:
+      "Requests cancellation in the authenticated owner scope. Terminal jobs return a 409 state conflict.",
+  },
+  retryEpisodeJob: {
+    summary: "Retry a failed episode job",
+    description:
+      "Creates a new owned job from a failed job. An explicit Idempotency-Key makes retries replay-safe; when omitted, the Gateway generates a fresh key.",
+  },
+  streamEpisodeJobEvents: {
+    summary: "Replay episode job events",
+    description:
+      "Streams the owned job snapshot and durable AG-UI progress events. Last-Event-ID or afterSequence resumes after an acknowledged sequence.",
+  },
+  listEpisodes: {
+    summary: "List owned completed episodes",
+    description:
+      "Lists completed episodes visible to the authenticated owner using the opaque next cursor returned by the previous page.",
+  },
+  getEpisode: {
+    summary: "Get an owned completed episode",
+    description:
+      "Returns a completed episode and its source provenance in the authenticated owner scope; foreign IDs are normalized to 404.",
+  },
+  streamEpisodeAudio: {
+    summary: "Stream owned episode audio",
+    description:
+      "Streams same-origin WAV audio for an owned episode and supports a single HTTP Range request without exposing the internal signed object URL.",
+  },
+  addFeedSubscription: {
+    summary: "Subscribe to an RSS feed",
+    description:
+      "Creates an authenticated owner subscription for a canonical credential-free HTTP(S) feed URL and queues synchronization.",
+  },
+  listFeedSubscriptions: {
+    summary: "List owned feed subscriptions",
+    description:
+      "Lists RSS subscriptions belonging only to the authenticated owner.",
+  },
+  listFeedSyncJobs: {
+    summary: "List owned feed synchronization jobs",
+    description:
+      "Lists synchronization status and bounded retry progress for the authenticated owner's feeds.",
+  },
+  syncFeedSubscription: {
+    summary: "Start immediate feed synchronization",
+    description:
+      "Queues an asynchronous synchronization for an owned subscription and returns the accepted job; foreign IDs are normalized to 404.",
+  },
+  deleteFeedSubscription: {
+    summary: "Delete an owned feed subscription",
+    description:
+      "Deletes a subscription in the authenticated owner scope. Missing and foreign IDs are both reported as 404.",
+  },
+  updateFeedSubscription: {
+    summary: "Update an owned feed subscription",
+    description:
+      "Enables or disables synchronization for a subscription belonging to the authenticated owner.",
+  },
+  listFeeds: {
+    summary: "Search the feed catalog",
+    description:
+      "Searches feeds visible to the authenticated owner by an optional bounded text query.",
+  },
+  registerFeed: {
+    summary: "Register a feed and subscribe",
+    description:
+      "Registers a canonical credential-free RSS URL and creates the authenticated owner's subscription in one request.",
+  },
+  listArticles: {
+    summary: "List owned articles",
+    description:
+      "Lists articles in the authenticated owner scope with state, feed, search, sort, and opaque cursor filters. Limit is 1 to 100.",
+  },
+  getArticleFacets: {
+    summary: "Get owned article facets",
+    description:
+      "Returns state and feed counts for the authenticated owner's current article filters.",
+  },
+  getArticle: {
+    summary: "Get an owned article",
+    description:
+      "Returns one article visible to the authenticated owner; missing and foreign IDs are normalized to 404.",
+  },
+  patchArticle: {
+    summary: "Update owned article state",
+    description:
+      "Updates read, saved, later, or hidden state for an article in the authenticated owner scope.",
+  },
+  getArticleMarkdown: {
+    summary: "Get archived article Markdown",
+    description:
+      "Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials.",
+  },
+  bulkPatchArticles: {
+    summary: "Bulk update owned article state",
+    description:
+      "Applies one state patch to all articles matching the authenticated owner's supplied bounded filter.",
+  },
+  archiveArticle: {
+    summary: "Archive an owned article",
+    description:
+      "Captures and stores a fixed article snapshot for the authenticated owner within the bounded archive deadline.",
+  },
+  listArticleTags: {
+    summary: "List tags on an owned article",
+    description:
+      "Lists manual and AI tags attached to an article in the authenticated owner scope.",
+  },
+  setArticleTags: {
+    summary: "Replace tags on an owned article",
+    description:
+      "Replaces manual tags for an owned article; unknown tag IDs or incompatible state return a conflict.",
+  },
+  enrichArticle: {
+    summary: "Queue article enrichment",
+    description:
+      "Queues AI enrichment for an archived owned article. Work consumes the owner's configured daily enrichment budget.",
+  },
+  getSettings: {
+    summary: "Get owner settings",
+    description:
+      "Returns the authenticated owner's generation schedule and interest profile projection.",
+  },
+  updateSettings: {
+    summary: "Update owner settings",
+    description:
+      "Partially updates the authenticated owner's generation schedule or interest profile and returns the combined projection.",
+  },
+  listTags: {
+    summary: "List owner tags",
+    description: "Lists the authenticated owner's reusable tag vocabulary.",
+  },
+  createTag: {
+    summary: "Create an owner tag",
+    description:
+      "Creates a bounded tag name in the authenticated owner's vocabulary.",
+  },
+  deleteTag: {
+    summary: "Delete an owner tag",
+    description:
+      "Deletes a tag in the authenticated owner scope; missing and foreign IDs are normalized to 404.",
+  },
+  listTagSuggestions: {
+    summary: "List owner tag suggestions",
+    description:
+      "Lists AI-observed tag candidates for the authenticated owner without adding them to the vocabulary.",
+  },
+  promoteTagSuggestion: {
+    summary: "Promote a tag suggestion",
+    description:
+      "Promotes an observed suggestion into the authenticated owner's reusable tag vocabulary.",
+  },
+  listReadingDictionary: {
+    summary: "List reading dictionary entries",
+    description:
+      "Lists pronunciation overrides available to the authenticated owner's episode generation jobs.",
+  },
+  createReadingDictionary: {
+    summary: "Create a reading dictionary entry",
+    description:
+      "Creates an owner-scoped pronunciation override; a duplicate surface conflict returns 409.",
+  },
+  updateReadingDictionary: {
+    summary: "Update a reading dictionary entry",
+    description:
+      "Updates an owner-scoped pronunciation override; missing entries return 404 and duplicate surfaces return 409.",
+  },
+  deleteReadingDictionary: {
+    summary: "Delete a reading dictionary entry",
+    description:
+      "Deletes an owner-scoped pronunciation override; missing and foreign IDs are normalized to 404.",
+  },
+  getEnrichQueue: {
+    summary: "Get enrichment queue and budget",
+    description:
+      "Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily used and limit counters.",
+  },
+  enrichReprocess: {
+    summary: "Requeue failed enrichment",
+    description:
+      "Requeues eligible failed work for the authenticated owner. Executions remain constrained by the reported daily enrichment budget.",
+  },
+  enrichResetDaily: {
+    summary: "Reset the daily enrichment budget",
+    description:
+      "Resets the authenticated owner's daily enrichment usage for the Gateway's current local date.",
+  },
+} as const
+
+type JsonRecord = Record<string, unknown>
+
+const isJsonRecord = (input: unknown): input is JsonRecord =>
+  typeof input === "object" && input !== null && !Array.isArray(input)
+
+const documentOperation = (input: unknown): unknown => {
+  if (!isJsonRecord(input) || typeof input.operationId !== "string")
+    return input
+  const operationName = input.operationId.slice(
+    input.operationId.lastIndexOf(".") + 1
+  )
+  if (!Object.hasOwn(operationDocumentation, operationName)) return input
+  const documentation =
+    operationDocumentation[operationName as keyof typeof operationDocumentation]
+  return { ...input, ...documentation }
+}
+
+const documentPathItem = (input: unknown): unknown =>
+  isJsonRecord(input)
+    ? Object.fromEntries(
+        Object.entries(input).map(([key, value]) => [
+          key,
+          documentOperation(value),
+        ])
+      )
+    : input
+
+const documentOpenApi = (specification: JsonRecord): JsonRecord => {
+  const paths = isJsonRecord(specification.paths)
+    ? Object.fromEntries(
+        Object.entries(specification.paths).map(([path, item]) => [
+          path,
+          documentPathItem(item),
+        ])
+      )
+    : specification.paths
+  const info = isJsonRecord(specification.info) ? specification.info : {}
+  return {
+    ...specification,
+    info: {
+      ...info,
+      contact: {
+        name: "RSS News Podcast API maintainers",
+        url: "https://github.com/r4ai/news-podcast/issues",
+      },
+    },
+    paths,
+  }
+}
+
 export const gatewayApi = HttpApi.make("gateway")
   .add(
     systemGroup,
@@ -1535,6 +1803,8 @@ export const gatewayApi = HttpApi.make("gateway")
       title: "RSS News Podcast API",
       version: "1.0.0",
       description: "Public gateway contract for RSS News Podcast.",
+      servers: [{ url: "/", description: "Same-origin public Gateway" }],
+      transform: documentOpenApi,
     })
   )
 

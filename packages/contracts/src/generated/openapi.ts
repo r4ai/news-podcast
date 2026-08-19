@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Runtime health */
+        /**
+         * Check Gateway health
+         * @description Returns the unauthenticated process health signal used by deployment probes.
+         */
         get: operations["health"];
         put?: never;
         post?: never;
@@ -28,7 +31,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Resolve the current session */
+        /**
+         * Resolve the current session
+         * @description Resolves the session cookie or authorization header and returns authentication state plus enabled login methods without exposing credentials.
+         */
         get: operations["resolveSession"];
         put?: never;
         post?: never;
@@ -45,10 +51,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List episode jobs */
+        /**
+         * List owned episode jobs
+         * @description Lists only jobs owned by the authenticated session, with an optional bounded result limit.
+         */
         get: operations["listEpisodeJobs"];
         put?: never;
-        /** Create an idempotent episode job */
+        /**
+         * Create an idempotent episode job
+         * @description Requires an authenticated owner and Idempotency-Key. Accepts 1 to 20 owned article IDs; replaying the same key and payload returns the same logical job, while a mismatched payload returns 409.
+         */
         post: operations["createEpisodeJob"];
         delete?: never;
         options?: never;
@@ -63,7 +75,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get an episode job */
+        /**
+         * Get an owned episode job
+         * @description Returns one job in the authenticated owner scope. Missing and foreign job IDs are both reported as 404.
+         */
         get: operations["getEpisodeJob"];
         put?: never;
         post?: never;
@@ -82,7 +97,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel an episode job */
+        /**
+         * Cancel an owned episode job
+         * @description Requests cancellation in the authenticated owner scope. Terminal jobs return a 409 state conflict.
+         */
         post: operations["cancelEpisodeJob"];
         delete?: never;
         options?: never;
@@ -99,7 +117,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retry an episode job */
+        /**
+         * Retry a failed episode job
+         * @description Creates a new owned job from a failed job. An explicit Idempotency-Key makes retries replay-safe; when omitted, the Gateway generates a fresh key.
+         */
         post: operations["retryEpisodeJob"];
         delete?: never;
         options?: never;
@@ -114,7 +135,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Replay episode job events */
+        /**
+         * Replay episode job events
+         * @description Streams the owned job snapshot and durable AG-UI progress events. Last-Event-ID or afterSequence resumes after an acknowledged sequence.
+         */
         get: operations["streamEpisodeJobEvents"];
         put?: never;
         post?: never;
@@ -131,7 +155,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List completed episodes */
+        /**
+         * List owned completed episodes
+         * @description Lists completed episodes visible to the authenticated owner using the opaque next cursor returned by the previous page.
+         */
         get: operations["listEpisodes"];
         put?: never;
         post?: never;
@@ -148,7 +175,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a completed episode */
+        /**
+         * Get an owned completed episode
+         * @description Returns a completed episode and its source provenance in the authenticated owner scope; foreign IDs are normalized to 404.
+         */
         get: operations["getEpisode"];
         put?: never;
         post?: never;
@@ -165,7 +195,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stream owned episode audio */
+        /**
+         * Stream owned episode audio
+         * @description Streams same-origin WAV audio for an owned episode and supports a single HTTP Range request without exposing the internal signed object URL.
+         */
         get: operations["streamEpisodeAudio"];
         put?: never;
         post?: never;
@@ -182,10 +215,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List feed subscriptions */
+        /**
+         * List owned feed subscriptions
+         * @description Lists RSS subscriptions belonging only to the authenticated owner.
+         */
         get: operations["listFeedSubscriptions"];
         put?: never;
-        /** Subscribe to an RSS feed URL */
+        /**
+         * Subscribe to an RSS feed
+         * @description Creates an authenticated owner subscription for a canonical credential-free HTTP(S) feed URL and queues synchronization.
+         */
         post: operations["addFeedSubscription"];
         delete?: never;
         options?: never;
@@ -200,7 +239,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List RSS feed synchronization jobs */
+        /**
+         * List owned feed synchronization jobs
+         * @description Lists synchronization status and bounded retry progress for the authenticated owner's feeds.
+         */
         get: operations["listFeedSyncJobs"];
         put?: never;
         post?: never;
@@ -219,7 +261,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start an immediate RSS feed synchronization */
+        /**
+         * Start immediate feed synchronization
+         * @description Queues an asynchronous synchronization for an owned subscription and returns the accepted job; foreign IDs are normalized to 404.
+         */
         post: operations["syncFeedSubscription"];
         delete?: never;
         options?: never;
@@ -237,10 +282,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a feed subscription */
+        /**
+         * Delete an owned feed subscription
+         * @description Deletes a subscription in the authenticated owner scope. Missing and foreign IDs are both reported as 404.
+         */
         delete: operations["deleteFeedSubscription"];
         options?: never;
         head?: never;
+        /**
+         * Update an owned feed subscription
+         * @description Enables or disables synchronization for a subscription belonging to the authenticated owner.
+         */
         patch: operations["feedSubscriptions.updateFeedSubscription"];
         trace?: never;
     };
@@ -251,8 +303,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Search the feed catalog
+         * @description Searches feeds visible to the authenticated owner by an optional bounded text query.
+         */
         get: operations["feeds.listFeeds"];
         put?: never;
+        /**
+         * Register a feed and subscribe
+         * @description Registers a canonical credential-free RSS URL and creates the authenticated owner's subscription in one request.
+         */
         post: operations["feeds.registerFeed"];
         delete?: never;
         options?: never;
@@ -267,6 +327,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List owned articles
+         * @description Lists articles in the authenticated owner scope with state, feed, search, sort, and opaque cursor filters. Limit is 1 to 100.
+         */
         get: operations["articles.listArticles"];
         put?: never;
         post?: never;
@@ -283,6 +347,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get owned article facets
+         * @description Returns state and feed counts for the authenticated owner's current article filters.
+         */
         get: operations["articles.getArticleFacets"];
         put?: never;
         post?: never;
@@ -299,12 +367,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get an owned article
+         * @description Returns one article visible to the authenticated owner; missing and foreign IDs are normalized to 404.
+         */
         get: operations["articles.getArticle"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update owned article state
+         * @description Updates read, saved, later, or hidden state for an article in the authenticated owner scope.
+         */
         patch: operations["articles.patchArticle"];
         trace?: never;
     };
@@ -315,6 +391,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get archived article Markdown
+         * @description Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials.
+         */
         get: operations["articles.getArticleMarkdown"];
         put?: never;
         post?: never;
@@ -333,6 +413,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Bulk update owned article state
+         * @description Applies one state patch to all articles matching the authenticated owner's supplied bounded filter.
+         */
         post: operations["articles.bulkPatchArticles"];
         delete?: never;
         options?: never;
@@ -349,6 +433,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Archive an owned article
+         * @description Captures and stores a fixed article snapshot for the authenticated owner within the bounded archive deadline.
+         */
         post: operations["articles.archiveArticle"];
         delete?: never;
         options?: never;
@@ -363,7 +451,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List tags on an owned article
+         * @description Lists manual and AI tags attached to an article in the authenticated owner scope.
+         */
         get: operations["articles.listArticleTags"];
+        /**
+         * Replace tags on an owned article
+         * @description Replaces manual tags for an owned article; unknown tag IDs or incompatible state return a conflict.
+         */
         put: operations["articles.setArticleTags"];
         post?: never;
         delete?: never;
@@ -381,6 +477,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Queue article enrichment
+         * @description Queues AI enrichment for an archived owned article. Work consumes the owner's configured daily enrichment budget.
+         */
         post: operations["articles.enrichArticle"];
         delete?: never;
         options?: never;
@@ -395,12 +495,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get owner settings
+         * @description Returns the authenticated owner's generation schedule and interest profile projection.
+         */
         get: operations["personalization.getSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update owner settings
+         * @description Partially updates the authenticated owner's generation schedule or interest profile and returns the combined projection.
+         */
         patch: operations["personalization.updateSettings"];
         trace?: never;
     };
@@ -411,8 +519,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List owner tags
+         * @description Lists the authenticated owner's reusable tag vocabulary.
+         */
         get: operations["personalization.listTags"];
         put?: never;
+        /**
+         * Create an owner tag
+         * @description Creates a bounded tag name in the authenticated owner's vocabulary.
+         */
         post: operations["personalization.createTag"];
         delete?: never;
         options?: never;
@@ -430,6 +546,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /**
+         * Delete an owner tag
+         * @description Deletes a tag in the authenticated owner scope; missing and foreign IDs are normalized to 404.
+         */
         delete: operations["personalization.deleteTag"];
         options?: never;
         head?: never;
@@ -443,6 +563,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List owner tag suggestions
+         * @description Lists AI-observed tag candidates for the authenticated owner without adding them to the vocabulary.
+         */
         get: operations["personalization.listTagSuggestions"];
         put?: never;
         post?: never;
@@ -461,6 +585,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Promote a tag suggestion
+         * @description Promotes an observed suggestion into the authenticated owner's reusable tag vocabulary.
+         */
         post: operations["personalization.promoteTagSuggestion"];
         delete?: never;
         options?: never;
@@ -475,8 +603,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List reading dictionary entries
+         * @description Lists pronunciation overrides available to the authenticated owner's episode generation jobs.
+         */
         get: operations["personalization.listReadingDictionary"];
         put?: never;
+        /**
+         * Create a reading dictionary entry
+         * @description Creates an owner-scoped pronunciation override; a duplicate surface conflict returns 409.
+         */
         post: operations["personalization.createReadingDictionary"];
         delete?: never;
         options?: never;
@@ -492,8 +628,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /**
+         * Update a reading dictionary entry
+         * @description Updates an owner-scoped pronunciation override; missing entries return 404 and duplicate surfaces return 409.
+         */
         put: operations["personalization.updateReadingDictionary"];
         post?: never;
+        /**
+         * Delete a reading dictionary entry
+         * @description Deletes an owner-scoped pronunciation override; missing and foreign IDs are normalized to 404.
+         */
         delete: operations["personalization.deleteReadingDictionary"];
         options?: never;
         head?: never;
@@ -507,6 +651,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get enrichment queue and budget
+         * @description Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily used and limit counters.
+         */
         get: operations["personalization.getEnrichQueue"];
         put?: never;
         post?: never;
@@ -525,6 +673,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Requeue failed enrichment
+         * @description Requeues eligible failed work for the authenticated owner. Executions remain constrained by the reported daily enrichment budget.
+         */
         post: operations["personalization.enrichReprocess"];
         delete?: never;
         options?: never;
@@ -541,6 +693,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Reset the daily enrichment budget
+         * @description Resets the authenticated owner's daily enrichment usage for the Gateway's current local date.
+         */
         post: operations["personalization.enrichResetDaily"];
         delete?: never;
         options?: never;

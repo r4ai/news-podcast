@@ -91,6 +91,35 @@ describe("gateway HttpApi contract", () => {
     ).toHaveProperty("202")
   })
 
+  it("documents global metadata and every public operation", () => {
+    const specification = generateOpenApi()
+
+    expect(specification.servers).toEqual([
+      { url: "/", description: "Same-origin public Gateway" },
+    ])
+    expect((specification.info as Record<string, unknown>).contact).toEqual({
+      name: "RSS News Podcast API maintainers",
+      url: "https://github.com/r4ai/news-podcast/issues",
+    })
+
+    for (const pathItem of Object.values(specification.paths))
+      for (const operation of Object.values(pathItem)) {
+        if (
+          typeof operation !== "object" ||
+          operation === null ||
+          !("operationId" in operation)
+        )
+          continue
+        if (
+          typeof operation.summary !== "string" ||
+          typeof operation.description !== "string"
+        )
+          throw new Error(`missing documentation for ${operation.operationId}`)
+        expect(operation.summary.length).toBeGreaterThan(0)
+        expect(operation.description.length).toBeGreaterThan(0)
+      }
+  })
+
   it("accepts only canonical credential-free feed URLs", async () => {
     const valid = await Effect.runPromise(
       Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
