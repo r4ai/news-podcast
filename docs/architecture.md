@@ -102,6 +102,17 @@ flowchart LR
 
 HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Gatewayは生成契約とScalar API Referenceを読み取り専用で配信する。Webはservice実装やdomain型ではなく、公開契約だけに依存する。
 
+公開HTTP Problemはstatusごとの自由文字列ではなく、`status + code + title`のclosed unionである。Gateway adapterは文脈固有の上流codeを公開variantへ変換し、Schema/RPC/未知failureは内部detailを含めず`503 upstream_unavailable`へ畳む。OpenAPIの全codeと実装表、Episode Jobの全conflict codeは型検査で全件対応を要求する。
+
+```mermaid
+flowchart LR
+  Upstream[Context / RPC failure] --> Map[Gateway context mapper]
+  Map -->|known variant| Problem[typed HTTP Problem]
+  Map -->|unknown / invalid| Redact[redacted 503]
+  Problem --> Client[OpenAPI response]
+  Redact --> Client
+```
+
 ### 3.3 service構成
 
 Bounded Contextと配備サービスは1対1にし、純粋な中核と実行shellを別top-level directoryへ分散させず、同じ所有単位へコロケーションする。Context間はdomain型をimportせず、version付きNATS protocolだけで通信する。
@@ -386,7 +397,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 | --- | --- |
 | 認証 | Better Authのsession cookie。Google OIDCはログイン上流であり、Google tokenをAPI bearerとして扱わない |
 | 認可 | 全 `/v1` resourceをowner scopeで検索し、他人のIDと存在しないIDをともに404へ正規化 |
-| API契約 | Effect HttpApi code-first OpenAPI、RFC 9457 Problem Details、生成型の差分検査 |
+| API契約 | Effect HttpApi code-first OpenAPI、closed typed Problem union（公開detailなし）、生成型の差分検査 |
 | 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。BrowserはGatewayの相対OTLP proxyを経由し、Collector originを公開しない。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |

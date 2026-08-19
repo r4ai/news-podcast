@@ -259,7 +259,7 @@ export const makeGatewayHandlers = (
               },
               catch: () => ({
                 type: "about:blank" as const,
-                title: "Unavailable" as const,
+                title: "Upstream unavailable" as const,
                 status: 503 as const,
                 code: "upstream_unavailable" as const,
               }),

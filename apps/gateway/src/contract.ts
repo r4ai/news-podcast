@@ -694,32 +694,127 @@ export const EnrichmentResetSchema = Schema.Struct({
   message: Schema.Literal("Daily enrichment usage reset"),
 })
 
-const problemSchema = <const Status extends number>(
+const problemVariant = <
+  const Status extends number,
+  const Title extends string,
+  const Code extends string,
+>(
   status: Status,
-  identifier: string
+  title: Title,
+  code: Code
 ) =>
   Schema.Struct({
-    type: Schema.String,
-    title: boundedText(200),
+    type: Schema.Literal("about:blank"),
+    title: Schema.Literal(title),
     status: Schema.Literal(status),
-    code: boundedText(100),
-    detail: Schema.optional(Schema.String),
+    code: Schema.Literal(code),
   })
-    .annotate({ identifier })
-    .pipe(HttpApiSchema.status(status))
 
-export const BadRequestProblemSchema = problemSchema(400, "BadRequestProblem")
-export const UnauthorizedProblemSchema = problemSchema(
+const badRequestProblem = problemVariant(
+  400,
+  "Invalid subscription request",
+  "invalid_subscription_request"
+)
+const unauthorizedProblem = problemVariant(
   401,
-  "UnauthorizedProblem"
+  "Authentication required",
+  "authentication_required"
 )
-export const ConflictProblemSchema = problemSchema(409, "ConflictProblem")
-export const UnprocessableProblemSchema = problemSchema(
+const episodeNotFoundProblem = problemVariant(
+  404,
+  "Episode not found",
+  "episode_not_found"
+)
+const subscriptionNotFoundProblem = problemVariant(
+  404,
+  "Feed subscription not found",
+  "feed_subscription_not_found"
+)
+const resourceNotFoundProblem = problemVariant(
+  404,
+  "Resource not found",
+  "resource_not_found"
+)
+const articleNotFoundProblem = problemVariant(
+  404,
+  "Article not found",
+  "article_not_found"
+)
+const episodeJobNotFoundProblem = problemVariant(
+  404,
+  "Episode job not found",
+  "episode_job_not_found"
+)
+const idempotencyConflictProblem = problemVariant(
+  409,
+  "Idempotency conflict",
+  "idempotency_conflict"
+)
+const resourceConflictProblem = problemVariant(
+  409,
+  "Resource conflict",
+  "resource_conflict"
+)
+const jobTerminalProblem = problemVariant(
+  409,
+  "Episode job state conflict",
+  "job_terminal"
+)
+const jobNotFailedProblem = problemVariant(
+  409,
+  "Episode job state conflict",
+  "job_not_failed"
+)
+const unprocessableProblem = problemVariant(
   422,
-  "UnprocessableProblem"
+  "Feed subscription rejected",
+  "feed_subscription_rejected"
 )
-export const NotFoundProblemSchema = problemSchema(404, "NotFoundProblem")
-export const UnavailableProblemSchema = problemSchema(503, "UnavailableProblem")
+const unavailableProblem = problemVariant(
+  503,
+  "Upstream unavailable",
+  "upstream_unavailable"
+)
+
+export const BadRequestProblemSchema = badRequestProblem
+  .annotate({ identifier: "BadRequestProblem" })
+  .pipe(HttpApiSchema.status(400))
+export const UnauthorizedProblemSchema = unauthorizedProblem
+  .annotate({ identifier: "UnauthorizedProblem" })
+  .pipe(HttpApiSchema.status(401))
+export const ConflictProblemSchema = Schema.Union([
+  idempotencyConflictProblem,
+  resourceConflictProblem,
+  jobTerminalProblem,
+  jobNotFailedProblem,
+])
+  .annotate({ identifier: "ConflictProblem" })
+  .pipe(HttpApiSchema.status(409))
+export const UnprocessableProblemSchema = unprocessableProblem
+  .annotate({ identifier: "UnprocessableProblem" })
+  .pipe(HttpApiSchema.status(422))
+export const NotFoundProblemSchema = Schema.Union([
+  episodeNotFoundProblem,
+  subscriptionNotFoundProblem,
+  resourceNotFoundProblem,
+  articleNotFoundProblem,
+  episodeJobNotFoundProblem,
+])
+  .annotate({ identifier: "NotFoundProblem" })
+  .pipe(HttpApiSchema.status(404))
+export const UnavailableProblemSchema = unavailableProblem
+  .annotate({ identifier: "UnavailableProblem" })
+  .pipe(HttpApiSchema.status(503))
+
+export const HttpProblemSchema = Schema.Union([
+  BadRequestProblemSchema,
+  UnauthorizedProblemSchema,
+  NotFoundProblemSchema,
+  ConflictProblemSchema,
+  UnprocessableProblemSchema,
+  UnavailableProblemSchema,
+])
+export type HttpProblem = Schema.Schema.Type<typeof HttpProblemSchema>
 
 export const healthEndpoint = HttpApiEndpoint.get("health", "/health", {
   success: HealthResponseSchema,
