@@ -80,6 +80,9 @@ describe("SQLite archive store", () => {
         snapshot,
       })
       expect(
+        await Effect.runPromise(store.listReferencedSnapshotIds())
+      ).toEqual([snapshot.snapshotId])
+      expect(
         database.getSql(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'content_outbox'"
         )

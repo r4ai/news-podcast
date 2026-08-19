@@ -27,8 +27,15 @@ export type CaptureError = DeepReadonly<{
 
 export type ArchiveStoreError = DeepReadonly<{
   readonly _tag: "ArchiveStoreFailed"
-  readonly operation: "Lookup" | "Commit"
+  readonly operation: "Lookup" | "Commit" | "ListReferences"
   readonly reason: "Conflict" | "Unavailable"
+}>
+
+export type ArchiveMaintenancePorts = DeepReadonly<{
+  readonly listReferencedSnapshotIds: () => Effect.Effect<
+    readonly SnapshotId[],
+    ArchiveStoreError
+  >
 }>
 
 export type ArchiveLookup =

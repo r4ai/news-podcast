@@ -241,6 +241,20 @@ stateDiagram-v2
 
 `running`中のstageは`selecting_articles`、`materializing_articles`、`generating_script`、`preparing_pronunciation`、`synthesizing_audio`、`storing_episode`に限定する。
 
+### 4.4 記事archive objectの回収
+
+```mermaid
+flowchart LR
+  Capture["capture Put失敗"] --> Immediate["成功キーを即時削除"]
+  SQLite[("article_snapshots")]
+  S3[("S3 articles/ prefix")]
+  SQLite --> Reconcile["6時間ごとに照合"]
+  S3 --> Reconcile
+  Reconcile -->|"未参照 + 24時間超"| Delete["best-effort削除"]
+```
+
+SQLiteのsnapshot IDを参照正本とし、in-flight captureは保持期間で保護する。削除失敗はcapture結果やservice readinessを上書きせず、件数だけを`object.cleanup`とstructured logへ記録して次周期で再試行する。
+
 ## 5. データ設計
 
 ```mermaid

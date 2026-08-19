@@ -104,6 +104,18 @@ flowchart LR
 
 SIGINT/SIGTERMはresource drainとtelemetry flush後にexit 0、subscription/connection終了、初期化失敗、process fatalはexit 1である。NATS drainが1秒以内に終わらない場合はconnectionをcloseし、終了処理自体の停止を防ぐ。Docker healthは観測専用であり、回復不能状態はapplication自身が終了する。詳細は[ADR-0052](../adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)を参照する。
 
+## Article archive orphan cleanup
+
+Content Knowledgeは部分Put失敗時に成功済みobjectを即時削除し、さらに既定6時間ごとにS3とSQLiteを照合する。`CONTENT_ARCHIVE_ORPHAN_RETENTION_MS`（既定24時間）より古く、`article_snapshots`に参照がないUUID snapshot prefixだけが対象になる。
+
+| 観測 | 対応 |
+| --- | --- |
+| `object.cleanup{cleanup.result="failed"}`が1以上 | Content logの`object.cleanup.failed`をtraceで追い、S3権限・容量・接続を確認する |
+| 3周期連続でDelete失敗 | 自動削除を手動で代行せず、S3障害を復旧した後の次周期を確認する |
+| 対象が0件 | 正常。object keyはlog/metricへ出ない |
+
+間隔は`CONTENT_ARCHIVE_CLEANUP_INTERVAL_MS`で調整できる。保持期間をcapture timeoutより短くしない。詳細は[ADR-0066](../adr/0066-reconcile-orphan-article-archive-objects.md)を参照する。
+
 ## Content Outbox廃止migration記録
 
 2026-08-15に未使用のContent archive event/outboxを廃止した。migration前のonline backupと検証値は次の通り。

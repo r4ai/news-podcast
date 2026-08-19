@@ -1,5 +1,5 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
-import { eq } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import { articleSnapshots } from "../../../../drizzle/schema.js"
@@ -7,9 +7,13 @@ import type {
   ArchiveArticlePorts,
   ArchiveCommit,
   ArchiveLookup,
+  ArchiveMaintenancePorts,
   ArchiveStoreError,
 } from "../../../application/ports/archive.js"
-import { ArticleSnapshotSchema } from "../../../domain/article.js"
+import {
+  ArticleSnapshotSchema,
+  SnapshotIdSchema,
+} from "../../../domain/article.js"
 import type {
   ContentKnowledgeDatabase,
   QueryRunner,
@@ -45,7 +49,8 @@ const parseSnapshotJson = (
     Effect.mapError(() => archiveStoreError(operation))
   )
 
-export type ArchiveStore = Pick<ArchiveArticlePorts, "lookup" | "commit">
+export type ArchiveStore = Pick<ArchiveArticlePorts, "lookup" | "commit"> &
+  ArchiveMaintenancePorts
 
 export const createArchiveStore = (
   database: ContentKnowledgeDatabase,
@@ -123,5 +128,25 @@ export const createArchiveStore = (
         )
       )
 
-    return deepFreeze({ lookup, commit })
+    const listReferencedSnapshotIds: ArchiveMaintenancePorts["listReferencedSnapshotIds"] =
+      () =>
+        Effect.try({
+          try: () =>
+            database
+              .select({ snapshotId: articleSnapshots.snapshotId })
+              .from(articleSnapshots)
+              .orderBy(asc(articleSnapshots.snapshotId))
+              .all(),
+          catch: (error) => archiveStoreError("ListReferences", error),
+        }).pipe(
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, ({ snapshotId }) =>
+              parse(SnapshotIdSchema)(snapshotId)
+            )
+          ),
+          Effect.mapError(() => archiveStoreError("ListReferences")),
+          Effect.map((snapshotIds) => deepFreeze(snapshotIds))
+        )
+
+    return deepFreeze({ lookup, commit, listReferencedSnapshotIds })
   })

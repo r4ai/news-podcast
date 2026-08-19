@@ -45,6 +45,10 @@ const validServiceConfig = {
     maximumAssetBytes: 20_971_520,
     maximumAssetCount: 512,
     maximumAssetTotalBytes: 104_857_600,
+    cleanup: {
+      intervalMillis: 21_600_000,
+      retentionMillis: 86_400_000,
+    },
   },
 }
 
@@ -115,6 +119,7 @@ describe("content-knowledge Node runtime", () => {
   it("becomes ready only after the RPC resource is acquired and drains on interrupt", async () => {
     const closeSqlite = vi.fn()
     const ready = vi.fn()
+    const runArchiveCleanup = vi.fn(() => Effect.never)
     const database = openContentKnowledgeDatabaseUnsafe(":memory:")
     const fiber = Effect.runFork(
       runNodeService(validServiceConfig, {
@@ -125,6 +130,7 @@ describe("content-knowledge Node runtime", () => {
           }),
         openCapture: () => ({
           capture: vi.fn(),
+          cleanupOrphans: vi.fn(),
           fetcher: vi.fn() as never,
           close: Effect.void,
         }),
@@ -137,11 +143,13 @@ describe("content-knowledge Node runtime", () => {
         runPoller: () => Effect.never,
         enrichmentProvider: { enrich: () => Effect.die("unused") },
         runEnrichment: () => Effect.never,
+        runArchiveCleanup,
         onReady: ready,
       })
     )
 
     await vi.waitFor(() => expect(ready).toHaveBeenCalledOnce())
+    expect(runArchiveCleanup).toHaveBeenCalledOnce()
     await Effect.runPromise(Fiber.interrupt(fiber))
     expect(closeSqlite).toHaveBeenCalledOnce()
     database.close()

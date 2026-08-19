@@ -84,4 +84,19 @@ describe("observability privacy boundary", () => {
       "job.next_retry_at": "2026-08-15T09:20:00.000Z",
     })
   })
+
+  it("keeps bounded cleanup counts while stripping object keys", () => {
+    expect(
+      sanitizeAttributes({
+        "cleanup.attempted": 3,
+        "cleanup.deleted": 2,
+        "cleanup.failed": 1,
+        "object.key": "articles/private/raw/response.html",
+      })
+    ).toEqual({
+      "cleanup.attempted": 3,
+      "cleanup.deleted": 2,
+      "cleanup.failed": 1,
+    })
+  })
 })

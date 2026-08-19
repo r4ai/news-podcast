@@ -78,6 +78,7 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
   - 記事一覧`GET /v1/me/articles`は`cursor`クエリと`page.hasMore` / `page.nextCursor`で継続する。cursorは`(公開日時 ?? 発見日時, articleId)`のkeyset位置をbase64urlへ畳んだ不透明tokenで、Content Knowledgeだけが解釈する。OFFSETと違い、ページを跨いで記事が増減しても重複・欠落しない。復号できないcursorは不正要求として閉じる。
   - `q`はownerの記事全体をタイトル・出典URL・ownerタグ名の部分一致で絞る。手動番組の記事選択は読み込み済みの先頭ページをクライアントで再検索せず、入力をdeferして同じAPIの先頭から再取得する。取得中は直前の候補を保持し、空結果と失敗は別状態として表示する。
 - 手動archive `POST /v1/me/articles/{articleId}/archive` は同期結果を返す。GatewayはContent captureと同じ30秒のend-to-end deadlineを送り、archive RPCだけ5秒の返信余裕を加えて待つ。Contentは期限切れ処理を中断してcommitしないため、Gatewayの失敗後にarchiveだけ成功する状態を作らない。詳細は[ADR-0065](adr/0065-bound-manual-archive-rpc-deadline.md)を正本とする。
+  - S3の一部Put失敗は全Putのsettle後に成功キーをbest-effort削除する。process停止・DB commit失敗・Delete失敗は、SQLiteの`article_snapshots.snapshot_id`を参照正本とする定期照合で回収する。未参照でも24時間以内のobjectは in-flight capture 保護のため残す。詳細は[ADR-0066](adr/0066-reconcile-orphan-article-archive-objects.md)を正本とする。
 - Episodeへ署名URLを保存・公開しない。`GET /v1/episodes/{episodeId}/audio`はGatewayがowner認可後にprivate S3からRange streamし、`Cache-Control: private, no-store`を返す。
 - Better Authの `/api/auth/**` はBetter Auth側の生成契約を正本とし、アプリOpenAPIへ複製しない。Google tokenを `/v1` のbearer tokenとして扱わない。
 

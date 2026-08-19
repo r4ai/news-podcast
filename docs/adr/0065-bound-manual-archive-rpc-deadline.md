@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Content Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: Issue #23、`POST /v1/me/articles/{articleId}/archive`、ADR-0012、ADR-0041
+- Related: Issue #23、`POST /v1/me/articles/{articleId}/archive`、ADR-0012、ADR-0041、ADR-0066
 
 ## コンテキストと変更契機
 
@@ -62,7 +62,7 @@ sequenceDiagram
 
 - 手動archive HTTPリクエストは最大約35秒開いたままになる。
 - GatewayとContentは同じ`CONTENT_ARCHIVE_TIMEOUT_MS`を配備設定として共有する。
-- 中断前にS3へ保存済みの未参照objectは残り得るため、将来のcleanup対象になる。
+- 中断前にS3へ保存済みの未参照objectは残り得る。2026-08-19にADR-0066で即時補償と24時間保持後の定期照合を追加した。
 
 ## 影響と同期
 
@@ -81,7 +81,7 @@ sequenceDiagram
 ## 再検討条件
 
 - archiveのp95が20秒、p99が30秒へ継続的に近づく。
-- orphan objectの量が運用閾値を超える。
+- ADR-0066の定期cleanup後もorphan objectがobject-store予算の5%を超える。
 - 再起動後の再開、進捗表示、複数archiveの公平なqueueingが必要になる。
 
 ## 受け入れゲートと未決事項
