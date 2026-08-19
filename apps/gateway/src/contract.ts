@@ -180,6 +180,10 @@ const JobReceiptWithLocationSchema = HttpApiSchema.WithHeaders(
 const jobFields = {
   id: JobIdSchema,
   status: JobStatusSchema,
+  trigger: Schema.Literals(["manual", "scheduled"]),
+  scheduleStatus: Schema.optional(
+    Schema.Literals(["retrying", "succeeded", "missed"])
+  ),
   createdAt: UtcDateTimeStringSchema,
   articleIds: Schema.optional(Schema.Array(ArticleIdSchema)),
   attempt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),

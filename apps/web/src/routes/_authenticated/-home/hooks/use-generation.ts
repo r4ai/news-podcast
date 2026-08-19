@@ -207,6 +207,7 @@ export function useGeneration() {
     progress: state === "running" && stage ? stagePercent(stage) : undefined,
     stage: state === "running" && stage ? stageLabel(stage) : undefined,
     state: presentationState,
+    scheduleStatus: latestJob?.scheduleStatus ?? undefined,
     streaming: liveForThisJob && streamConnected,
     episode: latestEpisode
       ? {

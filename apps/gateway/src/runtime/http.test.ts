@@ -239,6 +239,7 @@ describe("Gateway HTTP runtime", () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
       status: "succeeded",
+      trigger: "manual",
       createdAt: "2026-08-12T00:00:00.000Z",
       attempt: 1,
       maxAttempts: 4,
@@ -362,6 +363,7 @@ describe("Gateway HTTP runtime", () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
       status: "failed",
+      trigger: "manual",
       createdAt: "2026-08-12T00:00:00.000Z",
       attempt: 1,
       maxAttempts: 4,

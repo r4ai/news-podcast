@@ -239,6 +239,76 @@ describe("SQLite job repository", () => {
     expect(repeated.request.articleIds).toEqual(first.request.articleIds)
   })
 
+  it("requeues a candidate-missed scheduled job after a service restart", async () => {
+    const databasePath = join(
+      mkdtempSync(join(tmpdir(), "episode-production-schedule-")),
+      "jobs.sqlite"
+    )
+    const scheduled = job(
+      "10e2d4e1-c127-479f-a124-2ea037bd9319",
+      "scheduled",
+      undefined,
+      "scheduled:owner:2026-08-15"
+    )
+    const leaseToken = Schema.decodeUnknownSync(LeaseTokenSchema)("lease-1")
+    const first = openProductionDatabaseUnsafe(databasePath)
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(first.database)
+          const execution = yield* executionRepository(first.database)
+          yield* repository.saveScheduledIdempotently(scheduled)
+          const leased = yield* execution.leaseNext({
+            now: at,
+            leasedUntil: at,
+            leaseToken,
+          })
+          if (leased?.job._tag !== "Running") {
+            return yield* Effect.die("expected a running lease")
+          }
+          yield* execution.transition({
+            jobId: scheduled.jobId,
+            leaseToken,
+            state: failRunningJob(leased.job, {
+              failedAt: at,
+              failure: {
+                code: "no_generation_candidates" as never,
+                retryable: false,
+              },
+            }),
+          })
+        })
+      )
+    } finally {
+      first.close()
+    }
+
+    const restarted = openProductionDatabaseUnsafe(databasePath)
+    try {
+      const requeued = await Effect.runPromise(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(restarted.database)
+          return yield* repository.saveScheduledIdempotently(
+            job(
+              "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+              "scheduled",
+              undefined,
+              "scheduled:owner:2026-08-15"
+            )
+          )
+        })
+      )
+
+      expect(requeued).toMatchObject({
+        _tag: "Queued",
+        jobId: scheduled.jobId,
+        attempt: 0,
+      })
+    } finally {
+      restarted.close()
+    }
+  })
+
   it("treats selected articles as an order-independent idempotency input", async () => {
     const first = job("10e2d4e1-c127-479f-a124-2ea037bd9319", "manual", [
       "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",

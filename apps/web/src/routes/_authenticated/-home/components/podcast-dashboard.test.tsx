@@ -5,6 +5,16 @@ import { describe, expect, it, vi } from "vitest"
 import { PodcastDashboard } from "./podcast-dashboard"
 
 describe("PodcastDashboard の完成Episode投影", () => {
+  it.each([
+    ["retrying", "日次予約: 再調整中"],
+    ["succeeded", "日次予約: 完了"],
+    ["missed", "日次予約: 未達"],
+  ] as const)("日次予約の %s を区別して表示する", (scheduleStatus, label) => {
+    render(<PodcastDashboard scheduleStatus={scheduleStatus} />)
+
+    expect(screen.getByText(label)).toBeDefined()
+  })
+
   it("job完了後の投影待ちを完成とは区別する", () => {
     render(<PodcastDashboard state="projecting" />)
 

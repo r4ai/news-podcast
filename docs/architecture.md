@@ -207,7 +207,7 @@ sequenceDiagram
   Gateway-->>Web: same-origin audio stream
 ```
 
-定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はjob作成成功後だけ進める。
+定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{ownerId}:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はEpisodeが`Succeeded`、またはcancel・回復対象外の終端失敗を`missed`と判定した後だけ進める。`Queued / Running / Retrying`はdueを維持し、`no_generation_candidates`は同じjobを再queueして候補到着後に回復する（[ADR-0074](adr/0074-complete-daily-schedule-on-terminal-outcome.md)）。
 
 completion consumerはLibrary保存transactionが成功してからACKする。DB保存失敗は上限付き指数backoffでNACKし、JetStream側では再配送を打ち切らない。設定済み回数は停止上限ではなくerror通知の開始閾値である。JSON・protocol・domain契約違反はACKして破棄し、failure tagと検証済み識別子をerror eventへ残してpoison payloadの無限再配送を防ぐ。詳細は[ADR-0070](adr/0070-recover-episode-completion-after-redelivery-threshold.md)を正本とする。
 
@@ -407,4 +407,5 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0071: ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
 - [ADR-0072: Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
 - [ADR-0073: 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
+- [ADR-0074: 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

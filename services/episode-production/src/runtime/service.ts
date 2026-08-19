@@ -401,17 +401,24 @@ export const runNodeEpisodeProductionService = (
                       idempotencyKey: parsedIdempotencyKey,
                       trigger: "scheduled",
                     })
-                  ),
-                  Effect.asVoid
+                  )
                 ),
               complete: identitySchedule.complete,
               wait: (delay) => Effect.sleep(delay),
               observe: (event) =>
-                Effect.logInfo("scheduled generation state", {
-                  event_name: event._tag,
-                  owner_id: event.ownerId,
-                  local_date: event.localDate,
-                }),
+                Effect.sync(() =>
+                  observability.count("episode.schedule.outcomes", 1, {
+                    "schedule.outcome": event._tag.toLowerCase(),
+                  })
+                ).pipe(
+                  Effect.andThen(
+                    Effect.logInfo("scheduled generation state", {
+                      event_name: event._tag,
+                      owner_id: event.ownerId,
+                      local_date: event.localDate,
+                    })
+                  )
+                ),
             },
             config.scheduler,
             controller.signal

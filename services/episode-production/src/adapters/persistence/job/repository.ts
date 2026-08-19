@@ -60,6 +60,29 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
         return decodeDocument(result.row.document).pipe(
           Effect.flatMap((existing) => {
             if (
+              scheduledFirstWriteWins &&
+              existing.request.trigger === "scheduled" &&
+              ((existing._tag === "Failed" &&
+                existing.failure.code === "no_generation_candidates") ||
+                (existing._tag === "Canceled" &&
+                  existing.reason === "service_shutdown"))
+            ) {
+              const requeued: QueuedJob = deepFreeze({
+                _tag: "Queued",
+                jobId: existing.jobId,
+                request: existing.request,
+                createdAt: existing.createdAt,
+                attempt: 0,
+                enqueuedAt: job.enqueuedAt,
+              })
+              return Effect.sync(() =>
+                handle.requeueRecoverableScheduled({
+                  jobId: existing.jobId,
+                  document: JSON.stringify(encodeJob(requeued)),
+                })
+              ).pipe(Effect.as(requeued))
+            }
+            if (
               result.row.requestFingerprint === requestFingerprint ||
               (scheduledFirstWriteWins &&
                 encoded.request.trigger === "scheduled" &&

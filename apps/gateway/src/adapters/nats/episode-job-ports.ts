@@ -55,12 +55,36 @@ const stateTimestamp = (job: ParsedProductionJob) => {
   }
 }
 
+const scheduleStatus = (job: ParsedProductionJob) => {
+  if (job.trigger !== "scheduled") return undefined
+  switch (job.status) {
+    case "queued":
+    case "running":
+    case "retrying":
+      return "retrying" as const
+    case "succeeded":
+      return "succeeded" as const
+    case "failed":
+      return job.failure.code === "no_generation_candidates"
+        ? ("retrying" as const)
+        : ("missed" as const)
+    case "canceled":
+      return job.reason === "service_shutdown"
+        ? ("retrying" as const)
+        : ("missed" as const)
+  }
+}
+
 export const toEpisodeJob = (
   job: ParsedProductionJob
 ): Effect.Effect<PublicEpisodeJob, ReturnType<typeof unavailable>> =>
   parse(EpisodeJobSchema)({
     id: job.jobId,
     status: job.status,
+    trigger: job.trigger,
+    ...(scheduleStatus(job) === undefined
+      ? {}
+      : { scheduleStatus: scheduleStatus(job) }),
     createdAt: job.createdAt,
     deadlineAt: deadlineAt(job.createdAt),
     ...(job.articleIds === undefined ? {} : { articleIds: job.articleIds }),
