@@ -105,7 +105,9 @@ function useSingleColumnReaderFocus(articleId: string | undefined) {
   useEffect(() => {
     if (articleId === undefined) return
     const twoColumn = window.matchMedia?.("(min-width: 64rem)").matches ?? true
-    if (!twoColumn) ref.current?.focus()
+    // 位置は動かさない。focusに任せると、記事が画面へ収まらない時にブラウザが
+    // 本文を見える所まで送り、上に居る「一覧へ戻る」が画面外へ押し出される。
+    if (!twoColumn) ref.current?.focus({ preventScroll: true })
   }, [articleId])
 
   return ref

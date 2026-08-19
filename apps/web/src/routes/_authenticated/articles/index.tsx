@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { ArrowLeft } from "lucide-react"
+import { useLayoutEffect, useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -35,25 +36,56 @@ export const Route = createFileRoute("/_authenticated/articles/")({
   component: ArticlesRoute,
 })
 
+/**
+ * 1カラム (lg未満) では一覧と本文がページのスクロールを共有する。
+ *
+ * 切り替え先が描き上がった commit で、paint の前に位置を移す。前の画面の位置を
+ * 持ち越すと、描き終えた後にブラウザ (末尾の切り詰め) やrouterのリセットが
+ * スクロールを動かし、一度出た「一覧へ戻る」が上へ飛んでから戻る。
+ *
+ * 押した瞬間に動かすのでは早すぎる。記事の取得が済むまで一覧は画面に残った
+ * ままなので、まだ見えている一覧が先頭へ飛ぶ。
+ *
+ * 2カラムではページ自身がスクロールしないので、何もしない。
+ */
+function useSingleColumnScrollSwap(articleId: string | undefined) {
+  const listScroll = useRef(0)
+
+  useLayoutEffect(() => {
+    const twoColumn = window.matchMedia?.("(min-width: 64rem)").matches ?? true
+    if (twoColumn) return
+    window.scrollTo({ top: articleId === undefined ? listScroll.current : 0 })
+  }, [articleId])
+
+  return listScroll
+}
+
 function ArticlesRoute() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
 
   function onSearchChange(
     patch: Partial<typeof search>,
-    options?: { readonly replace?: boolean }
+    options?: { readonly replace?: boolean; readonly resetScroll?: boolean }
   ) {
     void navigate({
       replace: options?.replace,
+      resetScroll: options?.resetScroll,
       search: (prev) => ({ ...prev, ...patch }),
     })
   }
 
-  function selectArticle(id: string | undefined) {
-    onSearchChange({ article: id })
-  }
-
   const hasSelection = search.article !== undefined
+  const listScroll = useSingleColumnScrollSwap(search.article)
+
+  function selectArticle(id: string | undefined) {
+    // 一覧を離れる瞬間の位置を控える。戻った時にここへ返す。記事から記事へ
+    // 送る時 (既に選択がある) は、控えてあるのが一覧の位置なので触らない。
+    if (id !== undefined && !hasSelection) listScroll.current = window.scrollY
+    // 一覧と本文の入れ替えではrouterに位置を触らせない。routerのリセットは
+    // 描き終えた後に効くので、こちらが移した位置を上書きしてしまう。
+    onSearchChange({ article: id }, { resetScroll: false })
+  }
 
   return (
     /*
