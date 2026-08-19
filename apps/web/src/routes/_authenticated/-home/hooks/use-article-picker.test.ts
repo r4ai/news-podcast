@@ -93,6 +93,53 @@ describe("useArticlePicker", () => {
     expect(result.current.selectedIds).toEqual(["a1"])
   })
 
+  it("clears a cancelled selection when a fresh dialog is reopened", async () => {
+    stubArticles(3)
+    type Props = {
+      readonly open: boolean
+      readonly initialSelectedIds: readonly string[]
+    }
+    const { result, rerender } = renderHookWithProviders(
+      ({ open, initialSelectedIds }: Props) =>
+        useArticlePicker(open, initialSelectedIds),
+      { initialProps: { open: false, initialSelectedIds: [] } }
+    )
+
+    rerender({ open: true, initialSelectedIds: [] })
+    await waitFor(() => expect(result.current.articles).toHaveLength(3))
+    act(() => result.current.onToggle("a1"))
+    expect(result.current.selectedIds).toEqual(["a1"])
+
+    rerender({ open: false, initialSelectedIds: [] })
+    rerender({ open: true, initialSelectedIds: [] })
+
+    expect(result.current.selectedIds).toEqual([])
+  })
+
+  it("restores the requested retry selection on every reopen", async () => {
+    stubArticles(3)
+    type Props = {
+      readonly open: boolean
+      readonly initialSelectedIds: readonly string[]
+    }
+    const retryIds = ["a1"] as const
+    const { result, rerender } = renderHookWithProviders(
+      ({ open, initialSelectedIds }: Props) =>
+        useArticlePicker(open, initialSelectedIds),
+      { initialProps: { open: false, initialSelectedIds: retryIds } }
+    )
+
+    rerender({ open: true, initialSelectedIds: retryIds })
+    await waitFor(() => expect(result.current.articles).toHaveLength(3))
+    act(() => result.current.onToggle("a2"))
+    expect(result.current.selectedIds).toEqual(["a1", "a2"])
+
+    rerender({ open: false, initialSelectedIds: retryIds })
+    rerender({ open: true, initialSelectedIds: retryIds })
+
+    expect(result.current.selectedIds).toEqual(["a1"])
+  })
+
   it("refuses to select past the contract's limit", async () => {
     stubArticles(MAX_SELECTED_ARTICLES + 5)
     const { result } = renderHookWithProviders(() => useArticlePicker(true))
