@@ -1049,3 +1049,65 @@ test("each page names itself in the tab, history and screen reader", async ({
   await page.goBack()
   await expect(page).toHaveTitle("ライブラリ | News Podcast")
 })
+
+test("switching articles shows the next body from its beginning", async ({
+  page,
+}) => {
+  // 2カラム (lg以上) では本文だけが独立したスクロール領域になる。長い記事を
+  // 読んだ後に隣へ送ると、題名も操作列も画面の外から始まってしまう。
+  // 高さは本文が確実に溢れる値にする。収まってしまうと回帰を見逃す。
+  await page.setViewportSize({ width: 1440, height: 420 })
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+
+  await page.getByRole("link", { name: "記事", exact: true }).click()
+  await page
+    .getByRole("button", { name: /Durable Objectsが東京リージョンに対応/ })
+    .first()
+    .click()
+  await expect(
+    page.getByRole("heading", { name: "確認したいこと" })
+  ).toBeVisible()
+
+  const scroller = page.locator("[data-reader-pane]")
+  await scroller.evaluate((node) => {
+    node.scrollTop = node.scrollHeight
+  })
+  expect(await scroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+
+  // j で次の記事へ送る。
+  await page.keyboard.press("j")
+  await expect(
+    page.getByRole("heading", { name: /TypeScript 6.0のリリース候補が公開/ })
+  ).toBeVisible()
+
+  expect(
+    await scroller.evaluate((node) => [
+      node.scrollTop,
+      node.scrollHeight - node.clientHeight,
+    ])
+  ).toEqual([0, expect.any(Number)])
+
+  // 取得済みの記事へ戻す。骨組みを挟まないので、位置は誰かが戻さない限り残る。
+  await scroller.evaluate((node) => {
+    node.scrollTop = node.scrollHeight
+  })
+  expect(await scroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+
+  await page.keyboard.press("k")
+  await expect(
+    page.getByRole("heading", { name: /Durable Objectsが東京リージョンに対応/ })
+  ).toBeVisible()
+
+  const [top, max] = await scroller.evaluate((node) => [
+    node.scrollTop,
+    node.scrollHeight - node.clientHeight,
+  ])
+  // 戻り先も溢れる長さでなければ、丸めで0に戻って回帰を見逃す。
+  expect(max).toBeGreaterThan(0)
+  expect(top).toBe(0)
+})
