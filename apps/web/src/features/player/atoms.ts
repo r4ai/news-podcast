@@ -185,6 +185,16 @@ export const hasPlaybackErrorAtom = atom(
 /** 現在位置。`timeupdate`で毎秒数回動くので、購読はバーの目盛りだけに閉じる。 */
 export const playbackPositionAtom = atom(0)
 
+/**
+ * 明示の位置移動が起きた回数。
+ *
+ * ロック画面の目盛りは、こちらが最後に報告した位置から実時間で外挿される。
+ * 飛ばした直後に報告し直さないと、OS側は前の位置から数え続ける。位置そのものは
+ * 毎秒数回動くので購読できないが、「飛ばした」はまばらな出来事なので、
+ * 回数として取り出せば購読できる。
+ */
+export const seekGenerationAtom = atom(0)
+
 /** 総時間。契約には無く、`loadedmetadata`が届くまで判らない。 */
 export const playbackDurationAtom = atom<number | undefined>(undefined)
 
@@ -380,6 +390,7 @@ export const seekToAtom = atom(null, (get, set, seconds: number) => {
   const next = clampTime(seconds, get(playbackDurationAtom))
   element.currentTime = next
   set(playbackPositionAtom, next)
+  set(seekGenerationAtom, get(seekGenerationAtom) + 1)
 })
 
 export const skipByAtom = atom(null, (get, set, offset: number) => {
@@ -388,6 +399,7 @@ export const skipByAtom = atom(null, (get, set, offset: number) => {
   const next = seekBy(element.currentTime, offset, get(playbackDurationAtom))
   element.currentTime = next
   set(playbackPositionAtom, next)
+  set(seekGenerationAtom, get(seekGenerationAtom) + 1)
 })
 
 export const setPlaybackRateAtom = atom(
