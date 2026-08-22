@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { settingsQueryOptions } from "@/features/settings"
 import { Panel } from "@/shared/components/panel"
 import { PageHeader } from "@/shared/layouts/page-header"
+import { pageTitle } from "@/shared/lib/page-title"
 import { AiEnrichPanel } from "./-components/ai-enrich-panel"
 import { InterestProfileForm } from "./-components/interest-profile-form"
 import { ReadingDictionaryManager } from "./-components/reading-dictionary-manager"
@@ -16,6 +17,7 @@ import {
 } from "./-queries"
 
 export const Route = createFileRoute("/_authenticated/settings/")({
+  head: () => ({ meta: [{ title: pageTitle("設定") }] }),
   validateSearch: validateSettingsSearch,
   // 節ごとに読むものが違うので、どの節を開くかを先読みの依存に入れる。
   loaderDeps: ({ search }) => ({ section: search.section }),

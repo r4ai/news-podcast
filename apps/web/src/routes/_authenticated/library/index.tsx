@@ -8,6 +8,7 @@ import {
   episodesInfiniteQueryOptions,
 } from "@/features/episodes"
 import { Panel } from "@/shared/components/panel"
+import { pageTitle } from "@/shared/lib/page-title"
 import {
   EmptySelection,
   EpisodeDetail,
@@ -17,6 +18,7 @@ import { EpisodeList } from "./-components/episode-list"
 import { validateLibrarySearch } from "./-model"
 
 export const Route = createFileRoute("/_authenticated/library/")({
+  head: () => ({ meta: [{ title: pageTitle("ライブラリ") }] }),
   validateSearch: validateLibrarySearch,
   loaderDeps: ({ search }) => ({ episode: search.episode }),
   loader: ({ context, deps }) => {

@@ -6,6 +6,7 @@ import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { Panel } from "@/shared/components/panel"
+import { pageTitle } from "@/shared/lib/page-title"
 import {
   articleFacetsQueryOptions,
   articlesInfiniteQueryOptions,
@@ -20,6 +21,7 @@ import { ConnectedEnrichQueueDialog } from "./-components/enrich-queue-dialog"
 import { validateArticlesSearch } from "./-model"
 
 export const Route = createFileRoute("/_authenticated/articles/")({
+  head: () => ({ meta: [{ title: pageTitle("記事") }] }),
   validateSearch: validateArticlesSearch,
   // 選択中の記事はloaderの依存に入れない。記事を切り替えるたびに一覧の
   // loaderが走ると、ページングで積んだページが捨てられる。

@@ -1028,3 +1028,24 @@ test("switching between the list and the reader on one column keeps the page sti
   const leavingFrames = await framesWhere(true)
   expect(leavingFrames).toEqual(leavingFrames.map(() => 0))
 })
+
+test("each page names itself in the tab, history and screen reader", async ({
+  page,
+}) => {
+  await page.goto("/")
+  await expect(page).toHaveTitle("ログイン | News Podcast")
+
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(page).toHaveTitle("今日 | News Podcast")
+
+  // SPA遷移でも題は追従する。同じ題のまま並ぶと、タブも履歴も見分けが付かない。
+  await page.getByRole("link", { name: "ライブラリ" }).first().click()
+  await expect(page).toHaveTitle("ライブラリ | News Podcast")
+
+  await page.getByRole("link", { name: "設定" }).first().click()
+  await expect(page).toHaveTitle("設定 | News Podcast")
+
+  await page.goBack()
+  await expect(page).toHaveTitle("ライブラリ | News Podcast")
+})

@@ -3,9 +3,11 @@ import { createFileRoute } from "@tanstack/react-router"
 import { settingsQueryOptions } from "@/features/settings"
 import { Panel } from "@/shared/components/panel"
 import { PageHeader } from "@/shared/layouts/page-header"
+import { pageTitle } from "@/shared/lib/page-title"
 import { ScheduleForm } from "./-components/schedule-form"
 
 export const Route = createFileRoute("/_authenticated/schedule/")({
+  head: () => ({ meta: [{ title: pageTitle("生成時刻") }] }),
   // awaitしない先読み。未達ならPanelのfallbackが出る。
   loader: ({ context }) => {
     void context.queryClient.ensureQueryData(settingsQueryOptions)

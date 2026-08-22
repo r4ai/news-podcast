@@ -8,9 +8,11 @@ import {
 } from "@/features/subscriptions"
 import { api } from "@/shared/api"
 import { Panel } from "@/shared/components/panel"
+import { pageTitle } from "@/shared/lib/page-title"
 import { GenerationDashboard } from "./-home/components/generation-dashboard"
 
 export const Route = createFileRoute("/_authenticated/")({
+  head: () => ({ meta: [{ title: pageTitle("今日") }] }),
   loader: ({ context }) => {
     void context.queryClient.ensureQueryData(
       api.queryOptions("get", "/v1/episode-jobs")
