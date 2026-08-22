@@ -33,10 +33,12 @@ import { useGlobalKeydown } from "@/shared/lib/use-global-keydown"
 export function KeyboardShortcutsHelp() {
   const [open, setOpen] = useState(false)
 
+  // 開くだけ。閉じるのはdialogが持つEscapeと閉じるボタンで、ここは重ねない。
+  // 開いている間はfocusがmodalの中にあり、`useGlobalKeydown`は素通しする。
   useGlobalKeydown((event) => {
     if (event.key !== GLOBAL_SHORTCUT_HELP_KEY) return
     event.preventDefault()
-    setOpen((current) => !current)
+    setOpen(true)
   })
 
   return (

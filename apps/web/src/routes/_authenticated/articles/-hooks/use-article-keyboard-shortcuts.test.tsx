@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { SHORTCUT_GROUPS } from "@/shared/lib/keyboard-shortcuts"
@@ -103,5 +103,34 @@ describe("利用者へ見せる目録との一致", () => {
     )?.shortcuts.flatMap((shortcut) => shortcut.keys)
 
     expect(listed?.toSorted()).toEqual([...ARTICLE_SHORTCUT_KEYS].toSorted())
+  })
+})
+
+describe("modalが開いている間", () => {
+  /**
+   * modalの裏のページはその時点で操作の対象ではない。素通しすると`j`が裏の
+   * 選択を動かし、`/`は閉じ込めたはずのfocusを裏の検索欄へ連れ出す。
+   */
+  it("裏の一覧の操作へ届かせない", () => {
+    const handlers = makeHandlers()
+    render(
+      <>
+        <Harness handlers={handlers} />
+        <div aria-modal="true" data-testid="modal" role="dialog" tabIndex={-1}>
+          <p>AI処理キュー</p>
+        </div>
+      </>
+    )
+
+    const modal = screen.getByTestId("modal")
+    fireEvent.keyDown(modal, { key: "j" })
+    fireEvent.keyDown(modal, { key: "o" })
+    fireEvent.keyDown(modal, { key: "/" })
+
+    expect(handlers.onNext).not.toHaveBeenCalled()
+    expect(handlers.onOpenOriginal).not.toHaveBeenCalled()
+    expect(document.activeElement).not.toBe(
+      document.getElementById(ARTICLE_SEARCH_INPUT_ID)
+    )
   })
 })

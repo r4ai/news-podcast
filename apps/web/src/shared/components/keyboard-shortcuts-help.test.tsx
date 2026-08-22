@@ -19,7 +19,7 @@ describe("KeyboardShortcutsHelp", () => {
     expect(screen.getByText("次の記事へ")).toBeDefined()
   })
 
-  it("`?`で開き、もう一度押すと閉じる", async () => {
+  it("`?`で開き、Escapeで閉じる", async () => {
     const user = userEvent.setup()
     render(<KeyboardShortcutsHelp />)
 
@@ -28,7 +28,7 @@ describe("KeyboardShortcutsHelp", () => {
       await screen.findByRole("dialog", { name: "キーボード操作" })
     ).toBeDefined()
 
-    await user.keyboard("?")
+    await user.keyboard("{Escape}")
     expect(screen.queryByRole("dialog")).toBeNull()
   })
 
