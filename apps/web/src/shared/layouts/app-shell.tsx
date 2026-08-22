@@ -13,6 +13,7 @@ import { Link, useLocation, useMatchRoute } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+import { KeyboardShortcutsHelp } from "@/shared/components/keyboard-shortcuts-help"
 import { OfflineNotice } from "@/shared/components/offline-notice"
 
 const links = [
@@ -112,7 +113,15 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6">
         <Brand />
         <Navigation />
-        <div className="mt-auto flex justify-end">{actions}</div>
+        {/*
+          キー操作の目録は`actions`ではなくここが持つ。routeから配ると、
+          ページごとに渡し忘れる余地ができる。開閉の状態はこのcomponentの
+          中に閉じているので、開いてもページは描き直されない。
+        */}
+        <div className="mt-auto flex items-center justify-end gap-1">
+          <KeyboardShortcutsHelp />
+          {actions}
+        </div>
       </aside>
 
       <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background/95 px-4 py-2 backdrop-blur md:hidden">
