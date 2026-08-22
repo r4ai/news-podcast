@@ -9,6 +9,7 @@ import {
   createTestQueryClient,
   stubFetch,
 } from "@/shared/test/render"
+import { StubRouterProvider } from "@/shared/test/stub-router"
 import {
   renderCount,
   resetRenderCounts,
@@ -149,7 +150,10 @@ async function renderDashboard() {
   const queryClient = createTestQueryClient()
   render(
     <TestProviders queryClient={queryClient}>
-      <GenerationDashboard />
+      {/* カード内の遷移リンクが`<Link>`なので、routerの中で立ち上げる。 */}
+      <StubRouterProvider>
+        <GenerationDashboard />
+      </StubRouterProvider>
     </TestProviders>
   )
   await waitFor(() => expect(screen.getByText("生成ステータス")).toBeDefined())
