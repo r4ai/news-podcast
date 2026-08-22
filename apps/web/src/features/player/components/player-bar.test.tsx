@@ -1,3 +1,4 @@
+import { act } from "react"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { ReactNode } from "react"
@@ -11,12 +12,15 @@ import {
 import {
   attachAudioElementAtom,
   currentTrackAtom,
+  handlePlayingAtom,
+  handleWaitingAtom,
   playbackDurationAtom,
   playbackPositionAtom,
   mutedAtom,
   playbackRateAtom,
   playbackStatusAtom,
   volumeAtom,
+  type PlaybackStatus,
 } from "../atoms"
 import { PlayerBar } from "./player-bar"
 
@@ -59,11 +63,14 @@ function fakeAudio() {
     pause: vi.fn(function (this: { paused: boolean }) {
       this.paused = true
     }),
+    load: vi.fn(),
     removeAttribute: vi.fn(),
   }
 }
 
-function renderBar(patch: { readonly playing?: boolean } = {}) {
+function renderBar(
+  patch: { readonly playing?: boolean; readonly status?: PlaybackStatus } = {}
+) {
   const queryClient = createTestQueryClient()
   const store = createTestStore(queryClient)
   const audio = fakeAudio()
@@ -75,6 +82,7 @@ function renderBar(patch: { readonly playing?: boolean } = {}) {
     audio.paused = false
     store.set(playbackStatusAtom, "playing")
   }
+  if (patch.status) store.set(playbackStatusAtom, patch.status)
   const view = render(
     <TestProviders queryClient={queryClient} store={store}>
       <PlayerBar />
@@ -198,5 +206,36 @@ describe("PlayerBar", () => {
     expect(audio.pause).toHaveBeenCalled()
     expect(store.get(currentTrackAtom)).toBeNull()
     expect(screen.queryByRole("region", { name: "再生中の番組" })).toBeNull()
+  })
+})
+
+describe("PlayerBar の読み込みと失敗", () => {
+  beforeEach(() => localStorage.clear())
+
+  it("音が届くまでは待っていることを見せる", async () => {
+    const { store } = renderBar({ playing: true })
+    await act(async () => store.set(handleWaitingAtom))
+
+    expect(
+      screen.getByRole("button", { name: "一時停止" }).getAttribute("aria-busy")
+    ).toBe("true")
+    expect(screen.getByText("読み込み中…")).toBeDefined()
+
+    await act(async () => store.set(handlePlayingAtom))
+    expect(screen.queryByText("読み込み中…")).toBeNull()
+  })
+
+  it("鳴らせなかったことを伝え、その場でやり直せる", async () => {
+    const user = userEvent.setup()
+    const { audio } = renderBar({ status: "error" })
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "音声を再生できませんでした"
+    )
+
+    await user.click(screen.getByRole("button", { name: "再試行" }))
+    expect(audio.load).toHaveBeenCalledTimes(1)
+    expect(audio.play).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole("alert")).toBeNull()
   })
 })

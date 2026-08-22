@@ -5,6 +5,7 @@ import { X } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 
 import { closePlayerAtom, currentTrackAtom, type PlayerTrack } from "../atoms"
+import { PlaybackNotice } from "./playback-notice"
 import { PlaybackRateSelect } from "./playback-rate-select"
 import { PlaybackScrubber, PlaybackTimeReadout } from "./playback-scrubber"
 import { TransportControls } from "./transport-controls"
@@ -51,6 +52,11 @@ export function PlayerBar() {
         {/* 下段: どう鳴らすか。 */}
         <div className="flex items-center gap-2">
           <TransportControls />
+          {/*
+            音が出ていない理由は操作の隣に置く。上段 (題名) へ置くと、題名を
+            押し出して読めなくなる。
+          */}
+          <PlaybackNotice />
           <div className="ml-auto flex items-center gap-2">
             <PlaybackRateSelect />
             <VolumeControl />

@@ -7,7 +7,9 @@ import {
   handleLoadedMetadataAtom,
   handlePauseAtom,
   handlePlayAtom,
+  handlePlayingAtom,
   handleTimeUpdateAtom,
+  handleWaitingAtom,
 } from "../atoms"
 import { useMediaSession } from "../hooks/use-media-session"
 import { PlayerBar } from "./player-bar"
@@ -30,6 +32,10 @@ export function PlayerHost() {
   const onPause = useSetAtom(handlePauseAtom)
   const onEnded = useSetAtom(handleEndedAtom)
   const onError = useSetAtom(handleErrorAtom)
+  // 「押したのに聞こえない」を待ちと失敗に分けるための2つ。`waiting`は
+  // データ切れ、`playing`は実際に音が出た合図。
+  const onWaiting = useSetAtom(handleWaitingAtom)
+  const onPlaying = useSetAtom(handlePlayingAtom)
 
   useMediaSession()
 
@@ -46,7 +52,9 @@ export function PlayerHost() {
         onLoadedMetadata={() => onLoadedMetadata()}
         onPause={() => onPause()}
         onPlay={() => onPlay()}
+        onPlaying={() => onPlaying()}
         onTimeUpdate={() => onTimeUpdate()}
+        onWaiting={() => onWaiting()}
         preload="metadata"
         ref={(element) => {
           attach(element)
