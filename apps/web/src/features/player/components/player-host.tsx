@@ -1,7 +1,9 @@
-import { useSetAtom } from "jotai"
+import { useAtomValue, useSetAtom } from "jotai"
+import { lazy, Suspense } from "react"
 
 import {
   attachAudioElementAtom,
+  currentTrackAtom,
   handleEndedAtom,
   handleErrorAtom,
   handleLoadedMetadataAtom,
@@ -12,7 +14,17 @@ import {
   handleWaitingAtom,
 } from "../atoms"
 import { useMediaSession } from "../hooks/use-media-session"
-import { PlayerBar } from "./player-bar"
+
+/**
+ * バーの一式 (目盛り・操作列・速度・音量) は、番組が載って初めて要る。
+ *
+ * 速度の選択と音量はpopupを組む部品を連れてくるので、静的に繋ぐと初回表示の
+ * 資産に丸ごと乗る。しかし初めて開いた利用者のバーは空で、押せるものが1つも
+ * ない。載っている番組があるかどうかで分ける。
+ */
+const PlayerBar = lazy(async () => ({
+  default: (await import("./player-bar")).PlayerBar,
+}))
 
 /**
  * 音を出す唯一の場所。
@@ -25,6 +37,8 @@ import { PlayerBar } from "./player-bar"
  * 描き直しはそれぞれの値を実際に描くcomponentの中で止まる。
  */
 export function PlayerHost() {
+  // 載っているかどうかだけを見る。中身が変わっても`<audio>`は張り替えない。
+  const hasTrack = useAtomValue(currentTrackAtom) !== null
   const attach = useSetAtom(attachAudioElementAtom)
   const onLoadedMetadata = useSetAtom(handleLoadedMetadataAtom)
   const onTimeUpdate = useSetAtom(handleTimeUpdateAtom)
@@ -60,7 +74,15 @@ export function PlayerHost() {
           attach(element)
         }}
       />
-      <PlayerBar />
+      {/*
+        取りに行っている間は何も出さない。空の枠を先に置くと、本文の末尾に
+        バー1本分の余白が空いたまま何も鳴らない状態になる。
+      */}
+      {hasTrack ? (
+        <Suspense fallback={null}>
+          <PlayerBar />
+        </Suspense>
+      ) : null}
     </>
   )
 }

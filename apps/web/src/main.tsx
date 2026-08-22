@@ -6,7 +6,6 @@ import "@workspace/ui/globals.css"
 import { App } from "@/app/app"
 import { appStore } from "@/app/query-client"
 import { ThemeProvider } from "@/features/theme"
-import { TooltipProvider } from "@workspace/ui/components/tooltip"
 import { startBrowserObservability } from "@/shared/observability/browser"
 
 startBrowserObservability()
@@ -15,9 +14,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <JotaiProvider store={appStore}>
       <ThemeProvider>
-        <TooltipProvider>
-          <App />
-        </TooltipProvider>
+        <App />
       </ThemeProvider>
     </JotaiProvider>
   </StrictMode>
