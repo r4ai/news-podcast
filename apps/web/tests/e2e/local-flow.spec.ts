@@ -77,7 +77,7 @@ test("authentication service failures stay on a retryable error screen", async (
 
   await expect(page).toHaveURL(/\/subscriptions$/)
   await expect(
-    page.getByRole("heading", { name: "接続を確認してください" })
+    page.getByRole("heading", { name: "ページを表示できませんでした" })
   ).toBeVisible()
   await expect(page).not.toHaveURL(/\/login/)
 })

@@ -7,6 +7,7 @@ import {
 } from "@workspace/ui/components/alert"
 import { Button } from "@workspace/ui/components/button"
 
+import { describeError } from "@/shared/lib/error-message"
 import { useReconnect } from "@/shared/lib/use-reconnect"
 
 /**
@@ -24,8 +25,7 @@ export function PanelError({ error, reset }: PanelErrorProps) {
   // 消えているのに、利用者へ押させる理由はない。
   useReconnect(reset)
 
-  const message =
-    error instanceof Error ? error.message : "データを取得できませんでした"
+  const message = describeError(error)
 
   return (
     <Alert variant="destructive">

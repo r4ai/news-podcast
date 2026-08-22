@@ -12,6 +12,7 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 
+import { describeError } from "@/shared/lib/error-message"
 import { useReconnect } from "@/shared/lib/use-reconnect"
 
 export function RouteError({ error, reset }: ErrorComponentProps) {
@@ -27,8 +28,7 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
     reset()
   })
 
-  const message =
-    error instanceof Error ? error.message : "データを取得できませんでした"
+  const message = describeError(error)
 
   return (
     <main className="grid min-h-svh place-items-center bg-background px-4 text-foreground">
@@ -37,7 +37,12 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
           <Alert variant="destructive">
             <AlertTriangle aria-hidden="true" />
             <AlertTitle>
-              <h1>接続を確認してください</h1>
+              {/*
+                題は起きたことだけを言う。「接続を確認」と決め打つと、
+                サーバ側の不調や見つからない場合に的外れな指示になる。
+                次にできることは説明側が状態に応じて言う。
+              */}
+              <h1>ページを表示できませんでした</h1>
             </AlertTitle>
             <AlertDescription>{message}</AlertDescription>
           </Alert>
