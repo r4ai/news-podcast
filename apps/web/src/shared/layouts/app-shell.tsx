@@ -13,6 +13,8 @@ import { Link, useLocation, useMatchRoute } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+import { OfflineNotice } from "@/shared/components/offline-notice"
+
 const links = [
   { to: "/", label: "今日", icon: House },
   { to: "/articles", label: "記事", icon: Newspaper },
@@ -137,6 +139,15 @@ export function AppShell({ actions, children, player }: AppShellProps) {
           {children}
         </div>
       </main>
+
+      {/*
+        回線切れの案内。下端に居座るものの**すぐ上**へ重ねる。
+        本文の流れに入れると、記事・ライブラリが吸着の基準にしている
+        `--app-bar-h`が実際の高さとずれて、日付見出しがヘッダーへ潜る。
+      */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--app-nav-h)+var(--player-h))] z-40 md:bottom-[var(--player-h)]">
+        <OfflineNotice />
+      </div>
 
       {player}
 

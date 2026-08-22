@@ -12,6 +12,8 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent } from "@workspace/ui/components/card"
 
+import { useReconnect } from "@/shared/lib/use-reconnect"
+
 export function RouteError({ error, reset }: ErrorComponentProps) {
   // Reactの境界だけを開き直してもqueryはerrorのままなので、対でresetする。
   const { reset: resetQueries } = useQueryErrorResetBoundary()
@@ -19,6 +21,12 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
   useEffect(() => {
     recordBrowserEvent("route.error", { "error.type": errorType })
   }, [errorType])
+  // 回線切れで着いた画面なら、戻った時点で自力で開き直す。
+  useReconnect(() => {
+    resetQueries()
+    reset()
+  })
+
   const message =
     error instanceof Error ? error.message : "データを取得できませんでした"
 
