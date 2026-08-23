@@ -2096,7 +2096,7 @@
           }
         },
         "summary": "List owned articles",
-        "description": "Lists articles in the authenticated owner scope with state, feed, search, sort, and opaque cursor filters. Limit is 1 to 100."
+        "description": "Lists articles in the authenticated owner scope with state, feed, literal partial search, sort, and opaque cursor filters. Search covers title, source URL, owner tags, and the indexed persisted Markdown body of the deterministic latest snapshot. Limit is 1 to 100."
       }
     },
     "/v1/me/articles/facets": {
@@ -6401,8 +6401,11 @@
                 "pattern": "\\S"
               },
               {
-                "maxLength": 200,
-                "description": "Matches article title, source URL, or owner tag name."
+                "maxLength": 200
+              },
+              {
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "description": "Literal partial match against article title, source URL, owner tag name, or the persisted Markdown body of the latest snapshot accessible to the authenticated owner."
               }
             ]
           },

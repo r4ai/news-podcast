@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   AddFeedSubscriptionRequestSchema,
+  ArticleSearchQuerySchema,
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeSchema,
@@ -15,6 +16,11 @@ import {
 const validArticleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
 
 describe("gateway HttpApi contract", () => {
+  it("rejects NUL in an article search query before RPC", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(ArticleSearchQuerySchema)("abc\0def")
+    ).toThrow()
+  })
   it("keeps the public idempotency key within the RPC limit", () => {
     expect(() =>
       Schema.decodeUnknownSync(CreateEpisodeJobHeadersSchema)({
@@ -198,7 +204,7 @@ describe("gateway HttpApi contract", () => {
       "state",
     ])
     expect(JSON.stringify(specification.components?.schemas)).toContain(
-      "Matches article title, source URL, or owner tag name."
+      "Literal partial match against article title, source URL, owner tag name, or the persisted Markdown body of the latest snapshot accessible to the authenticated owner."
     )
     const article = specification.components?.schemas?.Article
     expect(JSON.stringify(article)).not.toContain("usedInEpisode")

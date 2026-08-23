@@ -329,7 +329,7 @@ export interface paths {
         };
         /**
          * List owned articles
-         * @description Lists articles in the authenticated owner scope with state, feed, search, sort, and opaque cursor filters. Limit is 1 to 100.
+         * @description Lists articles in the authenticated owner scope with state, feed, literal partial search, sort, and opaque cursor filters. Search covers title, source URL, owner tags, and the indexed persisted Markdown body of the deterministic latest snapshot. Limit is 1 to 100.
          */
         get: operations["articles.listArticles"];
         put?: never;
@@ -1073,7 +1073,7 @@ export interface components {
             feed: components["schemas"]["Feed"];
             subscription: components["schemas"]["FeedSubscription"];
         };
-        Union_4: (string & (unknown & unknown & unknown)) | null;
+        Union_4: (string & (unknown & unknown & unknown & unknown)) | null;
         Article: {
             id: string & unknown;
             feedId: string & unknown;

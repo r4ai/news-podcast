@@ -109,6 +109,23 @@ export const readContentKnowledgeConfig = (
             ),
           },
         },
+        searchIndex: {
+          batchSize: decimalInteger(env.CONTENT_SEARCH_INDEX_BATCH_SIZE, 10),
+          loop: {
+            intervalMillis: decimalInteger(
+              env.CONTENT_SEARCH_INDEX_INTERVAL_MS,
+              5_000
+            ),
+            initialBackoffMillis: decimalInteger(
+              env.CONTENT_SEARCH_INDEX_INITIAL_BACKOFF_MS,
+              1_000
+            ),
+            maximumBackoffMillis: decimalInteger(
+              env.CONTENT_SEARCH_INDEX_MAX_BACKOFF_MS,
+              30_000
+            ),
+          },
+        },
         archive: {
           endpoint: env.S3_ENDPOINT?.trim() ?? "",
           region: env.S3_REGION?.trim() ?? "",

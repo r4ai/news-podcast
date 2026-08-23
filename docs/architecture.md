@@ -338,6 +338,8 @@ erDiagram
   FEED_CATALOG ||--o{ FEED_SYNC_JOB : queues
   FEED_CATALOG ||--o{ FEED_ITEM : publishes
   FEED_ITEM ||--o{ ARTICLE_SNAPSHOT : archived_as
+  ARTICLE_SNAPSHOT ||--o| SEARCH_INDEX_QUEUE : awaits_index
+  ARTICLE_SNAPSHOT ||--o{ ARTICLE_SEARCH_INDEX : indexed_as
   USER ||--o{ ARTICLE_OWNER_ACCESS : acquired
   FEED_ITEM ||--o{ ARTICLE_OWNER_ACCESS : grants
   USER ||--o{ ARTICLE_USER_STATE : tracks
@@ -358,6 +360,7 @@ erDiagram
 | `feed_catalog` / `feed_subscriptions` / `public_feed_listings` | 内部canonical feed、ownerのprivate購読、明示公開listingを分離 |
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。parser validationを含む個別記事失敗は件数とsanitized reasonをdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
+| `article_search_index_queue` / `article_search_fts` / `article_search_short_grams` | snapshot commit後に再試行可能に更新するMarkdown本文索引。記事一覧検索はowner access内の最新snapshotだけを参照 |
 | `article_owner_access` | 購読解除後も残る、ownerが一度取り込んだ記事への恒久アクセス権 |
 | `article_owner_states` | ユーザーごとの既読・保存状態 |
 | `episode_jobs` / `episode_generation_plans` / `episode_job_articles` | 状態、lease、retry、冪等性、初回実行時に固定した嗜好・記事集合 |
@@ -384,6 +387,8 @@ DBアクセスは全service で **Drizzle ORM** に統一する（[ADR-0043](adr
 接続はservice processにつき1本である。process composition rootだけがopen/closeを所有し、同居するRPC・worker・relay・schedulerへ同じDrizzle databaseを注入する。単独起動するruntimeは自身のscopeで1本だけを所有する。起動時DDL（`CREATE TABLE IF NOT EXISTS`）は存在せず、`bootstrap.ts` がmigrationを適用する。testも本番と同一のmigrationでDBを構築するため、test用schemaが本番から乖離する余地はない。
 
 drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`sqlite_master` を検査する `schema.test.ts` で固定する。
+
+FTS5仮想テーブルもDrizzle schemaで表現できないためmigrationを正本とする。Content Knowledgeの単一process workerがSeaweedFSからqueue済みMarkdownを読み、FTS/short grams更新とackをSQLite transactionでまとめる（[ADR-0080](adr/0080-index-latest-article-markdown-for-search.md)）。
 
 JSON保存値は読込直後にstrict decodeし、domainへ渡す前にowner/job/episode/articleなどのbrandと日時を復元する。構文不正・Schema不一致・未対応の旧形式は、値をログやfailureへ含めず`CorruptRecord`へ分類する。互換対応はfieldごとに明示し、Productionではmaterialization導入前の空`selected_articles`だけを`selected_article_ids`から復元する。
 

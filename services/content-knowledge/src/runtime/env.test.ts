@@ -121,6 +121,14 @@ describe("content-knowledge environment boundary", () => {
           maximumBackoffMillis: 30_000,
         },
       },
+      searchIndex: {
+        batchSize: 10,
+        loop: {
+          intervalMillis: 5_000,
+          initialBackoffMillis: 1_000,
+          maximumBackoffMillis: 30_000,
+        },
+      },
       archive: {
         endpoint: "http://seaweedfs:8333",
         region: "us-east-1",

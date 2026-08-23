@@ -36,6 +36,14 @@ const validServiceConfig = {
       maximumBackoffMillis: 1_000,
     },
   },
+  searchIndex: {
+    batchSize: 10,
+    loop: {
+      intervalMillis: 5_000,
+      initialBackoffMillis: 1_000,
+      maximumBackoffMillis: 30_000,
+    },
+  },
   archive: {
     endpoint: "http://127.0.0.1:9000",
     region: "us-east-1",
@@ -122,6 +130,7 @@ describe("content-knowledge Node runtime", () => {
     const closeSqlite = vi.fn()
     const ready = vi.fn()
     const runArchiveCleanup = vi.fn(() => Effect.never)
+    const runSearchIndex = vi.fn(() => Effect.never)
     const database = openContentKnowledgeDatabaseUnsafe(":memory:")
     const fiber = Effect.runFork(
       runNodeService(validServiceConfig, {
@@ -145,6 +154,7 @@ describe("content-knowledge Node runtime", () => {
         runPoller: () => Effect.never,
         enrichmentProvider: { enrich: () => Effect.die("unused") },
         runEnrichment: () => Effect.never,
+        runSearchIndex,
         runArchiveCleanup,
         onReady: ready,
       })
@@ -152,6 +162,7 @@ describe("content-knowledge Node runtime", () => {
 
     await vi.waitFor(() => expect(ready).toHaveBeenCalledOnce())
     expect(runArchiveCleanup).toHaveBeenCalledOnce()
+    expect(runSearchIndex).toHaveBeenCalledOnce()
     await Effect.runPromise(Fiber.interrupt(fiber))
     expect(closeSqlite).toHaveBeenCalledOnce()
     database.close()
