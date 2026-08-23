@@ -1103,13 +1103,10 @@ test("episode provenance opens v1 after the same article synchronizes v2", async
     })
   })
 
-  await page.goto("/")
+  await page.goto("/library")
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
-  await expect(
-    page.getByRole("heading", { name: "今日のニュース番組" })
-  ).toBeVisible({ timeout: 15_000 })
-  await page.getByRole("link", { name: "ライブラリ", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "ライブラリ" })).toBeVisible()
   await page.getByRole("button", { name: /v1から生成した番組 2026/ }).click()
   await page.getByRole("link", { name: "生成時の保存版を開く" }).click()
 
