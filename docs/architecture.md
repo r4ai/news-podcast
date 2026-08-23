@@ -402,7 +402,7 @@ DBアクセスは全service で **Drizzle ORM** に統一する（[ADR-0043](adr
 
 drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`sqlite_master` を検査する `schema.test.ts` で固定する。
 
-FTS5仮想テーブルもDrizzle schemaで表現できないためmigrationを正本とする。Content Knowledgeの単一process workerがSeaweedFSからqueue済みMarkdownを読み、FTS/short grams更新とackをSQLite transactionでまとめる（[ADR-0080](adr/0080-index-latest-article-markdown-for-search.md)）。
+FTS5仮想テーブルもDrizzle schemaで表現できないためmigrationを正本とする。Content Knowledgeの単一process workerがSeaweedFSからqueue済みMarkdownを読み、FTS/short grams更新とackをSQLite transactionでまとめる（[ADR-0082](adr/0082-index-latest-article-markdown-for-search.md)）。
 
 JSON保存値は読込直後にstrict decodeし、domainへ渡す前にowner/job/episode/articleなどのbrandと日時を復元する。構文不正・Schema不一致・未対応の旧形式は、値をログやfailureへ含めず`CorruptRecord`へ分類する。互換対応はfieldごとに明示し、Productionではmaterialization導入前の空`selected_articles`だけを`selected_article_ids`から復元する。
 

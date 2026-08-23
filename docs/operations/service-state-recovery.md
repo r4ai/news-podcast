@@ -203,7 +203,7 @@ Content Knowledgeは部分Put失敗時に成功済みobjectを即時削除し、
 | `CONTENT_SEARCH_INDEX_INITIAL_BACKOFF_MS` | 1000 | SQLite失敗時の初回backoff |
 | `CONTENT_SEARCH_INDEX_MAX_BACKOFF_MS` | 30000 | SQLite失敗時のbackoff上限 |
 
-queue滞留は`article.search_body.queue.depth`の推移を起点に、object store到達性とSQLite書込可否を確認する。手動削除せず、原因解消後の自動再試行でFTS/short gram更新とqueue ackを同一transactionに完了させる。大きなMarkdownのshort gramは有界batchで書き込まれるため、深さが減らない場合は本文サイズより先に上記依存先障害を切り分ける。詳細は[ADR-0080](../adr/0080-index-latest-article-markdown-for-search.md)を参照する。
+queue滞留は`article.search_body.queue.depth`の推移を起点に、object store到達性とSQLite書込可否を確認する。手動削除せず、原因解消後の自動再試行でFTS/short gram更新とqueue ackを同一transactionに完了させる。大きなMarkdownのshort gramは有界batchで書き込まれるため、深さが減らない場合は本文サイズより先に上記依存先障害を切り分ける。詳細は[ADR-0082](../adr/0082-index-latest-article-markdown-for-search.md)を参照する。
 
 ## Content Outbox廃止migration記録
 
