@@ -299,6 +299,40 @@ describe("SQLite enrichment queue", () => {
     ])
   })
 
+  it("does not claim queued work for a paused feed when another feed stays enabled", async () => {
+    const { database, queue } = await setup()
+    const subscriptions = await Effect.runPromise(
+      createSubscriptionRepository(database.db)
+    )
+    database.execSql(`
+      INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at)
+      VALUES ('5d31cf0f-d2b1-45e1-a0cc-bc6668c8348a', 'owner-a', '${feedB}', '${now}');
+    `)
+    await Effect.runPromise(queue.reconcile(now))
+    await Effect.runPromise(
+      subscriptions.setEnabled(ownerA, subscriptionA as never, false)
+    )
+
+    expect(await Effect.runPromise(queue.listOwners())).toEqual([
+      ownerA,
+      ownerB,
+    ])
+    expect(
+      await Effect.runPromise(
+        queue.claim(ownerA, 1, now, expires, "lease-token-paused")
+      )
+    ).toEqual([])
+
+    await Effect.runPromise(
+      subscriptions.setEnabled(ownerA, subscriptionA as never, true)
+    )
+    expect(
+      await Effect.runPromise(
+        queue.claim(ownerA, 1, later, expires, "lease-token-resumed")
+      )
+    ).toMatchObject([{ articleId }])
+  })
+
   it("claims nothing when the requested batch is empty", async () => {
     const { database, queue } = await setup()
     await Effect.runPromise(queue.reconcile(now))

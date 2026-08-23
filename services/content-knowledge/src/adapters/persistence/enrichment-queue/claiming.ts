@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   inArray,
   isNotNull,
   lt,
@@ -167,6 +168,18 @@ export const makeClaiming = (database: ContentKnowledgeDatabase): Claiming => ({
             .where(
               and(
                 eq(contentEnrichmentQueue.ownerId, ownerId),
+                exists(
+                  tx
+                    .select({ one: sql`1` })
+                    .from(feedSubscriptions)
+                    .where(
+                      and(
+                        eq(feedSubscriptions.ownerId, ownerId),
+                        eq(feedSubscriptions.feedId, feedItems.feedId),
+                        eq(feedSubscriptions.enabled, 1)
+                      )
+                    )
+                ),
                 inArray(contentEnrichmentQueue.status, ["Queued", "Failed"]),
                 lt(contentEnrichmentQueue.attempt, ENRICHMENT_MAX_ATTEMPTS)
               )
