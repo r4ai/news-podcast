@@ -7,6 +7,7 @@ import {
   TestProviders,
 } from "@/shared/test/render"
 import { MARKDOWN_FALLBACK_MIN_LENGTH, type Article } from "../-model"
+import { articleQueryOptions } from "../-queries"
 import { useArticleReader, type ArticleReaderState } from "./use-article-reader"
 
 vi.mock("@/shared/ui/toast", () => ({
@@ -65,6 +66,7 @@ function renderReader(
   return {
     ...utils,
     ...stub,
+    queryClient,
     state,
     selectArticle: (articleId: string) =>
       utils.rerender(<Harness articleId={articleId} />),
@@ -140,6 +142,46 @@ describe("useArticleReader", () => {
     await waitFor(() => expect(state.current?.archiveUrl).toContain(snapshotId))
     expect(state.current?.article.title).toBe("v1 title")
     expect(calls.map((call) => call.url)).not.toContain("/v1/me/articles/a")
+  })
+
+  it("settles snapshot state mutations without replacing historical metadata", async () => {
+    const snapshotId = "00000000-0000-4000-8000-000000000021"
+    const nextSnapshotId = "00000000-0000-4000-8000-000000000022"
+    const fixedArticle = makeArticle({ snapshotId, title: "v1 title" })
+    const rendered = renderReader(
+      [
+        {
+          path: `/v1/me/articles/a/snapshots/${snapshotId}`,
+          body: fixedArticle,
+        },
+        {
+          path: `/v1/me/articles/a/snapshots/${snapshotId}/markdown`,
+          body: { markdown: longMarkdown },
+        },
+        {
+          method: "PATCH",
+          path: "/v1/me/articles/a",
+          body: makeArticle({
+            saved: true,
+            snapshotId: nextSnapshotId,
+            title: "latest v2 title",
+          }),
+        },
+      ],
+      snapshotId
+    )
+    await readerReady()
+
+    await act(async () => rendered.state.current?.toggleSaved())
+    await waitFor(() =>
+      expect(rendered.calls.some((call) => call.method === "PATCH")).toBe(true)
+    )
+
+    expect(
+      rendered.queryClient.getQueryData(
+        articleQueryOptions("a", snapshotId).queryKey
+      )
+    ).toMatchObject({ title: "v1 title", snapshotId, saved: true })
   })
 
   it("keeps the reader usable when the body fails to load", async () => {
