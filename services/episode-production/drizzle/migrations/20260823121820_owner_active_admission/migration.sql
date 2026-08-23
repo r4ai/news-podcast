@@ -12,7 +12,8 @@ END;
 --> statement-breakpoint
 CREATE TRIGGER episode_jobs_owner_active_admission_update
 BEFORE UPDATE OF status ON episode_jobs
-WHEN NEW.status IN ('Queued', 'Running', 'Retrying')
+WHEN OLD.status NOT IN ('Queued', 'Running', 'Retrying')
+ AND NEW.status IN ('Queued', 'Running', 'Retrying')
  AND EXISTS (
    SELECT 1 FROM episode_jobs
    WHERE owner_id = NEW.owner_id

@@ -43,7 +43,7 @@ application transactionで説明可能な競合を返し、SQLiteのINSERTおよ
 - owner単位でqueue占有とprovider費用の並行発生を上限1にできる。
 - ADR-0085のresponse-loss replayを壊さない。
 - global workerのready-time FIFOはADR-0086のまま維持する。
-- active件数、admission rejection、owner oldest queue ageを観測できる。
+- 全owner中の最大active件数、最大owner queue age、admission rejectionを低cardinalityで観測できる。owner IDはmetric labelへ載せない。
 
 ## 却下案
 

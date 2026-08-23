@@ -28,6 +28,11 @@ describe("episode worker observability", () => {
             count: 1,
             oldestActiveAt: "2026-08-23T11:59:30.000Z",
           },
+          {
+            ownerId: "owner-2",
+            count: 2,
+            oldestActiveAt: "2026-08-23T11:58:30.000Z",
+          },
         ],
       }
     )
@@ -35,8 +40,8 @@ describe("episode worker observability", () => {
     expect(gauge.mock.calls).toEqual([
       ["episode.jobs", 2, { "job.status": "Queued" }],
       ["episode.queue.oldest.age", 120_000],
-      ["episode.owner.active_jobs", 1, { "owner.id": "owner-1" }],
-      ["episode.owner.queue.oldest.age", 30_000, { "owner.id": "owner-1" }],
+      ["episode.owner.active_jobs", 2],
+      ["episode.owner.queue.oldest.age", 90_000],
     ])
   })
 

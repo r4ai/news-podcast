@@ -190,6 +190,36 @@ describe("episode-production migrated schema", () => {
     }
   })
 
+  it("lets legacy duplicate active jobs advance so they can drain", () => {
+    const handle = open()
+    try {
+      handle.client.exec(
+        "DROP TRIGGER episode_jobs_owner_active_admission_insert"
+      )
+      const insert = handle.client.prepare(
+        `INSERT INTO episode_jobs(
+           job_id, owner_id, idempotency_key, request_fingerprint, trigger,
+           status, attempt, created_at, enqueued_at
+         ) VALUES (?, 'legacy-owner', ?, ?, 'manual', 'Queued', 0, ?, ?)`
+      )
+      insert.run("legacy-a", "legacy-key-a", "legacy-fp-a", "t1", "t1")
+      insert.run("legacy-b", "legacy-key-b", "legacy-fp-b", "t2", "t2")
+
+      expect(() =>
+        handle.client
+          .prepare(
+            `UPDATE episode_jobs
+             SET status = 'Running', attempt = 1, started_at = 't3',
+                 lease_token = 'lease-a', leased_until = 't4', enqueued_at = NULL
+             WHERE job_id = 'legacy-a'`
+          )
+          .run()
+      ).not.toThrow()
+    } finally {
+      handle.close()
+    }
+  })
+
   it("rejects a running job that has no lease", () => {
     const handle = open()
     try {

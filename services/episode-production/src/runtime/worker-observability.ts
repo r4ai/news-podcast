@@ -45,15 +45,14 @@ export const recordEpisodeJobSnapshots = (
     "episode.queue.oldest.age",
     oldest === undefined ? 0 : age(oldest)
   )
-  for (const owner of input.owners) {
-    const attributes = { "owner.id": owner.ownerId }
-    observability.gauge("episode.owner.active_jobs", owner.count, attributes)
-    observability.gauge(
-      "episode.owner.queue.oldest.age",
-      age(owner.oldestActiveAt),
-      attributes
-    )
-  }
+  observability.gauge(
+    "episode.owner.active_jobs",
+    Math.max(0, ...input.owners.map((owner) => owner.count))
+  )
+  observability.gauge(
+    "episode.owner.queue.oldest.age",
+    Math.max(0, ...input.owners.map((owner) => age(owner.oldestActiveAt)))
+  )
 }
 
 export const recordScriptQualityObservation = (
