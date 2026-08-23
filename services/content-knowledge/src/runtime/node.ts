@@ -129,6 +129,7 @@ const ArchiveRetentionSchema = Schema.Int.check(
   Schema.isLessThanOrEqualTo(365 * 24 * 60 * 60 * 1_000)
 )
 export const NodeServiceConfigSchema = Schema.Struct({
+  appEnvironment: Schema.Literals(["development", "test", "production"]),
   sqlitePath: SqlitePathSchema,
   natsServers: Schema.NonEmptyArray(NatsServerSchema).check(
     Schema.isMaxLength(10)
@@ -151,6 +152,7 @@ export const NodeServiceConfigSchema = Schema.Struct({
   }),
   enrichment: Schema.Struct({
     dailyLimit: DailyLimitSchema,
+    resetDailyEnabled: Schema.Boolean,
     provider: Schema.NullOr(
       Schema.Struct({
         apiUrl: HttpEndpointSchema,
@@ -198,6 +200,10 @@ export const parseNodeServiceConfig = (input: unknown) =>
         config.enrichment.loop.initialBackoffMillis <=
           config.enrichment.loop.maximumBackoffMillis &&
         config.archive.cleanup.retentionMillis > config.archive.timeoutMillis &&
+        !(
+          config.appEnvironment === "production" &&
+          config.enrichment.resetDailyEnabled
+        ) &&
         (config.enrichment.provider === null ||
           config.enrichment.provider.baseDelayMillis <=
             config.enrichment.provider.maximumDelayMillis),
@@ -469,6 +475,11 @@ export const runNodeService = (
                             natsServers: config.natsServers,
                             queueGroup: config.rpc.queueGroup,
                             onReady: dependencies.onReady,
+                            appEnvironment: config.appEnvironment,
+                            enrichmentResetEnabled:
+                              config.enrichment.resetDailyEnabled,
+                            observability:
+                              dependencies.observability ?? noopObservability,
                           },
                           runtime,
                           markdown.reader,

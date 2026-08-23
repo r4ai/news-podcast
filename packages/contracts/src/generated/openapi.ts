@@ -1189,6 +1189,16 @@ export interface components {
                 count: number & unknown;
             };
         };
+        ForbiddenProblem: {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Operation forbidden";
+            /** @enum {number} */
+            status: 403;
+            /** @enum {string} */
+            code: "operation_forbidden";
+        };
     };
     responses: never;
     parameters: never;
@@ -3447,6 +3457,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description ForbiddenProblem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenProblem"];
                 };
             };
             /** @description UnavailableProblem */

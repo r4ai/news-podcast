@@ -720,6 +720,11 @@ const unauthorizedProblem = problemVariant(
   "Authentication required",
   "authentication_required"
 )
+const forbiddenProblem = problemVariant(
+  403,
+  "Operation forbidden",
+  "operation_forbidden"
+)
 const episodeNotFoundProblem = problemVariant(
   404,
   "Episode not found",
@@ -782,6 +787,9 @@ export const BadRequestProblemSchema = badRequestProblem
 export const UnauthorizedProblemSchema = unauthorizedProblem
   .annotate({ identifier: "UnauthorizedProblem" })
   .pipe(HttpApiSchema.status(401))
+export const ForbiddenProblemSchema = forbiddenProblem
+  .annotate({ identifier: "ForbiddenProblem" })
+  .pipe(HttpApiSchema.status(403))
 export const ConflictProblemSchema = Schema.Union([
   idempotencyConflictProblem,
   resourceConflictProblem,
@@ -809,6 +817,7 @@ export const UnavailableProblemSchema = unavailableProblem
 export const HttpProblemSchema = Schema.Union([
   BadRequestProblemSchema,
   UnauthorizedProblemSchema,
+  ForbiddenProblemSchema,
   NotFoundProblemSchema,
   ConflictProblemSchema,
   UnprocessableProblemSchema,
@@ -1451,7 +1460,11 @@ export const enrichResetDailyEndpoint = HttpApiEndpoint.post(
   {
     headers: SessionHeadersSchema,
     success: EnrichmentResetSchema,
-    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      ForbiddenProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
 )
 

@@ -220,6 +220,7 @@ export const ContentPersonalizationReplySchema = Schema.Union([
       "UNAUTHENTICATED",
       "STORAGE_FAILURE",
       "PROVIDER_FAILURE",
+      "FORBIDDEN",
     ]),
   }),
 ])

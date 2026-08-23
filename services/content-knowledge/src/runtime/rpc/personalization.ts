@@ -30,9 +30,21 @@ type Operations = Readonly<{
 type Dependencies = Readonly<{
   readonly newMessageId: () => string
   readonly now: () => string
+  readonly enrichmentResetPolicy?: Readonly<{
+    readonly enabled: boolean
+    readonly environment: "development" | "test" | "production"
+    readonly audit: (event: EnrichmentResetAuditEvent) => void
+  }>
+}>
+export type EnrichmentResetAuditEvent = Readonly<{
+  actorId: string
+  ownerId: string
+  environment: "development" | "test" | "production"
+  outcome: "rejected" | "succeeded"
+  reason: "server_policy_disabled" | "explicit_non_production_enablement"
 }>
 const rejected = (
-  code: "INVALID_REQUEST" | "UNAUTHENTICATED" | "STORAGE_FAILURE"
+  code: "INVALID_REQUEST" | "UNAUTHENTICATED" | "STORAGE_FAILURE" | "FORBIDDEN"
 ) => deepFreeze({ _tag: "Rejected" as const, code })
 
 const correlated = <E>(
@@ -198,10 +210,38 @@ export const makePersonalizationRpcHandler =
                         count,
                       }))
                     )
-                  case "ResetDailyEnrichment":
-                    return operations.enrichment
-                      .resetDaily(ownerId)
-                      .pipe(Effect.as({ _tag: "Reset" as const }))
+                  case "ResetDailyEnrichment": {
+                    const policy = dependencies.enrichmentResetPolicy ?? {
+                      enabled: false,
+                      environment: "production" as const,
+                      audit: () => undefined,
+                    }
+                    const auditBase = {
+                      actorId: ownerId,
+                      ownerId,
+                      environment: policy.environment,
+                    }
+                    if (!policy.enabled) {
+                      policy.audit({
+                        ...auditBase,
+                        outcome: "rejected",
+                        reason: "server_policy_disabled",
+                      })
+                      return Effect.succeed(rejected("FORBIDDEN"))
+                    }
+                    return operations.enrichment.resetDaily(ownerId).pipe(
+                      Effect.tap(() =>
+                        Effect.sync(() =>
+                          policy.audit({
+                            ...auditBase,
+                            outcome: "succeeded",
+                            reason: "explicit_non_production_enablement",
+                          })
+                        )
+                      ),
+                      Effect.as({ _tag: "Reset" as const })
+                    )
+                  }
                   case "EnrichArticle":
                     return parse(ArticleIdSchema)(command.articleId).pipe(
                       Effect.flatMap((articleId) =>

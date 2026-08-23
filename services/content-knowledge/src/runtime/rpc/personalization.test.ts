@@ -71,8 +71,9 @@ describe("personalization RPC", () => {
     ])
   })
 
-  it("scopes a daily enrichment reset to the actor owner", async () => {
+  it("rejects a daily enrichment reset when the server policy is disabled", async () => {
     const resetDaily = vi.fn(() => Effect.void)
+    const auditEnrichmentReset = vi.fn()
     const reply = vi.fn((_wire: string) => Effect.void)
     const handler = makePersonalizationRpcHandler(
       {
@@ -83,6 +84,58 @@ describe("personalization RPC", () => {
       {
         newMessageId: () => "00508c91-8d8a-452f-82d3-fc621faea801",
         now: () => "2026-08-13T01:00:00.000Z",
+        enrichmentResetPolicy: {
+          enabled: false,
+          environment: "production",
+          audit: auditEnrichmentReset,
+        },
+      }
+    )
+
+    await Effect.runPromise(
+      handler({
+        subject: subjects.content.personalization,
+        payload: envelope({
+          operation: "ResetDailyEnrichment",
+          localDate: "2026-08-13",
+        }),
+        reply,
+      })
+    )
+
+    expect(resetDaily).not.toHaveBeenCalled()
+    expect(
+      Schema.decodeUnknownSync(MessageEnvelopeSchema)(
+        JSON.parse(reply.mock.calls[0]![0])
+      ).payload
+    ).toEqual({ _tag: "Rejected", code: "FORBIDDEN" })
+    expect(auditEnrichmentReset).toHaveBeenCalledWith({
+      actorId: "owner-a",
+      ownerId: "owner-a",
+      environment: "production",
+      outcome: "rejected",
+      reason: "server_policy_disabled",
+    })
+  })
+
+  it("allows an explicitly enabled non-production reset for the actor owner", async () => {
+    const resetDaily = vi.fn(() => Effect.void)
+    const auditEnrichmentReset = vi.fn()
+    const reply = vi.fn((_wire: string) => Effect.void)
+    const handler = makePersonalizationRpcHandler(
+      {
+        taxonomy: {} as never,
+        interestProfiles: {} as never,
+        enrichment: { resetDaily } as never,
+      },
+      {
+        newMessageId: () => "00508c91-8d8a-452f-82d3-fc621faea801",
+        now: () => "2026-08-13T01:00:00.000Z",
+        enrichmentResetPolicy: {
+          enabled: true,
+          environment: "development",
+          audit: auditEnrichmentReset,
+        },
       }
     )
 
@@ -103,5 +156,12 @@ describe("personalization RPC", () => {
         JSON.parse(reply.mock.calls[0]![0])
       ).payload
     ).toEqual({ _tag: "Reset" })
+    expect(auditEnrichmentReset).toHaveBeenCalledWith({
+      actorId: "owner-a",
+      ownerId: "owner-a",
+      environment: "development",
+      outcome: "succeeded",
+      reason: "explicit_non_production_enablement",
+    })
   })
 })

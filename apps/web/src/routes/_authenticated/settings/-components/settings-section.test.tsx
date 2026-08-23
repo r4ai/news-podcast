@@ -55,7 +55,6 @@ const views = [
         pending={false}
         reprocessableCount={5}
         requestReprocess={vi.fn()}
-        resetDaily={vi.fn()}
       />
     ),
   },
