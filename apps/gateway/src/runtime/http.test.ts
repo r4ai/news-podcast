@@ -104,6 +104,37 @@ describe("Gateway HTTP runtime", () => {
     }
   })
 
+  it("returns 403 without invoking reset storage when the server policy rejects it", async () => {
+    const runtime = makeGatewayWebHandler({
+      ...ports,
+      enrichResetDaily: () =>
+        Effect.fail({
+          type: "about:blank" as const,
+          title: "Operation forbidden" as const,
+          status: 403 as const,
+          code: "operation_forbidden" as const,
+        }),
+    })
+
+    try {
+      const response = await runtime.handler(
+        new Request("http://gateway.test/v1/me/enrich/reset-daily", {
+          method: "POST",
+        })
+      )
+
+      expect(response.status).toBe(403)
+      expect(await response.json()).toEqual({
+        type: "about:blank",
+        title: "Operation forbidden",
+        status: 403,
+        code: "operation_forbidden",
+      })
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
   it("serves feed catalog and owner article workflows", async () => {
     const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
       id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",

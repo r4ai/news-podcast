@@ -33,7 +33,6 @@ export function AiEnrichPanel() {
       pending={panel.pending}
       reprocessableCount={panel.reprocessableCount}
       requestReprocess={panel.requestReprocess}
-      resetDaily={panel.resetDaily}
     />
   )
 }
@@ -46,7 +45,6 @@ export type AiEnrichPanelViewProps = {
   readonly requestReprocess: () => void
   readonly cancelReprocess: () => void
   readonly confirmReprocess: () => void
-  readonly resetDaily: () => void
 }
 
 const counter = new Intl.NumberFormat("ja-JP")
@@ -59,7 +57,6 @@ export function AiEnrichPanelView({
   requestReprocess,
   cancelReprocess,
   confirmReprocess,
-  resetDaily,
 }: AiEnrichPanelViewProps) {
   const remaining = daily ? Math.max(0, daily.limit - daily.used) : undefined
   const nothingToReprocess = reprocessableCount === 0
@@ -114,17 +111,6 @@ export function AiEnrichPanelView({
             ? `本日はあと${counter.format(remaining)}件処理できます。再処理できる処理済み記事はありません。`
             : `本日はあと${counter.format(remaining)}件処理できます。上限を超えた分は翌日へ繰り越して処理されます。`}
       </p>
-
-      {import.meta.env.DEV ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2">
-          <span className="text-xs text-muted-foreground">
-            開発用：日次上限をリセット
-          </span>
-          <Button onClick={resetDaily} size="sm" variant="outline">
-            リセット
-          </Button>
-        </div>
-      ) : null}
 
       <AlertDialog
         onOpenChange={(open) => (!open ? cancelReprocess() : undefined)}

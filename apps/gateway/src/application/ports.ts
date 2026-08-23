@@ -52,6 +52,7 @@ import {
   SubscriptionIdSchema,
   UnauthorizedProblemSchema,
   UnavailableProblemSchema,
+  ForbiddenProblemSchema,
   UnprocessableProblemSchema,
 } from "../contract.js"
 
@@ -443,6 +444,7 @@ export type GatewayPorts = Readonly<{
   ) => Effect.Effect<
     { readonly message: "Daily enrichment usage reset" },
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ForbiddenProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
 }>

@@ -493,10 +493,6 @@ export function createFakeApi(): FakeApi {
     if (path === "/v1/me/enrich/reprocess" && request.method === "POST") {
       return json({ enqueued: articles.length })
     }
-    if (path === "/v1/me/enrich/reset-daily" && request.method === "POST") {
-      state.dailyUsed = 0
-      return json({ message: "Daily enrichment usage reset" })
-    }
     if (path === "/v1/me/articles" && request.method === "GET") {
       const query = url.searchParams.get("q")?.trim().toLocaleLowerCase("ja")
       const items = query

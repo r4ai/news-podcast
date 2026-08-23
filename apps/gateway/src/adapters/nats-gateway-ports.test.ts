@@ -762,6 +762,31 @@ describe("NATS GatewayPorts adapter", () => {
     expect(partialSettings).toHaveLength(2)
   })
 
+  it("maps a disabled enrichment reset to the public forbidden problem", async () => {
+    const client = fakeClient(async (request) => {
+      if (request.subject === subjects.identity.resolveSession)
+        return userSessionReply(request)
+      return encodedReply(
+        request.envelope,
+        "content-knowledge",
+        Schema.Unknown,
+        { _tag: "Rejected", code: "FORBIDDEN" }
+      )
+    })
+    const ports = makeNatsGatewayPorts(client, dependencies())
+
+    const problem = await Effect.runPromise(
+      ports.enrichResetDaily(sessionHeaders).pipe(Effect.flip)
+    )
+
+    expect(problem).toEqual({
+      type: "about:blank",
+      title: "Operation forbidden",
+      status: 403,
+      code: "operation_forbidden",
+    })
+  })
+
   it("maps owner-scoped production job control and bounded replay RPCs", async () => {
     const requests: CapturedRequest[] = []
     const queued = {

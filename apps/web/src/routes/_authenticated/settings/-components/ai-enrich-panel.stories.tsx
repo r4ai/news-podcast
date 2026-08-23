@@ -17,7 +17,6 @@ function args(
     requestReprocess: fn(),
     cancelReprocess: fn(),
     confirmReprocess: fn(),
-    resetDaily: fn(),
     ...overrides,
   }
 }

@@ -42,6 +42,8 @@ const allowedAttributes = new Set([
   "telemetry.schema.version",
   "trace.entry.synthesized",
   "trigger",
+  "actor.id",
+  "owner.id",
 ])
 
 const allowedMetricAttributes = new Set([

@@ -19,10 +19,22 @@ const decimalInteger = (
     : Number.NaN
 }
 
+const boolean = (
+  value: string | undefined,
+  fallback: boolean
+): boolean | "invalid" => {
+  if (value === undefined || value.trim() === "") return fallback
+  if (value === "true") return true
+  if (value === "false") return false
+  return "invalid"
+}
+
 /** Reads only explicitly owned variables and rejects malformed values. */
 export const readContentKnowledgeConfig = (
   env: Readonly<Record<string, string | undefined>>
 ) => {
+  const appEnvironment = env.APP_ENV?.trim() || "development"
+  const resetDailyEnabled = boolean(env.CONTENT_ENRICH_RESET_ENABLED, false)
   const sqlitePath = env.CONTENT_KNOWLEDGE_DATABASE_PATH?.trim() ?? ""
   const natsServers = (env.NATS_SERVERS ?? "")
     .split(",")
@@ -41,6 +53,7 @@ export const readContentKnowledgeConfig = (
   }
 
   return parseNodeServiceConfig({
+    appEnvironment,
     sqlitePath,
     natsServers,
     rpc: {
@@ -61,6 +74,7 @@ export const readContentKnowledgeConfig = (
     },
     enrichment: {
       dailyLimit: decimalInteger(env.CONTENT_ENRICH_DAILY_LIMIT),
+      resetDailyEnabled,
       provider: enrichmentProviderEnabled
         ? {
             apiUrl: env.OPENAI_API_URL?.trim() || "https://api.openai.com/v1",

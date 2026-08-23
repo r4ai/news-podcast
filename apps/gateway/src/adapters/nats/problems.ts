@@ -25,6 +25,7 @@ const problemSpecs = {
     status: 401,
     title: "Authentication required",
   },
+  operation_forbidden: { status: 403, title: "Operation forbidden" },
   episode_not_found: { status: 404, title: "Episode not found" },
   feed_subscription_not_found: {
     status: 404,
@@ -56,6 +57,7 @@ const problem = <Code extends ProblemCode>(code: Code): ProblemFor<Code> =>
 
 export const unavailable = () => problem("upstream_unavailable")
 export const unauthorized = () => problem("authentication_required")
+export const forbidden = () => problem("operation_forbidden")
 export const conflict = () => problem("idempotency_conflict")
 export const notFound = () => problem("episode_not_found")
 export const badRequest = () => problem("invalid_subscription_request")

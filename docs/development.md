@@ -341,7 +341,7 @@ flowchart LR
 
 | 領域 | 主な変数 |
 | --- | --- |
-| runtime | `APP_ENV`、`PROVIDER_MODE`、`NATS_SERVERS` |
+| runtime | `APP_ENV`、`PROVIDER_MODE`、`NATS_SERVERS`、`CONTENT_ENRICH_RESET_ENABLED` |
 | auth | `BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`DEV_AUTH_*`、`GOOGLE_CLIENT_*` |
 | Gateway/Identity HTTP | `GATEWAY_PORT`、`IDENTITY_HTTP_ORIGIN`、`AUTH_PROXY_*` |
 | service DB | `IDENTITY_DATABASE_PATH`、`CONTENT_KNOWLEDGE_DATABASE_PATH`、`EPISODE_PRODUCTION_DATABASE_PATH`、`EPISODE_LIBRARY_DATABASE_PATH` |
@@ -349,7 +349,7 @@ flowchart LR
 | storage/TTS | `S3_*`、`CONTENT_ARCHIVE_*`、`VOICEVOX_*` |
 | scheduler | `EPISODE_SCHEDULER_INTERVAL_MS`、`EPISODE_SCHEDULER_FAILURE_BACKOFF_MS`、`EPISODE_SCHEDULER_REQUEST_TIMEOUT_MS` |
 
-secretをGitへ追加しない。`DEV_AUTH_ENABLED=true`と`APP_ENV=production`の組み合わせは起動時に拒否する。
+secretをGitへ追加しない。`DEV_AUTH_ENABLED=true`と`APP_ENV=production`の組み合わせは起動時に拒否する。日次補完枠のresetは既定で無効であり、非productionで`CONTENT_ENRICH_RESET_ENABLED=true`を明示した場合だけowner自身の枠に許可する。productionとの組み合わせは設定事故として起動時に拒否する。
 
 ## トラブルシューティング
 

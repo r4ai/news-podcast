@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import { readContentKnowledgeConfig } from "./env.js"
 
 const validEnvironment = {
+  APP_ENV: "development",
   CONTENT_KNOWLEDGE_DATABASE_PATH: "/data/content.sqlite",
   NATS_SERVERS: "nats://nats-a:4222, nats://nats-b:4222",
   CONTENT_RPC_QUEUE_GROUP: "content-rpc",
@@ -32,6 +33,7 @@ describe("content-knowledge environment boundary", () => {
     )
 
     expect(config).toEqual({
+      appEnvironment: "development",
       sqlitePath: "/data/content.sqlite",
       natsServers: ["nats://nats-a:4222", "nats://nats-b:4222"],
       rpc: { queueGroup: "content-rpc" },
@@ -45,6 +47,7 @@ describe("content-knowledge environment boundary", () => {
       },
       enrichment: {
         dailyLimit: 200,
+        resetDailyEnabled: false,
         provider: null,
         loop: {
           intervalMillis: 60_000,
@@ -74,6 +77,18 @@ describe("content-knowledge environment boundary", () => {
   })
 
   it.each([
+    [
+      "production enrichment reset",
+      {
+        ...validEnvironment,
+        APP_ENV: "production",
+        CONTENT_ENRICH_RESET_ENABLED: "true",
+      },
+    ],
+    [
+      "invalid enrichment reset flag",
+      { ...validEnvironment, CONTENT_ENRICH_RESET_ENABLED: "yes" },
+    ],
     [
       "shared database path",
       {
@@ -130,6 +145,28 @@ describe("content-knowledge environment boundary", () => {
 
     expect(exit._tag).toBe("Failure")
   })
+
+  it.each([
+    ["production", undefined, false],
+    ["development", undefined, false],
+    ["development", "false", false],
+    ["development", "true", true],
+    ["test", "true", true],
+  ] as const)(
+    "projects reset policy for APP_ENV=%s and flag=%s",
+    async (appEnvironment, flag, expected) => {
+      const config = await Effect.runPromise(
+        readContentKnowledgeConfig({
+          ...validEnvironment,
+          APP_ENV: appEnvironment,
+          CONTENT_ENRICH_RESET_ENABLED: flag,
+        })
+      )
+
+      expect(config.appEnvironment).toBe(appEnvironment)
+      expect(config.enrichment.resetDailyEnabled).toBe(expected)
+    }
+  )
 
   it("enables the OpenAI provider only when key and model are both configured", async () => {
     const config = await Effect.runPromise(

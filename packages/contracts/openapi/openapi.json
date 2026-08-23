@@ -4403,6 +4403,16 @@
               }
             }
           },
+          "403": {
+            "description": "ForbiddenProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenProblem"
+                }
+              }
+            }
+          },
           "503": {
             "description": "UnavailableProblem",
             "content": {
@@ -7269,6 +7279,42 @@
           "recent",
           "daily",
           "reprocessable"
+        ],
+        "additionalProperties": false
+      },
+      "ForbiddenProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "enum": [
+              "Operation forbidden"
+            ]
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              403
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "operation_forbidden"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
         ],
         "additionalProperties": false
       }

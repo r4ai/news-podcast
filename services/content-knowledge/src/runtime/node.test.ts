@@ -16,6 +16,7 @@ const validConfig = {
 
 const validServiceConfig = {
   ...validConfig,
+  appEnvironment: "development",
   rpc: { queueGroup: "content-rpc" },
   feedPoller: {
     http: { timeoutMillis: 1_000, maximumBytes: 8_192 },
@@ -27,6 +28,7 @@ const validServiceConfig = {
   },
   enrichment: {
     dailyLimit: 200,
+    resetDailyEnabled: false,
     provider: null,
     loop: {
       intervalMillis: 1_000,
