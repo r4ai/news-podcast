@@ -1,3 +1,4 @@
+import type { EpisodeFailureCode } from "@news-podcast/contracts/episode-failure"
 import { deepFreeze } from "@news-podcast/kernel"
 import { Effect, Schema } from "effect"
 
@@ -8,7 +9,9 @@ import {
   completeRunningJob,
   failRunningJob,
   retryRunningJob,
+  type RetryableFailure,
   type RunningJob,
+  type TerminalFailure,
   type UtcTimestamp,
 } from "../domain/episode-job.js"
 import { classifyProviderFailure } from "../domain/provider-reliability.js"
@@ -29,10 +32,10 @@ export type EpisodeExecutionOutcome =
   | Readonly<{ _tag: "Duplicate" }>
   | Readonly<{
       _tag: "Retrying"
-      failureCode: string
+      failureCode: EpisodeFailureCode
       retryAt: UtcTimestamp
     }>
-  | Readonly<{ _tag: "Failed"; failureCode: string }>
+  | Readonly<{ _tag: "Failed"; failureCode: EpisodeFailureCode }>
   | Readonly<{ _tag: "Canceled" }>
   | Readonly<{ _tag: "StaleLease" }>
 
@@ -43,6 +46,13 @@ type StagedProviderFailure = Readonly<{
   failure: ScriptGenerationFailure | SpeechSynthesisFailure
 }>
 type ExecutionFailure = LeaseFailure | PipelineFailure | StagedProviderFailure
+type ClassifiedFailure =
+  | Readonly<{ _tag: "Canceled"; code: "canceled" }>
+  | Readonly<{ _tag: "StaleLease"; code: "stale_lease" }>
+  | Readonly<{
+      _tag: "Retryable" | "Terminal"
+      code: EpisodeFailureCode
+    }>
 
 const withProviderStage =
   (stage: ProviderStage) =>
@@ -117,7 +127,7 @@ const providerReasonCode = (
     UnexpectedStatus: "unexpected_status",
   })[reason]
 
-const classify = (failure: ExecutionFailure) => {
+const classify = (failure: ExecutionFailure): ClassifiedFailure => {
   if (isTagged(failure, "ExecutionCanceled") || isTagged(failure, "Canceled")) {
     return { _tag: "Canceled" as const, code: "canceled" }
   }
@@ -146,7 +156,7 @@ const classify = (failure: ExecutionFailure) => {
     _tag: classification.retryable
       ? ("Retryable" as const)
       : ("Terminal" as const),
-    code: `${staged.stage}_${providerReasonCode(classification.reason)}`,
+    code: `${staged.stage}_${providerReasonCode(classification.reason)}` as EpisodeFailureCode,
   }
 }
 
@@ -190,7 +200,7 @@ const transitionFailure = (
     const retryable = Schema.decodeUnknownSync(RetryableFailureSchema)({
       code: classified.code,
       retryable: true,
-    })
+    }) as RetryableFailure
     return ports.persistence
       .transition({
         jobId: job.jobId,
@@ -215,7 +225,7 @@ const transitionFailure = (
   const terminal = Schema.decodeUnknownSync(TerminalFailureSchema)({
     code: classified.code,
     retryable: false,
-  })
+  }) as TerminalFailure
   return ports.persistence
     .transition({
       jobId: job.jobId,

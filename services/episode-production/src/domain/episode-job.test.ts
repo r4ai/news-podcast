@@ -90,7 +90,7 @@ describe("episode job state machine", () => {
     const retrying = retryRunningJob(running, {
       retryAt: time("2026-08-12T00:01:30.000Z"),
       failure: Schema.decodeUnknownSync(RetryableFailureSchema)({
-        code: "provider_unavailable",
+        code: "script_unavailable",
         retryable: true,
       }),
     })
@@ -129,7 +129,7 @@ describe("episode job state machine", () => {
     const failed = failRunningJob(running, {
       failedAt: time("2026-08-12T00:00:10.000Z"),
       failure: Schema.decodeUnknownSync(TerminalFailureSchema)({
-        code: "invalid_provider_response",
+        code: "script_malformed_response",
         retryable: false,
       }),
     })

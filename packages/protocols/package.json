@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@news-podcast/contracts": "workspace:*",
     "@news-podcast/kernel": "workspace:*",
     "effect": "4.0.0-rc.109"
   },

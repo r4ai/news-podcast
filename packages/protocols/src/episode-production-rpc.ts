@@ -1,3 +1,4 @@
+import { episodeFailureCodes } from "@news-podcast/contracts/episode-failure"
 import { parse } from "@news-podcast/kernel"
 import { Schema } from "effect"
 
@@ -89,7 +90,7 @@ export const ProductionEpisodeJobSchema = Schema.Union([
     attempt: Schema.Literals([1, 2, 3]),
     retryAt: UtcInstantSchema,
     failure: Schema.Struct({
-      code: boundedText(200),
+      code: Schema.Literals(episodeFailureCodes),
       retryable: Schema.Literal(true),
     }),
   }),
@@ -106,7 +107,7 @@ export const ProductionEpisodeJobSchema = Schema.Union([
     attempt: Schema.Literals([1, 2, 3, 4]),
     failedAt: UtcInstantSchema,
     failure: Schema.Struct({
-      code: boundedText(200),
+      code: Schema.Literals(episodeFailureCodes),
       retryable: Schema.Literal(false),
     }),
   }),

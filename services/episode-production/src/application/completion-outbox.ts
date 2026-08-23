@@ -92,7 +92,7 @@ const envelopeFor = (pending: PendingCompletion) =>
         _tag: "PipelineFailure" as const,
         code: "invalid_completion_outbox",
         retryable: false,
-      })
+      } satisfies PipelineFailure)
     )
   )
 

@@ -59,7 +59,7 @@ flowchart LR
 2. APIは `owner + method + canonical route + key` を一意に保存し、同一request hashなら同じreceiptを返す。異なるhashなら409にする。
 3. Episode Productionはジョブをleaseして `queued -> running` へ遷移する。
 4. 実行開始時に最新InterestProfileと候補metadataから`GenerationPlan`をfirst-write-winsで固定し、その記事snapshot取得、台本生成、独立quality gate、VOICEVOX合成、音声保存を順に実行する。quality rejectはcheckpoint前のterminal failureとし、音声化・公開しない。
-5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
+5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は共有`EpisodeFailureCode`だけを持つfailureへ `failed`。Webはコードを利用者向け説明と`retry / reselect / admin`へ変換し、未知コードでは上流messageを表示せず安全な汎用文言とjob IDを示す。内部コードはlog/traceに保持する（[ADR-0083](adr/0083-share-episode-failure-code-contract.md)）。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 7. Webはjobの`succeeded`を生成完了として受け取った後、`episodeId`の詳細がLibraryから読めるまで初回を含む最大5回・500ms間隔で確認する。確認中は再生可能な「完成」と区別し、上限到達後は利用者の再確認操作で回復できる。
 
@@ -401,6 +401,7 @@ flowchart TD
 - [ADR-0065 手動記事archiveをend-to-end RPC deadlineで拘束する](adr/0065-bound-manual-archive-rpc-deadline.md)
 - [ADR-0067 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)
 - [ADR-0068 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
+- [ADR-0083 Episode生成失敗コードと利用者向け復旧案内を分離する](adr/0083-share-episode-failure-code-contract.md)
 - [ADR-0069 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070 Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
 - [ADR-0071 ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)

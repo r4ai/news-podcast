@@ -58,6 +58,7 @@ flowchart LR
 - `ownerId` はセッションから導出し、URLやリクエスト本文から受け取らない。
 - ジョブ作成は `owner + operation scope + Idempotency-Key` で一意。同じscope・キーと異なる入力の組み合わせは競合とする。retry scopeは元job IDを含み、作成操作や別jobのretryと衝突しない。
 - 失敗ジョブの手動retryは新しいjobを作る。retry APIでキーを省略した呼び出しは毎回一意なキーをGatewayが発行し、明示キーの再送だけは既存jobの現在状態へ収束させる。
+- 生成失敗コードは`@news-podcast/contracts/episode-failure`の有限集合をProduction、RPC、Gateway/OpenAPI、Webで共有する。Webだけが利用者向け文言と復旧操作を所有し、未知コードは汎用文言とjob IDへ縮退する。log/traceの`failure.code`は表示文言から分離する（[ADR-0083](adr/0083-share-episode-failure-code-contract.md)）。
 - 手動生成は選択記事IDを必須とする。定期生成は記事IDなしでjobを作り、worker開始時の最新InterestProfileから選定したGenerationPlanをfirst-write-winsで固定する。
 - 台本が返す出典URLは、ownerが選択しContentが版固定した入力記事だけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。

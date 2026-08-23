@@ -508,6 +508,9 @@ importers:
 
   packages/protocols:
     dependencies:
+      '@news-podcast/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -823,6 +826,9 @@ importers:
       '@news-podcast/ai-runtime':
         specifier: workspace:*
         version: link:../../packages/ai-runtime
+      '@news-podcast/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@news-podcast/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel

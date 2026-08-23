@@ -239,7 +239,7 @@ describe("episode job-control NATS RPC", () => {
       }),
       {
         failedAt: now,
-        failure: { code: "provider-timeout" as never, retryable: false },
+        failure: { code: "script_timeout", retryable: false },
       }
     )
 

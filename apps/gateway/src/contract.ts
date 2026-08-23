@@ -1,4 +1,5 @@
 import { deepFreeze } from "@news-podcast/kernel"
+import { episodeFailureCodes } from "@news-podcast/contracts/episode-failure"
 import { TraceparentSchema } from "@news-podcast/protocols"
 import { Schema } from "effect"
 import {
@@ -208,7 +209,10 @@ const jobFields = {
   episodeId: Schema.optional(EpisodeIdSchema),
   failure: Schema.optional(
     Schema.Struct({
-      code: boundedText(200),
+      code: Schema.Literals(episodeFailureCodes).annotate({
+        description:
+          "Stable machine-readable Episode generation failure code. Preserve it in logs and traces; clients must use safe copy for unknown future values.",
+      }),
       message: boundedText(500),
       retryable: Schema.Boolean,
     })
@@ -271,7 +275,7 @@ const EpisodeJobStateSchema = Schema.Struct({
   currentStage: Schema.optional(JobStageSchema),
   failure: Schema.optional(
     Schema.Struct({
-      code: boundedText(200),
+      code: Schema.Literals(episodeFailureCodes),
       message: boundedText(500),
       retryable: Schema.Boolean,
     })

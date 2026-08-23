@@ -14,12 +14,12 @@ describe("completion relay loop", () => {
     const results = [
       Effect.fail({
         _tag: "PipelineFailure" as const,
-        code: "nats",
+        code: "nats_completion_publish" as const,
         retryable: true,
       }),
       Effect.fail({
         _tag: "PipelineFailure" as const,
-        code: "nats",
+        code: "nats_completion_publish" as const,
         retryable: true,
       }),
       Effect.succeed({ published: 1, duplicates: 0 }),

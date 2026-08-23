@@ -924,6 +924,86 @@ test("selecting articles generates an episode and streams its progress", async (
   ).toBeVisible()
 })
 
+test("a deadline failure shows safe guidance and the retry action", async ({
+  page,
+}) => {
+  const jobId = "00000000-0000-4000-8000-000000000079"
+  const createdAt = "2026-08-23T00:00:00.000Z"
+  const failedAt = "2026-08-23T00:30:00.000Z"
+  const failedJob = {
+    id: jobId,
+    status: "failed",
+    trigger: "manual",
+    createdAt,
+    articleIds: ["00000000-0000-4000-8000-000000000001"],
+    attempt: 4,
+    maxAttempts: 4,
+    deadlineAt: failedAt,
+    finishedAt: failedAt,
+    failure: {
+      code: "job_deadline_exceeded",
+      message: "job_deadline_exceeded",
+      retryable: false,
+    },
+  }
+
+  await page.route(
+    (url) => url.pathname === "/v1/episode-jobs",
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({ items: [failedJob], page: { hasMore: false } }),
+        contentType: "application/json",
+      })
+  )
+  await page.route(`**/v1/episode-jobs/${jobId}/events`, (route) =>
+    route.fulfill({
+      body: `data: ${JSON.stringify({
+        type: "STATE_SNAPSHOT",
+        snapshot: {
+          jobId,
+          status: "failed",
+          attempt: 4,
+          maxAttempts: 4,
+          selectionMode: "manual",
+          selectedArticles: [],
+          failure: failedJob.failure,
+        },
+      })}\n\n`,
+      contentType: "text/event-stream",
+    })
+  )
+  await page.route(`**/v1/episode-jobs/${jobId}/retry`, (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        id: "00000000-0000-4000-8000-000000000080",
+        status: "queued",
+        createdAt: failedAt,
+        attempt: 0,
+        maxAttempts: 4,
+      }),
+      contentType: "application/json",
+      status: 202,
+    })
+  )
+
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  await expect(
+    page.getByText("生成が制限時間を超えました。同じ条件で再試行してください。")
+  ).toBeVisible()
+  await expect(page.getByText("job_deadline_exceeded")).toHaveCount(0)
+
+  const retryRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === `/v1/episode-jobs/${jobId}/retry` &&
+      request.method() === "POST"
+  )
+  await page.getByRole("button", { name: "同じ条件で再試行" }).click()
+  await retryRequest
+})
+
 test("article picker searches server candidates by tag", async ({ page }) => {
   await page.goto("/")
   await page.getByLabel("開発パスワード").fill("e2e-password")
