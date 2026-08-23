@@ -129,10 +129,6 @@ const HttpEndpointSchema = Schema.String.check(
     }
   })
 )
-const ProviderAttemptSchema = Schema.Int.check(
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(5)
-)
 const ArchiveCleanupIntervalSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(24 * 60 * 60 * 1_000)
@@ -172,9 +168,6 @@ export const NodeServiceConfigSchema = Schema.Struct({
         apiKey: S3TextSchema,
         model: S3TextSchema,
         requestTimeoutMillis: LoopDelaySchema,
-        maximumAttempts: ProviderAttemptSchema,
-        baseDelayMillis: LoopDelaySchema,
-        maximumDelayMillis: LoopDelaySchema,
       })
     ),
     loop: Schema.Struct({
@@ -230,10 +223,7 @@ export const parseNodeServiceConfig = (input: unknown) =>
         !(
           config.appEnvironment === "production" &&
           config.enrichment.provider === null
-        ) &&
-        (config.enrichment.provider === null ||
-          config.enrichment.provider.baseDelayMillis <=
-            config.enrichment.provider.maximumDelayMillis),
+        ),
       () => deepFreeze({ _tag: "InvalidServiceConfig" as const })
     )
   )

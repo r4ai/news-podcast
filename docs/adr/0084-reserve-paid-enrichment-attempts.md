@@ -19,6 +19,8 @@
 2. `(owner_id, local_date)`の試行数を`limit`未満の場合だけ原子的に1加算する。
 3. 枠が尽きていればleaseを`Queued`へ戻し、providerを呼ばない。
 
+OpenAI adapterは内部HTTP retryを行わず、1回の`enrich`呼び出しを1回の外部送信に固定する。429、timeout、5xxの再試行はdurable queueへ戻り、新しいlive leaseと新しい日次枠予約を得た後だけ送信する。これによりApplicationの予約数と実HTTP request数を1対1に保つ。
+
 ```mermaid
 stateDiagram-v2
   Processing --> Failed: 送信前失敗 / 枠は消費しない
@@ -54,6 +56,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | 失敗完了時に加算 | 同時workerが残枠を確認してから複数送信できる | providerが予約token付きquotaを提供する |
 | claim時に一括予約 | 本文取得やvalidation失敗まで誤計上する | provider送信前の全処理をclaim前へ移せる |
+| provider adapter内でbounded retry | 1予約から複数の有料HTTP requestが発生しhard limitを越える | provider側が同じrequestを無課金で再送すると保証する |
 | 成功件数と試行数を同じ値で表示 | コスト境界と成果を誤認させる | N/A |
 
 ## 結果
@@ -76,6 +79,7 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | 設計/ADR | 成功件数と有料試行を分離 | Done | 本ADR、ADR-0063、design/architecture |
 | Application Port | 送信直前の`reserveAttempt` | Done | `application/enrichment.ts` |
+| Provider adapter | 内部retryを廃止し、1予約=1 HTTP requestへ固定 | Done | `openai/provider.ts` |
 | SQLite | live lease検証と条件付きincrement | Done | `enrichment-queue/budget.ts` |
 | OpenAPI/Web | `daily.used`の意味と表示単位を同期 | Done | Gateway contract、generated OpenAPI、Web components |
 | Observability | 予約・枯渇を低cardinality metric化 | Done | `article.enrich.attempt` |

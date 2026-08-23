@@ -1,4 +1,4 @@
-import type { Effect, Layer } from "effect"
+import type { Layer } from "effect"
 import type { LanguageModel } from "effect/unstable/ai"
 
 /**
@@ -10,14 +10,9 @@ export type OpenAiEnrichmentProviderConfig = Readonly<{
   readonly apiKey: string
   readonly model: string
   readonly requestTimeoutMillis: number
-  readonly maximumAttempts: number
-  readonly baseDelayMillis: number
-  readonly maximumDelayMillis: number
 }>
 
 export type OpenAiEnrichmentProviderDependencies = Readonly<{
   readonly languageModelLayer?: Layer.Layer<LanguageModel.LanguageModel>
   readonly fetcher?: typeof fetch
-  readonly nowMillis?: () => Effect.Effect<number>
-  readonly sleep?: (milliseconds: number) => Effect.Effect<void>
 }>

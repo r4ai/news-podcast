@@ -24,9 +24,6 @@ const config = {
   apiKey: "test-only-key",
   model: "gpt-test",
   requestTimeoutMillis: 1_000,
-  maximumAttempts: 2,
-  baseDelayMillis: 25,
-  maximumDelayMillis: 2_000,
 }
 
 describe("Effect AI enrichment provider", () => {
@@ -64,35 +61,31 @@ describe("Effect AI enrichment provider", () => {
     })
   })
 
-  it("feeds Retry-After into the existing bounded retry policy", async () => {
+  it("returns a retryable failure after one request so the durable queue reserves every retry", async () => {
     let attempts = 0
-    const delays: number[] = []
     const provider = makeOpenAiEnrichmentProvider(config, {
       languageModelLayer: makeFakeLanguageModelLayer(() => {
         attempts += 1
-        return attempts === 1
-          ? Effect.fail(
-              new AiError.AiError({
-                module: "test",
-                method: "generateObject",
-                reason: new AiError.RateLimitError({
-                  retryAfter: Duration.seconds(2),
-                }),
-              })
-            )
-          : Effect.succeed(payload)
+        return Effect.fail(
+          new AiError.AiError({
+            module: "test",
+            method: "generateObject",
+            reason: new AiError.RateLimitError({
+              retryAfter: Duration.seconds(2),
+            }),
+          })
+        )
       }),
-      nowMillis: () => Effect.succeed(0),
-      sleep: (milliseconds) =>
-        Effect.sync(() => {
-          delays.push(milliseconds)
-        }),
     })
 
-    await Effect.runPromise(provider.enrich(input))
+    await expect(
+      Effect.runPromise(provider.enrich(input))
+    ).rejects.toMatchObject({
+      _tag: "EnrichmentProviderFailed",
+      reason: "RateLimited",
+    })
 
-    expect(attempts).toBe(2)
-    expect(delays).toEqual([2_000])
+    expect(attempts).toBe(1)
   })
 
   it("classifies structured-output schema drift as permanent", async () => {
