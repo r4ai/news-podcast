@@ -322,6 +322,40 @@ groups:
           description: Check worker health, active NATS/queue edges, provider latency, and stale lease traces.
         labels: { severity: critical, team: platform }
 
+      - uid: np-script-quality-rejected
+        title: Generated script was rejected by the quality gate
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum by (gen_ai_request_model, episode_script_prompt_version, episode_script_quality_prompt_version, quality_reason) (increase(episode_script_quality_total{quality_outcome="reject"}[5m]))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: 'Script quality rejected: {{ $labels.quality_reason }}'
+          description: Check only the model, prompt versions, reason code, and failed job state. Do not copy the source, draft, URL, or attack payload into logs. Keep publication blocked and run the version-pinned security eval before changing the gate.
+        labels: { severity: warning, team: platform }
+
   - orgId: 1
     name: watchdog
     folder: News Podcast

@@ -32,7 +32,7 @@ flowchart TD
 | `CI / observability` | fake observed stack、Collector、Grafana、service graph |
 | `CI / security` | Action固定、workflow lint、zizmor、秘密情報、依存脆弱性 |
 
-`main`のRulesetでは7つすべてをrequired status checkにする。live OpenAI、VOICEVOX、Google OAuth、SMTPなどの資格情報はCIへ渡さない。
+`main`のRulesetでは7つすべてをrequired status checkにする。live OpenAI、VOICEVOX、Google OAuth、SMTPなどの資格情報はCIへ渡さない。OpenAI model/prompt変更時の`pnpm provider-security-eval`は、秘密を持つrelease環境で実行する明示gateとし、結果へ本文・台本・攻撃payload・response IDを含めない。
 
 observability smokeはCIでhermeticなdev loginから認証済みfeed subscription APIまでの実サービスフローを通し、続けて機密情報を含まないOTLP client/server traceをCollectorへ送る。これにより、アプリの計装結果だけに依存せず、Collectorのservice graph契約も検証する。service graphのstore TTL（30秒）、metric flush（15秒）、remote write遅延を考慮してPrometheusにsynthetic edgeが現れるまで最大90秒待ってから判定する。
 

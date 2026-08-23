@@ -5,7 +5,7 @@
 - Decision owners: Platform
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: ADR-0004、ADR-0011、ADR-0012、ADR-0026、`docs/external-provider-contracts.md`
+- Related: ADR-0004、ADR-0011、ADR-0012、ADR-0026、ADR-0080、`docs/external-provider-contracts.md`
 
 ## コンテキストと変更契機
 
@@ -15,7 +15,7 @@ VOICEVOXはHTTP 200の`AudioQuery`へ追加されたoptional fieldをstrict pars
 
 外部境界は「公式仕様 → 稼働version/digest → 実データ」の順で調査し、一致後にRed test、projection、strict parseを実装する。provider-only fieldは必要項目へ明示projectionし、未知fieldを無条件許可しない。矛盾時はDTOを広げず停止する。
 
-container provider（VOICEVOX 24.04、SeaweedFS 4.21）は検証済みdigestへ固定する。OpenAIは`gpt-5.6-luna` aliasを維持し、台本と記事補完の両方を同数のlive contract testと匿名fixtureで検証する。試行数は既定3、最大25/adapter（合計最大50 request）とし、retryによる上限超過を禁止する。
+container provider（VOICEVOX 24.04、SeaweedFS 4.21）は検証済みdigestへ固定する。OpenAIは`gpt-5.6-luna` aliasを維持し、台本と記事補完の両方を同数のlive contract testと匿名fixtureで検証する。試行数は既定3、最大25/adapterの論理sampleとし、retryによる上限超過を禁止する。台本は公開前quality gateを含むため1 sampleあたり2 request、記事補完は1 requestで、上限は合計75 requestとなる。
 
 ## 判断要因
 

@@ -27,6 +27,7 @@ export type GeneratedScript = DeepReadonly<{
 
 export type ScriptGenerationFailure =
   | ProviderFailure
+  | Readonly<{ readonly _tag: "QualityRejected" }>
   | ProviderRetryExhausted<ProviderFailure>
 
 export type ScriptGenerator = DeepReadonly<{

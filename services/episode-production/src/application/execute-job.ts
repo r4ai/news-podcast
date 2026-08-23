@@ -132,6 +132,9 @@ const classify = (failure: ExecutionFailure) => {
     }
   }
   const staged = failure as StagedProviderFailure
+  if (isTagged(staged.failure, "QualityRejected")) {
+    return { _tag: "Terminal" as const, code: "script_quality_rejected" }
+  }
   const provider = providerFailure(staged.failure) as Parameters<
     typeof classifyProviderFailure
   >[0]
