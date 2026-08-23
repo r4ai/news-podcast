@@ -1,6 +1,10 @@
+import { CatchBoundary } from "@tanstack/react-router"
 import { useAtomValue } from "jotai"
 import { lazy, Suspense } from "react"
 
+import { Button } from "@workspace/ui/components/button"
+
+import { recordBrowserEvent } from "@/shared/observability/events"
 import { enrichQueueOpenAtom } from "../-atoms"
 
 const ConnectedEnrichQueueDialog = lazy(async () => {
@@ -20,8 +24,38 @@ export function EnrichQueueDialogHost() {
   if (!open) return null
 
   return (
-    <Suspense fallback={null}>
-      <ConnectedEnrichQueueDialog />
-    </Suspense>
+    <CatchBoundary
+      errorComponent={() => <DialogLoadError />}
+      getResetKey={() => "enrich-queue-dialog"}
+      onCatch={(error) =>
+        recordBrowserEvent("panel.error", {
+          "panel.name": "enrich-queue-dialog",
+          "error.type": error instanceof Error ? error.name : "UnknownError",
+        })
+      }
+    >
+      <Suspense fallback={null}>
+        <ConnectedEnrichQueueDialog />
+      </Suspense>
+    </CatchBoundary>
+  )
+}
+
+function DialogLoadError() {
+  return (
+    <section
+      className="fixed right-4 bottom-[calc(var(--app-nav-h)+var(--player-h)+1rem)] z-50 flex max-w-sm flex-col gap-3 rounded-lg border border-destructive/40 bg-background p-4 shadow-lg md:bottom-[calc(var(--player-h)+1rem)]"
+      role="alert"
+    >
+      <div>
+        <h2 className="font-medium">AI処理キューを開けませんでした</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          アプリを再読み込みして、もう一度お試しください。
+        </p>
+      </div>
+      <Button onClick={() => window.location.reload()} size="sm">
+        アプリを再読み込み
+      </Button>
+    </section>
   )
 }
