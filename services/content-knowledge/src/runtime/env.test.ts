@@ -202,16 +202,6 @@ describe("content-knowledge environment boundary", () => {
         OPENAI_API_KEY: "test-key",
       },
     ],
-    [
-      "invalid OpenAI retry budget",
-      {
-        ...validEnvironment,
-        PROVIDER_MODE: "live",
-        OPENAI_API_KEY: "test-key",
-        OPENAI_MODEL: "gpt-test",
-        CONTENT_ENRICH_OPENAI_MAX_ATTEMPTS: "6",
-      },
-    ],
   ])("rejects %s", async (_name, environment) => {
     const exit = await Effect.runPromiseExit(
       readContentKnowledgeConfig(environment)
@@ -264,9 +254,6 @@ describe("content-knowledge environment boundary", () => {
       apiKey: "test-key",
       model: "gpt-test",
       requestTimeoutMillis: 60_000,
-      maximumAttempts: 3,
-      baseDelayMillis: 1_000,
-      maximumDelayMillis: 30_000,
     })
   })
 

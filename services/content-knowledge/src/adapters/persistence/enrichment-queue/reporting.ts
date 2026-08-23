@@ -86,7 +86,7 @@ export const makeReporting = (
 
   const dailyProgress = (ownerId: string, date: string) =>
     database
-      .select({ count: contentEnrichmentDailyProgress.processedCount })
+      .select({ count: contentEnrichmentDailyProgress.attemptedCount })
       .from(contentEnrichmentDailyProgress)
       .where(
         and(

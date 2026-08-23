@@ -75,7 +75,7 @@ RSS記事の`articleId`は`feedId + GUID`で安定させ、capture intentだけ�
 
 任意登録feedはprivate-by-defaultとし、`/v1/feeds`はrequest owner自身が購読するfeedと`public_feed_listings`へ明示掲載したfeedだけを返す。query/path tokenを文字列判定やredactionで加工せず、DB可視性条件で別ownerから閉じる。既存feedはmigrationで公開推測せず全件privateにする。将来の公開化は、認証なしの取得可能性・credential非包含・owner同意を検証するworkflowができるまで提供しない（[ADR-0071](adr/0071-keep-user-registered-feed-urls-private.md)）。
 
-AI記事補完のキュー、結果、タグ、日次使用量はすべてowner単位である。workerはownerごとに`CONTENT_ENRICH_DAILY_LIMIT`の使用量を読み、枯渇したownerだけをskipして次のownerを処理する。成功完了時刻からUTC日付を導出し、成功確定と`(owner_id, local_date)`使用量の加算を同じtransactionで行うため、外部処理が日付をまたいでも開始日へ誤計上しない。日次枠resetはContent KnowledgeのRPC境界で既定拒否し、非productionでserver flagを明示した場合だけactor自身のowner枠へ許可する。成功・拒否はactor、owner、環境、理由を監査し、回数をmetricへ記録する。所有境界は[ADR-0063](adr/0063-scope-enrichment-daily-budget-by-owner.md)、reset認可は[ADR-0076](adr/0076-fail-closed-enrichment-budget-reset.md)を正本とする。
+AI記事補完のキュー、結果、タグ、日次AI試行枠はすべてowner単位である。workerはownerごとに`CONTENT_ENRICH_DAILY_LIMIT`の使用量を読み、枯渇したownerだけをskipして次のownerを処理する。本文・語彙・profile・入力schemaを検証した後、provider送信の直前にlive leaseと残枠を同じtransactionで検査し、`(owner_id, UTC local_date)`へ有料試行を予約する。OpenAI adapterは内部retryをせず、1予約を1 HTTP requestへ固定する。成功だけでなく429、timeout、不正応答も1試行を消費する一方、送信前失敗と期限切れleaseは消費しない。日次枠resetはContent KnowledgeのRPC境界で既定拒否し、非productionでserver flagを明示した場合だけactor自身のowner枠へ許可する。予約・枯渇とresetの成功・拒否を低cardinality metricへ記録する。所有境界は[ADR-0063](adr/0063-scope-enrichment-daily-budget-by-owner.md)、試行契約は[ADR-0084](adr/0084-reserve-paid-enrichment-attempts.md)、reset認可は[ADR-0076](adr/0076-fail-closed-enrichment-budget-reset.md)を正本とする。
 
 Episode Productionのloopは単一flightで動く。leaseは期限切れRunning、dueなRetrying、Queuedの順に優先し、同一状態では`leasedUntil`、`retryAt`、`enqueuedAt`の昇順、同時刻だけ`jobId`で決定する。選択したready時刻はqueue wait計測にも使い、oldest ageと実行順を一致させる。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。cancelは永続化後の同一process通知で即時abortし、別processはleaseを延長しないread-only checkで既定250ms・最大5秒以内に検知する。commit安全性の正本は引き続きSQLite fencingとする。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0072](adr/0072-propagate-episode-cancellation-immediately.md)、[ADR-0086](adr/0086-order-episode-leases-by-ready-time.md)を正本とする。
 
@@ -405,8 +405,6 @@ flowchart TD
 - [ADR-0065 手動記事archiveをend-to-end RPC deadlineで拘束する](adr/0065-bound-manual-archive-rpc-deadline.md)
 - [ADR-0067 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)
 - [ADR-0068 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
-- [ADR-0083 Episode生成失敗コードと利用者向け復旧案内を分離する](adr/0083-share-episode-failure-code-contract.md)
-- [ADR-0086 Episode leaseを優先度とready時刻で決定する](adr/0086-order-episode-leases-by-ready-time.md)
 - [ADR-0069 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070 Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
 - [ADR-0071 ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
@@ -415,3 +413,7 @@ flowchart TD
 - [ADR-0074 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)
 - [ADR-0080 未信頼記事から生成した台本を独立quality gateで公開前に拒否する](adr/0080-gate-untrusted-article-scripts-before-publication.md)
 - [ADR-0081 Episode readerを生成元snapshotへ固定する](adr/0081-bind-episode-reader-to-source-snapshot.md)
+- [ADR-0082 最新記事Markdownを本文検索用に索引する](adr/0082-index-latest-article-markdown-for-search.md)
+- [ADR-0083 Episode生成失敗コードと利用者向け復旧案内を分離する](adr/0083-share-episode-failure-code-contract.md)
+- [ADR-0084 AI記事補完の有料試行をprovider送信前に予約する](adr/0084-reserve-paid-enrichment-attempts.md)
+- [ADR-0086 Episode leaseを優先度とready時刻で決定する](adr/0086-order-episode-leases-by-ready-time.md)

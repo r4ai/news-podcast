@@ -80,12 +80,22 @@ export type EnrichmentQueueRepository = DeepReadonly<{
     expiresAt: CapturedAt,
     leaseToken: string
   ) => Effect.Effect<readonly EnrichmentTarget[], EnrichmentQueueError>
+  /**
+   * Provider送信の直前に有料試行枠を原子的に予約する。
+   * 枠が尽きていた場合は対象のleaseを解放し、falseを返す。
+   */
+  readonly reserveAttempt: (
+    ownerId: OwnerId,
+    target: EnrichmentTarget,
+    attemptedAt: CapturedAt,
+    localDate: string,
+    dailyLimit: number
+  ) => Effect.Effect<boolean, EnrichmentQueueError>
   readonly completeSuccess: (
     ownerId: OwnerId,
     target: EnrichmentTarget,
     output: EnrichmentProviderOutput,
-    completedAt: CapturedAt,
-    localDate: string
+    completedAt: CapturedAt
   ) => Effect.Effect<void, EnrichmentQueueError | ContentTaxonomyError>
   readonly completeFailure: (
     ownerId: OwnerId,
@@ -152,6 +162,7 @@ export const createEnrichmentOperations = (input: {
   readonly dailyLimit: number
   readonly now: () => CapturedAt
   readonly newLeaseToken: () => string
+  readonly observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
 }) => {
   const processTarget = Effect.fn("contentKnowledge.enrichment.processTarget")(
     function* (ownerId: OwnerId, target: EnrichmentTarget) {
@@ -184,7 +195,7 @@ export const createEnrichmentOperations = (input: {
           "article content unavailable",
           markdownResult.sourceFailure.reason === "Unavailable"
         )
-        return false
+        return { attempted: false, succeeded: false } as const
       }
       const vocabulary = yield* input.taxonomy.vocabulary(ownerId)
       const interestProfile = yield* input.interestProfiles.get(ownerId)
@@ -195,6 +206,16 @@ export const createEnrichmentOperations = (input: {
         interestProfile,
         tagVocabulary: vocabulary,
       }).pipe(Effect.orDie)
+      const attemptedAt = input.now()
+      const reserved = yield* input.queue.reserveAttempt(
+        ownerId,
+        target,
+        attemptedAt,
+        localDate(attemptedAt),
+        input.dailyLimit
+      )
+      input.observeAttempt?.(reserved ? "Reserved" : "BudgetExhausted")
+      if (!reserved) return { attempted: false, succeeded: false } as const
       const providerResult = yield* input.provider.enrich(providerInput).pipe(
         Effect.matchEffect({
           onFailure: (providerFailure) =>
@@ -208,14 +229,14 @@ export const createEnrichmentOperations = (input: {
       if (providerResult._tag === "Failure") {
         const typed = providerResult.providerFailure
         yield* completeFailure(typed.message, typed.reason !== "Permanent")
-        return false
+        return { attempted: true, succeeded: false } as const
       }
       const decoded = yield* Effect.option(
         parse(EnrichmentProviderOutputSchema)(providerResult.value)
       )
       if (decoded._tag === "None") {
         yield* completeFailure("invalid enrichment provider response", false)
-        return false
+        return { attempted: true, succeeded: false } as const
       }
       const vocabularySet = new Set(vocabulary)
       if (decoded.value.tags.some((name) => !vocabularySet.has(name))) {
@@ -223,17 +244,16 @@ export const createEnrichmentOperations = (input: {
           "provider selected a tag outside vocabulary",
           false
         )
-        return false
+        return { attempted: true, succeeded: false } as const
       }
       const completedAt = input.now()
       yield* input.queue.completeSuccess(
         ownerId,
         target,
         decoded.value,
-        completedAt,
-        localDate(completedAt)
+        completedAt
       )
-      return true
+      return { attempted: true, succeeded: true } as const
     }
   )
 
@@ -259,9 +279,10 @@ export const createEnrichmentOperations = (input: {
           input.newLeaseToken()
         )
         for (const target of targets) {
-          if (yield* processTarget(ownerId, target)) {
+          const result = yield* processTarget(ownerId, target)
+          if (result.attempted) used += 1
+          if (result.succeeded) {
             processed += 1
-            used += 1
           }
         }
       }

@@ -83,7 +83,7 @@ async function renderPanel() {
       <AiEnrichPanel />
     </TestProviders>
   )
-  await waitFor(() => expect(screen.getByText("34 / 200件")).toBeDefined())
+  await waitFor(() => expect(screen.getByText("34 / 200回")).toBeDefined())
   await waitForRenderQuiescence(waitFor, "AiEnrichSection")
   return { queryClient, settled: renderCount("AiEnrichSection") }
 }
@@ -116,7 +116,7 @@ describe("AI処理パネルの描画範囲", () => {
 
     await replaceQueueSnapshot(queryClient, queueStatus(["a"], 35))
 
-    await waitFor(() => expect(screen.getByText("35 / 200件")).toBeDefined())
+    await waitFor(() => expect(screen.getByText("35 / 200回")).toBeDefined())
     expect(renderCount("AiEnrichSection")).toBeGreaterThan(settled)
   })
 })

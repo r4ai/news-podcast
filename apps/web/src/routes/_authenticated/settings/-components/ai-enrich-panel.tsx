@@ -88,17 +88,17 @@ export function AiEnrichPanelView({
       <Progress
         getAriaValueText={(_, value) =>
           daily
-            ? `${counter.format(value ?? 0)}件 / ${counter.format(daily.limit)}件`
+            ? `${counter.format(value ?? 0)}回 / ${counter.format(daily.limit)}回`
             : "読み込み中"
         }
         max={daily?.limit ?? 100}
         value={daily?.used ?? null}
       >
-        <ProgressLabel>本日の処理上限</ProgressLabel>
+        <ProgressLabel>本日のAI試行上限</ProgressLabel>
         <ProgressValue>
           {(_, value) =>
             daily
-              ? `${counter.format(value ?? 0)} / ${counter.format(daily.limit)}件`
+              ? `${counter.format(value ?? 0)} / ${counter.format(daily.limit)}回`
               : "—"
           }
         </ProgressValue>
@@ -108,8 +108,8 @@ export function AiEnrichPanelView({
         {remaining === undefined
           ? "使用量を読み込んでいます。"
           : nothingToReprocess
-            ? `本日はあと${counter.format(remaining)}件処理できます。再処理できる処理済み記事はありません。`
-            : `本日はあと${counter.format(remaining)}件処理できます。上限を超えた分は翌日へ繰り越して処理されます。`}
+            ? `本日はあと${counter.format(remaining)}回AIを試行できます。再処理できる処理済み記事はありません。`
+            : `本日はあと${counter.format(remaining)}回AIを試行できます。上限を超えた分は翌日へ繰り越されます。`}
       </p>
 
       <AlertDialog

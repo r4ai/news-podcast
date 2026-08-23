@@ -8,6 +8,7 @@ import type {
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
 import { makeClaiming } from "./claiming.js"
 import { makeCompletion } from "./completion.js"
+import { makeBudget } from "./budget.js"
 import { makeEnqueueing } from "./enqueueing.js"
 import { makeReporting } from "./reporting.js"
 
@@ -21,6 +22,7 @@ export const createEnrichmentQueue = (
   Effect.sync(() =>
     deepFreeze({
       ...makeClaiming(database),
+      ...makeBudget(database),
       ...makeEnqueueing(database),
       ...makeCompletion(database),
       ...makeReporting(database),

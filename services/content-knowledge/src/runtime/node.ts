@@ -129,10 +129,6 @@ const HttpEndpointSchema = Schema.String.check(
     }
   })
 )
-const ProviderAttemptSchema = Schema.Int.check(
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(5)
-)
 const ArchiveCleanupIntervalSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(24 * 60 * 60 * 1_000)
@@ -172,9 +168,6 @@ export const NodeServiceConfigSchema = Schema.Struct({
         apiKey: S3TextSchema,
         model: S3TextSchema,
         requestTimeoutMillis: LoopDelaySchema,
-        maximumAttempts: ProviderAttemptSchema,
-        baseDelayMillis: LoopDelaySchema,
-        maximumDelayMillis: LoopDelaySchema,
       })
     ),
     loop: Schema.Struct({
@@ -230,10 +223,7 @@ export const parseNodeServiceConfig = (input: unknown) =>
         !(
           config.appEnvironment === "production" &&
           config.enrichment.provider === null
-        ) &&
-        (config.enrichment.provider === null ||
-          config.enrichment.provider.baseDelayMillis <=
-            config.enrichment.provider.maximumDelayMillis),
+        ),
       () => deepFreeze({ _tag: "InvalidServiceConfig" as const })
     )
   )
@@ -256,6 +246,7 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
     readonly source: EnrichmentSource
     readonly provider: EnrichmentProvider
     readonly dailyLimit: number
+    readonly observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
   }) => ReturnType<typeof createEnrichmentOperations>
   readonly close: () => Effect.Effect<void, NodeRuntimeError>
 }>
@@ -365,6 +356,9 @@ export const startNodeRuntime = (
                       readonly source: EnrichmentSource
                       readonly provider: EnrichmentProvider
                       readonly dailyLimit: number
+                      readonly observeAttempt?: (
+                        outcome: "Reserved" | "BudgetExhausted"
+                      ) => void
                     }) =>
                       createEnrichmentOperations({
                         queue: enrichmentQueue,
@@ -375,6 +369,7 @@ export const startNodeRuntime = (
                         dailyLimit: input.dailyLimit,
                         now: dependencies.now,
                         newLeaseToken: dependencies.newEnrichmentLeaseToken,
+                        observeAttempt: input.observeAttempt,
                       })
                     const close = () => closeDatabase(handle)
 
@@ -482,6 +477,13 @@ export const runNodeService = (
                               ),
                             })),
                       dailyLimit: config.enrichment.dailyLimit,
+                      observeAttempt: (outcome) =>
+                        observability.count("article.enrich.attempt", 1, {
+                          outcome:
+                            outcome === "Reserved"
+                              ? "reserved"
+                              : "budget_exhausted",
+                        }),
                     })
                     const generationPlanning = createGenerationPlanning({
                       catalog: runtime.articles,

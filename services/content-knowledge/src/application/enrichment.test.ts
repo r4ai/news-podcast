@@ -26,6 +26,7 @@ const queue = (budgetUsed = 0): EnrichmentQueueRepository =>
     reconcile: vi.fn(() => Effect.void),
     listOwners: vi.fn(() => Effect.succeed([ownerId])),
     claim: vi.fn(() => Effect.succeed([target])),
+    reserveAttempt: vi.fn(() => Effect.succeed(true)),
     completeSuccess: vi.fn(() => Effect.void),
     completeFailure: vi.fn(() => Effect.void),
     budgetUsed: vi.fn(() => Effect.succeed(budgetUsed)),
@@ -47,7 +48,9 @@ const queue = (budgetUsed = 0): EnrichmentQueueRepository =>
 const operations = (
   repository: EnrichmentQueueRepository,
   enrich: (input: unknown) => Effect.Effect<unknown, EnrichmentProviderError>,
-  currentTime: () => typeof now = () => now
+  currentTime: () => typeof now = () => now,
+  dailyLimit = 200,
+  observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
 ) =>
   createEnrichmentOperations({
     queue: repository,
@@ -65,9 +68,10 @@ const operations = (
       },
     },
     provider: { enrich },
-    dailyLimit: 200,
+    dailyLimit,
     now: currentTime,
     newLeaseToken: () => "lease-token-0001",
+    observeAttempt,
   })
 
 describe("enrichment operations", () => {
@@ -92,20 +96,22 @@ describe("enrichment operations", () => {
       ownerId,
       target,
       expect.objectContaining({ score: 90 }),
-      now,
-      "2026-08-13"
+      now
     )
   })
 
-  it("accounts a success against the UTC date when it completes", async () => {
+  it("accounts a paid attempt against the UTC date when the provider call starts", async () => {
     const repository = queue()
     const startedAt = Schema.decodeUnknownSync(CapturedAtSchema)(
+      "2026-08-17T23:59:58.000Z"
+    )
+    const attemptedAt = Schema.decodeUnknownSync(CapturedAtSchema)(
       "2026-08-17T23:59:59.000Z"
     )
     const completedAt = Schema.decodeUnknownSync(CapturedAtSchema)(
       "2026-08-18T00:00:02.000Z"
     )
-    const instants = [startedAt, completedAt]
+    const instants = [startedAt, attemptedAt, completedAt]
 
     await Effect.runPromise(
       operations(
@@ -124,12 +130,12 @@ describe("enrichment operations", () => {
       ).runCycle()
     )
 
-    expect(repository.completeSuccess).toHaveBeenCalledWith(
+    expect(repository.reserveAttempt).toHaveBeenCalledWith(
       ownerId,
       target,
-      expect.objectContaining({ score: 90 }),
-      completedAt,
-      "2026-08-18"
+      attemptedAt,
+      "2026-08-17",
+      200
     )
   })
 
@@ -164,13 +170,19 @@ describe("enrichment operations", () => {
 
   it("classifies provider failures without exposing fake success", async () => {
     const repository = queue()
+    const observeAttempt = vi.fn()
     await Effect.runPromise(
-      operations(repository, () =>
-        Effect.fail({
-          _tag: "EnrichmentProviderFailed",
-          reason: "RateLimited",
-          message: "retry later",
-        })
+      operations(
+        repository,
+        () =>
+          Effect.fail({
+            _tag: "EnrichmentProviderFailed",
+            reason: "RateLimited",
+            message: "retry later",
+          }),
+        () => now,
+        200,
+        observeAttempt
       ).runCycle()
     )
     expect(repository.completeFailure).toHaveBeenCalledWith(
@@ -180,6 +192,82 @@ describe("enrichment operations", () => {
       true,
       now
     )
+    expect(repository.reserveAttempt).toHaveBeenCalledWith(
+      ownerId,
+      target,
+      now,
+      "2026-08-13",
+      200
+    )
+    expect(observeAttempt).toHaveBeenCalledWith("Reserved")
+  })
+
+  it("does not start a second paid attempt after a failed provider call consumes the daily limit", async () => {
+    let used = 0
+    const repository = {
+      ...queue(),
+      budgetUsed: vi.fn(() => Effect.succeed(used)),
+      reserveAttempt: vi.fn(() => {
+        if (used >= 1) return Effect.succeed(false)
+        used += 1
+        return Effect.succeed(true)
+      }),
+    } as EnrichmentQueueRepository
+    const enrich = vi.fn(() =>
+      Effect.fail({
+        _tag: "EnrichmentProviderFailed" as const,
+        reason: "RateLimited" as const,
+        message: "retry later",
+      })
+    )
+    const operation = operations(repository, enrich, () => now, 1)
+
+    await Effect.runPromise(operation.runCycle())
+    await Effect.runPromise(operation.runCycle())
+
+    expect(enrich).toHaveBeenCalledTimes(1)
+    expect(used).toBe(1)
+    expect(repository.claim).toHaveBeenCalledTimes(1)
+  })
+
+  it("counts a timeout as a paid attempt and keeps it retryable", async () => {
+    const repository = queue()
+    await Effect.runPromise(
+      operations(repository, () =>
+        Effect.fail({
+          _tag: "EnrichmentProviderFailed",
+          reason: "Retryable",
+          message: "provider timeout",
+        })
+      ).runCycle()
+    )
+
+    expect(repository.reserveAttempt).toHaveBeenCalledOnce()
+    expect(repository.completeFailure).toHaveBeenCalledWith(
+      ownerId,
+      target,
+      "provider timeout",
+      true,
+      now
+    )
+  })
+
+  it("does not call the provider when the atomic reservation finds no remaining budget", async () => {
+    const repository = {
+      ...queue(),
+      reserveAttempt: vi.fn(() => Effect.succeed(false)),
+    } as EnrichmentQueueRepository
+    const enrich = vi.fn(() => Effect.die("must not run"))
+    const observeAttempt = vi.fn()
+
+    expect(
+      await Effect.runPromise(
+        operations(repository, enrich, () => now, 1, observeAttempt).runCycle()
+      )
+    ).toEqual({ processed: 0 })
+    expect(enrich).not.toHaveBeenCalled()
+    expect(repository.completeFailure).not.toHaveBeenCalled()
+    expect(observeAttempt).toHaveBeenCalledWith("BudgetExhausted")
   })
 
   it("does not claim work after the durable daily budget is exhausted", async () => {

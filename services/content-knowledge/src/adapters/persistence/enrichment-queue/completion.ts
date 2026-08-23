@@ -3,7 +3,6 @@ import { Effect } from "effect"
 
 import {
   contentArticleTags,
-  contentEnrichmentDailyProgress,
   contentEnrichmentQueue,
   contentEnrichmentResults,
   contentTags,
@@ -19,7 +18,8 @@ import { failure } from "./row.js"
 
 /**
  * キューの出口側：リースを保持していた実行だけが結果を確定できる。
- * 成功時はタグと候補語彙、日次消費までを同じトランザクションで書き切る。
+ * 成功時はタグと候補語彙を同じトランザクションで書き切る。
+ * 日次の有料試行枠はprovider送信前にreserveAttemptが確保する。
  */
 type Completion = Pick<
   EnrichmentQueueRepository,
@@ -60,7 +60,7 @@ const countSuggestions = (
 export const makeCompletion = (
   database: ContentKnowledgeDatabase
 ): Completion => ({
-  completeSuccess: (ownerId, target, output, completedAt, localDate) =>
+  completeSuccess: (ownerId, target, output, completedAt) =>
     Effect.try({
       try: () =>
         database.transaction((tx) => {
@@ -148,19 +148,6 @@ export const makeCompletion = (
           }
 
           countSuggestions(tx, ownerId, output.suggestedTags, completedAt)
-
-          tx.insert(contentEnrichmentDailyProgress)
-            .values({ ownerId, localDate, processedCount: 1 })
-            .onConflictDoUpdate({
-              target: [
-                contentEnrichmentDailyProgress.ownerId,
-                contentEnrichmentDailyProgress.localDate,
-              ],
-              set: {
-                processedCount: sql`${contentEnrichmentDailyProgress.processedCount} + 1`,
-              },
-            })
-            .run()
         }),
       catch: () => failure("Complete"),
     }).pipe(Effect.asVoid),

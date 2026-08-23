@@ -85,18 +85,6 @@ export const readContentKnowledgeConfig = (
                     env.CONTENT_ENRICH_OPENAI_TIMEOUT_MS,
                     60_000
                   ),
-                  maximumAttempts: decimalInteger(
-                    env.CONTENT_ENRICH_OPENAI_MAX_ATTEMPTS,
-                    3
-                  ),
-                  baseDelayMillis: decimalInteger(
-                    env.CONTENT_ENRICH_OPENAI_BASE_DELAY_MS,
-                    1_000
-                  ),
-                  maximumDelayMillis: decimalInteger(
-                    env.CONTENT_ENRICH_OPENAI_MAX_DELAY_MS,
-                    30_000
-                  ),
                 }
               : null,
           loop: {

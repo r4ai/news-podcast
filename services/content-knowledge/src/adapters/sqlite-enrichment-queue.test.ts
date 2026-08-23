@@ -74,15 +74,90 @@ describe("SQLite enrichment queue", () => {
         .processing
     ).toHaveLength(1)
 
-    await Effect.runPromise(
-      queue.completeSuccess(ownerA, claim!, output, now, "2026-08-13")
-    )
+    expect(
+      await Effect.runPromise(
+        queue.reserveAttempt(ownerA, claim!, now, "2026-08-13", 200)
+      )
+    ).toBe(true)
+
+    await Effect.runPromise(queue.completeSuccess(ownerA, claim!, output, now))
     const after = await Effect.runPromise(
       queue.status(ownerA, 200, "2026-08-13")
     )
     expect(after.processing).toHaveLength(0)
     expect(after.recent[0]).toMatchObject({ status: "Succeeded" })
     expect(after.daily).toEqual({ used: 1, limit: 200 })
+  })
+
+  it("atomically caps paid attempts and releases an unreserved lease without consuming it", async () => {
+    const { database, queue } = await setup()
+    await Effect.runPromise(queue.reconcile(now))
+    const [claim] = await Effect.runPromise(
+      queue.claim(ownerA, 1, now, expires, "lease-token-0001")
+    )
+
+    expect(
+      await Effect.runPromise(
+        queue.reserveAttempt(ownerA, claim!, now, "2026-08-13", 1)
+      )
+    ).toBe(true)
+    expect(
+      await Effect.runPromise(
+        queue.reserveAttempt(ownerA, claim!, now, "2026-08-13", 1)
+      )
+    ).toBe(false)
+    expect(
+      database.getSql(
+        "SELECT processed_count AS used FROM content_enrichment_daily_progress WHERE owner_id = ? AND local_date = ?",
+        [ownerA, "2026-08-13"]
+      )
+    ).toEqual({ used: 1 })
+  })
+
+  it("does not reserve a paid attempt for a stale lease", async () => {
+    const { queue } = await setup()
+    await Effect.runPromise(queue.reconcile(now))
+    const [claim] = await Effect.runPromise(
+      queue.claim(ownerA, 1, now, expires, "lease-token-0001")
+    )
+
+    await expect(
+      Effect.runPromise(
+        queue.reserveAttempt(
+          ownerA,
+          { ...claim!, leaseToken: "stale-token-0000" },
+          now,
+          "2026-08-13",
+          1
+        )
+      )
+    ).rejects.toMatchObject({
+      _tag: "EnrichmentQueueFailed",
+      operation: "Budget",
+    })
+    expect(
+      await Effect.runPromise(queue.budgetUsed(ownerA, "2026-08-13"))
+    ).toBe(0)
+  })
+
+  it("does not charge a provider attempt after its lease expires", async () => {
+    const { queue } = await setup()
+    await Effect.runPromise(queue.reconcile(now))
+    const [claim] = await Effect.runPromise(
+      queue.claim(ownerA, 1, now, expires, "lease-token-0001")
+    )
+
+    await expect(
+      Effect.runPromise(
+        queue.reserveAttempt(ownerA, claim!, later, "2026-08-13", 1)
+      )
+    ).rejects.toMatchObject({
+      _tag: "EnrichmentQueueFailed",
+      operation: "Budget",
+    })
+    expect(
+      await Effect.runPromise(queue.budgetUsed(ownerA, "2026-08-13"))
+    ).toBe(0)
   })
 
   it("rejects stale lease completion and reclaims an expired lease", async () => {
@@ -97,8 +172,7 @@ describe("SQLite enrichment queue", () => {
           ownerA,
           { ...claim!, leaseToken: "stale-token-000" },
           output,
-          now,
-          "2026-08-13"
+          now
         )
       )
     ).rejects.toMatchObject({
@@ -219,8 +293,9 @@ describe("SQLite enrichment queue", () => {
       queue.claim(ownerA, 1, now, expires, "lease-token-0001")
     )
     await Effect.runPromise(
-      queue.completeSuccess(ownerA, claim!, output, now, "2026-08-13")
+      queue.reserveAttempt(ownerA, claim!, now, "2026-08-13", 200)
     )
+    await Effect.runPromise(queue.completeSuccess(ownerA, claim!, output, now))
 
     expect(
       await Effect.runPromise(queue.budgetUsed(ownerA, "2026-08-13"))
@@ -255,8 +330,9 @@ describe("SQLite enrichment queue", () => {
       queue.claim(ownerA, 1, now, expires, "lease-token-0001")
     )
     await Effect.runPromise(
-      queue.completeSuccess(ownerA, claim!, output, now, "2026-08-13")
+      queue.reserveAttempt(ownerA, claim!, now, "2026-08-13", 200)
     )
+    await Effect.runPromise(queue.completeSuccess(ownerA, claim!, output, now))
 
     expect(
       (await Effect.runPromise(queue.status(ownerA, 200, "2026-08-13"))).daily
@@ -295,8 +371,7 @@ describe("SQLite enrichment queue", () => {
           // 同じ未知の名前を重ねても、候補は1件としてだけ数える。
           suggestedTags: ["ai", "fresh", "fresh"],
         } as never,
-        now,
-        "2026-08-13"
+        now
       )
     )
 
