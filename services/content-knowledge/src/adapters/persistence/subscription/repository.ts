@@ -212,28 +212,70 @@ export const createSubscriptionRepository = (
       enabled
     ) =>
       Effect.try({
-        try: () => {
-          const updated = database
-            .update(feedSubscriptions)
-            .set({ enabled: enabled ? 1 : 0 })
-            .where(
-              and(
-                eq(feedSubscriptions.subscriptionId, subscriptionId),
-                eq(feedSubscriptions.ownerId, ownerId)
+        try: () =>
+          database.transaction((tx) => {
+            const owned = tx
+              .select({
+                enabled: feedSubscriptions.enabled,
+                feedId: feedSubscriptions.feedId,
+              })
+              .from(feedSubscriptions)
+              .where(
+                and(
+                  eq(feedSubscriptions.subscriptionId, subscriptionId),
+                  eq(feedSubscriptions.ownerId, ownerId)
+                )
               )
-            )
-            .run()
-          if (Number(updated.changes) !== 1) return undefined
+              .get()
+            if (owned === undefined) return undefined
 
-          return selectSubscriptions()
-            .where(
-              and(
-                eq(feedSubscriptions.subscriptionId, subscriptionId),
-                eq(feedSubscriptions.ownerId, ownerId)
+            tx.update(feedSubscriptions)
+              .set({ enabled: enabled ? 1 : 0 })
+              .where(
+                and(
+                  eq(feedSubscriptions.subscriptionId, subscriptionId),
+                  eq(feedSubscriptions.ownerId, ownerId)
+                )
               )
-            )
-            .get()
-        },
+              .run()
+
+            if (enabled && owned.enabled === 0) {
+              const articles = tx
+                .select({
+                  articleId: feedItems.articleId,
+                  acquiredAt: feedItems.discoveredAt,
+                })
+                .from(feedItems)
+                .where(eq(feedItems.feedId, owned.feedId))
+                .all()
+              if (articles.length > 0)
+                tx.insert(articleOwnerAccess)
+                  .values(
+                    articles.map(({ acquiredAt, articleId }) => ({
+                      ownerId,
+                      articleId,
+                      acquiredAt,
+                    }))
+                  )
+                  .onConflictDoNothing()
+                  .run()
+            }
+
+            return tx
+              .select(subscriptionProjection)
+              .from(feedSubscriptions)
+              .innerJoin(
+                feedCatalog,
+                eq(feedCatalog.feedId, feedSubscriptions.feedId)
+              )
+              .where(
+                and(
+                  eq(feedSubscriptions.subscriptionId, subscriptionId),
+                  eq(feedSubscriptions.ownerId, ownerId)
+                )
+              )
+              .get()
+          }),
         catch: () => failure("Update"),
       }).pipe(
         Effect.flatMap(

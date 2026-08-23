@@ -59,7 +59,9 @@ function statusText(subscription: Subscription, job: FeedSyncJob | undefined) {
     const summary = `前回の同期で${job.failed}件の記事を取得できませんでした`
     return `${summary}${reason === undefined ? "" : `（理由: ${reason}）`}`
   }
-  return subscription.enabled ? "生成対象" : "一時停止中"
+  return subscription.enabled
+    ? "同期・生成・AI処理の対象"
+    : "一時停止中（新着取得・AI処理の対象外）"
 }
 
 const sanitizedFailureReasons: Readonly<Record<string, string>> = {
@@ -120,7 +122,7 @@ export function SubscriptionItem({
       </ItemContent>
       <ItemActions>
         <Switch
-          aria-label={`${feedName}を生成対象にする`}
+          aria-label={`${feedName}の同期・生成を有効にする`}
           checked={subscription.enabled}
           disabled={disabled}
           onCheckedChange={() => onToggle(subscription)}

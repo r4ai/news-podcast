@@ -225,7 +225,7 @@ describe("SQLite article library", () => {
     ).resolves.toEqual({ _tag: "NotFound" })
   })
 
-  it("grants shared-feed items while a subscriber pauses and resumes", async () => {
+  it("defers shared-feed access while paused and backfills it on resume", async () => {
     const { articles, catalog, database, subscriptions } = await setup()
     await Effect.runPromise(
       subscriptions.setEnabled(
@@ -256,6 +256,23 @@ describe("SQLite article library", () => {
         discoveredAt: "2026-08-13T02:01:00.000Z",
       })
     )
+
+    await expect(
+      Effect.runPromise(articles.find(ids.ownerA, ids.articleC))
+    ).resolves.toEqual({ _tag: "NotFound" })
+    await expect(
+      Effect.runPromise(articles.find(ids.ownerB, ids.articleC))
+    ).resolves.toMatchObject({ _tag: "Found" })
+    expect(
+      database.getSql(
+        `SELECT count(*) AS count FROM article_owner_access
+         WHERE owner_id = '${ids.ownerA}' AND article_id = '${ids.articleC}'`
+      )
+    ).toEqual({ count: 0 })
+    await expect(
+      Effect.runPromise(articles.find(ids.ownerA, ids.articleA))
+    ).resolves.toMatchObject({ _tag: "Found" })
+
     await Effect.runPromise(
       subscriptions.setEnabled(
         ids.ownerA,

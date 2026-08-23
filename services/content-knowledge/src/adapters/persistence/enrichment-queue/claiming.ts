@@ -91,7 +91,13 @@ export const makeClaiming = (database: ContentKnowledgeDatabase): Claiming => ({
                   feedSubscriptions,
                   eq(feedSubscriptions.feedId, feedItems.feedId)
                 )
-                .where(and(hasSnapshot(tx), not(alreadyResolved)))
+                .where(
+                  and(
+                    eq(feedSubscriptions.enabled, 1),
+                    hasSnapshot(tx),
+                    not(alreadyResolved)
+                  )
+                )
             )
             .onConflictDoNothing({
               target: [
@@ -110,6 +116,7 @@ export const makeClaiming = (database: ContentKnowledgeDatabase): Claiming => ({
         database
           .selectDistinct({ ownerId: feedSubscriptions.ownerId })
           .from(feedSubscriptions)
+          .where(eq(feedSubscriptions.enabled, 1))
           .orderBy(asc(feedSubscriptions.ownerId))
           .all(),
       catch: () => failure("ListOwners"),
