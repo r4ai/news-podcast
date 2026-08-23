@@ -8,6 +8,10 @@ export type StoredJobRow = Readonly<{
   document: string
 }>
 
+export type StoredActiveJobRow = Readonly<{
+  readonly document: string
+}>
+
 export type LeasedJobRow = Readonly<{
   document: string
   recovered: boolean
@@ -36,6 +40,12 @@ export type SqliteJobStatusSnapshot = Readonly<{
   readonly oldestActiveAt?: string
 }>
 
+export type SqliteOwnerActiveSnapshot = Readonly<{
+  readonly ownerId: string
+  readonly count: number
+  readonly oldestActiveAt: string
+}>
+
 /**
  * ジョブ集約の永続化契約。document(JSON文字列)を受け渡す形は
  * 正規化後も維持し、上位のアダプタとテストを変更せずに済ませる。
@@ -45,6 +55,7 @@ export type SqliteJobHandle = Readonly<{
   findOwned: (ownerId: string, jobId: string) => string | undefined
   listOwned: (ownerId: string, limit: number) => readonly string[]
   statusSnapshot: () => readonly SqliteJobStatusSnapshot[]
+  ownerActiveSnapshot: () => readonly SqliteOwnerActiveSnapshot[]
   listOwnedAgUiEvents: (input: {
     readonly ownerId: string
     readonly jobId: string
@@ -93,7 +104,10 @@ export type SqliteJobHandle = Readonly<{
   requeueRecoverableScheduled: (input: {
     readonly jobId: string
     readonly document: string
-  }) => void
+  }) =>
+    | { readonly _tag: "Requeued" }
+    | { readonly _tag: "Ignored" }
+    | { readonly _tag: "OwnerActive"; readonly row: StoredActiveJobRow }
   saveIdempotently: (input: {
     readonly ownerId: string
     readonly idempotencyScope: string
@@ -104,6 +118,7 @@ export type SqliteJobHandle = Readonly<{
   }) =>
     | { readonly _tag: "Inserted" }
     | { readonly _tag: "Existing"; readonly row: StoredJobRow }
+    | { readonly _tag: "OwnerActive"; readonly row: StoredActiveJobRow }
   leaseNext: (input: {
     readonly now: string
     readonly replace: (document: string) => string
@@ -168,6 +183,7 @@ export type JobReadHandle = Pick<
   | "findOwned"
   | "listOwned"
   | "statusSnapshot"
+  | "ownerActiveSnapshot"
   | "listOwnedAgUiEvents"
 >
 

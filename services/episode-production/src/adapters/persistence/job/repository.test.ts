@@ -55,6 +55,110 @@ const job = (
   })
 
 describe("SQLite job repository", () => {
+  it.each([
+    ["Queued", true],
+    ["Running", true],
+    ["Retrying", true],
+    ["Succeeded", false],
+    ["Failed", false],
+    ["Canceled", false],
+  ] as const)(
+    "treats %s as %s for owner admission",
+    async (state, blocksAdmission) => {
+      const handle = openProductionDatabaseUnsafe(":memory:")
+      try {
+        const repository = await Effect.runPromise(
+          jobRepository(handle.database)
+        )
+        const existing = job(
+          "10e2d4e1-c127-479f-a124-2ea037bd9319",
+          "manual",
+          undefined,
+          "existing"
+        )
+        await Effect.runPromise(repository.saveIdempotently(existing))
+        if (state !== "Queued") {
+          const assignments = {
+            Running:
+              "status='Running', attempt=1, started_at='2026-08-12T00:00:00.000Z', lease_token='lease', leased_until='2026-08-12T00:01:00.000Z'",
+            Retrying:
+              "status='Retrying', attempt=1, retry_at='2026-08-12T00:01:00.000Z', failure_code='script_timeout', failure_retryable=1",
+            Succeeded:
+              "status='Succeeded', attempt=1, episode_id='5af55f2e-ff0b-475c-866a-f2cff48c101d', completed_at='2026-08-12T00:01:00.000Z'",
+            Failed:
+              "status='Failed', attempt=1, failed_at='2026-08-12T00:01:00.000Z', failure_code='script_refusal', failure_retryable=0",
+            Canceled:
+              "status='Canceled', canceled_at='2026-08-12T00:01:00.000Z', cancel_reason='requested_by_user'",
+          } as const
+          handle.client
+            .prepare(
+              `UPDATE episode_jobs SET ${assignments[state]} WHERE job_id = ?`
+            )
+            .run(existing.jobId)
+        }
+
+        const exit = await Effect.runPromiseExit(
+          repository.saveIdempotently(
+            job(
+              "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+              "manual",
+              undefined,
+              "competing",
+              later
+            )
+          )
+        )
+
+        expect(exit._tag).toBe(blocksAdmission ? "Failure" : "Success")
+        expect(
+          (await Effect.runPromise(repository.listOwned(command.ownerId, 100)))
+            .length
+        ).toBe(blocksAdmission ? 1 : 2)
+      } finally {
+        handle.close()
+      }
+    }
+  )
+
+  it("atomically rejects a different logical request while the owner has an active job", async () => {
+    const active = job(
+      "10e2d4e1-c127-479f-a124-2ea037bd9319",
+      "manual",
+      undefined,
+      "tab-a"
+    )
+    const competing = job(
+      "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+      "scheduled",
+      undefined,
+      "scheduled:owner:2026-08-12"
+    )
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(
+            openProductionDatabaseUnsafe(":memory:").database
+          )
+          yield* repository.saveIdempotently(active)
+          const conflict = yield* repository
+            .saveScheduledIdempotently(competing)
+            .pipe(Effect.flip)
+          return {
+            conflict,
+            jobs: yield* repository.listOwned(command.ownerId, 100),
+          }
+        })
+      )
+    )
+
+    expect(result.conflict).toMatchObject({
+      _tag: "OwnerActiveJobConflict",
+      activeJob: { jobId: active.jobId, _tag: "Queued" },
+    })
+    expect(result.jobs.map(({ jobId }) => jobId)).toEqual([active.jobId])
+  })
+
   it("observes accepted, replay, and conflict without exposing the key", async () => {
     const observations: unknown[] = []
     const first = job("10e2d4e1-c127-479f-a124-2ea037bd9319")
@@ -91,6 +195,7 @@ describe("SQLite job repository", () => {
           yield* repository.saveIdempotently(first)
           yield* repository.saveIdempotently(replay)
           yield* repository.saveIdempotently(conflict).pipe(Effect.ignore)
+          yield* repository.cancelOwned(command.ownerId, first.jobId, at)
           yield* repository.saveRetryIdempotently(retrySourceId, firstRetry)
           yield* repository.saveRetryIdempotently(retrySourceId, retryReplay)
           yield* repository
@@ -122,23 +227,35 @@ describe("SQLite job repository", () => {
           yield* repository.saveIdempotently(
             job("10e2d4e1-c127-479f-a124-2ea037bd9319")
           )
-          yield* repository.saveIdempotently(
-            job(
-              "6518412b-ce2f-4641-9f2c-a02dd515bc31",
-              "manual",
-              undefined,
-              "daily-2026-08-12-second"
+          yield* repository
+            .saveIdempotently(
+              job(
+                "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+                "manual",
+                undefined,
+                "daily-2026-08-12-second"
+              )
             )
-          )
-          return yield* repository.statusSnapshot()
+            .pipe(Effect.ignore)
+          return {
+            status: yield* repository.statusSnapshot(),
+            owners: yield* repository.ownerActiveSnapshot(),
+          }
         })
       )
     )
 
-    expect(result).toEqual([
+    expect(result.status).toEqual([
       {
         status: "queued",
-        count: 2,
+        count: 1,
+        oldestActiveAt: "2026-08-12T00:00:00.000Z",
+      },
+    ])
+    expect(result.owners).toEqual([
+      {
+        ownerId: command.ownerId,
+        count: 1,
         oldestActiveAt: "2026-08-12T00:00:00.000Z",
       },
     ])
@@ -211,6 +328,7 @@ describe("SQLite job repository", () => {
             openProductionDatabaseUnsafe(":memory:").database
           )
           yield* repository.saveIdempotently(original)
+          yield* repository.cancelOwned(command.ownerId, original.jobId, at)
           return yield* repository.saveRetryIdempotently(
             original.jobId,
             retried
@@ -402,6 +520,73 @@ describe("SQLite job repository", () => {
     }
   })
 
+  it("does not requeue a due scheduled job while a manual job owns the active slot", async () => {
+    const scheduled = job(
+      "10e2d4e1-c127-479f-a124-2ea037bd9319",
+      "scheduled",
+      undefined,
+      "scheduled:owner:2026-08-15"
+    )
+    const manual = job(
+      "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+      "manual",
+      undefined,
+      "manual-tab"
+    )
+    const leaseToken = Schema.decodeUnknownSync(LeaseTokenSchema)("lease-1")
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = openProductionDatabaseUnsafe(":memory:").database
+          const repository = yield* jobRepository(database)
+          const execution = yield* executionRepository(database)
+          yield* repository.saveScheduledIdempotently(scheduled)
+          const leased = yield* execution.leaseNext({
+            now: at,
+            leasedUntil: at,
+            leaseToken,
+          })
+          if (leased?.job._tag !== "Running")
+            return yield* Effect.die("expected a running scheduled job")
+          yield* execution.transition({
+            jobId: scheduled.jobId,
+            leaseToken,
+            state: failRunningJob(leased.job, {
+              failedAt: at,
+              failure: {
+                code: "no_generation_candidates" as never,
+                retryable: false,
+              },
+            }),
+          })
+          yield* repository.saveIdempotently(manual)
+          const conflict = yield* repository
+            .saveScheduledIdempotently(
+              job(
+                "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+                "scheduled",
+                undefined,
+                "scheduled:owner:2026-08-15",
+                later
+              )
+            )
+            .pipe(Effect.flip)
+          return {
+            conflict,
+            scheduled: yield* repository.findById(scheduled.jobId),
+          }
+        })
+      )
+    )
+
+    expect(result.conflict).toMatchObject({
+      _tag: "OwnerActiveJobConflict",
+      activeJob: { jobId: manual.jobId },
+    })
+    expect(result.scheduled?._tag).toBe("Failed")
+  })
+
   it("treats selected articles as an order-independent idempotency input", async () => {
     const first = job("10e2d4e1-c127-479f-a124-2ea037bd9319", "manual", [
       "f8f15e30-6877-4b4d-9568-76bfa3dc3e40",
@@ -518,6 +703,11 @@ describe("SQLite job repository", () => {
             openProductionDatabaseUnsafe(":memory:").database
           )
           yield* repository.saveIdempotently(ownerOneFirst)
+          yield* repository.cancelOwned(
+            command.ownerId,
+            ownerOneFirst.jobId,
+            at
+          )
           yield* repository.saveIdempotently(ownerOneSecond)
           yield* repository.saveIdempotently(ownerTwo)
           return {

@@ -2,11 +2,49 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   recordCancellationPropagation,
+  recordEpisodeJobSnapshots,
   recordEpisodeWorkerEvent,
   recordScriptQualityObservation,
 } from "./worker-observability.js"
 
 describe("episode worker observability", () => {
+  it("reports global and per-owner active-job saturation and queue age", () => {
+    const gauge = vi.fn()
+
+    recordEpisodeJobSnapshots(
+      { gauge },
+      {
+        now: "2026-08-23T12:00:00.000Z",
+        statuses: [
+          {
+            status: "Queued",
+            count: 2,
+            oldestActiveAt: "2026-08-23T11:58:00.000Z",
+          },
+        ],
+        owners: [
+          {
+            ownerId: "owner-1",
+            count: 1,
+            oldestActiveAt: "2026-08-23T11:59:30.000Z",
+          },
+          {
+            ownerId: "owner-2",
+            count: 2,
+            oldestActiveAt: "2026-08-23T11:58:30.000Z",
+          },
+        ],
+      }
+    )
+
+    expect(gauge.mock.calls).toEqual([
+      ["episode.jobs", 2, { "job.status": "Queued" }],
+      ["episode.queue.oldest.age", 120_000],
+      ["episode.owner.active_jobs", 2],
+      ["episode.owner.queue.oldest.age", 90_000],
+    ])
+  })
+
   it("records versioned script quality without source or draft content", () => {
     const log = vi.fn()
     const count = vi.fn()

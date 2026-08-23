@@ -5,6 +5,7 @@ import { handleCreateJobRpc, type CreateJobRpcDelivery } from "./create-job.js"
 import {
   JobIdSchema,
   UtcTimestampSchema,
+  newQueuedJob,
   type QueuedJob,
 } from "../../domain/episode-job.js"
 
@@ -51,6 +52,35 @@ const delivery = (input: unknown, replies: string[]): CreateJobRpcDelivery => ({
 })
 
 describe("create-job NATS RPC adapter", () => {
+  it("returns the existing active job reference when owner admission rejects", async () => {
+    const replies: string[] = []
+    const activeJob = newQueuedJob({
+      jobId,
+      ownerId: "d25da30b-4cd1-4875-94c7-6d48f32b5b1c" as never,
+      idempotencyKey: "tab-a" as never,
+      trigger: "manual",
+      enqueuedAt: now,
+    })
+    const handler = handleCreateJobRpc({
+      nextJobId: Effect.succeed(
+        Schema.decodeUnknownSync(JobIdSchema)(
+          "6518412b-ce2f-4641-9f2c-a02dd515bc31"
+        )
+      ),
+      now: Effect.succeed(now),
+      saveIdempotently: () =>
+        Effect.fail({ _tag: "OwnerActiveJobConflict" as const, activeJob }),
+      replyDependencies,
+    })
+
+    await Effect.runPromise(handler(delivery(envelope(), replies)))
+
+    expect(replyPayload(replies[0]!)).toEqual({
+      _tag: "ActiveJobConflict",
+      activeJobId: jobId,
+    })
+  })
+
   it("derives owner from the trusted envelope actor and returns a v1 reply", async () => {
     const saved: unknown[] = []
     const replies: string[] = []

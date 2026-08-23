@@ -193,8 +193,29 @@ export const makeJobProgressHandle = (
           (row.status === "Canceled" &&
             row.cancelReason === "service_shutdown"))
       ) {
+        const active = selectJob(tx)
+          .where(
+            and(
+              eq(episodeJobs.ownerId, row.ownerId),
+              or(
+                eq(episodeJobs.status, "Queued"),
+                eq(episodeJobs.status, "Running"),
+                eq(episodeJobs.status, "Retrying")
+              )
+            )
+          )
+          .orderBy(asc(episodeJobs.createdAt), asc(episodeJobs.jobId))
+          .limit(1)
+          .get()
+        if (active !== undefined)
+          return {
+            _tag: "OwnerActive" as const,
+            row: { document: documentOfJob(tx, active) },
+          }
         writeJobDocument(tx, input.jobId, input.document)
+        return { _tag: "Requeued" as const }
       }
+      return { _tag: "Ignored" as const }
     }),
 
   saveIdempotently: (input) =>
@@ -214,6 +235,27 @@ export const makeJobProgressHandle = (
           document: documentOfJob(tx, existing),
         }
         return { _tag: "Existing" as const, row }
+      }
+
+      const active = selectJob(tx)
+        .where(
+          and(
+            eq(episodeJobs.ownerId, input.ownerId),
+            or(
+              eq(episodeJobs.status, "Queued"),
+              eq(episodeJobs.status, "Running"),
+              eq(episodeJobs.status, "Retrying")
+            )
+          )
+        )
+        .orderBy(asc(episodeJobs.createdAt), asc(episodeJobs.jobId))
+        .limit(1)
+        .get()
+      if (active !== undefined) {
+        return {
+          _tag: "OwnerActive" as const,
+          row: { document: documentOfJob(tx, active) },
+        }
       }
 
       const row = documentToRow(input.document)

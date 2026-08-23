@@ -17,7 +17,11 @@ import {
 import { Effect, Schema } from "effect"
 
 import { createJob, type CreateJobPorts } from "../../application/create-job.js"
-import { JobIdSchema, OwnerIdSchema } from "../../domain/episode-job.js"
+import {
+  JobIdSchema,
+  OwnerIdSchema,
+  isOwnerActiveJobConflict,
+} from "../../domain/episode-job.js"
 
 const encodeReply = Schema.encodeSync(CreateEpisodeJobReplySchema)
 const decodeReply = Schema.decodeUnknownSync(CreateEpisodeJobReplySchema)
@@ -43,6 +47,16 @@ const accepted = (
       _tag: "Accepted" as const,
       jobId,
       state: "Queued" as const,
+    })
+  )
+
+const activeJobConflict = (
+  activeJobId: Schema.Schema.Type<typeof JobIdSchema>
+): CreateEpisodeJobReply =>
+  deepFreeze(
+    decodeReply({
+      _tag: "ActiveJobConflict" as const,
+      activeJobId,
     })
   )
 
@@ -165,7 +179,14 @@ export const handleCreateJobRpc = <SaveError>(
                       ).pipe(
                         Effect.matchEffect({
                           onFailure: (failure) =>
-                            reject(rejectionForSaveFailure(failure)),
+                            isOwnerActiveJobConflict(failure)
+                              ? replyWith(
+                                  delivery,
+                                  envelope,
+                                  activeJobConflict(failure.activeJob.jobId),
+                                  replyDependencies
+                                )
+                              : reject(rejectionForSaveFailure(failure)),
                           onSuccess: (job) =>
                             Effect.logInfo("episode job accepted", {
                               event_name: "episode.requested",

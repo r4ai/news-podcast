@@ -1,7 +1,10 @@
 import { deepFreeze } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
-import type { EpisodeJob } from "../domain/episode-job.js"
+import {
+  isOwnerActiveJobConflict,
+  type EpisodeJob,
+} from "../domain/episode-job.js"
 
 export type DueScheduledGeneration = Readonly<{
   ownerId: string
@@ -84,10 +87,14 @@ export const runScheduledGenerationTick = <E>(
             .pipe(
               Effect.flatMap((job) => reconcileJob(ports, schedule, job)),
               Effect.matchEffect({
-                onFailure: () =>
-                  ports
-                    .observe({ _tag: "Failed", ...schedule })
-                    .pipe(Effect.as("failed" as const)),
+                onFailure: (failure) =>
+                  isOwnerActiveJobConflict(failure)
+                    ? ports
+                        .observe({ _tag: "Retrying", ...schedule })
+                        .pipe(Effect.as("retrying" as const))
+                    : ports
+                        .observe({ _tag: "Failed", ...schedule })
+                        .pipe(Effect.as("failed" as const)),
                 onSuccess: Effect.succeed,
               })
             ),

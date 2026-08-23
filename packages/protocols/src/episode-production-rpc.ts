@@ -60,6 +60,9 @@ export const CreateEpisodeJobReplySchema = Schema.Union([
       "INTERNAL_ERROR",
     ]),
   }),
+  Schema.TaggedStruct("ActiveJobConflict", {
+    activeJobId: EpisodeJobIdSchema,
+  }),
 ])
 export type CreateEpisodeJobReply = Schema.Schema.Type<
   typeof CreateEpisodeJobReplySchema
@@ -202,6 +205,9 @@ export const EpisodeJobControlReplySchema = Schema.Union([
   Schema.TaggedStruct("NotFound", {}),
   Schema.TaggedStruct("Conflict", {
     code: Schema.Literals(["JOB_TERMINAL", "JOB_NOT_FAILED"]),
+  }),
+  Schema.TaggedStruct("ActiveJobConflict", {
+    activeJobId: EpisodeJobIdSchema,
   }),
   EpisodeJobControlRejectionSchema,
 ])

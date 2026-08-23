@@ -227,6 +227,7 @@ describe("gateway HttpApi contract", () => {
       "article_not_found",
       "episode_job_not_found",
       "idempotency_conflict",
+      "owner_active_job_exists",
       "resource_conflict",
       "job_terminal",
       "job_not_failed",

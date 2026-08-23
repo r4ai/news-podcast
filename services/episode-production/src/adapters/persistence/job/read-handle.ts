@@ -8,6 +8,7 @@ import type { ProductionDatabase } from "../../../infrastructure/unsafe/drizzle/
 import type {
   JobReadHandle,
   SqliteJobStatusSnapshot,
+  SqliteOwnerActiveSnapshot,
   StoredJobAgUiEventRow,
 } from "./ports.js"
 import { documentOfJob, selectJob } from "./shared.js"
@@ -63,6 +64,25 @@ export const makeJobReadHandle = (
           ...(row.oldestActiveAt === null
             ? {}
             : { oldestActiveAt: row.oldestActiveAt }),
+        })),
+    ownerActiveSnapshot: (): readonly SqliteOwnerActiveSnapshot[] =>
+      database
+        .select({
+          ownerId: episodeJobs.ownerId,
+          count: sql<number>`COUNT(*)`.as("count"),
+          oldestActiveAt: sql<string>`MIN(${episodeJobs.createdAt})`.as(
+            "oldestActiveAt"
+          ),
+        })
+        .from(episodeJobs)
+        .where(sql`${episodeJobs.status} IN ('Queued', 'Running', 'Retrying')`)
+        .groupBy(episodeJobs.ownerId)
+        .orderBy(asc(episodeJobs.ownerId))
+        .all()
+        .map((row) => ({
+          ownerId: row.ownerId,
+          count: Number(row.count),
+          oldestActiveAt: row.oldestActiveAt,
         })),
     listOwnedAgUiEvents: (input): readonly StoredJobAgUiEventRow[] =>
       database

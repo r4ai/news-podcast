@@ -11,6 +11,7 @@ import {
 } from "../../contract.js"
 import {
   articleNotFound,
+  activeJobConflict,
   badRequest,
   conflict,
   jobConflict,
@@ -82,6 +83,13 @@ describe("Gateway HTTP Problem contract", () => {
       conflict(),
       409,
       "idempotency_conflict",
+      ConflictProblemSchema,
+    ],
+    [
+      "owner active conflict",
+      activeJobConflict("10e2d4e1-c127-479f-a124-2ea037bd9319"),
+      409,
+      "owner_active_job_exists",
       ConflictProblemSchema,
     ],
     [

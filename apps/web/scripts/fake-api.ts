@@ -21,12 +21,12 @@ export const fakeApiIdentifiers = {
 
 type Job = {
   id: string
-  status: "succeeded"
+  status: "queued" | "succeeded"
   createdAt: string
   articleIds: string[]
   attempt: number
   maxAttempts: 4
-  episodeId: string
+  episodeId?: string
 }
 
 type Tag = { id: string; name: string; createdAt: string }
@@ -581,7 +581,10 @@ export function createFakeApi(): FakeApi {
       return json({ items: state.jobs, page: { hasMore: false } })
     }
     if (path === "/v1/episode-jobs" && request.method === "POST") {
-      const body = (await request.json()) as { articleIds: string[] }
+      const body = (await request.json()) as {
+        articleIds: string[]
+        trigger?: "manual" | "scheduled"
+      }
       const idempotencyKey = request.headers.get("idempotency-key")
       if (!idempotencyKey) {
         return json({ code: "invalid_request", message: "missing key" }, 400)
@@ -602,32 +605,50 @@ export function createFakeApi(): FakeApi {
               409
             )
       }
+      const active = state.jobs.find((job) => job.status === "queued")
+      if (active !== undefined) {
+        return json(
+          {
+            type: "about:blank",
+            title: "Owner already has an active episode job",
+            status: 409,
+            code: "owner_active_job_exists",
+            activeJob: {
+              id: active.id,
+              href: `/v1/episode-jobs/${active.id}`,
+            },
+          },
+          409
+        )
+      }
       const episodeId = randomUUID()
+      const staysActive = request.headers.get("x-fake-job-state") === "queued"
       const job: Job = {
         id: randomUUID(),
-        status: "succeeded",
+        status: staysActive ? "queued" : "succeeded",
         createdAt: new Date().toISOString(),
         articleIds: body.articleIds,
         attempt: 1,
         maxAttempts: 4,
-        episodeId,
+        ...(staysActive ? {} : { episodeId }),
       }
       state.jobs.unshift(job)
       state.createRequests.set(scope, { fingerprint, job })
-      state.episodes.unshift({
-        id: episodeId,
-        title: "今日の開発ニュース",
-        script: "ローカル環境の生成フローが正常に完了しました。",
-        sources: [
-          {
-            url: "https://example.com/local-news",
-            title: "ローカルE2Eニュース",
-            publishedAt: createdAt,
-            sourceKind: "rss",
-          },
-        ],
-        createdAt: new Date().toISOString(),
-      })
+      if (!staysActive)
+        state.episodes.unshift({
+          id: episodeId,
+          title: "今日の開発ニュース",
+          script: "ローカル環境の生成フローが正常に完了しました。",
+          sources: [
+            {
+              url: "https://example.com/local-news",
+              title: "ローカルE2Eニュース",
+              publishedAt: createdAt,
+              sourceKind: "rss",
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        })
       return json(job, 202)
     }
     const eventMatch = path.match(/^\/v1\/episode-jobs\/([^/]+)\/events$/)
