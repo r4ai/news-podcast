@@ -36,6 +36,7 @@ export type EpisodeWorkerEvent =
       jobId: string
       attempt: number
       recovered: boolean
+      queueWaitMillis: number
     }>
   | Readonly<{
       _tag: "JobFinished"
@@ -304,6 +305,11 @@ export const runEpisodeWorkerLoop = (
           jobId: leased.job.jobId,
           attempt: leased.job.attempt,
           recovered: leased.recovered,
+          queueWaitMillis: Math.max(
+            0,
+            Date.parse(encodeTimestamp(now)) -
+              Date.parse(encodeTimestamp(leased.readyAt))
+          ),
         })
       )
       const outcome = yield* runWithHeartbeat(ports, leased, signal)

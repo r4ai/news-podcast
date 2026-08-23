@@ -106,13 +106,15 @@ describe("episode worker observability", () => {
   it("records lease recovery and successful completion", () => {
     const log = vi.fn()
     const count = vi.fn()
-    const telemetry = { log, count }
+    const measure = vi.fn()
+    const telemetry = { log, count, measure }
 
     recordEpisodeWorkerEvent(telemetry, {
       _tag: "JobLeased",
       jobId: "job-1",
       attempt: 2,
       recovered: true,
+      queueWaitMillis: 120_000,
     })
     recordEpisodeWorkerEvent(telemetry, {
       _tag: "JobFinished",
@@ -126,7 +128,26 @@ describe("episode worker observability", () => {
       ["episode.lease.recovered"],
       ["episode.succeeded"],
     ])
+    expect(measure).toHaveBeenCalledWith("episode.queue.wait.duration", 120_000)
     expect(log).not.toHaveBeenCalled()
+  })
+
+  it("counts jobs that reach the end-to-end deadline", () => {
+    const count = vi.fn()
+    recordEpisodeWorkerEvent(
+      { log: vi.fn(), count },
+      {
+        _tag: "JobFinished",
+        jobId: "job-1",
+        attempt: 1,
+        outcome: {
+          _tag: "Failed",
+          failureCode: "job_deadline_exceeded",
+        } as never,
+      }
+    )
+
+    expect(count).toHaveBeenCalledWith("episode.deadline.exceeded")
   })
 
   it.each([

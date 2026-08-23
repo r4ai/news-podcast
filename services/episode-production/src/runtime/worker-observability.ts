@@ -7,7 +7,8 @@ import type { ScriptQualityObservation } from "../adapters/providers/openai-scri
 import type { EpisodeWorkerEvent } from "./loops/worker.js"
 import type { CancellationPropagation } from "./loops/worker.js"
 
-type WorkerTelemetry = Pick<Observability, "count" | "log">
+type WorkerTelemetry = Pick<Observability, "count" | "log"> &
+  Partial<Pick<Observability, "measure">>
 
 export const recordScriptQualityObservation = (
   observability: WorkerTelemetry,
@@ -67,6 +68,10 @@ export const recordEpisodeWorkerEvent = (
       observability.count("episode.started", 1, {
         "job.attempt": event.attempt,
       })
+      observability.measure?.(
+        "episode.queue.wait.duration",
+        event.queueWaitMillis
+      )
       if (event.recovered) observability.count("episode.lease.recovered")
       return
     case "JobFinished":
@@ -82,6 +87,8 @@ export const recordEpisodeWorkerEvent = (
       }
       if (event.outcome._tag === "Failed") {
         observability.count("episode.failed")
+        if (event.outcome.failureCode === "job_deadline_exceeded")
+          observability.count("episode.deadline.exceeded")
         observability.log({
           name: "episode.failed",
           level: "error",

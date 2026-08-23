@@ -107,6 +107,8 @@ export type LeaseRenewalResult = "Applied" | "StaleLease"
 export type LeasedExecution = DeepReadonly<{
   job: RunningJob
   recovered: boolean
+  /** State-specific ready time: lease expiry, retry due time, or enqueue time. */
+  readyAt: UtcTimestamp
 }>
 
 export type AudioObjectStore = DeepReadonly<{

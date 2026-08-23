@@ -51,7 +51,8 @@ describe("episode worker loop", () => {
     const controller = new AbortController()
     let deadlineReason: unknown
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: () => Effect.succeed("Applied"),
       execute: ({ signal }) =>
         Effect.sync(() => {
@@ -81,7 +82,11 @@ describe("episode worker loop", () => {
     const controller = new AbortController()
     const events: EpisodeWorkerEvent[] = []
     const waits: number[] = []
-    const leases = [undefined, { job, recovered: true }, undefined] as const
+    const leases = [
+      undefined,
+      { job, recovered: true, readyAt: job.createdAt },
+      undefined,
+    ] as const
     let leaseIndex = 0
     const ports: EpisodeWorkerPorts = {
       leaseNext: () => Effect.succeed(leases[leaseIndex++]),
@@ -110,6 +115,7 @@ describe("episode worker loop", () => {
         jobId: job.jobId,
         attempt: 1,
         recovered: true,
+        queueWaitMillis: 60_000,
       },
       {
         _tag: "JobFinished",
@@ -131,7 +137,8 @@ describe("episode worker loop", () => {
       retryable: true,
     }
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: () => Effect.succeed("Applied"),
       execute: () => Effect.fail(failure),
       now: () => at("2026-08-13T00:01:00.000Z"),
@@ -205,7 +212,8 @@ describe("episode worker loop", () => {
     const renewals: unknown[] = []
     let executionAborted = false
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: (input) =>
         Effect.sync(() => {
           renewals.push(input)
@@ -262,7 +270,8 @@ describe("episode worker loop", () => {
     let renewals = 0
     let finishedOutcome: unknown
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: () =>
         Effect.sync(() => {
           renewals += 1
@@ -319,7 +328,8 @@ describe("episode worker loop", () => {
     let providerAborted = false
     let finishedOutcome: unknown
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: () => Effect.succeed("Applied"),
       checkCancellation: () =>
         Effect.succeed({

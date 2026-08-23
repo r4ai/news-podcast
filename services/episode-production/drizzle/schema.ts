@@ -78,8 +78,22 @@ export const episodeJobs = sqliteTable(
       table.idempotencyScope,
       table.idempotencyKey
     ),
-    // 実行待ちの探索。式インデックスを置き換える。
-    index("episode_jobs_execution_state").on(table.status, table.jobId),
+    // lease優先度、状態ごとのready時刻、決定的tie-breakerをqueryと共有する。
+    index("episode_jobs_execution_priority").on(
+      sql`CASE ${table.status}
+            WHEN 'Running' THEN 0
+            WHEN 'Retrying' THEN 1
+            WHEN 'Queued' THEN 2
+            ELSE 3
+          END`,
+      sql`CASE ${table.status}
+            WHEN 'Running' THEN ${table.leasedUntil}
+            WHEN 'Retrying' THEN ${table.retryAt}
+            WHEN 'Queued' THEN ${table.enqueuedAt}
+            ELSE ${table.createdAt}
+          END`,
+      table.jobId
+    ),
     // 所有者ごとの新しい順。以前は rowid 順に暗黙依存していた。
     index("episode_jobs_owner_recent").on(
       table.ownerId,
