@@ -97,6 +97,7 @@ export function stubFetch(routes: readonly FetchRoute[]) {
     method: string
     url: string
     search: URLSearchParams
+    headers: Headers
     body?: unknown
   }> = []
 
@@ -109,6 +110,7 @@ export function stubFetch(routes: readonly FetchRoute[]) {
       method,
       url: url.pathname,
       search: url.searchParams,
+      headers: request.headers,
       body: rawBody ? JSON.parse(rawBody) : undefined,
     })
 

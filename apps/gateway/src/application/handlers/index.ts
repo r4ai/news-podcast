@@ -21,14 +21,13 @@ export const makeGatewayHandlerLayer = (
   ports: GatewayPorts,
   options: {
     readonly fetcher?: typeof globalThis.fetch
-    readonly nextRetryIdempotencyKey: () => string
-  }
+  } = {}
 ) => {
   const handlers = makeGatewayHandlers(ports, options)
   return Layer.mergeAll(
     systemGroup(handlers),
     sessionGroup(handlers),
-    episodeJobsGroup(handlers, options.nextRetryIdempotencyKey),
+    episodeJobsGroup(handlers),
     episodesGroup(handlers),
     feedSubscriptionsGroup(handlers),
     feedsGroup(handlers),

@@ -4,7 +4,7 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query"
 import { useAtomValue } from "jotai"
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 
 import { episodeQueryOptions, episodesQueryOptions } from "@/features/episodes"
 import { isEpisodeFailureCode } from "@news-podcast/contracts/episode-failure"
@@ -29,6 +29,7 @@ import {
   type JobStatus,
 } from "../model"
 import { settleJobAction } from "./job-action"
+import { LogicalOperationKey } from "./logical-operation-key"
 import { useGenerationStream } from "./use-generation-stream"
 
 const jobsQueryOptions = api.queryOptions("get", "/v1/episode-jobs")
@@ -53,6 +54,12 @@ export function useGeneration() {
     readonly string[]
   >([])
   const [submitError, setSubmitError] = useState<string>()
+  const createOperationKey = useRef(
+    new LogicalOperationKey(() => crypto.randomUUID())
+  )
+  const retryOperationKey = useRef(
+    new LogicalOperationKey(() => crypto.randomUUID())
+  )
   // ストリームの状態は「実際に描くもの」だけを購読する。timelineと採用記事は
   // 進捗カードの中でしか描かれないので、ここでは読まない。読むと毎フレーム
   // ダッシュボード全体が描き直される (ADR-0060)。
@@ -169,7 +176,8 @@ export function useGeneration() {
 
   function runJobAction(
     request: () => Promise<unknown>,
-    fallbackMessage: string
+    fallbackMessage: string,
+    onSuccess?: () => void
   ) {
     startTransition(async () => {
       const error = await settleJobAction(request, () =>
@@ -179,17 +187,22 @@ export function useGeneration() {
       )
       if (error !== undefined) {
         setSubmitError(messageFromActionError(error, fallbackMessage))
+      } else {
+        onSuccess?.()
       }
     })
   }
 
   function generate(articleIds: readonly string[]) {
+    const signature = JSON.stringify([...articleIds].sort())
+    const idempotencyKey = createOperationKey.current.acquire(signature)
     startTransition(async () => {
       try {
         await createJob.mutateAsync({
-          params: { header: { "idempotency-key": crypto.randomUUID() } },
+          params: { header: { "idempotency-key": idempotencyKey } },
           body: { trigger: "manual", articleIds: [...articleIds] },
         })
+        createOperationKey.current.reset()
         recordBrowserEvent("episode.requested", { result: "succeeded" })
         setPickerOpen(false)
         await queryClient.invalidateQueries({
@@ -237,11 +250,15 @@ export function useGeneration() {
     pickerInitialArticleIds,
     // 生成は記事選択が前提なので、ボタンは即発火ではなくダイアログを開く。
     onGenerate: () => {
+      createOperationKey.current.reset()
       setSubmitError(undefined)
       setPickerInitialArticleIds([])
       setPickerOpen(true)
     },
-    onPickerOpenChange: setPickerOpen,
+    onPickerOpenChange: (open: boolean) => {
+      if (!open) createOperationKey.current.reset()
+      setPickerOpen(open)
+    },
     onConfirmGenerate: generate,
     onCancel: () =>
       latestJob &&
@@ -255,20 +272,27 @@ export function useGeneration() {
     onRetry: () => {
       setSubmitError(undefined)
       if (recovery === "reselect") {
+        createOperationKey.current.reset()
         setPickerInitialArticleIds(latestJob?.articleIds ?? [])
         setPickerOpen(true)
         return
       }
       if (recovery === "retry" && latestJob) {
+        const idempotencyKey = retryOperationKey.current.acquire(latestJob.id)
         runJobAction(
           () =>
             retryJob.mutateAsync({
-              params: { path: { jobId: latestJob.id } },
+              params: {
+                path: { jobId: latestJob.id },
+                header: { "idempotency-key": idempotencyKey },
+              },
             }),
-          "同じ条件で再試行できませんでした。状態を更新してからもう一度お試しください。"
+          "同じ条件で再試行できませんでした。状態を更新してからもう一度お試しください。",
+          () => retryOperationKey.current.reset()
         )
         return
       }
+      createOperationKey.current.reset()
       setPickerInitialArticleIds([])
       setPickerOpen(true)
     },

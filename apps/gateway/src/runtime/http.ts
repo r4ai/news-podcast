@@ -13,16 +13,10 @@ export const makeGatewayWebHandler = (
   telemetry: Layer.Layer<never, never, never> = Layer.empty,
   options: {
     readonly fetcher?: typeof globalThis.fetch
-    readonly nextRetryIdempotencyKey?: () => string
   } = {}
 ) => {
-  const handlerOptions = {
-    ...options,
-    nextRetryIdempotencyKey:
-      options.nextRetryIdempotencyKey ?? (() => crypto.randomUUID()),
-  }
   const apiLayer = HttpApiBuilder.layer(gatewayApi).pipe(
-    Layer.provide(makeGatewayHandlerLayer(ports, handlerOptions)),
+    Layer.provide(makeGatewayHandlerLayer(ports, options)),
     Layer.provide(HttpServer.layerServices),
     Layer.provideMerge(telemetry)
   )

@@ -924,6 +924,57 @@ test("selecting articles generates an episode and streams its progress", async (
   ).toBeVisible()
 })
 
+test("a response loss converges the repeated logical submission to one job", async ({
+  page,
+}) => {
+  const keys: string[] = []
+  let loseFirstResponse = true
+  await page.route("**/v1/episode-jobs", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue()
+      return
+    }
+    keys.push(route.request().headers()["idempotency-key"] ?? "")
+    const response = await route.fetch()
+    if (loseFirstResponse) {
+      loseFirstResponse = false
+      await route.abort("failed")
+      return
+    }
+    await route.fulfill({ response })
+  })
+
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  const jobsBefore = await page.evaluate(async () => {
+    const response = await fetch("/v1/episode-jobs")
+    const body = (await response.json()) as { items: unknown[] }
+    return body.items.length
+  })
+  await page.getByRole("button", { name: "番組を生成" }).click()
+  await page.getByRole("checkbox").first().click()
+  const generate = page.getByRole("button", { name: "この記事で生成" })
+
+  await generate.click()
+  await expect.poll(() => keys.length).toBe(1)
+  await expect(generate).toBeEnabled()
+  await generate.click()
+
+  await expect(page.getByText("完成", { exact: true })).toBeVisible()
+  const jobCount = await page.evaluate(async () => {
+    const response = await fetch("/v1/episode-jobs")
+    const body = (await response.json()) as { items: unknown[] }
+    return body.items.length
+  })
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBe(keys[1])
+  expect(jobCount).toBe(jobsBefore + 1)
+})
+
 test("a deadline failure shows safe guidance and the retry action", async ({
   page,
 }) => {
@@ -1001,7 +1052,9 @@ test("a deadline failure shows safe guidance and the retry action", async ({
       request.method() === "POST"
   )
   await page.getByRole("button", { name: "同じ条件で再試行" }).click()
-  await retryRequest
+  expect((await retryRequest).headers()["idempotency-key"]).toMatch(
+    /^[0-9a-f-]{36}$/
+  )
 })
 
 test("article picker searches server candidates by tag", async ({ page }) => {

@@ -387,6 +387,7 @@ describe("Gateway HTTP runtime", () => {
         runtime.handler(
           new Request(`http://gateway.test/v1/episode-jobs/${jobId}/retry`, {
             method: "POST",
+            headers: { "Idempotency-Key": "retry-job-control-1" },
           })
         ),
         runtime.handler(
@@ -421,7 +422,7 @@ describe("Gateway HTTP runtime", () => {
       expect(retryEpisodeJob).toHaveBeenCalledWith(
         expect.objectContaining({
           jobId,
-          idempotencyKey: expect.stringMatching(`^retry:${jobId}:`),
+          idempotencyKey: "retry-job-control-1",
         })
       )
       expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
@@ -437,7 +438,7 @@ describe("Gateway HTTP runtime", () => {
     }
   })
 
-  it("issues a fresh retry key per headerless action and preserves explicit keys", async () => {
+  it("rejects a headerless retry and preserves an explicit key", async () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
       status: "failed",
@@ -456,9 +457,10 @@ describe("Gateway HTTP runtime", () => {
     const url = `http://gateway.test/v1/episode-jobs/${job.id}/retry`
 
     try {
-      await runtime.handler(new Request(url, { method: "POST" }))
-      await runtime.handler(new Request(url, { method: "POST" }))
-      await runtime.handler(
+      const headerless = await runtime.handler(
+        new Request(url, { method: "POST" })
+      )
+      const explicit = await runtime.handler(
         new Request(url, {
           method: "POST",
           headers: { "Idempotency-Key": "caller-retry-1" },
@@ -468,8 +470,9 @@ describe("Gateway HTTP runtime", () => {
       const keys = retryEpisodeJob.mock.calls.map(
         ([input]) => input.idempotencyKey
       )
-      expect(keys[0]).not.toBe(keys[1])
-      expect(keys[2]).toBe("caller-retry-1")
+      expect(headerless.status).toBe(400)
+      expect(explicit.status).toBe(202)
+      expect(keys).toEqual(["caller-retry-1"])
     } finally {
       await runtime.dispose()
     }

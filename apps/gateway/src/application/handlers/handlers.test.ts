@@ -138,11 +138,7 @@ const makePorts = (): GatewayPorts => ({
 describe("gateway port handlers", () => {
   it("injects every external port into a buildable Effect HttpApi layer", async () => {
     const context = await Effect.runPromise(
-      Layer.build(
-        makeGatewayHandlerLayer(makePorts(), {
-          nextRetryIdempotencyKey: () => "retry-test",
-        })
-      ).pipe(Effect.scoped)
+      Layer.build(makeGatewayHandlerLayer(makePorts())).pipe(Effect.scoped)
     )
 
     expect(context).toBeDefined()

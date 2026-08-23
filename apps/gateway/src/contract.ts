@@ -289,7 +289,7 @@ export const ListEpisodeJobsQuerySchema = Schema.Struct({
 export const RetryEpisodeJobHeadersSchema = Schema.Struct({
   authorization: Schema.optional(Schema.String),
   cookie: Schema.optional(Schema.String),
-  "idempotency-key": Schema.optional(boundedText(128)),
+  "idempotency-key": boundedText(128),
   traceparent: Schema.optional(TraceparentSchema),
 }).annotate({ identifier: "RetryEpisodeJobHeaders" })
 
@@ -1724,7 +1724,7 @@ const operationDocumentation = {
   retryEpisodeJob: {
     summary: "Retry a failed episode job",
     description:
-      "Creates a new owned job from a failed job. An explicit Idempotency-Key makes retries replay-safe; when omitted, the Gateway generates a fresh key.",
+      "Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409.",
   },
   streamEpisodeJobEvents: {
     summary: "Replay episode job events",

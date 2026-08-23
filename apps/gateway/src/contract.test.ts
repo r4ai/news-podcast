@@ -11,6 +11,7 @@ import {
   gatewayApi,
   generateOpenApi,
   JobReceiptSchema,
+  RetryEpisodeJobHeadersSchema,
 } from "./contract.js"
 
 const validArticleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
@@ -26,6 +27,11 @@ describe("gateway HttpApi contract", () => {
       Schema.decodeUnknownSync(CreateEpisodeJobHeadersSchema)({
         "idempotency-key": "x".repeat(129),
       })
+    ).toThrow()
+  })
+  it("requires an idempotency key for retry operations", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(RetryEpisodeJobHeadersSchema)({})
     ).toThrow()
   })
   it("generates the complete public OpenAPI 3.1 surface", () => {
@@ -86,6 +92,17 @@ describe("gateway HttpApi contract", () => {
     expect(
       specification.paths["/v1/episode-jobs"]?.post?.responses?.["202"]?.headers
     ).toHaveProperty("location")
+    expect(
+      specification.paths["/v1/episode-jobs/{jobId}/retry"]?.post?.parameters
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          in: "header",
+          name: "idempotency-key",
+          required: true,
+        }),
+      ])
+    )
     expect(
       specification.paths["/v1/episodes/{episodeId}/audio"]?.get?.responses
     ).toHaveProperty("404")

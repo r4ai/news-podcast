@@ -554,27 +554,20 @@
             "name": "idempotency-key",
             "in": "header",
             "schema": {
-              "anyOf": [
+              "type": "string",
+              "allOf": [
                 {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    },
-                    {
-                      "pattern": "\\S"
-                    },
-                    {
-                      "maxLength": 128
-                    }
-                  ]
+                  "minLength": 1
                 },
                 {
-                  "type": "null"
+                  "pattern": "\\S"
+                },
+                {
+                  "maxLength": 128
                 }
               ]
             },
-            "required": false
+            "required": true
           },
           {
             "name": "traceparent",
@@ -639,7 +632,7 @@
           }
         },
         "summary": "Retry a failed episode job",
-        "description": "Creates a new owned job from a failed job. An explicit Idempotency-Key makes retries replay-safe; when omitted, the Gateway generates a fresh key."
+        "description": "Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409."
       }
     },
     "/v1/episode-jobs/{jobId}/events": {
