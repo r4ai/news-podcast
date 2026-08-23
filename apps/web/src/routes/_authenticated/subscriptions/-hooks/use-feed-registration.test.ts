@@ -22,7 +22,7 @@ describe("feed registration messages", () => {
     ["invalid_subscription_request", "URLの形式が正しくありません。"],
     ["feed_subscription_rejected", "RSS/Atomフィードとして登録できません。"],
     ["feed_subscription_exists", "既に購読しています。"],
-    ["upstream_unavailable", "取得先に接続できませんでした。"],
+    ["upstream_unavailable", "現在フィードを登録できません。"],
   ])("distinguishes the %s response", (code, expected) => {
     expect(feedRegistrationErrorMessage({ code })).toContain(expected)
   })

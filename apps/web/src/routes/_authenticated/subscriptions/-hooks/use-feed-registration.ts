@@ -52,7 +52,7 @@ export function feedRegistrationErrorMessage(error: unknown): string {
     case "feed_subscription_exists":
       return "このフィードは既に購読しています。"
     case "upstream_unavailable":
-      return "フィードの取得先に接続できませんでした。"
+      return "現在フィードを登録できません。しばらくしてからもう一度お試しください。"
     default:
       return "RSSフィードを登録できませんでした。"
   }

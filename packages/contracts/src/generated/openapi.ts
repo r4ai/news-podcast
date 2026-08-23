@@ -1038,8 +1038,8 @@ export interface components {
             };
         };
         AddFeedSubscriptionRequest: {
-            /** @description Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; credentials and fragments are forbidden. */
-            feedUrl: string & unknown;
+            /** @description Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; the canonical result must be at most 2,048 characters, and credentials and fragments are forbidden. */
+            feedUrl: string;
         };
         CreatedFeedSubscription: {
             id: string & unknown;

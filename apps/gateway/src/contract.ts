@@ -72,13 +72,12 @@ const CanonicalFeedUrlSchema = Schema.String.check(
 ).pipe(Schema.brand("CanonicalFeedUrl"))
 
 const feedUrlInputDescription =
-  "Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; credentials and fragments are forbidden."
+  "Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; the canonical result must be at most 2,048 characters, and credentials and fragments are forbidden."
 
 const FeedUrlInputSchema = Schema.String.annotate({
   description: feedUrlInputDescription,
 })
   .check(
-    Schema.isMaxLength(2_048),
     Schema.makeFilter<string>((value) => {
       try {
         new URL(value)
