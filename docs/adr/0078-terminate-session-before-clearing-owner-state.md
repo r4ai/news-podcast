@@ -25,7 +25,7 @@ stateDiagram-v2
   Login --> Login: 戻る / 再読み込み
 ```
 
-- 開発認証が有効なら`POST /api/dev/logout`後に`GET /api/auth/state`で終了を確認する。別のBetter Auth sessionが残れば続けてBetter Auth `signOut`を行う。
+- 開発認証とBetter Authが併設される場合はBetter Auth `signOut`を先に行い、成功後に`POST /api/dev/logout`を行う。dev Cookieが主体解決で優先されるため、この順序なら最初の失敗時はdev ownerを保持し、後段の失敗時もdev ownerから別ownerへ切り替わらない。
 - session終了が成功するまでowner stateを消さない。失敗時は認証済み表示を保持し、同じ操作から再試行できる。
 - 成功時は再生を停止してaudio resourceをunloadし、owner依存Jotai state、`player.track` / `player.progress`、TanStack Query cacheを破棄する。
 - 最後に`window.location.replace("/login")`でdocumentを置き換え、historyやBFCacheから保護画面を再利用させない。
@@ -43,6 +43,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | cacheだけ消して先にloginへ移る | server失敗を終了済みと誤表示し、保護routeを再利用できる | N/A |
 | Cookie名をclientで見てendpointを選ぶ | HttpOnly Cookieを読めず、認証実装へUIを結合する | N/A |
+| dev logout後にBetter Authを終了 | 後段の失敗時、主体だけが背後の別ownerへ切り替わる | 認証方式間の主体優先がなくなった時 |
 | query invalidationだけ行う | owner Aの値を再取得まで表示し、Jotai/localStorageも残る | owner単位で完全分離したcache/storageへ移行した時 |
 
 ## 結果

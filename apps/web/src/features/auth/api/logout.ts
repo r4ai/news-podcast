@@ -1,5 +1,4 @@
 import type { AuthenticatedAuthState } from "../model"
-import { fetchAuthState } from "./auth-state"
 
 export class LogoutError extends Error {
   readonly status: number
@@ -36,8 +35,9 @@ type LogoutDependencies = Readonly<{
 
 /**
  * HttpOnly Cookieをclientから推測せず、公開された認証状態で終了経路を選ぶ。
- * devとBetter Authが併設されている場合、dev Cookieを消した後も認証済みなら
- * 背後に残るBetter Auth sessionも終了し、暗黙のowner切替を防ぐ。
+ * devとBetter Authが併設されている場合はBetter Authを先に終了する。
+ * 逆順だとdev logout直後に背後の別ownerへ主体が切り替わり、続く失敗時に
+ * 古いownerのclient stateで新しいownerのAPIを操作できてしまう。
  */
 export async function logoutSession(
   auth: AuthenticatedAuthState,
@@ -46,21 +46,8 @@ export async function logoutSession(
     signOutBetterAuth: logoutBetterAuthSession,
   }
 ): Promise<void> {
+  if (auth.loginMethods.google) await dependencies.signOutBetterAuth()
   if (auth.loginMethods.development) {
     await logoutDevelopmentSession(dependencies.fetch)
-    const state = await fetchAuthState(dependencies.fetch).catch((error) => {
-      if (error instanceof LogoutError) throw error
-      throw new LogoutError(
-        typeof error === "object" &&
-          error !== null &&
-          "status" in error &&
-          typeof error.status === "number"
-          ? error.status
-          : 0
-      )
-    })
-    if (!state.authenticated) return
   }
-
-  await dependencies.signOutBetterAuth()
 }
