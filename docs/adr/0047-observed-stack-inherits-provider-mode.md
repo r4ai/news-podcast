@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Platform
 - Supersedes: ADR-0040（observed stackのprovider選択に限る）
 - Superseded by: N/A
-- Related: ADR-0038、ADR-0046、`compose.observability.yaml`
+- Related: ADR-0038、ADR-0046、ADR-0077、`compose.observability.yaml`
 
 ## コンテキストと変更契機
 
@@ -31,6 +31,7 @@ flowchart LR
 - `PROVIDER_MODE=fake`なら外部OpenAI APIを呼ばない。
 - `PROVIDER_MODE=live`ならOpenAI Responses APIとCompose内VOICEVOXを使う。
 - observed stackを起動する操作自体はprovider modeを変更しない。
+- productionで許可するmodeと資格情報のfail-closed規則は[ADR-0077](0077-fail-closed-production-provider-mode.md)に従う。
 
 ## 判断要因
 

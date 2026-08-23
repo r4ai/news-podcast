@@ -91,4 +91,63 @@ describe("feed sync worker", () => {
       "lease-2"
     )
   })
+
+  it("completes an all-invalid feed as degraded with a sanitized reason", async () => {
+    const complete = vi.fn(() => Effect.succeed(job))
+    const claim = vi
+      .fn()
+      .mockReturnValueOnce(Effect.succeed(claimedJob))
+      .mockReturnValueOnce(Effect.succeed(undefined))
+    const now = vi
+      .fn()
+      .mockReturnValueOnce("2026-08-13T01:00:00.000Z")
+      .mockReturnValueOnce("2026-08-13T01:00:01.000Z")
+      .mockReturnValueOnce("2026-08-13T01:00:05.000Z")
+      .mockReturnValueOnce("2026-08-13T01:00:06.000Z")
+
+    await Effect.runPromise(
+      runFeedSyncCycle({
+        subscriptions: {
+          listFeedsForPolling: () => Effect.succeed([job]),
+        },
+        queue: {
+          enqueue: vi.fn(),
+          enqueueForPolling: vi.fn(() => Effect.void),
+          listForOwner: vi.fn(),
+          claim,
+          complete,
+        },
+        pollFeed: () =>
+          Effect.succeed({
+            feeds: 1,
+            discovered: 1,
+            archived: 0,
+            alreadyArchived: 0,
+            failed: 1,
+            failures: [
+              {
+                _tag: "FeedPollFailed" as const,
+                scope: "Item" as const,
+                reason: "MissingLink" as const,
+              },
+            ],
+          }),
+        now,
+        newLeaseToken: () => "lease-1",
+      })()
+    )
+
+    expect(complete).toHaveBeenCalledWith(
+      job.jobId,
+      "lease-1",
+      {
+        discovered: 1,
+        archived: 0,
+        failed: 1,
+        failureScope: "Item",
+        error: "MissingLink",
+      },
+      "2026-08-13T01:00:05.000Z"
+    )
+  })
 })

@@ -1,9 +1,14 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
-import type { FeedFetchError, RssFeedReader } from "./ports/article-catalog.js"
+import type {
+  FeedFetchError,
+  FeedItemValidationFailure,
+  RssFeedReader,
+} from "./ports/article-catalog.js"
 import {
   ArchiveCommandSchema,
+  type Sha256,
   type ArchiveRequestId,
   type ArticleId,
 } from "../domain/article.js"
@@ -31,8 +36,8 @@ export type FeedPollFailure = DeepReadonly<{
   readonly scope: "Feed" | "Item"
   readonly reason:
     | FeedFetchError["reason"]
+    | FeedItemValidationFailure["reason"]
     | "ArchiveFailed"
-    | "InvalidItem"
     | "CatalogFailed"
 }>
 
@@ -47,7 +52,8 @@ export type FeedPollResult = DeepReadonly<{
 
 export type PollSubscriptionsPorts = Readonly<{
   readonly subscriptions: Pick<SubscriptionRepository, "listFeedsForPolling">
-  readonly catalog?: Pick<ArticleCatalog, "upsert">
+  readonly catalog?: Pick<ArticleCatalog, "upsert"> &
+    Partial<Pick<ArticleCatalog, "markCaptured">>
   readonly reader: RssFeedReader
   readonly archive: (
     invocation: ArchiveArticleInvocation
@@ -55,6 +61,7 @@ export type PollSubscriptionsPorts = Readonly<{
   readonly deriveArticleIdentity: (input: {
     readonly feedId: FeedId
     readonly externalId: string
+    readonly captureFingerprint: Sha256
   }) => DeepReadonly<{
     readonly archiveRequestId: ArchiveRequestId
     readonly articleId: ArticleId
@@ -73,15 +80,30 @@ const empty = (): FeedPollResult =>
     failures: [],
   })
 
-const combine = (left: FeedPollResult, right: FeedPollResult): FeedPollResult =>
-  deepFreeze({
-    feeds: left.feeds + right.feeds,
-    discovered: left.discovered + right.discovered,
-    archived: left.archived + right.archived,
-    alreadyArchived: left.alreadyArchived + right.alreadyArchived,
-    failed: left.failed + right.failed,
-    failures: [...left.failures, ...right.failures],
+const aggregate = (results: readonly FeedPollResult[]): FeedPollResult => {
+  let feeds = 0
+  let discovered = 0
+  let archived = 0
+  let alreadyArchived = 0
+  let failed = 0
+  const failures: FeedPollFailure[] = []
+  for (const result of results) {
+    feeds += result.feeds
+    discovered += result.discovered
+    archived += result.archived
+    alreadyArchived += result.alreadyArchived
+    failed += result.failed
+    for (const failure of result.failures) failures.push(failure)
+  }
+  return deepFreeze({
+    feeds,
+    discovered,
+    archived,
+    alreadyArchived,
+    failed,
+    failures,
   })
+}
 
 const oneFailure = (
   reason: FeedPollFailure["reason"],
@@ -118,13 +140,14 @@ export const pollFeed =
   (ports: PollSubscriptionsPorts) =>
   (feed: { readonly feedId: FeedId; readonly feedUrl: FeedUrl }) =>
     ports.reader.read(feed.feedUrl).pipe(
-      Effect.flatMap((items) =>
+      Effect.flatMap((readResult) =>
         Effect.forEach(
-          items,
+          readResult.items,
           (item) => {
             const identity = ports.deriveArticleIdentity({
               feedId: feed.feedId,
               externalId: item.externalId,
+              captureFingerprint: item.captureFingerprint,
             })
             return parseArchiveCommand({
               ...identity,
@@ -133,7 +156,7 @@ export const pollFeed =
             }).pipe(
               Effect.flatMap((command) =>
                 (ports.catalog === undefined
-                  ? Effect.void
+                  ? Effect.succeed({ _tag: "CaptureRequired" as const })
                   : ports.catalog.upsert({
                       articleId: command.articleId,
                       feedId: feed.feedId,
@@ -144,15 +167,36 @@ export const pollFeed =
                         ? {}
                         : { publishedAt: item.publishedAt }),
                       discoveredAt: ports.now(),
+                      captureFingerprint: item.captureFingerprint,
                     })
                 ).pipe(
-                  Effect.andThen(
-                    ports.archive(
-                      deepFreeze({
-                        command,
-                        context: ports.newContext(),
-                      })
-                    )
+                  Effect.flatMap(
+                    (
+                      decision
+                    ): Effect.Effect<
+                      Readonly<{ _tag: "Archived" | "AlreadyArchived" }>,
+                      ArchiveStoreError | CaptureError
+                    > =>
+                      decision._tag === "Unchanged"
+                        ? Effect.succeed({ _tag: "AlreadyArchived" as const })
+                        : ports
+                            .archive(
+                              deepFreeze({
+                                command,
+                                context: ports.newContext(),
+                              })
+                            )
+                            .pipe(
+                              Effect.map((result) => ({ _tag: result._tag }))
+                            )
+                  ),
+                  Effect.tap(() =>
+                    ports.catalog?.markCaptured === undefined
+                      ? Effect.void
+                      : ports.catalog.markCaptured({
+                          articleId: command.articleId,
+                          captureFingerprint: item.captureFingerprint,
+                        })
                   )
                 )
               ),
@@ -172,7 +216,25 @@ export const pollFeed =
             )
           },
           { concurrency: 1 }
-        ).pipe(Effect.map((results) => results.reduce(combine, empty())))
+        ).pipe(
+          Effect.map((results) =>
+            aggregate([
+              ...results,
+              deepFreeze({
+                ...empty(),
+                discovered: readResult.failures.length,
+                failed: readResult.failures.length,
+                failures: readResult.failures.map((failure) =>
+                  deepFreeze({
+                    _tag: "FeedPollFailed" as const,
+                    scope: "Item" as const,
+                    reason: failure.reason,
+                  })
+                ),
+              }),
+            ])
+          )
+        )
       ),
       Effect.match({
         onFailure: (failure): FeedPollResult =>
@@ -196,5 +258,5 @@ export const pollSubscriptions =
       Effect.flatMap((feeds) =>
         Effect.forEach(feeds, pollFeed(ports), { concurrency: 1 })
       ),
-      Effect.map((results) => results.reduce(combine, empty()))
+      Effect.map(aggregate)
     )

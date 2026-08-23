@@ -19,10 +19,7 @@ import { createArchiveStore } from "./persistence/archive/repository.js"
 import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
 import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
 import { openTestDatabase } from "./persistence/testing.js"
-import {
-  parseJsonUnsafe,
-  stringifyJsonUnsafe,
-} from "../infrastructure/unsafe/json.js"
+import { stringifyJsonUnsafe } from "../infrastructure/unsafe/json.js"
 import { materializeArticles } from "../application/materialize-articles.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
@@ -41,14 +38,9 @@ describe("article materialization", () => {
       const subscriptions = await Effect.runPromise(
         createSubscriptionRepository(database.db)
       )
-      const catalog = await Effect.runPromise(
-        createArticleCatalog(database.db, {
-          parse: parseJsonUnsafe,
-        })
-      )
+      const catalog = await Effect.runPromise(createArticleCatalog(database.db))
       const archiveStore = await Effect.runPromise(
         createArchiveStore(database.db, {
-          parse: parseJsonUnsafe,
           stringify: stringifyJsonUnsafe,
         })
       )

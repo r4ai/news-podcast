@@ -1,4 +1,5 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
+import { decodePersistedJsonSync } from "@news-podcast/persistence"
 import { Effect, Schema } from "effect"
 
 import {
@@ -286,19 +287,19 @@ export const statusOccurredAt = (job: EpisodeJob): string => {
 export const freezeJob = (job: EpisodeJob): EpisodeJob =>
   deepFreeze(job) as EpisodeJob
 
-const decodeJobSync = Schema.decodeUnknownSync(EpisodeJobSchema)
-
 /**
  * 既存アダプタは document(JSON文字列) を受け渡す契約のままである。
  * 正規化はこの層で吸収し、上位の振る舞いを変えない。
  */
 export const documentToRow = (document: string): EpisodeJobRow =>
-  toJobRow(decodeJobSync(JSON.parse(document) as unknown))
+  toJobRow(
+    decodePersistedJsonSync("episode_jobs.document", EpisodeJobSchema, document)
+  )
 
 export const documentArticleIds = (document: string): readonly string[] =>
-  toArticleRows(decodeJobSync(JSON.parse(document) as unknown)).map(
-    (row) => row.articleId
-  )
+  toArticleRows(
+    decodePersistedJsonSync("episode_jobs.document", EpisodeJobSchema, document)
+  ).map((row) => row.articleId)
 
 export const rowToDocument = (
   row: EpisodeJobRow,

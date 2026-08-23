@@ -240,6 +240,12 @@ export const progressEntryAtomFamily = atomFamily((episodeId: string) =>
  */
 const audioElementAtom = atom<HTMLAudioElement | null>(null)
 
+function unloadAudio(element: HTMLAudioElement): void {
+  element.removeAttribute("src")
+  // 現在の取得を中止し、srcを外した状態をmedia elementへ確定させる。
+  element.load()
+}
+
 export const attachAudioElementAtom = atom(
   null,
   (get, set, element: HTMLAudioElement | null) => {
@@ -448,7 +454,23 @@ export const closePlayerAtom = atom(null, (get, set) => {
   set(bufferingAtom, false)
   set(playbackPositionAtom, 0)
   set(playbackDurationAtom, undefined)
-  if (element !== null) element.removeAttribute("src")
+  if (element !== null) unloadAudio(element)
+})
+
+/** 認証ownerを離れるとき、端末とメモリの再生状態をまとめて破棄する。 */
+export const resetOwnerPlaybackAtom = atom(null, (get, set) => {
+  const element = get(audioElementAtom)
+  if (element !== null) {
+    if (!element.paused) element.pause()
+    unloadAudio(element)
+  }
+  set(currentTrackAtom, null)
+  set(progressMapAtom, {})
+  set(playbackStatusAtom, "idle")
+  set(playbackPositionAtom, 0)
+  set(playbackDurationAtom, undefined)
+  set(pendingSeekAtom, null)
+  clearPersistedPlayback()
 })
 
 export const handleLoadedMetadataAtom = atom(null, (get, set) => {

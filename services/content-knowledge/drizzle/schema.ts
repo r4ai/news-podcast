@@ -22,6 +22,14 @@ export const feedCatalog = sqliteTable("feed_catalog", {
   createdAt: text("created_at").notNull(),
 })
 
+/** 明示的な公開判定を通過したfeedだけをcross-owner catalogへ掲載する。 */
+export const publicFeedListings = sqliteTable("public_feed_listings", {
+  feedId: text("feed_id")
+    .primaryKey()
+    .references(() => feedCatalog.feedId, { onDelete: "cascade" }),
+  listedAt: text("listed_at").notNull(),
+})
+
 export const feedSubscriptions = sqliteTable(
   "feed_subscriptions",
   {
@@ -56,6 +64,7 @@ export const feedItems = sqliteTable(
     title: text("title").notNull(),
     publishedAt: text("published_at"),
     discoveredAt: text("discovered_at").notNull(),
+    captureFingerprint: text("capture_fingerprint"),
   },
   (table) => [
     unique("feed_items_feed_external").on(table.feedId, table.externalId),
@@ -143,6 +152,50 @@ export const articleSnapshots = sqliteTable(
       sql`${table.capturedAt} DESC`,
       sql`${table.snapshotId} DESC`
     ),
+  ]
+)
+
+/**
+ * オブジェクトストア上のMarkdownを永続FTSへ反映する再試行可能な作業列。
+ * FTS5仮想テーブル自体はdrizzle-kitで表現できないためmigrationで管理する。
+ */
+export const articleSearchIndexQueue = sqliteTable(
+  "article_search_index_queue",
+  {
+    snapshotId: text("snapshot_id")
+      .primaryKey()
+      .references(() => articleSnapshots.snapshotId, { onDelete: "cascade" }),
+    articleId: text("article_id").notNull(),
+    markdownKey: text("markdown_key").notNull(),
+    enqueuedAt: text("enqueued_at").notNull(),
+    attempt: integer("attempt").notNull().default(0),
+    lastFailure: text("last_failure"),
+  },
+  (table) => [
+    index("article_search_index_queue_pending").on(
+      table.attempt,
+      table.enqueuedAt,
+      table.snapshotId
+    ),
+    check(
+      "article_search_index_queue_attempt_check",
+      sql`${table.attempt} >= 0`
+    ),
+  ]
+)
+
+/** FTS5 trigramが扱えない1〜2文字の部分一致をB-treeで補う永続索引。 */
+export const articleSearchShortGrams = sqliteTable(
+  "article_search_short_grams",
+  {
+    snapshotId: text("snapshot_id")
+      .notNull()
+      .references(() => articleSnapshots.snapshotId, { onDelete: "cascade" }),
+    gram: text("gram").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.snapshotId, table.gram] }),
+    index("article_search_short_grams_lookup").on(table.gram, table.snapshotId),
   ]
 )
 
@@ -365,13 +418,15 @@ export const contentEnrichmentDailyProgress = sqliteTable(
   {
     ownerId: text("owner_id").notNull(),
     localDate: text("local_date").notNull(),
-    processedCount: integer("processed_count").notNull().default(0),
+    // Physical name is retained for migration compatibility; this counts paid
+    // provider attempts, not successful completions.
+    attemptedCount: integer("processed_count").notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.ownerId, table.localDate] }),
     check(
       "content_enrichment_daily_progress_count_check",
-      sql`${table.processedCount} >= 0`
+      sql`${table.attemptedCount} >= 0`
     ),
   ]
 )

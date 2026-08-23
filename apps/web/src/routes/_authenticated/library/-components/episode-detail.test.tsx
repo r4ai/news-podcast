@@ -25,7 +25,15 @@ vi.mock("@tanstack/react-router", () => ({
     readonly to: string
     readonly search?: unknown
   }) => (
-    <a href={to} {...rest}>
+    <a
+      href={`${to}?${new URLSearchParams(
+        Object.entries(rest.search ?? {}).flatMap(([key, value]) =>
+          value === undefined
+            ? []
+            : [[key, Array.isArray(value) ? value.join(",") : String(value)]]
+        )
+      )}`}
+    >
       {children}
     </a>
   ),
@@ -40,6 +48,7 @@ const episode: Episode = {
       url: "https://example.com/a",
       title: "保存済みの記事",
       articleId: "00000000-0000-4000-8000-0000000000aa",
+      snapshotId: "00000000-0000-4000-8000-0000000000bb",
       publishedAt: "2026-08-18T00:00:00.000Z",
       sourceKind: "rss",
     },
@@ -101,7 +110,13 @@ describe("EpisodeDetail", () => {
     )
     const external = screen.getByRole("link", { name: /保存済みの記事/ })
     expect(external.getAttribute("href")).toBe("https://example.com/a")
-    expect(screen.getByRole("link", { name: "保存版を開く" })).toBeDefined()
+    expect(
+      screen.getByRole("link", { name: "外部サイトで開く 保存済みの記事" })
+    ).toBeDefined()
+    const fixed = screen.getByRole("link", { name: "生成時の保存版を開く" })
+    expect(fixed.getAttribute("href")).toContain(
+      "snapshot=00000000-0000-4000-8000-0000000000bb"
+    )
   })
 
   it("保存されていない出典には保存版の導線を出さない", async () => {
@@ -112,9 +127,34 @@ describe("EpisodeDetail", () => {
       ).toBeDefined()
     )
     // 保存版の導線は`articleId`を持つ1件ぶんだけ。
-    expect(screen.getAllByRole("link", { name: "保存版を開く" })).toHaveLength(
-      1
+    expect(
+      screen.getAllByRole("link", { name: "生成時の保存版を開く" })
+    ).toHaveLength(1)
+  })
+
+  it("legacy出典はlatest fallbackであることをリンク名に明示する", async () => {
+    const legacy = {
+      ...episode,
+      sources: [
+        {
+          url: "https://example.com/legacy",
+          title: "旧形式の記事",
+          articleId: "00000000-0000-4000-8000-0000000000cc",
+          sourceKind: "rss" as const,
+        },
+      ],
+    }
+    stubFetch([{ path: `/v1/episodes/${episode.id}`, body: legacy }])
+    const queryClient = createTestQueryClient()
+    render(
+      <TestProviders queryClient={queryClient}>
+        <EpisodeDetail episodeId={episode.id} onBack={vi.fn()} />
+      </TestProviders>
     )
+
+    expect(
+      await screen.findByRole("link", { name: "最新の保存版を開く" })
+    ).toBeDefined()
   })
 
   it("再生ボタンは下端のバーへこの番組を載せる", async () => {

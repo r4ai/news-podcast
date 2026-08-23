@@ -1,0 +1,16 @@
+{
+  "name": "@news-podcast/state-backup",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.mjs",
+    "build": "node --check src/consistency.mjs && node --check src/coordinator.mjs && node --check src/s3-storage.mjs && node --check src/runtime.mjs && node --check src/main.mjs",
+    "lint": "oxlint",
+    "typecheck": "pnpm build",
+    "test": "node --test src/*.test.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1106.0"
+  }
+}

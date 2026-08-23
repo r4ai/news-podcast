@@ -1,8 +1,63 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { recordEpisodeWorkerEvent } from "./worker-observability.js"
+import {
+  recordCancellationPropagation,
+  recordEpisodeWorkerEvent,
+  recordScriptQualityObservation,
+} from "./worker-observability.js"
 
 describe("episode worker observability", () => {
+  it("records versioned script quality without source or draft content", () => {
+    const log = vi.fn()
+    const count = vi.fn()
+
+    recordScriptQualityObservation(
+      { log, count },
+      {
+        model: "gpt-test",
+        generationPromptVersion: "episode-script-v2",
+        qualityPromptVersion: "episode-script-quality-v1",
+        outcome: "reject",
+        reasonCode: "prompt_injection",
+      }
+    )
+
+    const attributes = {
+      "gen_ai.request.model": "gpt-test",
+      "episode.script.prompt.version": "episode-script-v2",
+      "episode.script.quality_prompt.version": "episode-script-quality-v1",
+      "quality.outcome": "reject",
+      "quality.reason": "prompt_injection",
+    }
+    expect(count).toHaveBeenCalledWith("episode.script.quality", 1, attributes)
+    expect(log).toHaveBeenCalledWith({
+      name: "episode.script.quality_evaluated",
+      level: "warn",
+      attributes,
+    })
+    expect(attributes).not.toHaveProperty("source")
+    expect(attributes).not.toHaveProperty("draft")
+  })
+
+  it("measures cancel-to-provider-abort latency with a bounded source tag", () => {
+    const measure = vi.fn()
+
+    recordCancellationPropagation(
+      { measure },
+      {
+        jobId: "job-1" as never,
+        source: "poll",
+        latencyMillis: 250,
+      }
+    )
+
+    expect(measure).toHaveBeenCalledWith(
+      "episode.cancellation.propagation.duration",
+      250,
+      { source: "poll" }
+    )
+  })
+
   it.each([
     [
       "Retrying",
@@ -51,13 +106,15 @@ describe("episode worker observability", () => {
   it("records lease recovery and successful completion", () => {
     const log = vi.fn()
     const count = vi.fn()
-    const telemetry = { log, count }
+    const measure = vi.fn()
+    const telemetry = { log, count, measure }
 
     recordEpisodeWorkerEvent(telemetry, {
       _tag: "JobLeased",
       jobId: "job-1",
       attempt: 2,
       recovered: true,
+      queueWaitMillis: 120_000,
     })
     recordEpisodeWorkerEvent(telemetry, {
       _tag: "JobFinished",
@@ -71,7 +128,26 @@ describe("episode worker observability", () => {
       ["episode.lease.recovered"],
       ["episode.succeeded"],
     ])
+    expect(measure).toHaveBeenCalledWith("episode.queue.wait.duration", 120_000)
     expect(log).not.toHaveBeenCalled()
+  })
+
+  it("counts jobs that reach the end-to-end deadline", () => {
+    const count = vi.fn()
+    recordEpisodeWorkerEvent(
+      { log: vi.fn(), count },
+      {
+        _tag: "JobFinished",
+        jobId: "job-1",
+        attempt: 1,
+        outcome: {
+          _tag: "Failed",
+          failureCode: "job_deadline_exceeded",
+        } as never,
+      }
+    )
+
+    expect(count).toHaveBeenCalledWith("episode.deadline.exceeded")
   })
 
   it.each([

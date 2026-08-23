@@ -36,12 +36,14 @@ export type ArticleReaderViewProps = ReturnType<typeof useArticleReader>
  */
 export function ArticleReader({
   articleId,
+  snapshotId,
   includeHidden,
 }: {
   readonly articleId: string
+  readonly snapshotId?: string
   readonly includeHidden: boolean
 }) {
-  const reader = useArticleReader({ articleId, includeHidden })
+  const reader = useArticleReader({ articleId, includeHidden, snapshotId })
 
   // 記事を開いている時だけ有効なショートカット。リーダーと寿命を揃える。
   useArticleKeyboardShortcuts({
@@ -122,9 +124,10 @@ export function ArticleReaderView({
   didAutoFallback,
   markdown,
   isMarkdownLoading,
-  archiveHtml,
+  archiveUrl,
   isArchiveLoading,
   archiveUnavailable,
+  retryArchive,
   toggleSaved,
   toggleReadLater,
   toggleHidden,
@@ -202,14 +205,16 @@ export function ArticleReaderView({
         ) : null}
 
         <ArticleReaderContent
-          archiveHtml={archiveHtml}
+          archiveUrl={archiveUrl}
           archiveUnavailable={archiveUnavailable}
           article={article}
           compiled={compiled}
           isArchiveLoading={isArchiveLoading}
           isMarkdownLoading={isMarkdownLoading}
           markdown={markdown}
+          retryArchive={retryArchive}
           source={source}
+          useMarkdown={() => setSource("markdown")}
         />
       </article>
 

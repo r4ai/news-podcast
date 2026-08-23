@@ -49,9 +49,11 @@ import {
   NotFoundProblemSchema,
   SessionHeadersSchema,
   SessionResponseSchema,
+  SnapshotIdSchema,
   SubscriptionIdSchema,
   UnauthorizedProblemSchema,
   UnavailableProblemSchema,
+  ForbiddenProblemSchema,
   UnprocessableProblemSchema,
 } from "../contract.js"
 
@@ -163,6 +165,7 @@ export type GatewayPorts = Readonly<{
     TypeOf<typeof FeedSubscriptionSchema>,
     | TypeOf<typeof BadRequestProblemSchema>
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
     | TypeOf<typeof UnprocessableProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
@@ -224,6 +227,7 @@ export type GatewayPorts = Readonly<{
   }) => Effect.Effect<
     TypeOf<typeof RegisteredFeedSchema>,
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
     | TypeOf<typeof UnprocessableProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
@@ -252,11 +256,48 @@ export type GatewayPorts = Readonly<{
     | TypeOf<typeof NotFoundProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
+  getArticleSnapshot: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+    readonly snapshotId: TypeOf<typeof SnapshotIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
   getArticleMarkdown: (input: {
     readonly headers: TypeOf<typeof SessionHeadersSchema>
     readonly articleId: TypeOf<typeof ArticleIdSchema>
   }) => Effect.Effect<
     TypeOf<typeof ArticleMarkdownSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getArticleSnapshotMarkdown: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+    readonly snapshotId: TypeOf<typeof SnapshotIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleMarkdownSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  createArticleReplayAccess: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly snapshotId: string
+    readonly object:
+      | { readonly kind: "Replay" }
+      | { readonly kind: "Asset"; readonly assetName: string }
+  }) => Effect.Effect<
+    Readonly<{
+      url: string
+      mediaType: string
+      byteLength: number
+      sha256: string
+    }>,
     | TypeOf<typeof UnauthorizedProblemSchema>
     | TypeOf<typeof NotFoundProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
@@ -443,6 +484,7 @@ export type GatewayPorts = Readonly<{
   ) => Effect.Effect<
     { readonly message: "Daily enrichment usage reset" },
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ForbiddenProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
 }>

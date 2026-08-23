@@ -1,4 +1,12 @@
+import type {
+  EpisodeFailureCode,
+  SqliteFailureOperation,
+} from "@news-podcast/contracts/episode-failure"
 import { deepFreeze } from "@news-podcast/kernel"
+import {
+  decodePersistedJsonSync,
+  isDatabaseError,
+} from "@news-podcast/persistence"
 import { Effect, Schema } from "effect"
 
 import type {
@@ -6,6 +14,7 @@ import type {
   EpisodeExecutionCheckpoint,
   EpisodeExecutionPorts,
   LeaseNextInput,
+  LeaseToken,
   LeaseFailure,
   PipelineFailure,
   StoredAudioCheckpoint,
@@ -36,7 +45,6 @@ import { makeJobHandle } from "../job/handle.js"
 import type { SqliteJobHandle } from "../job/ports.js"
 
 const encodeJob = Schema.encodeSync(EpisodeJobSchema)
-const decodeJob = Schema.decodeUnknownSync(EpisodeJobSchema)
 const encodeTimestamp = Schema.encodeSync(UtcTimestampSchema)
 
 const ScriptSchema = Schema.Struct({
@@ -84,17 +92,30 @@ const CompletionSchema = Schema.Struct({
   ),
 })
 
-const pipelineFailure = (code: string, retryable = true): PipelineFailure =>
-  deepFreeze({ _tag: "PipelineFailure", code, retryable })
+const pipelineFailure = (
+  code: EpisodeFailureCode,
+  retryable = true
+): PipelineFailure => deepFreeze({ _tag: "PipelineFailure", code, retryable })
 const staleLease = () => deepFreeze({ _tag: "StaleLease" as const })
 
 const stringify = (value: unknown) => JSON.stringify(value)
-const parseJson = (value: string) => JSON.parse(value) as unknown
 
-const tryPersistence = <Value>(operation: string, run: () => Value) =>
+const decodeJson = <S extends Schema.ConstraintDecoder<unknown>>(
+  operation: string,
+  schema: S,
+  value: string
+) => decodePersistedJsonSync(operation, schema, value)
+
+const tryPersistence = <Value>(
+  operation: SqliteFailureOperation,
+  run: () => Value
+) =>
   Effect.try({
     try: run,
-    catch: () => pipelineFailure(`sqlite_${operation}`),
+    catch: (cause) =>
+      isDatabaseError(cause) && cause.reason === "CorruptRecord"
+        ? pipelineFailure(`sqlite_${operation}_corrupt_record`, false)
+        : pipelineFailure(`sqlite_${operation}`),
   })
 
 const decodeGenerationPlan = (
@@ -102,14 +123,16 @@ const decodeGenerationPlan = (
 ): Effect.Effect<GenerationPlan, PipelineFailure> =>
   tryPersistence("decode_generation_plan", () =>
     deepFreeze(
-      Schema.decodeUnknownSync(GenerationPlanSchema)(
-        parseJson(document)
+      decodeJson(
+        "episode_generation_plans.plan",
+        GenerationPlanSchema,
+        document
       ) as GenerationPlan
     )
   )
 
 const leaseDocument = (input: LeaseNextInput, document: string) => {
-  const job = decodeJob(parseJson(document))
+  const job = decodeJson("episode_jobs.document", EpisodeJobSchema, document)
   const lease = {
     token: input.leaseToken,
     leasedUntil: input.leasedUntil,
@@ -189,14 +212,18 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             "decode_checkpoint",
             () =>
               deepFreeze({
-                ...Schema.decodeUnknownSync(ScriptCheckpointSchema)(
-                  parseJson(row.script)
+                ...decodeJson(
+                  "episode_execution_checkpoints.script",
+                  ScriptCheckpointSchema,
+                  row.script
                 ),
                 ...(row.audio === undefined
                   ? {}
                   : {
-                      audio: Schema.decodeUnknownSync(AudioSchema)(
-                        parseJson(row.audio)
+                      audio: decodeJson(
+                        "episode_execution_checkpoints.audio",
+                        AudioSchema,
+                        row.audio
                       ) as StoredAudioCheckpoint,
                     }),
               }) as EpisodeExecutionCheckpoint
@@ -253,8 +280,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             ? Effect.succeed(undefined)
             : tryPersistence("decode_dictionary_snapshot", () =>
                 deepFreeze(
-                  Schema.decodeUnknownSync(ReadingDictionarySnapshotSchema)(
-                    parseJson(document)
+                  decodeJson(
+                    "episode_dictionary_snapshots.snapshot",
+                    ReadingDictionarySnapshotSchema,
+                    document
                   ) as ReadingDictionarySnapshot
                 )
               )
@@ -365,15 +394,46 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
           row === undefined
             ? undefined
             : deepFreeze({
-                job: decodeJob(parseJson(row.document)) as RunningJob,
+                job: decodeJson(
+                  "episode_jobs.document",
+                  EpisodeJobSchema,
+                  row.document
+                ) as RunningJob,
                 recovered: row.recovered,
+                readyAt: Schema.decodeUnknownSync(UtcTimestampSchema)(
+                  row.readyAt
+                ),
               })
         )
+      ),
+    checkCancellation: (input: { jobId: JobId; leaseToken: LeaseToken }) =>
+      tryPersistence("check_cancellation", () =>
+        handle.findById(input.jobId)
+      ).pipe(
+        Effect.map((document) => {
+          if (document === undefined)
+            return deepFreeze({ _tag: "StaleLease" as const })
+          const job = decodeJson(
+            "episode_jobs.document",
+            EpisodeJobSchema,
+            document
+          )
+          if (job._tag === "Canceled")
+            return deepFreeze({
+              _tag: "Canceled" as const,
+              canceledAt: job.canceledAt,
+            })
+          return job._tag === "Running" && job.lease.token === input.leaseToken
+            ? deepFreeze({ _tag: "Current" as const })
+            : deepFreeze({ _tag: "StaleLease" as const })
+        })
       ),
     findById: (jobId: JobId) =>
       tryPersistence("find_job", () => handle.findById(jobId)).pipe(
         Effect.map((document): EpisodeJob | undefined =>
-          document === undefined ? undefined : decodeJob(parseJson(document))
+          document === undefined
+            ? undefined
+            : decodeJson("episode_jobs.document", EpisodeJobSchema, document)
         )
       ),
     findCompletionOutbox: (jobId: JobId) =>
@@ -383,8 +443,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
         Effect.map((row): EpisodeCompletionIntent | undefined =>
           row === undefined
             ? undefined
-            : (Schema.decodeUnknownSync(CompletionSchema)(
-                parseJson(row.payload)
+            : (decodeJson(
+                "episode_completion_outbox.payload",
+                CompletionSchema,
+                row.payload
               ) as EpisodeCompletionIntent)
         )
       ),
@@ -395,8 +457,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
         Effect.map((rows) =>
           rows.map((row) => ({
             jobId: row.jobId as JobId,
-            completion: Schema.decodeUnknownSync(CompletionSchema)(
-              parseJson(row.payload)
+            completion: decodeJson(
+              "episode_completion_outbox.payload",
+              CompletionSchema,
+              row.payload
             ) as EpisodeCompletionIntent,
           }))
         )

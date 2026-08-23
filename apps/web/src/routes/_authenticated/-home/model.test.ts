@@ -7,6 +7,7 @@ import type {
 
 import {
   emptyGenerationStream,
+  failureMessage,
   failureRecovery,
   reduceGenerationStream,
   resolvedJobStatus,
@@ -131,8 +132,8 @@ describe("view model helpers", () => {
     ["content_materialization_invalid", "reselect"],
     ["script_unavailable", "retry"],
     ["speech_malformed_response", "admin"],
-    ["checkpoint_corruption", "admin"],
-    ["invalid_script_sources", "new"],
+    ["sqlite_decode_checkpoint_corrupt_record", "admin"],
+    ["invalid_script_sources", "reselect"],
   ] as const)("maps %s to %s", (code, expected) => {
     expect(failureRecovery(code)).toBe(expected)
   })
@@ -142,6 +143,52 @@ describe("view model helpers", () => {
     expect(resolvedJobStatus(undefined, "running")).toBe("running")
     expect(selectionLabel(0)).toBe("記事を選択してください")
     expect(selectionLabel(3)).toBe("3/20件を選択中")
+  })
+
+  it.each([
+    [
+      "job_deadline_exceeded",
+      "生成が制限時間を超えました。同じ条件で再試行してください。",
+    ],
+    [
+      "script_timeout",
+      "台本生成サービスが時間内に応答しませんでした。同じ条件で再試行してください。",
+    ],
+    [
+      "speech_unavailable",
+      "音声生成サービスを一時的に利用できません。同じ条件で再試行してください。",
+    ],
+    [
+      "generation_planning_invalid_request",
+      "生成条件を確認できませんでした。記事を選び直してください。",
+    ],
+    [
+      "no_generation_candidates",
+      "番組にできる新しい記事がありません。記事を選んで生成してください。",
+    ],
+    [
+      "sqlite_decode_checkpoint_corrupt_record",
+      "保存済みデータを安全に処理できませんでした。問い合わせIDを添えて管理者へ連絡してください。",
+    ],
+    [
+      "audio_store_unavailable",
+      "番組を保存できませんでした。時間をおいて再試行してください。",
+    ],
+  ] as const)("maps public failure %s to safe guidance", (code, expected) => {
+    expect(failureMessage({ code, message: code })).toBe(expected)
+  })
+
+  it("hides an unknown internal code and includes the job ID for support", () => {
+    const message = failureMessage(
+      { code: "secret_internal_adapter_42", message: "s3://private/key" },
+      "00000000-0000-4000-8000-000000000079"
+    )
+
+    expect(message).toBe(
+      "生成中に問題が発生しました。時間をおいて再試行してください。問い合わせID: 00000000-0000-4000-8000-000000000079"
+    )
+    expect(message).not.toContain("secret_internal_adapter_42")
+    expect(message).not.toContain("s3://private/key")
   })
 })
 

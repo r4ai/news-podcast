@@ -6,6 +6,10 @@ const uuid = <Brand extends string>(brand: Brand) =>
 const ArticleIdSchema = uuid("ContentArticleId")
 const FeedIdSchema = uuid("ContentFeedId")
 const SnapshotIdSchema = uuid("ContentSnapshotId")
+const ReplayAssetNameSchema = Schema.String.check(
+  Schema.isPattern(/^[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
+  Schema.isMaxLength(81)
+)
 const utc = Schema.String.check(
   Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
   Schema.makeFilter((value: string) =>
@@ -93,6 +97,27 @@ export const ArticleLibraryRequestSchema = Schema.Union([
     articleId: ArticleIdSchema,
   }),
   Schema.Struct({
+    operation: Schema.Literal("FindSnapshot"),
+    articleId: ArticleIdSchema,
+    snapshotId: SnapshotIdSchema,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("SnapshotMarkdown"),
+    articleId: ArticleIdSchema,
+    snapshotId: SnapshotIdSchema,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("ReplayAccess"),
+    snapshotId: SnapshotIdSchema,
+    object: Schema.Union([
+      Schema.Struct({ kind: Schema.Literal("Replay") }),
+      Schema.Struct({
+        kind: Schema.Literal("Asset"),
+        assetName: ReplayAssetNameSchema,
+      }),
+    ]),
+  }),
+  Schema.Struct({
     operation: Schema.Literal("Patch"),
     articleId: ArticleIdSchema,
     patch,
@@ -152,6 +177,18 @@ export const ArticleLibraryReplySchema = Schema.Union([
   Schema.TaggedStruct("Found", { article: ContentArticleViewSchema }),
   Schema.TaggedStruct("Markdown", {
     markdown: Schema.String.check(Schema.isMaxLength(1_048_576)),
+  }),
+  Schema.TaggedStruct("ReplayAccess", {
+    url,
+    mediaType: Schema.String.check(
+      Schema.isMinLength(3),
+      Schema.isMaxLength(255)
+    ),
+    byteLength: Schema.Int.check(
+      Schema.isGreaterThanOrEqualTo(0),
+      Schema.isLessThanOrEqualTo(100 * 1_024 * 1_024)
+    ),
+    sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
   }),
   Schema.TaggedStruct("Updated", { article: ContentArticleViewSchema }),
   Schema.TaggedStruct("BulkUpdated", {

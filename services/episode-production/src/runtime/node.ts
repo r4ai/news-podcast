@@ -1,4 +1,7 @@
-import { openProductionDatabaseUnsafe } from "../infrastructure/unsafe/drizzle/open.js"
+import {
+  openProductionDatabaseUnsafe,
+  type ProductionDatabase,
+} from "../infrastructure/unsafe/drizzle/open.js"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { subjects } from "@news-podcast/protocols"
 import { Effect, Schema } from "effect"
@@ -64,6 +67,12 @@ export type NodeCreateJobRpcDependencies = DeepReadonly<{
   readonly newJobId: () => JobId
   readonly now: () => UtcTimestamp
   readonly onReady?: () => void
+  readonly onJobCanceled?: (
+    job: Extract<
+      import("../domain/episode-job.js").EpisodeJob,
+      { _tag: "Canceled" }
+    >
+  ) => void
 }>
 
 export const defaultNodeCreateJobRpcDependencies: NodeCreateJobRpcDependencies =
@@ -149,9 +158,10 @@ type RpcHandler = (
     | ReadingDictionaryRpcDelivery<NodeCreateJobRpcError>
 ) => Effect.Effect<void, unknown, never>
 
-/** Runs the complete versioned Episode Production command/query RPC surface. */
-export const runNodeProductionRpc = (
+/** Runs RPC against the database owned by the surrounding service process. */
+export const runProductionRpcWithDatabase = (
   input: unknown,
+  database: ProductionDatabase,
   dependencies: NodeCreateJobRpcDependencies = defaultNodeCreateJobRpcDependencies
 ): Effect.Effect<void, NodeCreateJobRpcError> =>
   parseNodeCreateJobRpcConfig(input).pipe(
@@ -159,20 +169,12 @@ export const runNodeProductionRpc = (
     Effect.flatMap((config) =>
       Effect.scoped(
         Effect.gen(function* () {
-          // 接続はプロセスにつき1本。以前は同じDBへ最大6本を開いていた。
-          const database = yield* Effect.acquireRelease(
-            Effect.try({
-              try: () => openProductionDatabaseUnsafe(config.sqlitePath),
-              catch: () => runtimeError("Sqlite"),
-            }),
-            (handle) => Effect.sync(() => handle.close())
-          )
-          const repository = yield* jobRepository(database.database).pipe(
+          const repository = yield* jobRepository(database).pipe(
             Effect.mapError(() => runtimeError("Sqlite"))
           )
-          const dictionary = yield* readingDictionaryRepository(
-            database.database
-          ).pipe(Effect.mapError(() => runtimeError("Sqlite")))
+          const dictionary = yield* readingDictionaryRepository(database).pipe(
+            Effect.mapError(() => runtimeError("Sqlite"))
+          )
           const now = Effect.sync(dependencies.now)
           const replyDependencies = {
             newMessageId: () => dependencies.newJobId(),
@@ -215,6 +217,7 @@ export const runNodeProductionRpc = (
               handleCancelJobRpc({
                 now,
                 cancelOwned: repository.cancelOwned,
+                onCanceled: dependencies.onJobCanceled,
                 replyDependencies,
               }),
             ],
@@ -299,6 +302,33 @@ export const runNodeProductionRpc = (
             },
             () => runtimeError("Nats"),
             "rpc"
+          )
+        })
+      )
+    )
+  )
+
+/** Standalone RPC runtime; owns one database connection for its whole scope. */
+export const runNodeProductionRpc = (
+  input: unknown,
+  dependencies: NodeCreateJobRpcDependencies = defaultNodeCreateJobRpcDependencies
+): Effect.Effect<void, NodeCreateJobRpcError> =>
+  parseNodeCreateJobRpcConfig(input).pipe(
+    Effect.mapError(() => runtimeError("Config")),
+    Effect.flatMap((config) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = yield* Effect.acquireRelease(
+            Effect.try({
+              try: () => openProductionDatabaseUnsafe(config.sqlitePath),
+              catch: () => runtimeError("Sqlite"),
+            }),
+            (handle) => Effect.sync(() => handle.close())
+          )
+          yield* runProductionRpcWithDatabase(
+            config,
+            database.database,
+            dependencies
           )
         })
       )

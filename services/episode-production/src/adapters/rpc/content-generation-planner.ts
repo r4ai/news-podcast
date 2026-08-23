@@ -1,4 +1,5 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
+import type { EpisodeFailureCode } from "@news-podcast/contracts/episode-failure"
 import {
   PlanGenerationReplySchema,
   messageEnvelope,
@@ -18,8 +19,21 @@ const decodeReplyEnvelope = Schema.decodeUnknownEffect(
   { errors: "all", onExcessProperty: "error" }
 )
 
-const failure = (code: string, retryable: boolean): PipelineFailure =>
-  deepFreeze({ _tag: "PipelineFailure", code, retryable })
+const failure = (
+  code:
+    | Extract<EpisodeFailureCode, `generation_planning_${string}`>
+    | "no_generation_candidates",
+  retryable: boolean
+): PipelineFailure => deepFreeze({ _tag: "PipelineFailure", code, retryable })
+
+const rejectionFailureCodes = {
+  INVALID_REQUEST: "generation_planning_invalid_request",
+  UNAUTHENTICATED: "generation_planning_unauthenticated",
+  NOT_FOUND: "generation_planning_not_found",
+  STORAGE_FAILURE: "generation_planning_storage_failure",
+  OBJECT_FAILURE: "generation_planning_object_failure",
+  INTERNAL_ERROR: "generation_planning_internal_error",
+} as const
 
 /** Fetches current preferences and candidate selection; persistence freezes the winner. */
 export const makeContentGenerationPlanner = (
@@ -82,7 +96,7 @@ export const makeContentGenerationPlanner = (
           if (reply.payload._tag === "Rejected") {
             return Effect.fail(
               failure(
-                `generation_planning_${reply.payload.code.toLowerCase()}`,
+                rejectionFailureCodes[reply.payload.code],
                 reply.payload.code === "INTERNAL_ERROR" ||
                   reply.payload.code === "STORAGE_FAILURE"
               )

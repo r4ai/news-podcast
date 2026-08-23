@@ -5,6 +5,7 @@ import {
   parseArticleListQuery,
   parseArticleStatePatch,
   readOwnerArticleMarkdown,
+  readOwnerSnapshotMarkdown,
   type ArticleListPage,
 } from "../application/article-library.js"
 import {
@@ -22,14 +23,12 @@ import {
   OwnerIdSchema,
   SubscriptionIdSchema,
 } from "../domain/subscription.js"
-import {
-  parseJsonUnsafe,
-  stringifyJsonUnsafe,
-} from "../infrastructure/unsafe/json.js"
+import { stringifyJsonUnsafe } from "../infrastructure/unsafe/json.js"
 import { openTestDatabase, type TestDatabase } from "./persistence/testing.js"
 import { createArchiveStore } from "./persistence/archive/repository.js"
 import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
 import { createArticleLibrary } from "./persistence/article-library/repository.js"
+import { createArticleSearchIndexRepository } from "./persistence/article-search-index/repository.js"
 import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
@@ -55,12 +54,9 @@ const setup = async () => {
   const subscriptions = await Effect.runPromise(
     createSubscriptionRepository(database.db)
   )
-  const catalog = await Effect.runPromise(
-    createArticleCatalog(database.db, { parse: parseJsonUnsafe })
-  )
+  const catalog = await Effect.runPromise(createArticleCatalog(database.db))
   const archiveStore = await Effect.runPromise(
     createArchiveStore(database.db, {
-      parse: parseJsonUnsafe,
       stringify: stringifyJsonUnsafe,
     })
   )
@@ -136,7 +132,7 @@ const setup = async () => {
       },
       replay: {
         _tag: "Replay",
-        key: "articles/a/replay.html",
+        key: "articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/replay/index.html",
         sha256: "2".repeat(64),
         mediaType: "text/html",
         byteLength: 10,
@@ -148,7 +144,15 @@ const setup = async () => {
         mediaType: "text/markdown",
         byteLength: 10,
       },
-      assets: [],
+      assets: [
+        {
+          _tag: "Asset",
+          key: `articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/assets/${"a".repeat(64)}.css`,
+          sha256: "4".repeat(64),
+          mediaType: "text/css",
+          byteLength: 12,
+        },
+      ],
     }),
   })
   await Effect.runPromise(
@@ -174,7 +178,54 @@ const query = (overrides: Record<string, unknown> = {}) =>
 const capturedAt = (value: string) => decode(CapturedAtSchema, value)
 
 describe("SQLite article library", () => {
-  it("grants shared-feed items while a subscriber pauses and resumes", async () => {
+  it("authorizes exact replay objects by durable owner access after unsubscribe", async () => {
+    const { articles, snapshot, subscriptions } = await setup()
+    await Effect.runPromise(
+      subscriptions.remove(
+        ids.ownerA,
+        decode(SubscriptionIdSchema, "9aa2225d-07e7-4af4-a8e6-e4788f801a91")
+      )
+    )
+
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerA, snapshot.snapshotId, {
+          kind: "Replay",
+        })
+      )
+    ).resolves.toMatchObject({
+      _tag: "Found",
+      object: { mediaType: "text/html", byteLength: 10 },
+    })
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerA, snapshot.snapshotId, {
+          kind: "Asset",
+          assetName: `${"a".repeat(64)}.css`,
+        })
+      )
+    ).resolves.toMatchObject({
+      _tag: "Found",
+      object: { mediaType: "text/css", byteLength: 12 },
+    })
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerB, snapshot.snapshotId, {
+          kind: "Replay",
+        })
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerA, snapshot.snapshotId, {
+          kind: "Asset",
+          assetName: `${"b".repeat(64)}.png`,
+        })
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+  })
+
+  it("defers shared-feed access while paused and backfills it on resume", async () => {
     const { articles, catalog, database, subscriptions } = await setup()
     await Effect.runPromise(
       subscriptions.setEnabled(
@@ -205,6 +256,23 @@ describe("SQLite article library", () => {
         discoveredAt: "2026-08-13T02:01:00.000Z",
       })
     )
+
+    await expect(
+      Effect.runPromise(articles.find(ids.ownerA, ids.articleC))
+    ).resolves.toEqual({ _tag: "NotFound" })
+    await expect(
+      Effect.runPromise(articles.find(ids.ownerB, ids.articleC))
+    ).resolves.toMatchObject({ _tag: "Found" })
+    expect(
+      database.getSql(
+        `SELECT count(*) AS count FROM article_owner_access
+         WHERE owner_id = '${ids.ownerA}' AND article_id = '${ids.articleC}'`
+      )
+    ).toEqual({ count: 0 })
+    await expect(
+      Effect.runPromise(articles.find(ids.ownerA, ids.articleA))
+    ).resolves.toMatchObject({ _tag: "Found" })
+
     await Effect.runPromise(
       subscriptions.setEnabled(
         ids.ownerA,
@@ -372,6 +440,84 @@ describe("SQLite article library", () => {
     expect(byMutableFeedTitle.items).toEqual([])
   })
 
+  it("reads v1 metadata and Markdown after v2 becomes latest, bound to owner and article", async () => {
+    const { articles, archiveStore, snapshot: v1 } = await setup()
+    const v2Id = decode(
+      SnapshotIdSchema,
+      "56c2eef5-a205-4526-8640-dc3ea84d88b4"
+    )
+    const v2 = createArticleSnapshot({
+      command: decode(ArchiveCommandSchema, {
+        archiveRequestId: "27b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
+        articleId: ids.articleA,
+        sourceUrl: "https://news.example.com/a-v2",
+        title: "Owner A article v2",
+      }),
+      snapshotId: v2Id,
+      capturedAt: decode(CapturedAtSchema, "2026-08-13T02:03:00.000Z"),
+      capture: decode(ArchiveCaptureSchema, {
+        rawResponse: {
+          _tag: "RawResponse",
+          key: `articles/${v2Id}/raw/response.html`,
+          sha256: "5".repeat(64),
+          mediaType: "text/html",
+          byteLength: 20,
+        },
+        replay: {
+          _tag: "Replay",
+          key: `articles/${v2Id}/replay/index.html`,
+          sha256: "6".repeat(64),
+          mediaType: "text/html",
+          byteLength: 20,
+        },
+        markdown: {
+          _tag: "Markdown",
+          key: `articles/${v2Id}/markdown/article.md`,
+          sha256: "7".repeat(64),
+          mediaType: "text/markdown",
+          byteLength: 20,
+        },
+        assets: [],
+      }),
+    })
+    await Effect.runPromise(archiveStore.commit({ snapshot: v2 }))
+
+    await expect(
+      Effect.runPromise(
+        articles.findSnapshot(ids.ownerA, ids.articleA, v1.snapshotId)
+      )
+    ).resolves.toMatchObject({
+      _tag: "Found",
+      article: {
+        title: "Owner A article",
+        sourceUrl: "https://news.example.com/a",
+        snapshotId: v1.snapshotId,
+      },
+    })
+    await expect(
+      Effect.runPromise(
+        articles.findSnapshot(ids.ownerB, ids.articleA, v1.snapshotId)
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+    await expect(
+      Effect.runPromise(
+        articles.findSnapshot(ids.ownerA, ids.articleB, v1.snapshotId)
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+
+    const read = vi.fn((key: string) => Effect.succeed(`# ${key}`))
+    await expect(
+      Effect.runPromise(
+        readOwnerSnapshotMarkdown({ articles, objects: { read } })(
+          ids.ownerA,
+          ids.articleA,
+          v1.snapshotId
+        )
+      )
+    ).resolves.toEqual({ _tag: "Found", markdown: "# articles/a/article.md" })
+    expect(read).toHaveBeenCalledWith("articles/a/article.md")
+  })
+
   it("finds an article by an owner-scoped tag name", async () => {
     const { articles, database } = await setup()
     const tagId = "ce2690a0-3d85-4ac7-a731-1a0d087c0584"
@@ -393,6 +539,98 @@ describe("SQLite article library", () => {
       articles.list(ids.ownerB, await query({ q: "observability" }))
     )
     expect(otherOwner.items).toEqual([])
+  })
+
+  it.each([
+    ["Japanese substring", "永続化された日本語全文検索", "日本語全文"],
+    ["short Japanese substring", "永続化された日本語全文検索", "日本"],
+    ["whitespace phrase", "alpha  beta with spaces", "alpha  beta"],
+    ["FTS quote", 'literal body with a "quoted" value', 'a "quoted"'],
+    ["FTS operators", "literal OR * NEAR token", "OR * NEAR"],
+  ])(
+    "finds body-only text through the persisted index: %s",
+    async (_case, body, search) => {
+      const { articles, database, snapshot } = await setup()
+      const searchIndex = createArticleSearchIndexRepository(database.db)
+      const pending = (
+        await Effect.runPromise(searchIndex.listPending(10))
+      ).find((entry) => entry.snapshotId === snapshot.snapshotId)
+      expect(pending).toBeDefined()
+      await Effect.runPromise(searchIndex.index({ pending: pending!, body }))
+
+      const found = await Effect.runPromise(
+        articles.list(ids.ownerA, await query({ q: search }))
+      )
+
+      expect(found.items.map((item) => item.articleId)).toEqual([ids.articleA])
+      expect(
+        await Effect.runPromise(
+          articles.list(ids.ownerB, await query({ q: search }))
+        )
+      ).toEqual({ items: [], nextCursor: null })
+    }
+  )
+
+  it("searches indexed bodies beyond the first page and only in the latest snapshot", async () => {
+    const { articles, archiveStore, catalog, database, snapshot } =
+      await setup()
+    await Effect.runPromise(
+      catalog.upsert({
+        articleId: ids.articleC,
+        feedId: ids.feedA,
+        externalId: "entry-c",
+        sourceUrl: "https://news.example.com/c" as never,
+        title: "Newest unrelated article" as never,
+        publishedAt: "2026-08-14T00:00:00.000Z",
+        discoveredAt: "2026-08-14T01:01:00.000Z",
+      })
+    )
+    const latest = createArticleSnapshot({
+      command: decode(ArchiveCommandSchema, {
+        archiveRequestId: "37b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
+        articleId: ids.articleA,
+        sourceUrl: "https://news.example.com/a-latest",
+        title: "Latest title",
+      }),
+      snapshotId: decode(
+        SnapshotIdSchema,
+        "66c2eef5-a205-4526-8640-dc3ea84d88b4"
+      ),
+      capturedAt: decode(CapturedAtSchema, "2026-08-14T01:03:00.000Z"),
+      capture: snapshot.capture,
+    })
+    await Effect.runPromise(archiveStore.commit({ snapshot: latest }))
+    const searchIndex = createArticleSearchIndexRepository(database.db)
+    const pending = await Effect.runPromise(searchIndex.listPending(10))
+    for (const [snapshotId, body] of [
+      [snapshot.snapshotId, "superseded-only-needle"],
+      [latest.snapshotId, "latest-body-needle"],
+    ] as const) {
+      const work = pending.find((entry) => entry.snapshotId === snapshotId)
+      expect(work).toBeDefined()
+      await Effect.runPromise(searchIndex.index({ pending: work!, body }))
+    }
+
+    const firstPage = await Effect.runPromise(
+      articles.list(ids.ownerA, await query({ limit: 1 }))
+    )
+    expect(firstPage.items.map((item) => item.articleId)).toEqual([
+      ids.articleC,
+    ])
+    expect(firstPage.nextCursor).not.toBeNull()
+    expect(
+      await Effect.runPromise(
+        articles.list(ids.ownerA, await query({ q: "latest-body" }))
+      )
+    ).toEqual({
+      items: [expect.objectContaining({ articleId: ids.articleA })],
+      nextCursor: null,
+    })
+    expect(
+      await Effect.runPromise(
+        articles.list(ids.ownerA, await query({ q: "superseded-only" }))
+      )
+    ).toEqual({ items: [], nextCursor: null })
   })
 
   it("uses the latest snapshot once for automatic and selected generation", async () => {

@@ -18,6 +18,26 @@ export type LibraryFilter = Pick<
   "state" | "includeHidden" | "feedIds" | "q"
 >
 
+/** User input is always one literal phrase, never executable FTS5 syntax. */
+export const articleBodySearchPredicate = (query: string): SQL => {
+  const characters = [...query]
+  if (characters.length <= 2) {
+    return sql`EXISTS (
+      SELECT 1
+      FROM article_search_short_grams
+      WHERE article_search_short_grams.snapshot_id = ${articleSnapshots.snapshotId}
+        AND article_search_short_grams.gram = ${query}
+    )`
+  }
+  const literalPhrase = `"${query.replaceAll('"', '""')}"`
+  return sql`EXISTS (
+    SELECT 1
+    FROM article_search_fts
+    WHERE article_search_fts.snapshot_id = ${articleSnapshots.snapshotId}
+      AND article_search_fts MATCH ${literalPhrase}
+  )`
+}
+
 /**
  * 一覧の絞り込み条件。状態はCOALESCEを通し、状態行が無い記事も
  * 「未読」として正しく数えられるようにする。
@@ -52,6 +72,7 @@ export const queryFilters = (query: LibraryFilter): readonly SQL[] => {
           json_extract(${articleSnapshots.snapshotJson}, '$.sourceUrl'),
           ${feedItems.sourceUrl}
         ) LIKE ${pattern} ESCAPE '\\'`,
+        articleBodySearchPredicate(query.q),
         sql`EXISTS (
           SELECT 1
           FROM ${contentArticleTags}

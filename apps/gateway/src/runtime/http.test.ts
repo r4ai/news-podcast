@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { Effect, Layer, Schema, Tracer } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
@@ -18,10 +19,10 @@ import type { GatewayPorts } from "../application/ports.js"
 import { makeGatewayWebHandler } from "./http.js"
 
 const unavailable = {
-  type: "about:blank",
-  title: "Unavailable",
+  type: "about:blank" as const,
+  title: "Upstream unavailable" as const,
   status: 503 as const,
-  code: "unavailable",
+  code: "upstream_unavailable" as const,
 }
 
 const ports: GatewayPorts = {
@@ -50,7 +51,10 @@ const ports: GatewayPorts = {
   registerFeed: () => Effect.fail(unavailable),
   listArticles: () => Effect.fail(unavailable),
   getArticle: () => Effect.fail(unavailable),
+  getArticleSnapshot: () => Effect.fail(unavailable),
   getArticleMarkdown: () => Effect.fail(unavailable),
+  getArticleSnapshotMarkdown: () => Effect.fail(unavailable),
+  createArticleReplayAccess: () => Effect.fail(unavailable),
   patchArticle: () => Effect.fail(unavailable),
   bulkPatchArticles: () => Effect.fail(unavailable),
   getArticleFacets: () => Effect.fail(unavailable),
@@ -99,6 +103,37 @@ describe("Gateway HTTP runtime", () => {
       expect(html).toContain("News Podcast API Reference")
       expect(html).toContain("/openapi.json")
       expect(html).toContain("@scalar/api-reference")
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("returns 403 without invoking reset storage when the server policy rejects it", async () => {
+    const runtime = makeGatewayWebHandler({
+      ...ports,
+      enrichResetDaily: () =>
+        Effect.fail({
+          type: "about:blank" as const,
+          title: "Operation forbidden" as const,
+          status: 403 as const,
+          code: "operation_forbidden" as const,
+        }),
+    })
+
+    try {
+      const response = await runtime.handler(
+        new Request("http://gateway.test/v1/me/enrich/reset-daily", {
+          method: "POST",
+        })
+      )
+
+      expect(response.status).toBe(403)
+      expect(await response.json()).toEqual({
+        type: "about:blank",
+        title: "Operation forbidden",
+        status: 403,
+        code: "operation_forbidden",
+      })
     } finally {
       await runtime.dispose()
     }
@@ -163,7 +198,10 @@ describe("Gateway HTTP runtime", () => {
       listArticles: () =>
         Effect.succeed({ items: [article], page: { hasMore: false } }),
       getArticle: () => Effect.succeed(article),
+      getArticleSnapshot: () => Effect.succeed(article),
       getArticleMarkdown: () => Effect.succeed({ markdown: "# Article" }),
+      getArticleSnapshotMarkdown: () =>
+        Effect.succeed({ markdown: "# Article snapshot" }),
       patchArticle: () => Effect.succeed({ ...article, saved: true }),
       bulkPatchArticles: () => Effect.succeed({ updated: 1 }),
       getArticleFacets: () =>
@@ -200,6 +238,12 @@ describe("Gateway HTTP runtime", () => {
       new Request("http://gateway.test/v1/me/articles/facets?q=news"),
       new Request(`http://gateway.test/v1/me/articles/${article.id}`),
       new Request(`http://gateway.test/v1/me/articles/${article.id}/markdown`),
+      new Request(
+        `http://gateway.test/v1/me/articles/${article.id}/snapshots/${article.snapshotId}`
+      ),
+      new Request(
+        `http://gateway.test/v1/me/articles/${article.id}/snapshots/${article.snapshotId}/markdown`
+      ),
       new Request(`http://gateway.test/v1/me/articles/${article.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -228,17 +272,52 @@ describe("Gateway HTTP runtime", () => {
         requests.map((request) => runtime.handler(request))
       )
       expect(responses.map(({ status }) => status)).toEqual([
-        200, 201, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200,
+        200, 201, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200,
+        200,
       ])
     } finally {
       await runtime.dispose()
     }
   })
 
+  it.each([
+    ["https://example.com", "https://example.com/"],
+    ["https://EXAMPLE.com/feed", "https://example.com/feed"],
+    ["https://example.com:443/feed", "https://example.com/feed"],
+    [
+      "https://example.com/a b?q=hello world&next=%2f",
+      "https://example.com/a%20b?q=hello%20world&next=%2f",
+    ],
+  ])("passes a canonical feed URL through HTTP", async (input, expected) => {
+    const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
+      id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
+      enabled: true,
+      createdAt: "2026-08-12T00:00:00.000Z",
+    })
+    const addFeedSubscription = vi.fn(() => Effect.succeed(subscription))
+    const runtime = makeGatewayWebHandler({ ...ports, addFeedSubscription })
+
+    const response = await runtime.handler(
+      new Request("http://gateway.test/v1/me/feed-subscriptions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ feedUrl: input }),
+      })
+    )
+
+    expect(response.status).toBe(201)
+    expect(addFeedSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { feedUrl: expected } })
+    )
+    await runtime.dispose()
+  })
+
   it("serves job control, episode detail, and terminal replay routes", async () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
       status: "succeeded",
+      trigger: "manual",
       createdAt: "2026-08-12T00:00:00.000Z",
       attempt: 1,
       maxAttempts: 4,
@@ -308,6 +387,7 @@ describe("Gateway HTTP runtime", () => {
         runtime.handler(
           new Request(`http://gateway.test/v1/episode-jobs/${jobId}/retry`, {
             method: "POST",
+            headers: { "Idempotency-Key": "retry-job-control-1" },
           })
         ),
         runtime.handler(
@@ -342,7 +422,7 @@ describe("Gateway HTTP runtime", () => {
       expect(retryEpisodeJob).toHaveBeenCalledWith(
         expect.objectContaining({
           jobId,
-          idempotencyKey: expect.stringMatching(`^retry:${jobId}:`),
+          idempotencyKey: "retry-job-control-1",
         })
       )
       expect(replayEpisodeJobEvents).toHaveBeenNthCalledWith(
@@ -358,10 +438,11 @@ describe("Gateway HTTP runtime", () => {
     }
   })
 
-  it("issues a fresh retry key per headerless action and preserves explicit keys", async () => {
+  it("rejects a headerless retry and preserves an explicit key", async () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
       status: "failed",
+      trigger: "manual",
       createdAt: "2026-08-12T00:00:00.000Z",
       attempt: 1,
       maxAttempts: 4,
@@ -376,9 +457,10 @@ describe("Gateway HTTP runtime", () => {
     const url = `http://gateway.test/v1/episode-jobs/${job.id}/retry`
 
     try {
-      await runtime.handler(new Request(url, { method: "POST" }))
-      await runtime.handler(new Request(url, { method: "POST" }))
-      await runtime.handler(
+      const headerless = await runtime.handler(
+        new Request(url, { method: "POST" })
+      )
+      const explicit = await runtime.handler(
         new Request(url, {
           method: "POST",
           headers: { "Idempotency-Key": "caller-retry-1" },
@@ -388,8 +470,9 @@ describe("Gateway HTTP runtime", () => {
       const keys = retryEpisodeJob.mock.calls.map(
         ([input]) => input.idempotencyKey
       )
-      expect(keys[0]).not.toBe(keys[1])
-      expect(keys[2]).toBe("caller-retry-1")
+      expect(headerless.status).toBe(400)
+      expect(explicit.status).toBe(202)
+      expect(keys).toEqual(["caller-retry-1"])
     } finally {
       await runtime.dispose()
     }
@@ -701,6 +784,165 @@ describe("Gateway HTTP runtime", () => {
       expect(response.headers.get("location")).toBe(
         `/v1/episode-jobs/${receipt.id}`
       )
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("proxies authorized replay HTML and assets with locked-down headers", async () => {
+    const snapshotId = "6518412b-ce2f-4641-9f2c-a02dd515bc31"
+    const assetName = `${"a".repeat(64)}.css`
+    const bodies = new Map([
+      ["Replay", "<!doctype html><p>saved</p>"],
+      ["Asset", "p{color:green}"],
+    ])
+    const runtime = makeGatewayWebHandler(
+      {
+        ...ports,
+        createArticleReplayAccess: ({ object }) => {
+          const body = bodies.get(object.kind)!
+          return Effect.succeed({
+            url: `https://objects.test/${object.kind}`,
+            mediaType:
+              object.kind === "Replay"
+                ? "text/html; charset=utf-8"
+                : "text/css",
+            byteLength: new TextEncoder().encode(body).byteLength,
+            sha256: createHash("sha256").update(body).digest("hex"),
+          })
+        },
+      },
+      undefined,
+      {
+        fetcher: vi.fn(async (url) => {
+          const kind = String(url).endsWith("Replay") ? "Replay" : "Asset"
+          const body = bodies.get(kind)!
+          return new Response(body, {
+            headers: {
+              "content-length": String(
+                new TextEncoder().encode(body).byteLength
+              ),
+            },
+          })
+        }),
+      }
+    )
+
+    try {
+      const location = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/article-snapshots/${snapshotId}/replay`
+        )
+      )
+      expect(await location.json()).toEqual({
+        url: `/v1/me/article-snapshots/${snapshotId}/replay/index.html`,
+      })
+
+      const replay = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/article-snapshots/${snapshotId}/replay/index.html`
+        )
+      )
+      expect(await replay.text()).toContain("saved")
+      expect(replay.headers.get("content-security-policy")).toContain(
+        "sandbox; default-src 'none'"
+      )
+      expect(replay.headers.get("x-content-type-options")).toBe("nosniff")
+
+      const asset = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/article-snapshots/${snapshotId}/assets/${assetName}`
+        )
+      )
+      expect(await asset.text()).toBe("p{color:green}")
+      expect(asset.headers.get("content-type")).toContain("text/css")
+      expect(asset.headers.get("cache-control")).toBe("private, no-store")
+      expect(asset.headers.get("content-security-policy")).toContain(
+        "sandbox; default-src 'none'"
+      )
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("rejects a replay whose completed body does not match durable metadata", async () => {
+    const snapshotId = "6518412b-ce2f-4641-9f2c-a02dd515bc31"
+    const body = "same-length-corruption"
+    const runtime = makeGatewayWebHandler(
+      {
+        ...ports,
+        createArticleReplayAccess: () =>
+          Effect.succeed({
+            url: "https://objects.test/Replay",
+            mediaType: "text/html; charset=utf-8",
+            byteLength: new TextEncoder().encode(body).byteLength,
+            sha256: "f".repeat(64),
+          }),
+      },
+      undefined,
+      {
+        fetcher: vi.fn(
+          async () =>
+            new Response(body, {
+              headers: {
+                "content-length": String(
+                  new TextEncoder().encode(body).byteLength
+                ),
+              },
+            })
+        ),
+      }
+    )
+
+    try {
+      const response = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/article-snapshots/${snapshotId}/replay/index.html`
+        )
+      )
+      expect(response.status).toBe(503)
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("returns unavailable when the replay body fails before completion", async () => {
+    const snapshotId = "6518412b-ce2f-4641-9f2c-a02dd515bc31"
+    const runtime = makeGatewayWebHandler(
+      {
+        ...ports,
+        createArticleReplayAccess: () =>
+          Effect.succeed({
+            url: "https://objects.test/Replay",
+            mediaType: "text/html; charset=utf-8",
+            byteLength: 4,
+            sha256: "f".repeat(64),
+          }),
+      },
+      undefined,
+      {
+        fetcher: vi.fn(
+          async () =>
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode("sa"))
+                  controller.error(new Error("object store disconnected"))
+                },
+              }),
+              { headers: { "content-length": "4" } }
+            )
+        ),
+      }
+    )
+
+    try {
+      const response = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/article-snapshots/${snapshotId}/replay/index.html`
+        )
+      )
+      expect(response.status).toBe(503)
     } finally {
       await runtime.dispose()
     }

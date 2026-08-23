@@ -106,6 +106,56 @@ test("login accepts Enter submission but rejects an external return URL", async 
   ).toBeVisible()
 })
 
+test("logout clears owner A state before owner B logs in", async ({ page }) => {
+  await page.goto("/articles")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page
+      .getByRole("button", {
+        name: /Durable Objectsが東京リージョンに対応/,
+      })
+      .first()
+  ).toBeVisible()
+
+  await page.goto("/library")
+  await page
+    .getByRole("button", { name: /今日の開発ニュース.*を再生/ })
+    .first()
+    .click()
+  await expect(page.locator("audio")).toHaveJSProperty("paused", false)
+
+  await page.getByRole("button", { name: "ログアウト" }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible()
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        track: localStorage.getItem("player.track"),
+        progress: localStorage.getItem("player.progress"),
+      }))
+    )
+    .toEqual({ track: null, progress: null })
+
+  await page.goBack()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  await page.reload()
+  await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible()
+
+  await page.getByLabel("開発パスワード").fill("e2e-password-b")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await page.goto("/articles")
+
+  await expect(
+    page.getByRole("button", { name: /Owner B 専用ニュース/ }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", {
+      name: /Durable Objectsが東京リージョンに対応/,
+    })
+  ).toHaveCount(0)
+})
+
 test("a protected API 401 clears the visible app and preserves the return path", async ({
   page,
 }) => {
@@ -211,7 +261,7 @@ test("subscription changes confirm destructive actions and roll back failed opti
   })
 
   const zenn = page.getByRole("switch", {
-    name: "Zennを生成対象にする",
+    name: "Zennの同期・生成を有効にする",
   })
   await expect(zenn).toBeChecked()
   await zenn.click()
@@ -254,7 +304,9 @@ test("refreshes RSS sync status after a subscription is deleted", async ({
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  await expect(page.getByText("生成対象", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("同期・生成・AI処理の対象", { exact: true })
+  ).toBeVisible()
   await page.getByRole("button", { name: "Zennの操作", exact: true }).click()
   await page.getByRole("menuitem", { name: "削除", exact: true }).click()
   await page.getByRole("button", { name: "削除する" }).click()
@@ -353,10 +405,14 @@ test("shows RSS sync progress and refreshes the article list after completion", 
   await expect(page.getByText(/RSSを同期中です/)).toHaveCount(0)
 })
 
-test("RSS reader reports unavailable raw archives and persists saved state", async ({
+test("RSS reader replays stored HTML, CSS, and images after the source disappears", async ({
   page,
 }) => {
   const stylesheetHash = "a".repeat(64)
+  const imageHash = "b".repeat(64)
+  const snapshotId = "00000000-0000-4000-8000-000000000021"
+  const replayBaseUrl = `/v1/me/article-snapshots/${snapshotId}`
+  const replayUrl = `${replayBaseUrl}/replay/index.html`
   const article = {
     id: "00000000-0000-4000-8000-000000000020",
     feedId: "00000000-0000-4000-8000-000000000001",
@@ -366,12 +422,11 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
     publishedAt: "2026-08-10T00:00:00.000Z",
     discoveredAt: "2026-08-10T00:01:00.000Z",
     archiveStatus: "succeeded",
-    snapshotId: "00000000-0000-4000-8000-000000000021",
+    snapshotId,
     read: false,
     saved: false,
     readLater: false,
     hidden: false,
-    archiveUrl: "/v1/me/articles/00000000-0000-4000-8000-000000000020/archive",
     markdownUrl:
       "/v1/me/articles/00000000-0000-4000-8000-000000000020/markdown",
   }
@@ -379,20 +434,46 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
   page.on("console", (message) => {
     if (message.type() === "error") archiveErrors.push(message.text())
   })
-  await page.context().route(`**${article.archiveUrl}`, (route) =>
+  await page.context().route(`**${replayBaseUrl}/replay`, (route) =>
     route.fulfill({
-      body: `<!doctype html><html><head><title>保存された記事</title><link rel="stylesheet" href="assets/${stylesheetHash}"></head><body><main><h1>保存された記事</h1><p>保存時点の本文です。</p></main></body></html>`,
+      body: JSON.stringify({ url: replayUrl }),
+      contentType: "application/json",
+    })
+  )
+  await page.context().route(`**${replayUrl}`, (route) =>
+    route.fulfill({
+      body: `<!doctype html><html><head><title>保存された記事</title><link rel="stylesheet" href="../assets/${stylesheetHash}.css"></head><body><main><h1>保存された記事</h1><img alt="保存画像" src="../assets/${imageHash}.png"><p>保存時点の本文です。</p></main></body></html>`,
       contentType: "text/html; charset=utf-8",
       headers: {
         "Content-Security-Policy":
-          "sandbox allow-same-origin; default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'self'; frame-ancestors 'self'",
+          "sandbox; default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self'; style-src 'self'; frame-ancestors 'self'",
       },
     })
   )
-  await page.context().route(`**/assets/${stylesheetHash}`, (route) =>
+  await page
+    .context()
+    .route(`**${replayBaseUrl}/assets/${stylesheetHash}.css`, (route) =>
+      route.fulfill({
+        body: "body { background: rgb(240, 244, 248); } h1 { color: rgb(17, 24, 39); font-size: 32px; }",
+        contentType: "text/css",
+      })
+    )
+  await page
+    .context()
+    .route(`**${replayBaseUrl}/assets/${imageHash}.png`, (route) =>
+      route.fulfill({
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64"
+        ),
+        contentType: "image/png",
+      })
+    )
+  await page.context().route(article.url, (route) => route.abort())
+  await page.context().route("https://example.com/**", (route) =>
     route.fulfill({
-      body: "body { background: rgb(240, 244, 248); } h1 { color: rgb(17, 24, 39); font-size: 32px; }",
-      contentType: "text/css",
+      status: 503,
+      body: "source unavailable",
     })
   )
   await page.route(
@@ -444,10 +525,15 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
   await expect(
     page.getByRole("heading", { name: "保存された記事" })
   ).toBeVisible()
+  const archiveFrame = page.locator(`iframe[title="${article.title}"]`)
+  await expect(archiveFrame).toBeVisible()
+  await expect(archiveFrame).toHaveAttribute("sandbox", "")
+  const replay = page.frameLocator(`iframe[title="${article.title}"]`)
+  await expect(replay.getByText("保存時点の本文です。")).toBeVisible()
+  await expect(replay.getByAltText("保存画像")).toBeVisible()
   await expect(
-    page.getByText("本文もアーカイブも利用できません。")
-  ).toBeVisible()
-  await expect(page.locator(`iframe[title="${article.title}"]`)).toHaveCount(0)
+    replay.getByRole("heading", { name: "保存された記事" })
+  ).toHaveCSS("color", "rgb(17, 24, 39)")
   expect(archiveErrors).toEqual([])
 
   // 狭い幅でも操作列は題名の直下に居る。以前は画面下端へ固定していたが、
@@ -840,6 +926,139 @@ test("selecting articles generates an episode and streams its progress", async (
   ).toBeVisible()
 })
 
+test("a response loss converges the repeated logical submission to one job", async ({
+  page,
+}) => {
+  const keys: string[] = []
+  let loseFirstResponse = true
+  await page.route("**/v1/episode-jobs", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue()
+      return
+    }
+    keys.push(route.request().headers()["idempotency-key"] ?? "")
+    const response = await route.fetch()
+    if (loseFirstResponse) {
+      loseFirstResponse = false
+      await route.abort("failed")
+      return
+    }
+    await route.fulfill({ response })
+  })
+
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  const jobsBefore = await page.evaluate(async () => {
+    const response = await fetch("/v1/episode-jobs")
+    const body = (await response.json()) as { items: unknown[] }
+    return body.items.length
+  })
+  await page.getByRole("button", { name: "番組を生成" }).click()
+  await page.getByRole("checkbox").first().click()
+  const generate = page.getByRole("button", { name: "この記事で生成" })
+
+  await generate.click()
+  await expect.poll(() => keys.length).toBe(1)
+  await expect(generate).toBeEnabled()
+  await generate.click()
+
+  await expect(page.getByText("完成", { exact: true })).toBeVisible()
+  const jobCount = await page.evaluate(async () => {
+    const response = await fetch("/v1/episode-jobs")
+    const body = (await response.json()) as { items: unknown[] }
+    return body.items.length
+  })
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBe(keys[1])
+  expect(jobCount).toBe(jobsBefore + 1)
+})
+
+test("a deadline failure shows safe guidance and the retry action", async ({
+  page,
+}) => {
+  const jobId = "00000000-0000-4000-8000-000000000079"
+  const createdAt = "2026-08-23T00:00:00.000Z"
+  const failedAt = "2026-08-23T00:30:00.000Z"
+  const failedJob = {
+    id: jobId,
+    status: "failed",
+    trigger: "manual",
+    createdAt,
+    articleIds: ["00000000-0000-4000-8000-000000000001"],
+    attempt: 4,
+    maxAttempts: 4,
+    deadlineAt: failedAt,
+    finishedAt: failedAt,
+    failure: {
+      code: "job_deadline_exceeded",
+      message: "job_deadline_exceeded",
+      retryable: false,
+    },
+  }
+
+  await page.route(
+    (url) => url.pathname === "/v1/episode-jobs",
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({ items: [failedJob], page: { hasMore: false } }),
+        contentType: "application/json",
+      })
+  )
+  await page.route(`**/v1/episode-jobs/${jobId}/events`, (route) =>
+    route.fulfill({
+      body: `data: ${JSON.stringify({
+        type: "STATE_SNAPSHOT",
+        snapshot: {
+          jobId,
+          status: "failed",
+          attempt: 4,
+          maxAttempts: 4,
+          selectionMode: "manual",
+          selectedArticles: [],
+          failure: failedJob.failure,
+        },
+      })}\n\n`,
+      contentType: "text/event-stream",
+    })
+  )
+  await page.route(`**/v1/episode-jobs/${jobId}/retry`, (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        id: "00000000-0000-4000-8000-000000000080",
+        status: "queued",
+        createdAt: failedAt,
+        attempt: 0,
+        maxAttempts: 4,
+      }),
+      contentType: "application/json",
+      status: 202,
+    })
+  )
+
+  await page.goto("/")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  await expect(
+    page.getByText("生成が制限時間を超えました。同じ条件で再試行してください。")
+  ).toBeVisible()
+  await expect(page.getByText("job_deadline_exceeded")).toHaveCount(0)
+
+  const retryRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === `/v1/episode-jobs/${jobId}/retry` &&
+      request.method() === "POST"
+  )
+  await page.getByRole("button", { name: "同じ条件で再試行" }).click()
+  expect((await retryRequest).headers()["idempotency-key"]).toMatch(
+    /^[0-9a-f-]{36}$/
+  )
+})
+
 test("article picker searches server candidates by tag", async ({ page }) => {
   await page.goto("/")
   await page.getByLabel("開発パスワード").fill("e2e-password")
@@ -907,6 +1126,140 @@ test("switching episodes shows the next script from its beginning", async ({
   // 位置が残る回帰を見逃す。
   expect(max).toBeGreaterThan(0)
   expect(top).toBe(0)
+})
+
+test("episode provenance opens v1 after the same article synchronizes v2", async ({
+  page,
+}) => {
+  const episodeId = "00000000-0000-4000-8000-000000000075"
+  const articleId = "00000000-0000-4000-8000-0000000000a1"
+  const v1SnapshotId = "00000000-0000-4000-8000-0000000000b1"
+  const v2SnapshotId = "00000000-0000-4000-8000-0000000000b2"
+  const v1Article = {
+    id: articleId,
+    feedId: "00000000-0000-4000-8000-0000000000f1",
+    sourceName: "example.com",
+    title: "生成時のv1タイトル",
+    url: "https://example.com/article-v1",
+    discoveredAt: "2026-08-23T00:00:00.000Z",
+    publishedAt: "2026-08-23T00:00:00.000Z",
+    archiveStatus: "succeeded",
+    snapshotId: v1SnapshotId,
+    read: true,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  }
+  const episode = {
+    id: episodeId,
+    title: "v1から生成した番組",
+    script: "この台本はv1から生成しました。",
+    sources: [
+      {
+        articleId,
+        snapshotId: v1SnapshotId,
+        sourceKind: "rss",
+        title: "生成時のv1タイトル",
+        url: "https://example.com/article-v1",
+      },
+    ],
+    createdAt: "2026-08-23T01:00:00.000Z",
+  }
+  const requested: string[] = []
+
+  await page.route("**/v1/episodes**", async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname === `/v1/episodes/${episodeId}`) {
+      await route.fulfill({ json: episode })
+      return
+    }
+    await route.fulfill({
+      json: { items: [episode], page: { hasMore: false } },
+    })
+  })
+  await page.route("**/v1/me/articles**", async (route) => {
+    const url = new URL(route.request().url())
+    requested.push(url.pathname)
+    if (
+      url.pathname === `/v1/me/articles/${articleId}/snapshots/${v1SnapshotId}`
+    ) {
+      await route.fulfill({ json: v1Article })
+      return
+    }
+    if (
+      url.pathname ===
+      `/v1/me/articles/${articleId}/snapshots/${v1SnapshotId}/markdown`
+    ) {
+      await route.fulfill({
+        json: {
+          markdown: `# 生成時のv1本文\n\n${"v1の固定本文です。".repeat(20)}`,
+        },
+      })
+      return
+    }
+    if (url.pathname === `/v1/me/articles/${articleId}`) {
+      await route.fulfill({
+        json: {
+          ...v1Article,
+          title: "同期後のv2タイトル",
+          snapshotId: v2SnapshotId,
+        },
+      })
+      return
+    }
+    if (url.pathname.endsWith("/facets")) {
+      await route.fulfill({
+        json: {
+          states: { all: 1, unread: 0, saved: 0, later: 0 },
+          feeds: [],
+          aiPending: 0,
+        },
+      })
+      return
+    }
+    await route.fulfill({
+      json: { items: [v1Article], page: { hasMore: false } },
+    })
+  })
+  await page.route("**/v1/me/article-snapshots/**", async (route) => {
+    const url = new URL(route.request().url())
+    requested.push(url.pathname)
+    if (url.pathname.endsWith("/replay")) {
+      await route.fulfill({
+        json: {
+          url: `/v1/me/article-snapshots/${v1SnapshotId}/replay/index.html`,
+        },
+      })
+      return
+    }
+    await route.fulfill({
+      body: "<!doctype html><title>v1 replay</title><p>生成時のv1 replay</p>",
+      contentType: "text/html",
+    })
+  })
+
+  await page.goto("/library")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(page.getByRole("heading", { name: "ライブラリ" })).toBeVisible()
+  await page.getByRole("button", { name: /v1から生成した番組 2026/ }).click()
+  await page.getByRole("link", { name: "生成時の保存版を開く" }).click()
+
+  await expect(
+    page.getByRole("heading", { name: "生成時のv1タイトル" })
+  ).toBeVisible()
+  await expect(page.getByText("生成時のv1本文")).toBeVisible()
+  expect(requested).not.toContain(`/v1/me/articles/${articleId}`)
+
+  await page.getByRole("button", { name: "アーカイブ" }).click()
+  await expect(page.locator("iframe")).toHaveAttribute(
+    "src",
+    `/v1/me/article-snapshots/${v1SnapshotId}/replay/index.html`
+  )
+  expect(requested).toContain(`/v1/me/article-snapshots/${v1SnapshotId}/replay`)
+  await expect
+    .poll(() => requested)
+    .toContain(`/v1/me/article-snapshots/${v1SnapshotId}/replay/index.html`)
 })
 
 test("switching between the list and the reader on one column keeps the page still", async ({

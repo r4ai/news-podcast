@@ -7,7 +7,10 @@ import {
   type ArchiveRequestId,
   type ArticleId,
   type CapturedAt,
+  type MediaType,
   type ObjectKey,
+  type Sha256,
+  type SnapshotId,
 } from "../domain/article.js"
 import {
   ArticleCursorSchema,
@@ -33,6 +36,8 @@ import type {
 const uniqueFeedIds = Schema.makeFilter<readonly FeedId[]>((feedIds) =>
   new Set(feedIds).size === feedIds.length ? true : "feed IDs must be unique"
 )
+// oxlint-disable-next-line eslint/no-control-regex -- SQLite FTS cannot accept NUL, so reject controls at the RPC boundary.
+const searchableTextPattern = new RegExp("^[^\\u0000-\\u001f\\u007f]*$")
 
 export const parseArticleStatePatch = parse(ArticleStatePatchSchema)
 
@@ -51,7 +56,8 @@ export const ArticleListQuerySchema = Schema.Struct({
     Schema.String.check(
       Schema.isTrimmed(),
       Schema.isMinLength(1),
-      Schema.isMaxLength(200)
+      Schema.isMaxLength(200),
+      Schema.isPattern(searchableTextPattern)
     )
   ),
   order: Schema.Literals(["Newest", "Oldest"]),
@@ -89,7 +95,15 @@ export type ArticleFacets = DeepReadonly<{
 
 export type ArticleLibraryError = DeepReadonly<{
   readonly _tag: "ArticleLibraryFailed"
-  readonly operation: "List" | "Find" | "Patch" | "BulkPatch" | "Facets"
+  readonly operation:
+    | "List"
+    | "Find"
+    | "FindSnapshot"
+    | "SnapshotMarkdown"
+    | "ReplayAccess"
+    | "Patch"
+    | "BulkPatch"
+    | "Facets"
   readonly reason: "CorruptRecord" | "Unavailable"
 }>
 
@@ -103,6 +117,19 @@ export type ArticleObjectLookup = DeepReadonly<
   | { readonly _tag: "NotFound" }
 >
 
+export type ReplayObjectLookup = DeepReadonly<
+  | {
+      readonly _tag: "Found"
+      readonly object: {
+        readonly key: ObjectKey
+        readonly mediaType: MediaType
+        readonly byteLength: number
+        readonly sha256: Sha256
+      }
+    }
+  | { readonly _tag: "NotFound" }
+>
+
 export type ArticleLibraryRepository = DeepReadonly<{
   readonly list: (
     ownerId: OwnerId,
@@ -112,10 +139,28 @@ export type ArticleLibraryRepository = DeepReadonly<{
     ownerId: OwnerId,
     articleId: ArticleId
   ) => Effect.Effect<ArticleLookup, ArticleLibraryError>
+  readonly findSnapshot: (
+    ownerId: OwnerId,
+    articleId: ArticleId,
+    snapshotId: SnapshotId
+  ) => Effect.Effect<ArticleLookup, ArticleLibraryError>
   readonly findMarkdown: (
     ownerId: OwnerId,
     articleId: ArticleId
   ) => Effect.Effect<ArticleObjectLookup, ArticleLibraryError>
+  readonly findSnapshotMarkdown: (
+    ownerId: OwnerId,
+    articleId: ArticleId,
+    snapshotId: SnapshotId
+  ) => Effect.Effect<ArticleObjectLookup, ArticleLibraryError>
+  readonly findReplayObject: (
+    ownerId: OwnerId,
+    snapshotId: SnapshotId,
+    object: Readonly<
+      | { readonly kind: "Replay" }
+      | { readonly kind: "Asset"; readonly assetName: string }
+    >
+  ) => Effect.Effect<ReplayObjectLookup, ArticleLibraryError>
   readonly patch: (
     ownerId: OwnerId,
     articleId: ArticleId,
@@ -138,6 +183,71 @@ export type OwnerArticleMarkdownResult = DeepReadonly<
   | { readonly _tag: "Found"; readonly markdown: string }
   | { readonly _tag: "NotFound" }
 >
+
+export type ReplayAccessSigningFailure = DeepReadonly<{
+  readonly _tag: "ReplayAccessSigningFailure"
+}>
+
+export type ReplayAccessSigner = DeepReadonly<{
+  readonly issue: (input: {
+    readonly objectKey: ObjectKey
+    readonly mediaType: MediaType
+    readonly expiresAtEpochMillis: number
+  }) => Effect.Effect<string, ReplayAccessSigningFailure>
+}>
+
+export type OwnerReplayAccessResult = DeepReadonly<
+  | {
+      readonly _tag: "Found"
+      readonly url: string
+      readonly mediaType: MediaType
+      readonly byteLength: number
+      readonly sha256: Sha256
+    }
+  | { readonly _tag: "NotFound" }
+>
+
+/** Authorization and exact immutable metadata lookup always precede signing. */
+export const createOwnerReplayAccess =
+  (ports: {
+    readonly articles: Pick<ArticleLibraryRepository, "findReplayObject">
+    readonly signer: ReplayAccessSigner
+    readonly nowEpochMillis: () => number
+  }) =>
+  (
+    ownerId: OwnerId,
+    snapshotId: SnapshotId,
+    object: Readonly<
+      | { readonly kind: "Replay" }
+      | { readonly kind: "Asset"; readonly assetName: string }
+    >
+  ) =>
+    ports.articles.findReplayObject(ownerId, snapshotId, object).pipe(
+      Effect.flatMap((lookup) => {
+        if (lookup._tag === "NotFound") {
+          return Effect.succeed<OwnerReplayAccessResult>(
+            deepFreeze({ _tag: "NotFound" })
+          )
+        }
+        return ports.signer
+          .issue({
+            objectKey: lookup.object.key,
+            mediaType: lookup.object.mediaType,
+            expiresAtEpochMillis: ports.nowEpochMillis() + 60_000,
+          })
+          .pipe(
+            Effect.map((url): OwnerReplayAccessResult =>
+              deepFreeze({
+                _tag: "Found",
+                url,
+                mediaType: lookup.object.mediaType,
+                byteLength: lookup.object.byteLength,
+                sha256: lookup.object.sha256,
+              })
+            )
+          )
+      })
+    )
 
 export const readOwnerArticleMarkdown =
   (ports: {
@@ -163,6 +273,30 @@ export const readOwnerArticleMarkdown =
         )
       )
 
+export const readOwnerSnapshotMarkdown =
+  (ports: {
+    readonly articles: Pick<ArticleLibraryRepository, "findSnapshotMarkdown">
+    readonly objects: MarkdownObjectReader
+  }) =>
+  (ownerId: OwnerId, articleId: ArticleId, snapshotId: SnapshotId) =>
+    ports.articles
+      .findSnapshotMarkdown(ownerId, articleId, snapshotId)
+      .pipe(
+        Effect.flatMap((lookup) =>
+          lookup._tag === "NotFound"
+            ? Effect.succeed<OwnerArticleMarkdownResult>(
+                deepFreeze({ _tag: "NotFound" })
+              )
+            : ports.objects
+                .read(lookup.key)
+                .pipe(
+                  Effect.map((markdown): OwnerArticleMarkdownResult =>
+                    deepFreeze({ _tag: "Found", markdown })
+                  )
+                )
+        )
+      )
+
 export type TriggerOwnerArticleArchiveResult = DeepReadonly<
   { readonly _tag: "NotFound" } | ArchiveArticleResult
 >
@@ -171,7 +305,10 @@ export type TriggerOwnerArticleArchiveResult = DeepReadonly<
 export const triggerOwnerArticleArchive =
   (ports: {
     readonly articles: Pick<ArticleLibraryRepository, "find">
-    readonly deriveArchiveRequestId: (articleId: ArticleId) => ArchiveRequestId
+    readonly deriveArchiveRequestId: (input: {
+      readonly articleId: ArticleId
+      readonly messageId: ArchiveMessageContext["messageId"]
+    }) => ArchiveRequestId
     readonly archive: (
       invocation: ArchiveArticleInvocation
     ) => Effect.Effect<ArchiveArticleResult, ArchiveStoreError | CaptureError>
@@ -192,7 +329,10 @@ export const triggerOwnerArticleArchive =
           )
         }
         return parse(ArchiveCommandSchema)({
-          archiveRequestId: ports.deriveArchiveRequestId(input.articleId),
+          archiveRequestId: ports.deriveArchiveRequestId({
+            articleId: input.articleId,
+            messageId: input.context.messageId,
+          }),
           articleId: lookup.article.articleId,
           sourceUrl: lookup.article.sourceUrl,
           title: lookup.article.title,

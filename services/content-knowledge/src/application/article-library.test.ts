@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  parseArticleListQuery,
   parseArticleStatePatch,
   triggerOwnerArticleArchive,
 } from "./article-library.js"
@@ -12,6 +13,21 @@ const context = {
   traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
   actor: { _tag: "User", userId: "owner-a" },
 } as never
+
+it("rejects NUL in an article search query before FTS", async () => {
+  await expect(
+    Effect.runPromise(
+      parseArticleListQuery({
+        limit: 50,
+        state: "All",
+        includeHidden: false,
+        feedIds: [],
+        q: "abc\0def",
+        order: "Newest",
+      })
+    )
+  ).rejects.toBeDefined()
+})
 
 describe("triggerOwnerArticleArchive", () => {
   it("rejects an empty or excess-property state patch", async () => {
@@ -43,10 +59,13 @@ describe("triggerOwnerArticleArchive", () => {
     expect(archive).not.toHaveBeenCalled()
   })
 
-  it("derives a stable request identity and delegates a trusted command", async () => {
+  it("derives a refresh intent from article and RPC message identity", async () => {
     const snapshot = { articleId: "unused" }
     const archive = vi.fn(() =>
       Effect.succeed({ _tag: "AlreadyArchived", snapshot } as never)
+    )
+    const deriveArchiveRequestId = vi.fn(
+      () => "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93" as never
     )
     const result = await Effect.runPromise(
       triggerOwnerArticleArchive({
@@ -61,8 +80,7 @@ describe("triggerOwnerArticleArchive", () => {
               },
             } as never),
         },
-        deriveArchiveRequestId: () =>
-          "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93" as never,
+        deriveArchiveRequestId,
         archive,
       })({
         ownerId: "owner-a" as never,
@@ -72,6 +90,10 @@ describe("triggerOwnerArticleArchive", () => {
     )
 
     expect(result).toEqual({ _tag: "AlreadyArchived", snapshot })
+    expect(deriveArchiveRequestId).toHaveBeenCalledWith({
+      articleId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
+      messageId: "724fefb9-5ee4-4c02-a2a7-4ca923eed2a4",
+    })
     expect(archive).toHaveBeenCalledWith({
       command: {
         archiveRequestId: "17b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",

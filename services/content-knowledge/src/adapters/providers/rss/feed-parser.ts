@@ -1,11 +1,15 @@
 import { XMLParser } from "fast-xml-parser"
 import { deepFreeze } from "@news-podcast/kernel"
+import { createHash } from "node:crypto"
 
 import type {
   FeedItem,
   FeedFetchError,
+  FeedItemValidationFailure,
+  FeedReadResult,
 } from "../../../application/ports/article-catalog.js"
 import type { FeedUrl } from "../../../domain/subscription.js"
+import type { Sha256 } from "../../../domain/article.js"
 
 type XmlObject = Readonly<Record<string, unknown>>
 
@@ -42,6 +46,21 @@ const textField = (node: XmlObject, name: string): string | undefined => {
 const attribute = (node: XmlObject, name: string): string | undefined => {
   const value = xmlText(node[`@_${name}`]).trim()
   return value === "" ? undefined : value
+}
+
+/** Preserves element names, attributes, array order, and text deterministically. */
+const canonicalXml = (value: unknown): unknown => {
+  if (value === undefined || value === null) return null
+  if (typeof value === "string" || typeof value === "number")
+    return String(value)
+  if (Array.isArray(value)) return value.map(canonicalXml)
+  const object = asObject(value)
+  if (object === undefined) return String(value)
+  return Object.fromEntries(
+    Object.keys(object)
+      .sort()
+      .map((key) => [key, canonicalXml(object[key])])
+  )
 }
 
 const parseDate = (value: string | undefined): string | undefined => {
@@ -90,7 +109,7 @@ const parserOptions = Object.freeze({
     tagName === "item" || tagName === "entry" || tagName === "link",
 })
 
-const parseRootItems = (parsed: unknown): readonly XmlObject[] => {
+const parseRootItems = (parsed: unknown): readonly unknown[] => {
   const document = asObject(parsed)
   if (document === undefined) throw failed()
   const rootName = Object.keys(document).find((name) => !name.startsWith("?"))
@@ -110,57 +129,90 @@ const parseRootItems = (parsed: unknown): readonly XmlObject[] => {
     throw failed()
   }
 
-  return asList(items).flatMap((item) => {
-    const object = asObject(item)
-    return object === undefined ? [] : [object]
-  })
+  return asList(items)
 }
 
-const parseItem = (node: XmlObject, feedUrl: FeedUrl): FeedItem | undefined => {
+type ParsedItem =
+  | Readonly<{ readonly _tag: "ValidItem"; readonly item: FeedItem }>
+  | FeedItemValidationFailure
+
+const invalidItem = (
+  reason: FeedItemValidationFailure["reason"]
+): FeedItemValidationFailure =>
+  deepFreeze({ _tag: "FeedItemValidationFailed", reason })
+
+const parseItem = (value: unknown, feedUrl: FeedUrl): ParsedItem => {
+  const node = asObject(value)
+  if (node === undefined) return invalidItem("InvalidItem")
   const title = textField(node, "title")
+  if (title === undefined) return invalidItem("MissingTitle")
+  if (title.length > 500) return invalidItem("TitleTooLong")
   const rawLink = parseLink(node)
-  if (title === undefined || title.length > 500 || rawLink === undefined)
-    return undefined
+  if (rawLink === undefined) return invalidItem("MissingLink")
 
   try {
     const url = new URL(rawLink, feedUrl)
-    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+    if (url.protocol !== "http:" && url.protocol !== "https:")
+      return invalidItem("InvalidUrl")
     url.hash = ""
     const externalId =
       textField(node, "guid") ??
       textField(node, "id") ??
       attribute(node, "about") ??
       url.href
-    const publishedAt = parseDate(
+    const explicitPublishedAt = parseDate(
       textField(node, "pubDate") ??
         textField(node, "published") ??
-        textField(node, "updated") ??
         textField(node, "date")
     )
+    const updatedAt = parseDate(textField(node, "updated"))
+    const publishedAt = explicitPublishedAt ?? updatedAt
+    const captureFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          title,
+          url: url.href,
+          publishedAt: explicitPublishedAt ?? null,
+          updatedAt: updatedAt ?? null,
+          content: ["description", "content", "encoded", "summary"].map(
+            (name) => ({ name, value: canonicalXml(node[name]) })
+          ),
+        })
+      )
+      .digest("hex") as Sha256
     return deepFreeze({
-      externalId: externalId.slice(0, 2_048),
-      title,
-      url: url.href,
-      ...(publishedAt === undefined ? {} : { publishedAt }),
+      _tag: "ValidItem" as const,
+      item: deepFreeze({
+        externalId: externalId.slice(0, 2_048),
+        captureFingerprint,
+        title,
+        url: url.href,
+        ...(publishedAt === undefined ? {} : { publishedAt }),
+      }),
     })
   } catch {
-    return undefined
+    return invalidItem("InvalidUrl")
   }
 }
 
 export const parseRssFeed = (
   body: string,
   feedUrl: FeedUrl
-): readonly FeedItem[] => {
+): FeedReadResult => {
   try {
     const parser = new XMLParser(parserOptions)
     const parsed = parser.parse(body, true)
-    return deepFreeze(
-      parseRootItems(parsed).flatMap((item) => {
-        const parsedItem = parseItem(item, feedUrl)
-        return parsedItem === undefined ? [] : [parsedItem]
-      })
+    const parsedItems = parseRootItems(parsed).map((item) =>
+      parseItem(item, feedUrl)
     )
+    return deepFreeze({
+      items: parsedItems.flatMap((item) =>
+        item._tag === "ValidItem" ? [item.item] : []
+      ),
+      failures: parsedItems.flatMap((item) =>
+        item._tag === "FeedItemValidationFailed" ? [item] : []
+      ),
+    })
   } catch (error) {
     if (isFeedFetchError(error)) throw error
     throw failed()

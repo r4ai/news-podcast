@@ -65,9 +65,6 @@ describe.runIf(live)("OpenAI enrichment live contract", () => {
         apiKey,
         model,
         requestTimeoutMillis: 120_000,
-        maximumAttempts: 1,
-        baseDelayMillis: 0,
-        maximumDelayMillis: 0,
       },
       { fetcher }
     )

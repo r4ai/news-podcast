@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-15
+- Amended: 2026-08-20（Issue #4: job persistence handleをユースケース責務へ分割）
 - Decision owners: Platform
 - Supersedes: N/A
 - Superseded by: ADR-0058（状態イベントをdurable AG-UIへ置換）
@@ -43,6 +44,30 @@
 ドメイン ↔ 行の変換は `adapters/persistence/job/state-columns.ts` に集約し、
 `EpisodeJobSchema` を唯一の正とする。
 
+永続化handleは、同じprocess-owned databaseを明示的に受け取る4責務へ分割する。
+
+```mermaid
+flowchart LR
+  Facade[makeJobHandle] --> Read[read-handle]
+  Facade --> Progress[progress-handle]
+  Facade --> Plan[plan-handle]
+  Facade --> Outbox[outbox-handle]
+  Read --> DB[(shared database)]
+  Progress --> DB
+  Plan --> DB
+  Outbox --> DB
+```
+
+| handle | 単一責務 | transaction境界 |
+| --- | --- | --- |
+| read | owner制約付きjob/event queryと状態集計 | なし |
+| progress | job状態遷移、lease fencing、進捗event | 状態とeventを一括commit |
+| plan | generation plan、辞書snapshot、checkpoint | lease確認とfirst-write-winsを一括commit |
+| outbox | 完了遷移とcompletion event配送状態 | job完了とoutbox insertを一括commit |
+
+`makeJobHandle` はapplication層向けの互換facadeとして4契約を合成し、外部契約を維持する。
+共通の行変換・lease判定・durable event追記だけを `shared.ts` に隔離する。
+
 ## 判断要因
 
 - 状態遷移がSQLからもコードからも追えること
@@ -77,12 +102,12 @@
 | 設計書 | 永続化の記述を更新 | Done | `docs/architecture.md` |
 | ドメイン/ユースケース | 変更なし（状態機械は不変） | Done | `services/episode-production/src/domain/episode-job.ts` |
 | OpenAPI/外部契約 | 変更なし | Done | `pnpm contract:check` |
-| コード/ポート | ハンドル契約（document文字列）は維持 | Done | `adapters/persistence/job/ports.ts` |
+| コード/ポート | document文字列の互換契約を維持し、read/progress/plan/outboxへ分割 | Done | `adapters/persistence/job/{handle,read-handle,progress-handle,plan-handle,outbox-handle,ports}.ts` |
 | データ/ストレージ | 初期マイグレーションで新スキーマを作成。既存volumeは作り直し | Done | `services/episode-production/drizzle/migrations` |
 | 実行/配備 | 変更なし | Done | N/A |
 | 認証/セキュリティ | 変更なし | Done | N/A |
 | フロント/品質保証 | 変更なし | Done | N/A |
-| テスト/運用 | 全状態の往復とイベント記録条件を固定 | Done | `state-columns.test.ts`, `status-events.test.ts` |
+| テスト/運用 | 全状態の往復、イベント記録条件、責務とtransaction境界を固定 | Done | `state-columns.test.ts`, `status-events.test.ts`, `handle-responsibilities.test.ts` |
 
 ## 再検討条件
 
@@ -96,4 +121,5 @@
 
 - `state-columns.test.ts`（全6状態の往復・不整合行の拒否・冪等指紋の不変性）
 - `status-events.test.ts`（トリガ相当の記録条件）
+- `handle-responsibilities.test.ts`（4責務の非重複な契約とtransaction境界）
 - リース・フェンシング・冪等性を検証する既存20件のテストが実質無変更で通過

@@ -91,7 +91,7 @@ describe.runIf(live)("OpenAI script generator live contract", () => {
       expect(output.sourceUrls).toEqual([sourceUrl])
     }
 
-    expect(observations).toHaveLength(samples)
+    expect(observations).toHaveLength(samples * 2)
     for (const observation of observations) {
       expect(observation.httpStatus).toBe(200)
       expect(observation.contentType).toMatch(/^application\/json\b/i)

@@ -165,27 +165,33 @@ const extractSources = (body) => {
   try {
     const input = Array.isArray(body?.input) ? body.input : []
     const user = input.find((item) => item?.role === "user")
-    const payload = JSON.parse(String(user?.content ?? "{}"))
+    const content = Array.isArray(user?.content) ? user.content : []
+    const inputText = content.find((part) => part?.type === "input_text")?.text
+    const payload = JSON.parse(String(inputText ?? user?.content ?? "{}"))
     const sources = Array.isArray(payload.sources) ? payload.sources : []
     return sources
-      .filter((source) => typeof source?.url === "string")
+      .filter((source) => typeof source?.source_id === "string")
       .map((source) => ({
         title: String(source.title ?? "負荷テスト記事"),
-        url: source.url,
+        sourceId: source.source_id,
       }))
   } catch {
     return []
   }
 }
 
-const openAiResponse = (body, fault) => {
+export const openAiResponse = (body, fault) => {
   const sources = extractSources(body)
-  const sourceUrls = sources.map((source) => source.url)
-  const validPayload = {
-    title: "負荷テストニュース",
-    script: `負荷テスト用Fake OpenAIが${sources[0]?.title ?? "記事"}を要約しました。`,
-    source_urls: sourceUrls.length > 0 ? sourceUrls : ["https://example.com/loadtest"],
-  }
+  const sourceIds = sources.map((source) => source.sourceId)
+  const objectName = body?.text?.format?.name
+  const validPayload =
+    objectName === "episode_script_quality_v1"
+      ? { verdict: "pass", reason_code: "none" }
+      : {
+          title: "負荷テストニュース",
+          script: `負荷テスト用Fake OpenAIが${sources[0]?.title ?? "記事"}を要約しました。`,
+          source_ids: sourceIds.length > 0 ? sourceIds : ["source-1"],
+        }
 
   if (fault === "malformed") return "{invalid-json"
   if (fault === "incomplete") {
@@ -204,11 +210,7 @@ const openAiResponse = (body, fault) => {
         content: [
           {
             type: "output_text",
-            text: JSON.stringify(
-              fault === "http-5xx"
-                ? { ...validPayload, source_urls: ["https://attacker.invalid/source"] }
-                : validPayload
-            ),
+            text: JSON.stringify(validPayload),
           },
         ],
       },

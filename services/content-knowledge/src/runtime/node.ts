@@ -1,6 +1,7 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import {
   noopObservability,
+  recordProviderConfiguration,
   type Observability,
 } from "@news-podcast/observability"
 import { Effect, Schema } from "effect"
@@ -8,6 +9,7 @@ import { Effect, Schema } from "effect"
 import {
   createArticleCatalog,
   createArticleLibrary,
+  createArticleSearchIndexRepository,
   createArchiveStore,
   createContentTaxonomy as createContentTaxonomyRepository,
   createEnrichmentQueue,
@@ -31,12 +33,17 @@ import type { SubscriptionRepository } from "../application/ports/subscription.j
 import type { FeedSyncQueueRepository } from "../application/feed-sync-queue.js"
 import { archiveArticle } from "../application/archive-article.js"
 import {
+  runArticleSearchIndexCycle,
+  type ArticleSearchIndexRepository,
+} from "../application/article-search-index.js"
+import {
   openHttpS3ArticleCaptureUnsafe,
   type HttpS3ArticleCaptureConfig,
   type HttpS3ArticleCaptureObserver,
   type HttpS3ArticleCaptureResource,
 } from "../infrastructure/unsafe/http-s3-article-capture.js"
 import { openS3MarkdownObjectReaderUnsafe } from "../infrastructure/unsafe/s3-markdown-object-reader.js"
+import { makeS3ReplayAccessSignerUnsafe } from "../infrastructure/unsafe/s3-replay-access-signer.js"
 import type { CapturedAt } from "../domain/article.js"
 import {
   currentCapturedAtUnsafe,
@@ -46,10 +53,7 @@ import {
   randomSyncJobIdUnsafe,
   randomTagIdUnsafe,
 } from "../infrastructure/unsafe/identity.js"
-import {
-  parseJsonUnsafe,
-  stringifyJsonUnsafe,
-} from "../infrastructure/unsafe/json.js"
+import { stringifyJsonUnsafe } from "../infrastructure/unsafe/json.js"
 import {
   openContentKnowledgeDatabaseUnsafe,
   type ContentKnowledgeDatabaseHandle,
@@ -69,6 +73,8 @@ import {
   runArchiveCleanupLoop,
 } from "./loops/archive-cleanup.js"
 import { makeArchiveCleanupObserver } from "./archive-cleanup-observability.js"
+import { makeArticleSearchIndexObserver } from "./article-search-index-observability.js"
+import { runArticleSearchIndexLoop } from "./loops/article-search-index.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -104,6 +110,10 @@ const DailyLimitSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(10_000)
 )
+const SearchIndexBatchSizeSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(100)
+)
 const S3TextSchema = Schema.NonEmptyString.check(Schema.isMaxLength(1_024))
 const HttpEndpointSchema = Schema.String.check(
   Schema.makeFilter((value: string) => {
@@ -119,10 +129,6 @@ const HttpEndpointSchema = Schema.String.check(
     }
   })
 )
-const ProviderAttemptSchema = Schema.Int.check(
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(5)
-)
 const ArchiveCleanupIntervalSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(24 * 60 * 60 * 1_000)
@@ -132,6 +138,7 @@ const ArchiveRetentionSchema = Schema.Int.check(
   Schema.isLessThanOrEqualTo(365 * 24 * 60 * 60 * 1_000)
 )
 export const NodeServiceConfigSchema = Schema.Struct({
+  appEnvironment: Schema.Literals(["development", "test", "production"]),
   sqlitePath: SqlitePathSchema,
   natsServers: Schema.NonEmptyArray(NatsServerSchema).check(
     Schema.isMaxLength(10)
@@ -154,17 +161,23 @@ export const NodeServiceConfigSchema = Schema.Struct({
   }),
   enrichment: Schema.Struct({
     dailyLimit: DailyLimitSchema,
+    resetDailyEnabled: Schema.Boolean,
     provider: Schema.NullOr(
       Schema.Struct({
         apiUrl: HttpEndpointSchema,
         apiKey: S3TextSchema,
         model: S3TextSchema,
         requestTimeoutMillis: LoopDelaySchema,
-        maximumAttempts: ProviderAttemptSchema,
-        baseDelayMillis: LoopDelaySchema,
-        maximumDelayMillis: LoopDelaySchema,
       })
     ),
+    loop: Schema.Struct({
+      intervalMillis: LoopDelaySchema,
+      initialBackoffMillis: LoopDelaySchema,
+      maximumBackoffMillis: LoopDelaySchema,
+    }),
+  }),
+  searchIndex: Schema.Struct({
+    batchSize: SearchIndexBatchSizeSchema,
     loop: Schema.Struct({
       intervalMillis: LoopDelaySchema,
       initialBackoffMillis: LoopDelaySchema,
@@ -200,11 +213,18 @@ export const parseNodeServiceConfig = (input: unknown) =>
           config.feedPoller.loop.maximumBackoffMillis &&
         config.enrichment.loop.initialBackoffMillis <=
           config.enrichment.loop.maximumBackoffMillis &&
+        config.searchIndex.loop.initialBackoffMillis <=
+          config.searchIndex.loop.maximumBackoffMillis &&
         config.archive.cleanup.retentionMillis > config.archive.timeoutMillis &&
-        (config.enrichment.provider === null ||
-          config.enrichment.provider.baseDelayMillis <=
-            config.enrichment.provider.maximumDelayMillis),
-      () => deepFreeze({ _tag: "InvalidBackoffRange" as const })
+        !(
+          config.appEnvironment === "production" &&
+          config.enrichment.resetDailyEnabled
+        ) &&
+        !(
+          config.appEnvironment === "production" &&
+          config.enrichment.provider === null
+        ),
+      () => deepFreeze({ _tag: "InvalidServiceConfig" as const })
     )
   )
 
@@ -217,6 +237,7 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
   readonly store: ArchiveStore
   readonly articles: ArticleCatalog
   readonly library: ArticleLibraryRepository
+  readonly searchIndex: ArticleSearchIndexRepository
   readonly subscriptions: SubscriptionRepository
   readonly feedSyncQueue: FeedSyncQueueRepository
   readonly taxonomy: ReturnType<typeof createContentTaxonomy>
@@ -225,6 +246,7 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
     readonly source: EnrichmentSource
     readonly provider: EnrichmentProvider
     readonly dailyLimit: number
+    readonly observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
   }) => ReturnType<typeof createEnrichmentOperations>
   readonly close: () => Effect.Effect<void, NodeRuntimeError>
 }>
@@ -250,6 +272,7 @@ export type NodeServiceDependencies = Readonly<{
   readonly runPoller: typeof runContentFeedPoller
   readonly enrichmentProvider?: EnrichmentProvider
   readonly runEnrichment: typeof runEnrichmentWorkerLoop
+  readonly runSearchIndex: typeof runArticleSearchIndexLoop
   readonly runArchiveCleanup: typeof runArchiveCleanupLoop
   readonly observability?: Observability
   readonly onReady?: () => void
@@ -263,7 +286,6 @@ const defaultDependencies: NodeRuntimeDependencies = deepFreeze({
   newEnrichmentLeaseToken: randomEnrichmentLeaseTokenUnsafe,
 })
 const jsonInterop = deepFreeze({
-  parse: parseJsonUnsafe,
   stringify: stringifyJsonUnsafe,
 })
 
@@ -296,8 +318,11 @@ export const startNodeRuntime = (
             Effect.mapError(() => runtimeError("Sqlite")),
             Effect.flatMap((store) =>
               Effect.all([
-                createArticleCatalog(handle.database, jsonInterop),
+                createArticleCatalog(handle.database),
                 createArticleLibrary(handle.database),
+                Effect.succeed(
+                  createArticleSearchIndexRepository(handle.database)
+                ),
                 createSubscriptionRepository(handle.database),
                 createContentTaxonomyRepository(handle.database),
                 createEnrichmentQueue(handle.database),
@@ -312,6 +337,7 @@ export const startNodeRuntime = (
                   ([
                     articles,
                     library,
+                    searchIndex,
                     subscriptions,
                     taxonomyRepository,
                     enrichmentQueue,
@@ -330,6 +356,9 @@ export const startNodeRuntime = (
                       readonly source: EnrichmentSource
                       readonly provider: EnrichmentProvider
                       readonly dailyLimit: number
+                      readonly observeAttempt?: (
+                        outcome: "Reserved" | "BudgetExhausted"
+                      ) => void
                     }) =>
                       createEnrichmentOperations({
                         queue: enrichmentQueue,
@@ -340,6 +369,7 @@ export const startNodeRuntime = (
                         dailyLimit: input.dailyLimit,
                         now: dependencies.now,
                         newLeaseToken: dependencies.newEnrichmentLeaseToken,
+                        observeAttempt: input.observeAttempt,
                       })
                     const close = () => closeDatabase(handle)
 
@@ -347,6 +377,7 @@ export const startNodeRuntime = (
                       store,
                       articles,
                       library,
+                      searchIndex,
                       subscriptions,
                       feedSyncQueue,
                       taxonomy,
@@ -374,6 +405,7 @@ export const defaultNodeServiceDependencies: NodeServiceDependencies =
     runRpc: runNatsContentKnowledgeRpc,
     runPoller: runContentFeedPoller,
     runEnrichment: runEnrichmentWorkerLoop,
+    runSearchIndex: runArticleSearchIndexLoop,
     runArchiveCleanup: runArchiveCleanupLoop,
     observability: noopObservability,
   })
@@ -385,8 +417,13 @@ export const runNodeService = (
 ): Effect.Effect<void, NodeRuntimeError> =>
   parseNodeServiceConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
-    Effect.flatMap((config) =>
-      Effect.scoped(
+    Effect.flatMap((config) => {
+      const observability = dependencies.observability ?? noopObservability
+      recordProviderConfiguration(observability, {
+        appEnvironment: config.appEnvironment,
+        providerMode: config.enrichment.provider === null ? "fake" : "live",
+      })
+      return Effect.scoped(
         Effect.acquireRelease(
           dependencies.startRuntime({
             sqlitePath: config.sqlitePath,
@@ -440,6 +477,13 @@ export const runNodeService = (
                               ),
                             })),
                       dailyLimit: config.enrichment.dailyLimit,
+                      observeAttempt: (outcome) =>
+                        observability.count("article.enrich.attempt", 1, {
+                          outcome:
+                            outcome === "Reserved"
+                              ? "reserved"
+                              : "budget_exhausted",
+                        }),
                     })
                     const generationPlanning = createGenerationPlanning({
                       catalog: runtime.articles,
@@ -473,6 +517,10 @@ export const runNodeService = (
                             natsServers: config.natsServers,
                             queueGroup: config.rpc.queueGroup,
                             onReady: dependencies.onReady,
+                            appEnvironment: config.appEnvironment,
+                            enrichmentResetEnabled:
+                              config.enrichment.resetDailyEnabled,
+                            observability,
                           },
                           runtime,
                           markdown.reader,
@@ -480,6 +528,9 @@ export const runNodeService = (
                           makeArticleLibraryHandler({
                             articles: runtime.library,
                             objects: markdown.reader,
+                            replaySigner: makeS3ReplayAccessSignerUnsafe(
+                              config.archive
+                            ),
                             now: currentCapturedAtUnsafe,
                             deriveArchiveRequestId:
                               deriveManualArchiveRequestIdUnsafe,
@@ -509,6 +560,19 @@ export const runNodeService = (
                           config.enrichment.loop,
                           enrichment.runCycle
                         ),
+                        dependencies.runSearchIndex(
+                          config.searchIndex.loop,
+                          () =>
+                            runArticleSearchIndexCycle(
+                              {
+                                repository: runtime.searchIndex,
+                                objects: markdown.reader,
+                                observer:
+                                  makeArticleSearchIndexObserver(observability),
+                              },
+                              config.searchIndex.batchSize
+                            )
+                        ),
                         dependencies.runArchiveCleanup(
                           config.archive.cleanup,
                           () =>
@@ -528,5 +592,5 @@ export const runNodeService = (
           )
         )
       )
-    )
+    })
   )

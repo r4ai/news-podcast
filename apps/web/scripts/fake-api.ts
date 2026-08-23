@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 const sessionCookieName = "news-podcast-e2e"
 const ownerId = "00000000-0000-4000-8000-000000000100"
+const secondOwnerId = "00000000-0000-4000-8000-000000000200"
 const feedId = "00000000-0000-4000-8000-000000000001"
 const subscriptionId = "00000000-0000-4000-8000-000000000002"
 const createdAt = "2026-08-10T00:00:00.000Z"
@@ -124,6 +125,22 @@ function seedArticles() {
     archiveUrl: `/v1/me/articles/00000000-0000-4000-8000-00000000001${index}/archive`,
     markdownUrl: `/v1/me/articles/00000000-0000-4000-8000-00000000001${index}/markdown`,
   }))
+}
+
+function seedSecondOwnerArticles(): ReturnType<typeof seedArticles> {
+  return [
+    {
+      ...seedArticles()[0]!,
+      id: "00000000-0000-4000-8000-000000000210",
+      title: "Owner B 専用ニュース",
+      url: "https://example.com/owner-b-news",
+      snapshotId: "00000000-0000-4000-8000-000000000220",
+      archiveUrl:
+        "/v1/me/articles/00000000-0000-4000-8000-000000000210/archive",
+      markdownUrl:
+        "/v1/me/articles/00000000-0000-4000-8000-000000000210/markdown",
+    },
+  ]
 }
 
 /**
@@ -285,7 +302,8 @@ export type FakeApi = {
  */
 export function createFakeApi(): FakeApi {
   const articles = seedArticles()
-  const sessions = new Set<string>()
+  const secondOwnerArticles = seedSecondOwnerArticles()
+  const sessions = new Map<string, string>()
   const state = {
     subscription: { id: subscriptionId, feedId, enabled: true, createdAt },
     settings: {
@@ -300,6 +318,10 @@ export function createFakeApi(): FakeApi {
       },
     },
     jobs: [] as Job[],
+    createRequests: new Map<
+      string,
+      { readonly fingerprint: string; readonly job: Job }
+    >(),
     syncJob: undefined as FeedSyncJob | undefined,
     episodes: seedEpisodes(),
     tags: seedTags(),
@@ -314,11 +336,12 @@ export function createFakeApi(): FakeApi {
 
     if (path === "/health") return json({ status: "ok" })
     if (path === "/api/auth/state") {
+      const authenticatedOwner = ownerFor(request, sessions)
       return json(
-        authenticated(request, sessions)
+        authenticatedOwner !== undefined
           ? {
               authenticated: true,
-              userId: ownerId,
+              userId: authenticatedOwner,
               loginMethods: { development: true, google: false },
             }
           : {
@@ -329,18 +352,38 @@ export function createFakeApi(): FakeApi {
     }
     if (path === "/api/dev/login" && request.method === "POST") {
       const body = await request.json().catch(() => ({}))
-      if ((body as { password?: string }).password !== "e2e-password") {
+      const password = (body as { password?: string }).password
+      const authenticatedOwner =
+        password === "e2e-password"
+          ? ownerId
+          : password === "e2e-password-b"
+            ? secondOwnerId
+            : undefined
+      if (authenticatedOwner === undefined) {
         return json({ error: "invalid credentials" }, 401)
       }
       const sessionId = randomUUID()
-      sessions.add(sessionId)
+      sessions.set(sessionId, authenticatedOwner)
       return json({ authenticated: true }, 200, {
         "Set-Cookie": `${sessionCookieName}=${sessionId}; Path=/; HttpOnly; SameSite=Lax`,
       })
     }
-    if (!authenticated(request, sessions)) {
+    if (path === "/api/dev/logout" && request.method === "POST") {
+      const sessionId = sessionIdFrom(request)
+      if (sessionId !== undefined) sessions.delete(sessionId)
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Set-Cookie": `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+        },
+      })
+    }
+    const authenticatedOwner = ownerFor(request, sessions)
+    if (authenticatedOwner === undefined) {
       return json({ error: "unauthorized" }, 401)
     }
+    const ownerArticles =
+      authenticatedOwner === secondOwnerId ? secondOwnerArticles : articles
 
     if (path === "/v1/feeds" && request.method === "GET") {
       return json({
@@ -487,39 +530,40 @@ export function createFakeApi(): FakeApi {
         failed: { count: 0, items: [] },
         recent: [],
         daily: { used: state.dailyUsed, limit: 200 },
-        reprocessable: { count: articles.length },
+        reprocessable: { count: ownerArticles.length },
       })
     }
     if (path === "/v1/me/enrich/reprocess" && request.method === "POST") {
-      return json({ enqueued: articles.length })
-    }
-    if (path === "/v1/me/enrich/reset-daily" && request.method === "POST") {
-      state.dailyUsed = 0
-      return json({ message: "Daily enrichment usage reset" })
+      return json({ enqueued: ownerArticles.length })
     }
     if (path === "/v1/me/articles" && request.method === "GET") {
       const query = url.searchParams.get("q")?.trim().toLocaleLowerCase("ja")
       const items = query
-        ? articles.filter((article) =>
+        ? ownerArticles.filter((article) =>
             [
               article.title,
               article.sourceName,
               ...(seededArticleTags[article.id] ?? []),
             ].some((value) => value.toLocaleLowerCase("ja").includes(query))
           )
-        : articles
+        : ownerArticles
       return json({ items, page: { hasMore: false } })
     }
     if (path === "/v1/me/articles/facets") {
       return json({
-        states: { all: 3, unread: 3, saved: 0, later: 0 },
-        feeds: [{ feedId, name: "Zenn", count: 3 }],
+        states: {
+          all: ownerArticles.length,
+          unread: ownerArticles.length,
+          saved: 0,
+          later: 0,
+        },
+        feeds: [{ feedId, name: "Zenn", count: ownerArticles.length }],
         aiPending: 0,
       })
     }
     const articleMatch = /^\/v1\/me\/articles\/([^/]+)(\/markdown)?$/.exec(path)
     if (articleMatch) {
-      const article = articles.find((item) => item.id === articleMatch[1])
+      const article = ownerArticles.find((item) => item.id === articleMatch[1])
       if (!article) return json({ error: "not found" }, 404)
       // 本文はOpenAPI通り`application/json`の`{ markdown }`で返す。
       // text/markdownで生本文を返すとWeb側の`parseAs: "text"`バグと
@@ -538,6 +582,26 @@ export function createFakeApi(): FakeApi {
     }
     if (path === "/v1/episode-jobs" && request.method === "POST") {
       const body = (await request.json()) as { articleIds: string[] }
+      const idempotencyKey = request.headers.get("idempotency-key")
+      if (!idempotencyKey) {
+        return json({ code: "invalid_request", message: "missing key" }, 400)
+      }
+      const scope = `${authenticatedOwner}:${idempotencyKey}`
+      const fingerprint = JSON.stringify([...body.articleIds].sort())
+      const existing = state.createRequests.get(scope)
+      if (existing !== undefined) {
+        return existing.fingerprint === fingerprint
+          ? json(existing.job, 202)
+          : json(
+              {
+                type: "about:blank",
+                title: "Idempotency conflict",
+                status: 409,
+                code: "idempotency_conflict",
+              },
+              409
+            )
+      }
       const episodeId = randomUUID()
       const job: Job = {
         id: randomUUID(),
@@ -549,6 +613,7 @@ export function createFakeApi(): FakeApi {
         episodeId,
       }
       state.jobs.unshift(job)
+      state.createRequests.set(scope, { fingerprint, job })
       state.episodes.unshift({
         id: episodeId,
         title: "今日の開発ニュース",
@@ -678,17 +743,20 @@ function eventStream(job: Job, articles: FakeApi["articles"]): Response {
   })
 }
 
-function authenticated(
-  request: Request,
-  sessions: ReadonlySet<string>
-): boolean {
-  const sessionId = request.headers
+function sessionIdFrom(request: Request): string | undefined {
+  return request.headers
     .get("cookie")
     ?.split(";")
     .map((cookie) => cookie.trim().split("="))
     .find(([name]) => name === sessionCookieName)?.[1]
+}
 
-  return sessionId !== undefined && sessions.has(sessionId)
+function ownerFor(
+  request: Request,
+  sessions: ReadonlyMap<string, string>
+): string | undefined {
+  const sessionId = sessionIdFrom(request)
+  return sessionId === undefined ? undefined : sessions.get(sessionId)
 }
 
 function json(

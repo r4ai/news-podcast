@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import {
   noopObservability,
+  recordProviderConfiguration,
   type Observability,
 } from "@news-podcast/observability"
 import { DateTime, Effect, Schema } from "effect"
@@ -42,13 +43,19 @@ import { runCompletionRelayLoop } from "./loops/completion-relay.js"
 import {
   defaultNodeCreateJobRpcDependencies,
   NodeCreateJobRpcConfigSchema,
-  runNodeProductionRpc,
+  runProductionRpcWithDatabase,
 } from "./node.js"
 import {
+  MAX_CANCELLATION_POLL_MILLIS,
   runEpisodeWorkerLoop,
   type EpisodeWorkerEvent,
 } from "./loops/worker.js"
-import { recordEpisodeWorkerEvent } from "./worker-observability.js"
+import {
+  recordCancellationPropagation,
+  recordEpisodeWorkerEvent,
+  recordScriptQualityObservation,
+} from "./worker-observability.js"
+import { makeJobCancellationRegistry } from "./job-cancellation-registry.js"
 
 const positive = (maximum: number) =>
   Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(maximum))
@@ -75,6 +82,7 @@ const retryPolicy = Schema.Struct({
 })
 
 export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
+  appEnvironment: Schema.Literals(["development", "test", "production"]),
   rpc: NodeCreateJobRpcConfigSchema,
   contentRequestTimeoutMillis: positive(30_000),
   providerMode: Schema.Union([Schema.Literal("fake"), Schema.Literal("live")]),
@@ -107,6 +115,7 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
   worker: Schema.Struct({
     leaseMillis: positive(3_600_000),
     heartbeatMillis: positive(1_200_000),
+    cancellationPollMillis: positive(MAX_CANCELLATION_POLL_MILLIS),
     retryDelayMillis: positive(3_600_000),
     idleMillis: positive(60_000),
   }).check(
@@ -129,9 +138,11 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
   }),
 }).check(
   Schema.makeFilter((config) =>
-    config.providerMode === "fake" || config.openAi.apiKey.length > 0
+    (config.appEnvironment !== "production" ||
+      config.providerMode === "live") &&
+    (config.providerMode === "fake" || config.openAi.apiKey.length > 0)
       ? true
-      : "OPENAI_API_KEY is required in live provider mode"
+      : "production requires live provider mode with OPENAI_API_KEY"
   )
 )
 export type NodeEpisodeProductionServiceConfig = DeepReadonly<
@@ -171,7 +182,8 @@ export const runNodeEpisodeProductionService = (
       Effect.scoped(
         Effect.gen(function* () {
           const observability = dependencies.observability ?? noopObservability
-          // 接続はプロセスにつき1本。以前は同じDBへ最大6本を開いていた。
+          recordProviderConfiguration(observability, config)
+          // process rootだけがDBを所有し、RPC/worker/relay/schedulerへ共有する。
           const database = yield* Effect.acquireRelease(
             Effect.try({
               try: () => openProductionDatabaseUnsafe(config.rpc.sqlitePath),
@@ -212,6 +224,7 @@ export const runNodeEpisodeProductionService = (
             Effect.sync(() => new AbortController()),
             (resource) => Effect.sync(() => resource.abort())
           )
+          const cancellations = makeJobCancellationRegistry()
           const now = currentUtcTimestampUnsafe
           const articles = makeContentArticleMaterializer(content, {
             newMessageId: randomUUID,
@@ -226,10 +239,19 @@ export const runNodeEpisodeProductionService = (
           const script =
             config.providerMode === "fake"
               ? makeFakeScriptGenerator()
-              : makeOpenAiScriptGenerator({
-                  ...config.openAi,
-                  apiUrl: new URL(config.openAi.apiUrl),
-                })
+              : makeOpenAiScriptGenerator(
+                  {
+                    ...config.openAi,
+                    apiUrl: new URL(config.openAi.apiUrl),
+                  },
+                  {
+                    observeQuality: (observation) =>
+                      recordScriptQualityObservation(
+                        observability,
+                        observation
+                      ),
+                  }
+                )
           const readingTerms =
             config.providerMode === "fake"
               ? makeNoopReadingTermExtractor()
@@ -333,15 +355,20 @@ export const runNodeEpisodeProductionService = (
             {
               leaseNext: execution.leaseNext,
               renewLease: execution.renewLease,
+              checkCancellation: execution.checkCancellation,
+              subscribeCancellation: cancellations.subscribe,
               execute,
               now,
               leasedUntil: (instant) =>
                 addMillis(instant, config.worker.leaseMillis),
               nextLeaseToken: randomLeaseTokenUnsafe,
               heartbeatMillis: config.worker.heartbeatMillis,
+              cancellationPollMillis: config.worker.cancellationPollMillis,
               backoffMillis: () => config.worker.idleMillis,
               wait: (delay) => Effect.sleep(delay),
               observe: observeWorkerEvent,
+              recordCancellationPropagation: (event) =>
+                recordCancellationPropagation(observability, event),
             },
             controller.signal
           ).pipe(Effect.mapError(() => runtimeError("Execution")))
@@ -389,25 +416,38 @@ export const runNodeEpisodeProductionService = (
                       idempotencyKey: parsedIdempotencyKey,
                       trigger: "scheduled",
                     })
-                  ),
-                  Effect.asVoid
+                  )
                 ),
               complete: identitySchedule.complete,
               wait: (delay) => Effect.sleep(delay),
               observe: (event) =>
-                Effect.logInfo("scheduled generation state", {
-                  event_name: event._tag,
-                  owner_id: event.ownerId,
-                  local_date: event.localDate,
-                }),
+                Effect.sync(() =>
+                  observability.count("episode.schedule.outcomes", 1, {
+                    "schedule.outcome": event._tag.toLowerCase(),
+                  })
+                ).pipe(
+                  Effect.andThen(
+                    Effect.logInfo("scheduled generation state", {
+                      event_name: event._tag,
+                      owner_id: event.ownerId,
+                      local_date: event.localDate,
+                    })
+                  )
+                ),
             },
             config.scheduler,
             controller.signal
           )
-          const rpc = runNodeProductionRpc(config.rpc, {
-            ...defaultNodeCreateJobRpcDependencies,
-            onReady,
-          }).pipe(Effect.mapError(() => runtimeError("Execution")))
+          const rpc = runProductionRpcWithDatabase(
+            config.rpc,
+            database.database,
+            {
+              ...defaultNodeCreateJobRpcDependencies,
+              onReady,
+              onJobCanceled: (job) =>
+                void cancellations.notify(job.jobId, job.canceledAt),
+            }
+          ).pipe(Effect.mapError(() => runtimeError("Execution")))
 
           yield* Effect.all([rpc, worker, relay, scheduler], {
             concurrency: "unbounded",

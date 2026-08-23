@@ -15,6 +15,14 @@ import {
   runNatsContentKnowledgeRpc,
   startNodeRuntime,
 } from "../services/content-knowledge/src/runtime/index.js"
+import { makeArticleLibraryHandler } from "../services/content-knowledge/src/runtime/rpc/article-library-handler.js"
+import {
+  ArchiveCaptureSchema,
+  ArchiveCommandSchema,
+  CapturedAtSchema,
+  SnapshotIdSchema,
+  createArticleSnapshot,
+} from "../services/content-knowledge/src/domain/article.js"
 import {
   defaultNodeEpisodeLibraryServiceDependencies,
   runNodeEpisodeLibraryService,
@@ -117,6 +125,9 @@ const main = Effect.scoped(
       }),
       (runtime) => runtime.close().pipe(Effect.ignore)
     )
+    const e2eMarkdownReader = {
+      read: () => Effect.succeed("# E2E article"),
+    }
     yield* Effect.forkScoped(
       runNatsContentKnowledgeRpc(
         {
@@ -124,7 +135,16 @@ const main = Effect.scoped(
           queueGroup: "content-e2e",
         },
         content,
-        { read: () => Effect.succeed("# E2E article") }
+        e2eMarkdownReader,
+        undefined,
+        makeArticleLibraryHandler({
+          articles: content.library,
+          objects: e2eMarkdownReader,
+          now: () => "2026-08-23T00:00:00.000Z" as never,
+          deriveArchiveRequestId: () =>
+            "6c4d046c-b47b-4047-a562-66ac7e74e995" as never,
+          archive: () => Effect.die("archive is outside this E2E"),
+        })
       )
     )
     yield* Effect.forkScoped(
@@ -254,6 +274,89 @@ const main = Effect.scoped(
       assert(
         Array.isArray(subscriptions.items) && subscriptions.items.length === 1,
         "owner subscription projection was not materialized"
+      )
+
+      // 本番と同じcatalog -> snapshot queue -> persistent FTS repository ->
+      // NATS/Gateway検索を通す。ブラウザfakeのメモリ内filterでは検証しない。
+      const feedId = String(added.feedId)
+      const searchArticleId = "9c4d046c-b47b-4047-a562-66ac7e74e995"
+      await Effect.runPromise(
+        content.articles.upsert({
+          articleId: searchArticleId as never,
+          feedId: feedId as never,
+          externalId: "body-search-e2e",
+          sourceUrl: "https://example.com/indexed-article" as never,
+          title: "Persistent search contract" as never,
+          publishedAt: "2026-08-23T00:00:00.000Z",
+          discoveredAt: "2026-08-23T00:01:00.000Z",
+        })
+      )
+      const searchSnapshot = createArticleSnapshot({
+        command: Schema.decodeUnknownSync(ArchiveCommandSchema)({
+          archiveRequestId: "8c4d046c-b47b-4047-a562-66ac7e74e995",
+          articleId: searchArticleId,
+          sourceUrl: "https://example.com/indexed-article",
+          title: "Persistent search contract",
+        }),
+        snapshotId: Schema.decodeUnknownSync(SnapshotIdSchema)(
+          "7c4d046c-b47b-4047-a562-66ac7e74e995"
+        ),
+        capturedAt: Schema.decodeUnknownSync(CapturedAtSchema)(
+          "2026-08-23T00:02:00.000Z"
+        ),
+        capture: Schema.decodeUnknownSync(ArchiveCaptureSchema)({
+          rawResponse: {
+            _tag: "RawResponse",
+            key: "articles/search/raw/response.html",
+            sha256: "1".repeat(64),
+            mediaType: "text/html",
+            byteLength: 10,
+          },
+          replay: {
+            _tag: "Replay",
+            key: "articles/search/replay/index.html",
+            sha256: "2".repeat(64),
+            mediaType: "text/html",
+            byteLength: 10,
+          },
+          markdown: {
+            _tag: "Markdown",
+            key: "articles/search/markdown/article.md",
+            sha256: "3".repeat(64),
+            mediaType: "text/markdown",
+            byteLength: 50,
+          },
+          assets: [],
+        }),
+      })
+      await Effect.runPromise(
+        content.store.commit({ snapshot: searchSnapshot })
+      )
+      const [searchPending] = await Effect.runPromise(
+        content.searchIndex.listPending(10)
+      )
+      assert(searchPending !== undefined, "search index work was not queued")
+      await Effect.runPromise(
+        content.searchIndex.index({
+          pending: searchPending,
+          body: "この保存本文だけに body-only-needle が存在します。",
+        })
+      )
+      const bodySearchResponse = await request(
+        web.handler,
+        "/v1/me/articles?q=body-only-needle&limit=1",
+        { headers }
+      )
+      assert(
+        bodySearchResponse.status === 200,
+        `body search request failed: ${bodySearchResponse.status} ${await bodySearchResponse.clone().text()}`
+      )
+      const bodySearch = await json(bodySearchResponse)
+      assert(
+        Array.isArray(bodySearch.items) &&
+          (bodySearch.items[0] as Record<string, unknown>)?.id ===
+            searchArticleId,
+        "persisted indexed body was not searchable through the public API"
       )
 
       const create = (articleIds: readonly string[]) =>
@@ -511,6 +614,7 @@ const main = Effect.scoped(
         conflict: "rejected",
         jobControl: "read-replay-cancel-fenced",
         subscription: "owner-scoped",
+        articleBodySearch: "persistent-indexed-latest-snapshot",
         ownerBoundary: "enforced",
         completion: "jetstream-materialized",
         episodeDetail: "readable-with-same-origin-audio",

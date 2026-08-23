@@ -4,22 +4,34 @@ import { describe, expect, it } from "vitest"
 
 import {
   AddFeedSubscriptionRequestSchema,
+  ArticleSearchQuerySchema,
   CreateEpisodeJobHeadersSchema,
   CreateEpisodeJobRequestSchema,
   EpisodeSchema,
   gatewayApi,
   generateOpenApi,
   JobReceiptSchema,
+  RetryEpisodeJobHeadersSchema,
 } from "./contract.js"
 
 const validArticleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
 
 describe("gateway HttpApi contract", () => {
+  it("rejects NUL in an article search query before RPC", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(ArticleSearchQuerySchema)("abc\0def")
+    ).toThrow()
+  })
   it("keeps the public idempotency key within the RPC limit", () => {
     expect(() =>
       Schema.decodeUnknownSync(CreateEpisodeJobHeadersSchema)({
         "idempotency-key": "x".repeat(129),
       })
+    ).toThrow()
+  })
+  it("requires an idempotency key for retry operations", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(RetryEpisodeJobHeadersSchema)({})
     ).toThrow()
   })
   it("generates the complete public OpenAPI 3.1 surface", () => {
@@ -42,6 +54,9 @@ describe("gateway HttpApi contract", () => {
       "/v1/episodes/{episodeId}",
       "/v1/episodes/{episodeId}/audio",
       "/v1/feeds",
+      "/v1/me/article-snapshots/{snapshotId}/assets/{assetName}",
+      "/v1/me/article-snapshots/{snapshotId}/replay",
+      "/v1/me/article-snapshots/{snapshotId}/replay/index.html",
       "/v1/me/articles",
       "/v1/me/articles/bulk-state",
       "/v1/me/articles/facets",
@@ -49,6 +64,8 @@ describe("gateway HttpApi contract", () => {
       "/v1/me/articles/{articleId}/archive",
       "/v1/me/articles/{articleId}/enrich",
       "/v1/me/articles/{articleId}/markdown",
+      "/v1/me/articles/{articleId}/snapshots/{snapshotId}",
+      "/v1/me/articles/{articleId}/snapshots/{snapshotId}/markdown",
       "/v1/me/articles/{articleId}/tags",
       "/v1/me/enrich/queue",
       "/v1/me/enrich/reprocess",
@@ -76,6 +93,17 @@ describe("gateway HttpApi contract", () => {
       specification.paths["/v1/episode-jobs"]?.post?.responses?.["202"]?.headers
     ).toHaveProperty("location")
     expect(
+      specification.paths["/v1/episode-jobs/{jobId}/retry"]?.post?.parameters
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          in: "header",
+          name: "idempotency-key",
+          required: true,
+        }),
+      ])
+    )
+    expect(
       specification.paths["/v1/episodes/{episodeId}/audio"]?.get?.responses
     ).toHaveProperty("404")
     expect(
@@ -91,19 +119,63 @@ describe("gateway HttpApi contract", () => {
     ).toHaveProperty("202")
   })
 
-  it("accepts only canonical credential-free feed URLs", async () => {
-    const valid = await Effect.runPromise(
-      Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
-        feedUrl: "https://feeds.example.com/news.xml",
-      })
-    )
+  it("documents global metadata and every public operation", () => {
+    const specification = generateOpenApi()
 
-    expect(valid.feedUrl).toBe("https://feeds.example.com/news.xml")
+    expect(specification.servers).toEqual([
+      { url: "/", description: "Same-origin public Gateway" },
+    ])
+    expect((specification.info as Record<string, unknown>).contact).toEqual({
+      name: "RSS News Podcast API maintainers",
+      url: "https://github.com/r4ai/news-podcast/issues",
+    })
+
+    for (const pathItem of Object.values(specification.paths))
+      for (const operation of Object.values(pathItem)) {
+        if (
+          typeof operation !== "object" ||
+          operation === null ||
+          !("operationId" in operation)
+        )
+          continue
+        if (
+          typeof operation.summary !== "string" ||
+          typeof operation.description !== "string"
+        )
+          throw new Error(`missing documentation for ${operation.operationId}`)
+        expect(operation.summary.length).toBeGreaterThan(0)
+        expect(operation.description.length).toBeGreaterThan(0)
+      }
+  })
+
+  it.each([
+    ["https://example.com", "https://example.com/"],
+    ["https://EXAMPLE.com/feed", "https://example.com/feed"],
+    ["https://example.com:443/feed", "https://example.com/feed"],
+    [
+      "https://example.com/a b?q=hello world&next=%2f",
+      "https://example.com/a%20b?q=hello%20world&next=%2f",
+    ],
+  ])(
+    "canonicalizes a valid HTTP feed URL at the boundary",
+    async (input, expected) => {
+      const valid = await Effect.runPromise(
+        Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
+          feedUrl: input,
+        })
+      )
+
+      expect(valid.feedUrl).toBe(expected)
+    }
+  )
+
+  it("rejects unsafe feed URLs after canonicalization", async () => {
     for (const feedUrl of [
       "javascript:alert(1)",
       "https://user:secret@feeds.example.com/news.xml",
       "https://feeds.example.com/news.xml#section",
-      "https://feeds.example.com/has space",
+      "https://feeds.example.com/news.xml#",
+      `https://feeds.example.com/${"x".repeat(2_049)}`,
     ]) {
       const exit = await Effect.runPromiseExit(
         Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
@@ -114,8 +186,55 @@ describe("gateway HttpApi contract", () => {
     }
   })
 
+  it("applies the length limit to the canonical URL rather than the raw spelling", async () => {
+    const prefix = "https://example.com:443/"
+    const input = `${prefix}${"x".repeat(2_049 - prefix.length)}`
+    const expected = new URL(input).href
+
+    expect(input.length).toBe(2_049)
+    expect(expected.length).toBe(2_045)
+    await expect(
+      Effect.runPromise(
+        Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
+          feedUrl: input,
+        })
+      )
+    ).resolves.toEqual({ feedUrl: expected })
+  })
+
   it("is generated by Effect OpenApi without a handwritten document", () => {
     expect(generateOpenApi()).toEqual(OpenApi.fromApi(gatewayApi))
+  })
+
+  it("publishes only the closed public HTTP Problem variants", () => {
+    const schemas = generateOpenApi().components?.schemas
+    const problems = JSON.stringify({
+      badRequest: schemas?.BadRequestProblem,
+      unauthorized: schemas?.UnauthorizedProblem,
+      notFound: schemas?.NotFoundProblem,
+      conflict: schemas?.ConflictProblem,
+      unprocessable: schemas?.UnprocessableProblem,
+      unavailable: schemas?.UnavailableProblem,
+    })
+
+    for (const code of [
+      "invalid_subscription_request",
+      "feed_subscription_exists",
+      "authentication_required",
+      "episode_not_found",
+      "feed_subscription_not_found",
+      "resource_not_found",
+      "article_not_found",
+      "episode_job_not_found",
+      "idempotency_conflict",
+      "resource_conflict",
+      "job_terminal",
+      "job_not_failed",
+      "feed_subscription_rejected",
+      "upstream_unavailable",
+    ])
+      expect(problems).toContain(code)
+    expect(problems).not.toContain('"detail"')
   })
 
   it("publishes only article list capabilities implemented end to end", () => {
@@ -136,7 +255,7 @@ describe("gateway HttpApi contract", () => {
       "state",
     ])
     expect(JSON.stringify(specification.components?.schemas)).toContain(
-      "Matches article title, source URL, or owner tag name."
+      "Literal partial match against article title, source URL, owner tag name, or the persisted Markdown body of the latest snapshot accessible to the authenticated owner."
     )
     const article = specification.components?.schemas?.Article
     expect(JSON.stringify(article)).not.toContain("usedInEpisode")

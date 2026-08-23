@@ -37,6 +37,18 @@ const succeededJob = {
   episodeId: "episode-1",
 }
 
+const failedJob = {
+  ...runningJob,
+  id: "00000000-0000-4000-8000-000000000085",
+  status: "failed",
+  stage: null,
+  failure: {
+    code: "script_timeout",
+    message: "script_timeout",
+    retryable: false,
+  },
+}
+
 const projectedEpisode = {
   id: "episode-1",
   title: "投影を待った番組",
@@ -271,6 +283,103 @@ describe("useGeneration", () => {
 
     await act(async () => result.current?.onRetryProjection())
     expect(projection.detailCalls()).toBe(attemptsAtTimeout + 1)
+  })
+
+  it("reuses the create key after an ambiguous response loss until the selection changes", async () => {
+    vi.useRealTimers()
+    const randomUUID = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000101")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000102")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000103")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000104")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000105")
+    const firstArticleId = "00000000-0000-4000-8000-000000000001"
+    const secondArticleId = "00000000-0000-4000-8000-000000000002"
+    const { calls } = stubFetch([
+      ...routes(),
+      {
+        method: "POST",
+        path: "/v1/episode-jobs",
+        status: 503,
+        body: { code: "service_unavailable", message: "response lost" },
+      },
+    ])
+    const { result } = renderHookWithProviders(() => useGeneration())
+    await vi.waitFor(() => expect(result.current?.state).toBe("running"))
+
+    act(() =>
+      result.current?.onConfirmGenerate([firstArticleId, secondArticleId])
+    )
+    await vi.waitFor(() => expect(randomUUID).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() =>
+      expect(calls.filter((call) => call.method === "POST")).toHaveLength(1)
+    )
+    act(() =>
+      result.current?.onConfirmGenerate([firstArticleId, secondArticleId])
+    )
+    await vi.waitFor(() => {
+      const posts = calls.filter((call) => call.method === "POST")
+      expect(posts).toHaveLength(2)
+    })
+
+    act(() => result.current?.onConfirmGenerate([firstArticleId]))
+    await vi.waitFor(() => {
+      const posts = calls.filter((call) => call.method === "POST")
+      expect(posts).toHaveLength(3)
+      expect(posts[0]?.headers.get("idempotency-key")).toBe(
+        posts[1]?.headers.get("idempotency-key")
+      )
+      expect(posts[2]?.headers.get("idempotency-key")).not.toBe(
+        posts[1]?.headers.get("idempotency-key")
+      )
+    })
+
+    act(() => result.current?.onPickerOpenChange(false))
+    act(() => result.current?.onConfirmGenerate([firstArticleId]))
+    await vi.waitFor(() =>
+      expect(calls.filter((call) => call.method === "POST")).toHaveLength(4)
+    )
+    act(() => result.current?.onGenerate())
+    act(() => result.current?.onConfirmGenerate([firstArticleId]))
+    await vi.waitFor(() => {
+      const posts = calls.filter((call) => call.method === "POST")
+      expect(posts).toHaveLength(5)
+      expect(posts[3]?.headers.get("idempotency-key")).not.toBe(
+        posts[2]?.headers.get("idempotency-key")
+      )
+      expect(posts[4]?.headers.get("idempotency-key")).not.toBe(
+        posts[3]?.headers.get("idempotency-key")
+      )
+    })
+  })
+
+  it("reuses the retry key after an ambiguous response loss", async () => {
+    vi.useRealTimers()
+    const { calls } = stubFetch([
+      { path: "/v1/episode-jobs", body: { items: [failedJob] } },
+      ...routes().slice(1),
+      {
+        method: "POST",
+        path: `/v1/episode-jobs/${failedJob.id}/retry`,
+        status: 503,
+        body: { code: "service_unavailable", message: "response lost" },
+      },
+    ])
+    const { result } = renderHookWithProviders(() => useGeneration())
+    await vi.waitFor(() => expect(result.current?.state).toBe("failed"))
+
+    act(() => result.current?.onRetry())
+    await vi.waitFor(() => expect(result.current?.submitError).toBeDefined())
+    act(() => result.current?.onRetry())
+    await vi.waitFor(() => {
+      const retries = calls.filter((call) => call.method === "POST")
+      expect(retries).toHaveLength(2)
+      expect(retries[0]?.headers.get("idempotency-key")).not.toBeNull()
+      expect(retries[0]?.headers.get("idempotency-key")).toBe(
+        retries[1]?.headers.get("idempotency-key")
+      )
+    })
   })
 })
 

@@ -3,6 +3,7 @@ import type { Effect } from "effect"
 
 import type {
   ObjectKey,
+  Sha256,
   ArticleId,
   ArticleTitle,
   ArticleUrl,
@@ -12,9 +13,26 @@ import type { FeedId, OwnerId } from "../../domain/subscription.js"
 
 export type FeedItem = DeepReadonly<{
   readonly externalId: string
+  /** Stable for retries; changes when capture-relevant feed metadata changes. */
+  readonly captureFingerprint: Sha256
   readonly title: string
   readonly url: string
   readonly publishedAt?: string
+}>
+
+export type FeedItemValidationFailure = DeepReadonly<{
+  readonly _tag: "FeedItemValidationFailed"
+  readonly reason:
+    | "InvalidItem"
+    | "InvalidUrl"
+    | "MissingLink"
+    | "MissingTitle"
+    | "TitleTooLong"
+}>
+
+export type FeedReadResult = DeepReadonly<{
+  readonly items: readonly FeedItem[]
+  readonly failures: readonly FeedItemValidationFailure[]
 }>
 
 export type FeedFetchError = DeepReadonly<{
@@ -31,7 +49,7 @@ export type FeedFetchError = DeepReadonly<{
 export type RssFeedReader = DeepReadonly<{
   readonly read: (
     url: import("../../domain/subscription.js").FeedUrl
-  ) => Effect.Effect<readonly FeedItem[], FeedFetchError>
+  ) => Effect.Effect<FeedReadResult, FeedFetchError>
 }>
 
 export type CatalogArticle = DeepReadonly<{
@@ -67,6 +85,14 @@ export type ArticleCatalog = DeepReadonly<{
     readonly title: ArticleTitle
     readonly publishedAt?: string
     readonly discoveredAt: string
+    readonly captureFingerprint?: Sha256
+  }) => Effect.Effect<
+    Readonly<{ _tag: "CaptureRequired" } | { _tag: "Unchanged" }>,
+    ArticleCatalogError
+  >
+  readonly markCaptured: (input: {
+    readonly articleId: ArticleId
+    readonly captureFingerprint: Sha256
   }) => Effect.Effect<void, ArticleCatalogError>
   readonly findAutomatic: (
     ownerId: OwnerId,

@@ -271,6 +271,72 @@ describe("Node observability configuration", () => {
     await observability.shutdown()
   })
 
+  it("retains bounded script quality dimensions after adapter sanitization", async () => {
+    const metricExporter = new InMemoryMetricExporter(
+      AggregationTemporality.CUMULATIVE
+    )
+    const metricReader = new PeriodicExportingMetricReader({
+      exporter: metricExporter,
+      exportIntervalMillis: 60_000,
+    })
+    const logExporter = new InMemoryLogRecordExporter()
+    const observability = createNodeObservability(
+      {
+        enabled: true,
+        endpoint: "http://unused.test",
+        serviceName: "test",
+        serviceVersion: "test",
+        environment: "test",
+        traceSampleRate: 1,
+        autoInstrumentation: false,
+        propagationAllowlist: new Set<string>(),
+      },
+      { metricReader, logExporter }
+    )
+    const attributes = {
+      "gen_ai.request.model": "gpt-5.6-luna",
+      "episode.script.prompt.version": "episode-script-v2",
+      "episode.script.quality_prompt.version": "episode-script-quality-v1",
+      "quality.outcome": "reject",
+      "quality.reason": "prompt_injection",
+      "article.body": "must-never-be-exported",
+    }
+
+    observability.count("episode.script.quality", 1, attributes)
+    observability.log({
+      name: "episode.script.quality_evaluated",
+      attributes,
+    })
+    const collected = await metricReader.collect()
+    await (
+      logs.getLoggerProvider() as unknown as {
+        forceFlush(): Promise<void>
+      }
+    ).forceFlush()
+
+    const metric = collected.resourceMetrics.scopeMetrics
+      .flatMap(({ metrics }) => metrics)
+      .find(
+        (candidate) => candidate.descriptor.name === "episode.script.quality"
+      )
+    expect(metric?.dataPoints[0]?.attributes).toEqual({
+      "gen_ai.request.model": "gpt-5.6-luna",
+      "episode.script.prompt.version": "episode-script-v2",
+      "episode.script.quality_prompt.version": "episode-script-quality-v1",
+      "quality.outcome": "reject",
+      "quality.reason": "prompt_injection",
+    })
+    expect(logExporter.getFinishedLogRecords()[0]?.attributes).toEqual({
+      "gen_ai.request.model": "gpt-5.6-luna",
+      "episode.script.prompt.version": "episode-script-v2",
+      "episode.script.quality_prompt.version": "episode-script-quality-v1",
+      "quality.outcome": "reject",
+      "quality.reason": "prompt_injection",
+    })
+    await metricReader.shutdown()
+    await observability.shutdown()
+  })
+
   it("correlates logs with the active trace and models every service boundary kind", async () => {
     const traceExporter = new InMemorySpanExporter()
     const tracerProvider = new BasicTracerProvider({

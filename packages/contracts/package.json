@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./openapi": "./src/generated/openapi.ts",
-    "./agui": "./src/agui.ts"
+    "./agui": "./src/agui.ts",
+    "./episode-failure": "./src/episode-failure.ts"
   },
   "scripts": {
     "build": "pnpm generate",

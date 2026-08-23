@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   inArray,
   isNotNull,
   lt,
@@ -91,7 +92,13 @@ export const makeClaiming = (database: ContentKnowledgeDatabase): Claiming => ({
                   feedSubscriptions,
                   eq(feedSubscriptions.feedId, feedItems.feedId)
                 )
-                .where(and(hasSnapshot(tx), not(alreadyResolved)))
+                .where(
+                  and(
+                    eq(feedSubscriptions.enabled, 1),
+                    hasSnapshot(tx),
+                    not(alreadyResolved)
+                  )
+                )
             )
             .onConflictDoNothing({
               target: [
@@ -110,6 +117,7 @@ export const makeClaiming = (database: ContentKnowledgeDatabase): Claiming => ({
         database
           .selectDistinct({ ownerId: feedSubscriptions.ownerId })
           .from(feedSubscriptions)
+          .where(eq(feedSubscriptions.enabled, 1))
           .orderBy(asc(feedSubscriptions.ownerId))
           .all(),
       catch: () => failure("ListOwners"),
@@ -160,6 +168,18 @@ export const makeClaiming = (database: ContentKnowledgeDatabase): Claiming => ({
             .where(
               and(
                 eq(contentEnrichmentQueue.ownerId, ownerId),
+                exists(
+                  tx
+                    .select({ one: sql`1` })
+                    .from(feedSubscriptions)
+                    .where(
+                      and(
+                        eq(feedSubscriptions.ownerId, ownerId),
+                        eq(feedSubscriptions.feedId, feedItems.feedId),
+                        eq(feedSubscriptions.enabled, 1)
+                      )
+                    )
+                ),
                 inArray(contentEnrichmentQueue.status, ["Queued", "Failed"]),
                 lt(contentEnrichmentQueue.attempt, ENRICHMENT_MAX_ATTEMPTS)
               )

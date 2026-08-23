@@ -7,7 +7,7 @@ import { Effect } from "effect"
 
 import { EnrichQueueSchema } from "../../contract.js"
 import type { GatewayPorts } from "../../application/ports.js"
-import { normalizeProblem, unavailable } from "./problems.js"
+import { forbidden, normalizeProblem, unavailable } from "./problems.js"
 import type { Transport } from "./transport.js"
 
 /**
@@ -20,6 +20,9 @@ type EnrichmentPorts = Pick<
 >
 
 type Headers = Parameters<GatewayPorts["getEnrichQueue"]>[0]
+type EnrichmentResetFailure =
+  | ReturnType<typeof forbidden>
+  | ReturnType<typeof unavailable>
 
 // キューの項目は内部IDのままでは公開できないため、公開名と小文字語彙へ移す。
 const toPublicQueueItem = (
@@ -40,21 +43,19 @@ const toPublicQueueItem = (
 
 export const makeEnrichmentPorts = (transport: Transport): EnrichmentPorts => {
   const personalizationRpc = (headers: Headers, payload: unknown) =>
-    transport
-      .ownerRpc(
-        headers,
-        subjects.content.personalization,
-        "content-knowledge",
-        payload,
-        parseContentPersonalizationReply
-      )
-      .pipe(Effect.mapError(normalizeProblem))
+    transport.ownerRpc(
+      headers,
+      subjects.content.personalization,
+      "content-knowledge",
+      payload,
+      parseContentPersonalizationReply
+    )
 
   return {
     getEnrichQueue: (headers) =>
       personalizationRpc(headers, { operation: "GetEnrichmentQueue" }).pipe(
         Effect.flatMap((reply) =>
-          (reply._tag === "EnrichmentQueue"
+          reply._tag === "EnrichmentQueue"
             ? parse(EnrichQueueSchema)({
                 ...reply.queue,
                 processing: reply.queue.processing.map(toPublicQueueItem),
@@ -67,9 +68,8 @@ export const makeEnrichmentPorts = (transport: Transport): EnrichmentPorts => {
                   items: reply.queue.failed.items.map(toPublicQueueItem),
                 },
                 recent: reply.queue.recent.map(toPublicQueueItem),
-              })
+              }).pipe(Effect.mapError(unavailable))
             : Effect.fail(unavailable())
-          ).pipe(Effect.mapError(normalizeProblem))
         ),
         Effect.mapError(normalizeProblem)
       ),
@@ -88,14 +88,26 @@ export const makeEnrichmentPorts = (transport: Transport): EnrichmentPorts => {
         operation: "ResetDailyEnrichment",
         localDate: transport.now().slice(0, 10),
       }).pipe(
-        Effect.flatMap((reply) =>
-          reply._tag === "Reset"
-            ? Effect.succeed(
+        Effect.flatMap(
+          (
+            reply
+          ): Effect.Effect<
+            { readonly message: "Daily enrichment usage reset" },
+            EnrichmentResetFailure
+          > => {
+            if (reply._tag === "Reset")
+              return Effect.succeed(
                 deepFreeze({ message: "Daily enrichment usage reset" as const })
               )
-            : Effect.fail(unavailable())
+            if (reply._tag === "Rejected" && reply.code === "FORBIDDEN")
+              return Effect.fail(forbidden())
+            return Effect.fail(unavailable())
+          }
         ),
-        Effect.mapError(normalizeProblem)
+        Effect.mapError(
+          (failure): EnrichmentResetFailure =>
+            normalizeProblem(failure) as EnrichmentResetFailure
+        )
       ),
   }
 }

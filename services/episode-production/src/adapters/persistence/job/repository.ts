@@ -1,4 +1,9 @@
-import { deepFreeze, parse } from "@news-podcast/kernel"
+import { deepFreeze } from "@news-podcast/kernel"
+import {
+  decodePersistedJson,
+  decodePersistedJsonSync,
+  isDatabaseError,
+} from "@news-podcast/persistence"
 import { Effect, Schema } from "effect"
 
 import {
@@ -17,7 +22,7 @@ import type { SqliteJobHandle } from "./ports.js"
 
 const encodeJob = Schema.encodeSync(EpisodeJobSchema)
 const encodeTimestamp = Schema.encodeSync(UtcTimestampSchema)
-const parseJob = parse(EpisodeJobSchema)
+const PersistedAgUiEventSchema = Schema.Record(Schema.String, Schema.Unknown)
 
 export type IdempotencyConflict = Readonly<{
   readonly _tag: "IdempotencyConflict"
@@ -25,16 +30,36 @@ export type IdempotencyConflict = Readonly<{
   readonly idempotencyKey: string
 }>
 
+export type IdempotencyObservation = Readonly<{
+  readonly operation: "create" | "retry"
+  readonly outcome: "accepted" | "replay" | "conflict"
+}>
+
+const observeIdempotency = (observation: IdempotencyObservation) =>
+  Effect.logInfo("episode job idempotency resolved", {
+    event_name: "episode.idempotency",
+    idempotency_operation: observation.operation,
+    idempotency_outcome: observation.outcome,
+  })
+
 const persistenceError = (operation: string, cause: unknown) =>
-  deepFreeze({ _tag: "PersistenceError" as const, operation, cause })
+  deepFreeze({
+    _tag: "PersistenceError" as const,
+    operation,
+    reason: isDatabaseError(cause) ? cause.reason : ("Unavailable" as const),
+  })
 
 const decodeDocument = (document: string) =>
-  Effect.try({
-    try: () => JSON.parse(document) as unknown,
-    catch: (cause) => persistenceError("decode-job-json", cause),
-  }).pipe(Effect.flatMap(parseJob))
+  decodePersistedJson("episode_jobs.document", EpisodeJobSchema, document).pipe(
+    Effect.mapError((cause) => persistenceError("decode-job-json", cause))
+  )
 
-const repositoryFromHandle = (handle: SqliteJobHandle) => {
+const repositoryFromHandle = (
+  handle: SqliteJobHandle,
+  observe: (
+    observation: IdempotencyObservation
+  ) => Effect.Effect<void> = observeIdempotency
+) => {
   const save = (
     job: QueuedJob,
     scheduledFirstWriteWins: boolean,
@@ -42,6 +67,9 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
   ) => {
     const encoded = encodeJob(job)
     const requestFingerprint = JSON.stringify(encoded.request)
+    const operation = idempotencyScope.startsWith("retry:")
+      ? ("retry" as const)
+      : ("create" as const)
 
     return Effect.try({
       try: () =>
@@ -56,23 +84,58 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
       catch: (cause) => persistenceError("save-job", cause),
     }).pipe(
       Effect.flatMap((result) => {
-        if (result._tag === "Inserted") return Effect.succeed(job)
+        if (result._tag === "Inserted")
+          return observe({ operation, outcome: "accepted" }).pipe(
+            Effect.as(job)
+          )
         return decodeDocument(result.row.document).pipe(
           Effect.flatMap((existing) => {
+            if (
+              scheduledFirstWriteWins &&
+              existing.request.trigger === "scheduled" &&
+              ((existing._tag === "Failed" &&
+                existing.failure.code === "no_generation_candidates") ||
+                (existing._tag === "Canceled" &&
+                  existing.reason === "service_shutdown"))
+            ) {
+              const requeued: QueuedJob = deepFreeze({
+                _tag: "Queued",
+                jobId: existing.jobId,
+                request: existing.request,
+                createdAt: job.enqueuedAt,
+                attempt: 0,
+                enqueuedAt: job.enqueuedAt,
+              })
+              return Effect.sync(() =>
+                handle.requeueRecoverableScheduled({
+                  jobId: existing.jobId,
+                  document: JSON.stringify(encodeJob(requeued)),
+                })
+              ).pipe(
+                Effect.andThen(observe({ operation, outcome: "replay" })),
+                Effect.as(requeued)
+              )
+            }
             if (
               result.row.requestFingerprint === requestFingerprint ||
               (scheduledFirstWriteWins &&
                 encoded.request.trigger === "scheduled" &&
                 existing.request.trigger === "scheduled")
             ) {
-              return Effect.succeed(existing)
+              return observe({ operation, outcome: "replay" }).pipe(
+                Effect.as(existing)
+              )
             }
-            return Effect.fail(
-              deepFreeze({
-                _tag: "IdempotencyConflict" as const,
-                ownerId: encoded.request.ownerId,
-                idempotencyKey: encoded.request.idempotencyKey,
-              })
+            return observe({ operation, outcome: "conflict" }).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  deepFreeze({
+                    _tag: "IdempotencyConflict" as const,
+                    ownerId: encoded.request.ownerId,
+                    idempotencyKey: encoded.request.idempotencyKey,
+                  })
+                )
+              )
             )
           })
         )
@@ -159,7 +222,11 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             try: () =>
               rows.map((row) => ({
                 sequence: row.sequence,
-                event: JSON.parse(row.payload) as unknown,
+                event: decodePersistedJsonSync(
+                  "episode_job_agui_events.payload",
+                  PersistedAgUiEventSchema,
+                  row.payload
+                ),
               })),
             catch: (cause) => persistenceError("decode-agui-event", cause),
           })
@@ -172,8 +239,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
             ownerId,
             jobId,
             replace: (document) => {
-              const current = Schema.decodeUnknownSync(EpisodeJobSchema)(
-                JSON.parse(document) as unknown
+              const current = decodePersistedJsonSync(
+                "episode_jobs.document",
+                EpisodeJobSchema,
+                document
               )
               if (
                 current._tag !== "Queued" &&
@@ -194,14 +263,15 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
               )
             },
           })
-          return result._tag === "Updated"
-            ? ({
-                _tag: "Canceled" as const,
-                job: Schema.decodeUnknownSync(EpisodeJobSchema)(
-                  JSON.parse(result.document) as unknown
-                ),
-              } as const)
-            : result
+          if (result._tag !== "Updated") return result
+          const job = decodePersistedJsonSync(
+            "episode_jobs.document",
+            EpisodeJobSchema,
+            result.document
+          )
+          if (job._tag !== "Canceled")
+            throw new Error("cancellation did not persist a canceled job")
+          return { _tag: "Canceled" as const, job } as const
         },
         catch: (cause) => persistenceError("cancel-owned-job", cause),
       }),
@@ -212,9 +282,10 @@ export type SqliteJobRepository = ReturnType<typeof repositoryFromHandle>
 
 /** 接続はサービスプロセスが1本だけ所有し、リポジトリはそれを借りる。 */
 export const jobRepository = (
-  database: ProductionDatabase
+  database: ProductionDatabase,
+  observe?: (observation: IdempotencyObservation) => Effect.Effect<void>
 ): Effect.Effect<SqliteJobRepository, unknown> =>
   Effect.try({
-    try: () => repositoryFromHandle(makeJobHandle(database)),
+    try: () => repositoryFromHandle(makeJobHandle(database), observe),
     catch: (cause) => persistenceError("open-database", cause),
   })

@@ -2,6 +2,11 @@ import type {
   EpisodeJobAgUiEvent,
   EpisodeJobState,
 } from "@news-podcast/contracts/agui"
+import {
+  episodeFailureFamilyByCode,
+  isEpisodeFailureCode,
+  type EpisodeFailureFamily,
+} from "@news-podcast/contracts/episode-failure"
 import type { components } from "@news-podcast/contracts/openapi"
 
 export type JobStatus = components["schemas"]["JobStatus"]
@@ -45,77 +50,114 @@ export function resolvedJobStatus(
   return streamed ?? polled ?? "ready"
 }
 
-const failureMessages: Readonly<Record<string, string>> = {
-  "provider-timeout":
-    "外部サービスが時間内に応答しませんでした。自動再試行または手動再試行を利用できます。",
-  "provider-unavailable":
-    "外部サービスを一時的に利用できませんでした。時間をおいて再試行してください。",
-  "job-deadline-exceeded": "生成時間が30分の安全上限を超えたため停止しました。",
-  "attempt-limit-exceeded": "自動試行の上限4回に達したため停止しました。",
-  "checkpoint-corruption":
-    "保存済みの生成途中データを検証できなかったため、安全に停止しました。",
-  "legacy-execution-invalidated":
-    "旧方式で実行中だった生成を安全のため停止しました。新しい方式で再試行してください。",
-  "pipeline-input-invalid":
-    "生成結果を検証できませんでした。内容を変えて再試行してください。",
-}
-
 export type FailureRecovery = "reselect" | "retry" | "new" | "admin"
 
-const terminalProviderReasons = [
-  "client_error",
-  "malformed_response",
-  "refusal",
-  "unexpected_status",
-] as const
+type FailurePresentation = Readonly<{
+  message: string
+  recovery: FailureRecovery
+}>
 
-const isTerminalStagedProviderFailure = (code: string): boolean =>
-  (code.startsWith("script_") || code.startsWith("speech_")) &&
-  terminalProviderReasons.some((reason) => code.endsWith(`_${reason}`))
+const failurePresentationByFamily = {
+  deadline: {
+    message: "生成が制限時間を超えました。同じ条件で再試行してください。",
+    recovery: "retry",
+  },
+  planning_transient: {
+    message:
+      "生成条件を一時的に準備できませんでした。時間をおいて再試行してください。",
+    recovery: "retry",
+  },
+  content_transient: {
+    message:
+      "記事本文を一時的に取得できませんでした。同じ条件で再試行してください。",
+    recovery: "retry",
+  },
+  script_timeout: {
+    message:
+      "台本生成サービスが時間内に応答しませんでした。同じ条件で再試行してください。",
+    recovery: "retry",
+  },
+  script_transient: {
+    message:
+      "台本生成サービスを一時的に利用できません。同じ条件で再試行してください。",
+    recovery: "retry",
+  },
+  script_terminal: {
+    message:
+      "台本生成サービスの設定または応答を確認する必要があります。管理者へ連絡してください。",
+    recovery: "admin",
+  },
+  speech_timeout: {
+    message:
+      "音声生成サービスが時間内に応答しませんでした。同じ条件で再試行してください。",
+    recovery: "retry",
+  },
+  speech_transient: {
+    message:
+      "音声生成サービスを一時的に利用できません。同じ条件で再試行してください。",
+    recovery: "retry",
+  },
+  speech_terminal: {
+    message:
+      "音声生成サービスの設定または応答を確認する必要があります。管理者へ連絡してください。",
+    recovery: "admin",
+  },
+  input_invalid: {
+    message: "生成条件を確認できませんでした。記事を選び直してください。",
+    recovery: "reselect",
+  },
+  no_candidates: {
+    message:
+      "番組にできる新しい記事がありません。記事を選んで生成してください。",
+    recovery: "reselect",
+  },
+  storage_transient: {
+    message: "番組を保存できませんでした。時間をおいて再試行してください。",
+    recovery: "retry",
+  },
+  checkpoint_invalid: {
+    message:
+      "保存済みデータを安全に処理できませんでした。問い合わせIDを添えて管理者へ連絡してください。",
+    recovery: "admin",
+  },
+  publication_transient: {
+    message:
+      "完成した番組を連携できませんでした。問い合わせIDを添えて管理者へ連絡してください。",
+    recovery: "admin",
+  },
+  internal_invariant: {
+    message:
+      "生成状態を安全に確認できませんでした。問い合わせIDを添えて管理者へ連絡してください。",
+    recovery: "admin",
+  },
+} satisfies Record<EpisodeFailureFamily, FailurePresentation>
 
-export function failureRecovery(code?: string): FailureRecovery {
-  if (
-    code === "content_materialization_invalid" ||
-    code === "content_materialization_empty"
-  )
-    return "reselect"
-  if (code && isTerminalStagedProviderFailure(code)) return "admin"
-  if (
-    code?.startsWith("script_") ||
-    code?.startsWith("speech_") ||
-    code?.startsWith("provider_") ||
-    code === "content_materialization_unavailable"
-  )
-    return "retry"
-  if (
-    code?.includes("checkpoint") ||
-    code?.includes("storage") ||
-    code?.includes("owner_mismatch") ||
-    code?.includes("stale_lease")
-  )
-    return "admin"
-  return "new"
+const unknownFailurePresentation: FailurePresentation = {
+  message: "生成中に問題が発生しました。時間をおいて再試行してください。",
+  recovery: "retry",
 }
 
-export function failureMessage(failure?: {
-  readonly code: string
-  readonly message: string
-}): string | undefined {
+const failurePresentation = (code: string): FailurePresentation =>
+  isEpisodeFailureCode(code)
+    ? failurePresentationByFamily[episodeFailureFamilyByCode[code]]
+    : unknownFailurePresentation
+
+export function failureRecovery(code?: string): FailureRecovery {
+  return code === undefined ? "new" : failurePresentation(code).recovery
+}
+
+export function failureMessage(
+  failure?: {
+    readonly code: string
+    readonly message: string
+  },
+  jobId?: string
+): string | undefined {
   if (!failure) return undefined
-  if (isTerminalStagedProviderFailure(failure.code))
-    return "外部サービスの設定または応答契約を確認する必要があります。管理者へ連絡してください。"
-  if (failure.code.startsWith("script_"))
-    return "台本生成サービスで失敗しました。同じ条件で再試行できます。"
-  if (failure.code.startsWith("speech_"))
-    return "音声生成サービスで失敗しました。同じ条件で再試行できます。"
-  if (failure.code.startsWith("provider_"))
-    return "外部サービスで失敗しました。同じ条件で再試行できます。"
-  if (
-    failure.code.startsWith("checkpoint_") ||
-    failure.code.includes("storage")
-  )
-    return "保存済みデータを安全に処理できませんでした。管理者確認後に新規生成してください。"
-  return failureMessages[failure.code] ?? failure.message
+  const message = failurePresentation(failure.code).message
+  return !isEpisodeFailureCode(failure.code) && jobId !== undefined
+    ? `${message}問い合わせID: ${jobId}`
+    : message
 }
 
 const activeStatuses = new Set<JobStatus>(["queued", "running", "retrying"])

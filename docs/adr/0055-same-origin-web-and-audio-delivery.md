@@ -4,7 +4,7 @@
 - Date: 2026-08-16
 - Decision owners: rai
 - Supersedes: [ADR-0002](0002-openapi-async-jobs.md)（短期音声URLの公開契約のみ）
-- Superseded by: N/A
+- Superseded by: [ADR-0079](0079-deliver-owned-private-artifacts-through-gateway.md)
 - Related: [ADR-0011](0011-s3-compatible-object-storage.md)、[design.md](../design.md) §3、[architecture.md](../architecture.md)
 
 ## コンテキストと変更契機

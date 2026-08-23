@@ -39,19 +39,177 @@ const articleId = Schema.decodeUnknownSync(ArticleIdSchema)(
 const token = (value: string) =>
   Schema.decodeUnknownSync(LeaseTokenSchema)(value)
 
-const queued = (key = "daily", id = jobId) =>
+const queued = (
+  key = "daily",
+  id = jobId,
+  enqueuedAt = "2026-08-13T00:00:00.000Z"
+) =>
   newQueuedJob({
     jobId: id,
     ownerId,
     idempotencyKey: Schema.decodeUnknownSync(IdempotencyKeySchema)(key),
     trigger: "manual",
-    enqueuedAt: timestamp("2026-08-13T00:00:00.000Z"),
+    enqueuedAt: timestamp(enqueuedAt),
   })
 
 const databasePath = () =>
   join(mkdtempSync(join(tmpdir(), "episode-execution-")), "jobs.sqlite")
 
 describe("SQLite execution repository", () => {
+  it("leases queued jobs by enqueue time and uses UUID only as a tie-breaker", async () => {
+    const path = databasePath()
+    const olderId = Schema.decodeUnknownSync(JobIdSchema)(
+      "ffffffff-ffff-4fff-8fff-ffffffffffff"
+    )
+    const newerId = Schema.decodeUnknownSync(JobIdSchema)(
+      "00000000-0000-4000-8000-000000000001"
+    )
+
+    const leased = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = openProductionDatabaseUnsafe(path).database
+          const commands = yield* jobRepository(database)
+          const execution = yield* executionRepository(database)
+          yield* commands.saveIdempotently(
+            queued("older", olderId, "2026-08-12T00:00:00.000Z")
+          )
+          yield* commands.saveIdempotently(
+            queued("newer", newerId, "2026-08-12T00:01:00.000Z")
+          )
+          return yield* execution.leaseNext({
+            now: timestamp("2026-08-12T00:01:00.000Z"),
+            leasedUntil: timestamp("2026-08-12T00:06:00.000Z"),
+            leaseToken: token("lease-fifo"),
+          })
+        })
+      )
+    )
+
+    expect(leased?.job.jobId).toBe(olderId)
+    expect(leased?.readyAt).toEqual(timestamp("2026-08-12T00:00:00.000Z"))
+  })
+
+  it("does not starve the oldest queued job while newer jobs keep arriving", async () => {
+    const path = databasePath()
+    const oldestId = Schema.decodeUnknownSync(JobIdSchema)(
+      "ffffffff-ffff-4fff-8fff-ffffffffffff"
+    )
+
+    const leasedIds = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = openProductionDatabaseUnsafe(path).database
+          const commands = yield* jobRepository(database)
+          const execution = yield* executionRepository(database)
+          yield* commands.saveIdempotently(
+            queued("oldest", oldestId, "2026-08-12T00:00:00.000Z")
+          )
+          const ids = []
+          for (let minute = 1; minute <= 4; minute += 1) {
+            const id = Schema.decodeUnknownSync(JobIdSchema)(
+              `00000000-0000-4000-8000-00000000000${minute}`
+            )
+            yield* commands.saveIdempotently(
+              queued(`newer-${minute}`, id, `2026-08-12T00:0${minute}:00.000Z`)
+            )
+            const leased = yield* execution.leaseNext({
+              now: timestamp(`2026-08-12T00:0${minute}:00.000Z`),
+              leasedUntil: timestamp("2026-08-12T01:00:00.000Z"),
+              leaseToken: token(`lease-${minute}`),
+            })
+            ids.push(leased?.job.jobId)
+          }
+          return ids
+        })
+      )
+    )
+
+    expect(leasedIds).toEqual([
+      oldestId,
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003",
+    ])
+  })
+
+  it("prioritizes expired leases, then due retries, then queued work", async () => {
+    const path = databasePath()
+    const expiredId = Schema.decodeUnknownSync(JobIdSchema)(
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    )
+    const retryId = Schema.decodeUnknownSync(JobIdSchema)(
+      "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+    )
+    const queuedId = Schema.decodeUnknownSync(JobIdSchema)(
+      "ffffffff-ffff-4fff-8fff-ffffffffffff"
+    )
+
+    const leases = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = openProductionDatabaseUnsafe(path).database
+          const commands = yield* jobRepository(database)
+          const execution = yield* executionRepository(database)
+
+          yield* commands.saveIdempotently(
+            queued("expired", expiredId, "2026-08-12T00:00:00.000Z")
+          )
+          yield* execution.leaseNext({
+            now: timestamp("2026-08-12T00:01:00.000Z"),
+            leasedUntil: timestamp("2026-08-12T00:05:00.000Z"),
+            leaseToken: token("lease-expired"),
+          })
+
+          yield* commands.saveIdempotently(
+            queued("retry", retryId, "2026-08-12T00:01:00.000Z")
+          )
+          const retryRunning = (yield* execution.leaseNext({
+            now: timestamp("2026-08-12T00:02:00.000Z"),
+            leasedUntil: timestamp("2026-08-12T00:07:00.000Z"),
+            leaseToken: token("lease-retry-setup"),
+          }))!.job as RunningJob & { readonly attempt: 1 }
+          yield* execution.transition({
+            jobId: retryId,
+            leaseToken: token("lease-retry-setup"),
+            state: retryRunningJob(retryRunning, {
+              retryAt: timestamp("2026-08-12T00:04:00.000Z"),
+              failure: Schema.decodeUnknownSync(RetryableFailureSchema)({
+                code: "script_unavailable",
+                retryable: true,
+              }),
+            }),
+          })
+
+          yield* commands.saveIdempotently(
+            queued("queued", queuedId, "2026-08-12T00:03:00.000Z")
+          )
+          const input = (leaseToken: string) => ({
+            now: timestamp("2026-08-12T00:05:00.000Z"),
+            leasedUntil: timestamp("2026-08-12T00:10:00.000Z"),
+            leaseToken: token(leaseToken),
+          })
+          return [
+            yield* execution.leaseNext(input("lease-priority-1")),
+            yield* execution.leaseNext(input("lease-priority-2")),
+            yield* execution.leaseNext(input("lease-priority-3")),
+          ]
+        })
+      )
+    )
+
+    expect(leases.map((lease) => lease?.job.jobId)).toEqual([
+      expiredId,
+      retryId,
+      queuedId,
+    ])
+    expect(leases.map((lease) => lease?.recovered)).toEqual([
+      true,
+      false,
+      false,
+    ])
+  })
+
   it("fences checkpoints and atomically records an idempotent success", async () => {
     const path = databasePath()
     const script = {
@@ -372,7 +530,7 @@ describe("SQLite execution repository", () => {
             leaseToken: token("lease-1"),
           }))!.job as RunningJob & { readonly attempt: 1 }
           const failure = Schema.decodeUnknownSync(RetryableFailureSchema)({
-            code: "provider_busy",
+            code: "script_unavailable",
             retryable: true,
           })
           yield* execution.transition({

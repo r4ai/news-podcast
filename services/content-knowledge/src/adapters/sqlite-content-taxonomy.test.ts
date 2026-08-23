@@ -28,7 +28,7 @@ const setup = async () => {
     INSERT INTO feed_catalog VALUES ('feed-b', 'https://b.example/feed', '${now}');
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-a', 'owner-a', 'feed-a', '${now}');
     INSERT INTO feed_subscriptions(subscription_id, owner_id, feed_id, created_at) VALUES ('sub-b', 'owner-b', 'feed-b', '${now}');
-    INSERT INTO feed_items VALUES ('${articleA}', 'feed-a', 'a', 'https://a.example/a', 'A', NULL, '${now}');
+    INSERT INTO feed_items(article_id, feed_id, external_id, source_url, title, published_at, discovered_at) VALUES ('${articleA}', 'feed-a', 'a', 'https://a.example/a', 'A', NULL, '${now}');
     INSERT INTO article_owner_access VALUES ('owner-a', '${articleA}', '${now}');
   `)
   const repository = await Effect.runPromise(

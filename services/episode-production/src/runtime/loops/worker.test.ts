@@ -11,11 +11,14 @@ import {
   newQueuedJob,
 } from "../../domain/episode-job.js"
 import {
+  MAX_CANCELLATION_POLL_MILLIS,
   episodeJobDeadlineAt,
   runEpisodeWorkerLoop,
+  type CancellationPropagation,
   type EpisodeWorkerEvent,
   type EpisodeWorkerPorts,
 } from "./worker.js"
+import { makeJobCancellationRegistry } from "../job-cancellation-registry.js"
 
 const at = (value: string) =>
   Schema.decodeUnknownSync(UtcTimestampSchema)(value)
@@ -48,7 +51,8 @@ describe("episode worker loop", () => {
     const controller = new AbortController()
     let deadlineReason: unknown
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: () => Effect.succeed("Applied"),
       execute: ({ signal }) =>
         Effect.sync(() => {
@@ -78,7 +82,11 @@ describe("episode worker loop", () => {
     const controller = new AbortController()
     const events: EpisodeWorkerEvent[] = []
     const waits: number[] = []
-    const leases = [undefined, { job, recovered: true }, undefined] as const
+    const leases = [
+      undefined,
+      { job, recovered: true, readyAt: job.createdAt },
+      undefined,
+    ] as const
     let leaseIndex = 0
     const ports: EpisodeWorkerPorts = {
       leaseNext: () => Effect.succeed(leases[leaseIndex++]),
@@ -107,6 +115,7 @@ describe("episode worker loop", () => {
         jobId: job.jobId,
         attempt: 1,
         recovered: true,
+        queueWaitMillis: 60_000,
       },
       {
         _tag: "JobFinished",
@@ -124,11 +133,12 @@ describe("episode worker loop", () => {
     const events: EpisodeWorkerEvent[] = []
     const failure = {
       _tag: "PipelineFailure" as const,
-      code: "sqlite_transition",
+      code: "sqlite_transition" as const,
       retryable: true,
     }
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: () => Effect.succeed("Applied"),
       execute: () => Effect.fail(failure),
       now: () => at("2026-08-13T00:01:00.000Z"),
@@ -160,7 +170,7 @@ describe("episode worker loop", () => {
     let executions = 0
     const failure = {
       _tag: "PipelineFailure" as const,
-      code: "sqlite_lease_next",
+      code: "sqlite_lease_next" as const,
       retryable: true,
     }
     const ports: EpisodeWorkerPorts = {
@@ -202,7 +212,8 @@ describe("episode worker loop", () => {
     const renewals: unknown[] = []
     let executionAborted = false
     const ports: EpisodeWorkerPorts = {
-      leaseNext: () => Effect.succeed({ job, recovered: false }),
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
       renewLease: (input) =>
         Effect.sync(() => {
           renewals.push(input)
@@ -249,5 +260,125 @@ describe("episode worker loop", () => {
       outcome: { _tag: "StaleLease" },
     })
     expect(events.at(-1)).toEqual({ _tag: "WorkerStopped" })
+  })
+
+  it("aborts the active provider immediately after same-process cancellation", async () => {
+    const processController = new AbortController()
+    const cancellation = makeJobCancellationRegistry()
+    const propagated: CancellationPropagation[] = []
+    let providerAborted = false
+    let renewals = 0
+    let finishedOutcome: unknown
+    const ports: EpisodeWorkerPorts = {
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
+      renewLease: () =>
+        Effect.sync(() => {
+          renewals += 1
+          return "Applied" as const
+        }),
+      checkCancellation: () => Effect.succeed({ _tag: "Current" as const }),
+      subscribeCancellation: cancellation.subscribe,
+      execute: ({ signal }) =>
+        Effect.sync(() => {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              providerAborted = true
+            },
+            { once: true }
+          )
+          cancellation.notify(job.jobId, at("2026-08-13T00:02:00.000Z"))
+        }).pipe(Effect.andThen(Effect.never)),
+      now: () => at("2026-08-13T00:02:00.010Z"),
+      leasedUntil: () => at("2026-08-13T00:07:00.000Z"),
+      nextLeaseToken: () => leaseToken,
+      heartbeatMillis: 60_000,
+      cancellationPollMillis: MAX_CANCELLATION_POLL_MILLIS,
+      backoffMillis: () => 100,
+      wait: (delay) => Effect.sleep(delay),
+      recordCancellationPropagation: (event) => propagated.push(event),
+      observe: (event) =>
+        Effect.sync(() => {
+          if (event._tag === "JobFinished") processController.abort()
+          if (event._tag === "JobFinished") finishedOutcome = event.outcome
+        }),
+    }
+
+    await Effect.runPromise(
+      runEpisodeWorkerLoop(ports, processController.signal)
+    )
+
+    expect(providerAborted).toBe(true)
+    expect(renewals).toBe(0)
+    expect(finishedOutcome).toEqual({ _tag: "Canceled" })
+    expect(propagated).toEqual([
+      {
+        jobId: job.jobId,
+        source: "same_process",
+        latencyMillis: 10,
+      },
+    ])
+  })
+
+  it("polls fencing state so another process cancels within a bounded delay", async () => {
+    const processController = new AbortController()
+    const propagated: CancellationPropagation[] = []
+    const waits: number[] = []
+    let providerAborted = false
+    let finishedOutcome: unknown
+    const ports: EpisodeWorkerPorts = {
+      leaseNext: () =>
+        Effect.succeed({ job, recovered: false, readyAt: job.createdAt }),
+      renewLease: () => Effect.succeed("Applied"),
+      checkCancellation: () =>
+        Effect.succeed({
+          _tag: "Canceled" as const,
+          canceledAt: at("2026-08-13T00:02:00.000Z"),
+        }),
+      subscribeCancellation: () => () => undefined,
+      execute: ({ signal }) =>
+        Effect.sync(() => {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              providerAborted = true
+            },
+            { once: true }
+          )
+        }).pipe(Effect.andThen(Effect.never)),
+      now: () => at("2026-08-13T00:02:00.250Z"),
+      leasedUntil: () => at("2026-08-13T00:07:00.000Z"),
+      nextLeaseToken: () => leaseToken,
+      heartbeatMillis: 60_000,
+      cancellationPollMillis: 250,
+      backoffMillis: () => 100,
+      wait: (delay) =>
+        Effect.sync(() => {
+          waits.push(delay)
+        }),
+      recordCancellationPropagation: (event) => propagated.push(event),
+      observe: (event) =>
+        Effect.sync(() => {
+          if (event._tag === "JobFinished") processController.abort()
+          if (event._tag === "JobFinished") finishedOutcome = event.outcome
+        }),
+    }
+
+    await Effect.runPromise(
+      runEpisodeWorkerLoop(ports, processController.signal)
+    )
+
+    expect(providerAborted).toBe(true)
+    expect(waits).toContain(250)
+    expect(finishedOutcome).toEqual({ _tag: "Canceled" })
+    expect(250).toBeLessThanOrEqual(MAX_CANCELLATION_POLL_MILLIS)
+    expect(propagated).toEqual([
+      {
+        jobId: job.jobId,
+        source: "poll",
+        latencyMillis: 250,
+      },
+    ])
   })
 })

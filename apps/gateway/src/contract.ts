@@ -1,6 +1,7 @@
+import { episodeFailureCodes } from "@news-podcast/contracts/episode-failure"
 import { deepFreeze } from "@news-podcast/kernel"
 import { TraceparentSchema } from "@news-podcast/protocols"
-import { Schema } from "effect"
+import { Schema, SchemaGetter } from "effect"
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -55,6 +56,7 @@ const CanonicalFeedUrlSchema = Schema.String.check(
           url.username === "" &&
           url.password === "" &&
           url.hash === "" &&
+          !value.includes("#") &&
           url.href === value
           ? undefined
           : "Expected a canonical credential-free HTTP(S) feed URL"
@@ -68,6 +70,50 @@ const CanonicalFeedUrlSchema = Schema.String.check(
     }
   )
 ).pipe(Schema.brand("CanonicalFeedUrl"))
+
+const feedUrlInputDescription =
+  "Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; the canonical result must be at most 2,048 characters, and credentials and fragments are forbidden."
+
+const FeedUrlInputSchema = Schema.String.annotate({
+  description: feedUrlInputDescription,
+})
+  .check(
+    Schema.makeFilter<string>((value) => {
+      try {
+        new URL(value)
+        return undefined
+      } catch {
+        return "Expected an absolute HTTP(S) feed URL"
+      }
+    })
+  )
+  .pipe(
+    Schema.decode({
+      decode: SchemaGetter.transform((value) => new URL(value).href),
+      encode: SchemaGetter.transform((value) => new URL(value).href),
+    })
+  )
+  .check(
+    Schema.isMaxLength(2_048),
+    Schema.makeFilter<string>(
+      (value) => {
+        const url = new URL(value)
+        return (url.protocol === "http:" || url.protocol === "https:") &&
+          url.username === "" &&
+          url.password === "" &&
+          url.hash === "" &&
+          !value.includes("#")
+          ? undefined
+          : "Expected a credential-free, fragment-free HTTP(S) feed URL"
+      },
+      {
+        format: "uri",
+        expected: "a credential-free, fragment-free HTTP(S) feed URL",
+      }
+    )
+  )
+  .pipe(Schema.brand("CanonicalFeedUrl"))
+  .annotate({ description: feedUrlInputDescription })
 
 export const ArticleIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("ArticleId")
@@ -87,10 +133,21 @@ export const FeedSyncJobIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
 const FeedIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("ContentFeedId")
 )
-const SnapshotIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
+export const SnapshotIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("SnapshotId")
 )
+const ReplayAssetNameSchema = Schema.String.check(
+  Schema.isPattern(/^[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
+  Schema.isMaxLength(81)
+)
 const UserIdSchema = boundedText(255).pipe(Schema.brand("PublicUserId"))
+const ForwardCompatibleEpisodeFailureCodeSchema = Schema.Union([
+  Schema.Literals(episodeFailureCodes),
+  boundedText(200),
+]).annotate({
+  description:
+    "Machine-readable Episode generation failure code. The enum lists known values; clients must safely handle bounded future values during rolling deployments.",
+})
 
 export const HealthResponseSchema = Schema.Struct({
   status: Schema.Literal("ok"),
@@ -180,6 +237,10 @@ const JobReceiptWithLocationSchema = HttpApiSchema.WithHeaders(
 const jobFields = {
   id: JobIdSchema,
   status: JobStatusSchema,
+  trigger: Schema.Literals(["manual", "scheduled"]),
+  scheduleStatus: Schema.optional(
+    Schema.Literals(["retrying", "succeeded", "missed"])
+  ),
   createdAt: UtcDateTimeStringSchema,
   articleIds: Schema.optional(Schema.Array(ArticleIdSchema)),
   attempt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
@@ -200,7 +261,7 @@ const jobFields = {
   episodeId: Schema.optional(EpisodeIdSchema),
   failure: Schema.optional(
     Schema.Struct({
-      code: boundedText(200),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       message: boundedText(500),
       retryable: Schema.Boolean,
     })
@@ -228,7 +289,7 @@ export const ListEpisodeJobsQuerySchema = Schema.Struct({
 export const RetryEpisodeJobHeadersSchema = Schema.Struct({
   authorization: Schema.optional(Schema.String),
   cookie: Schema.optional(Schema.String),
-  "idempotency-key": Schema.optional(boundedText(128)),
+  "idempotency-key": boundedText(128),
   traceparent: Schema.optional(TraceparentSchema),
 }).annotate({ identifier: "RetryEpisodeJobHeaders" })
 
@@ -263,7 +324,7 @@ const EpisodeJobStateSchema = Schema.Struct({
   currentStage: Schema.optional(JobStageSchema),
   failure: Schema.optional(
     Schema.Struct({
-      code: boundedText(200),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       message: boundedText(500),
       retryable: Schema.Boolean,
     })
@@ -345,7 +406,7 @@ export const AudioAccessSchema = Schema.Struct({
 }).annotate({ identifier: "AudioAccess" })
 
 export const AddFeedSubscriptionRequestSchema = Schema.Struct({
-  feedUrl: CanonicalFeedUrlSchema,
+  feedUrl: FeedUrlInputSchema,
 }).annotate({ identifier: "AddFeedSubscriptionRequest" })
 
 const feedSubscriptionFields = {
@@ -494,9 +555,14 @@ export const ArticleFacetsSchema = Schema.Struct({
   ),
   aiPending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ identifier: "ArticleFacets" })
-const ArticleSearchQuerySchema = boundedText(200).annotate({
-  description: "Matches article title, source URL, or owner tag name.",
-})
+// oxlint-disable-next-line eslint/no-control-regex -- SQLite FTS cannot accept NUL; expose the full boundary in OpenAPI.
+const searchableTextPattern = new RegExp("^[^\\u0000-\\u001f\\u007f]*$")
+export const ArticleSearchQuerySchema = boundedText(200)
+  .check(Schema.isPattern(searchableTextPattern))
+  .annotate({
+    description:
+      "Literal partial match against article title, source URL, owner tag name, or the persisted Markdown body of the latest snapshot accessible to the authenticated owner.",
+  })
 export const BulkArticleStateSchema = Schema.Struct({
   state: Schema.optional(ArticleStateFilterSchema),
   includeHidden: Schema.optional(Schema.Boolean),
@@ -690,32 +756,142 @@ export const EnrichmentResetSchema = Schema.Struct({
   message: Schema.Literal("Daily enrichment usage reset"),
 })
 
-const problemSchema = <const Status extends number>(
+const problemVariant = <
+  const Status extends number,
+  const Title extends string,
+  const Code extends string,
+>(
   status: Status,
-  identifier: string
+  title: Title,
+  code: Code
 ) =>
   Schema.Struct({
-    type: Schema.String,
-    title: boundedText(200),
+    type: Schema.Literal("about:blank"),
+    title: Schema.Literal(title),
     status: Schema.Literal(status),
-    code: boundedText(100),
-    detail: Schema.optional(Schema.String),
+    code: Schema.Literal(code),
   })
-    .annotate({ identifier })
-    .pipe(HttpApiSchema.status(status))
 
-export const BadRequestProblemSchema = problemSchema(400, "BadRequestProblem")
-export const UnauthorizedProblemSchema = problemSchema(
+const badRequestProblem = problemVariant(
+  400,
+  "Invalid subscription request",
+  "invalid_subscription_request"
+)
+const unauthorizedProblem = problemVariant(
   401,
-  "UnauthorizedProblem"
+  "Authentication required",
+  "authentication_required"
 )
-export const ConflictProblemSchema = problemSchema(409, "ConflictProblem")
-export const UnprocessableProblemSchema = problemSchema(
+const forbiddenProblem = problemVariant(
+  403,
+  "Operation forbidden",
+  "operation_forbidden"
+)
+const episodeNotFoundProblem = problemVariant(
+  404,
+  "Episode not found",
+  "episode_not_found"
+)
+const subscriptionNotFoundProblem = problemVariant(
+  404,
+  "Feed subscription not found",
+  "feed_subscription_not_found"
+)
+const resourceNotFoundProblem = problemVariant(
+  404,
+  "Resource not found",
+  "resource_not_found"
+)
+const articleNotFoundProblem = problemVariant(
+  404,
+  "Article not found",
+  "article_not_found"
+)
+const episodeJobNotFoundProblem = problemVariant(
+  404,
+  "Episode job not found",
+  "episode_job_not_found"
+)
+const idempotencyConflictProblem = problemVariant(
+  409,
+  "Idempotency conflict",
+  "idempotency_conflict"
+)
+const resourceConflictProblem = problemVariant(
+  409,
+  "Resource conflict",
+  "resource_conflict"
+)
+const feedSubscriptionExistsProblem = problemVariant(
+  409,
+  "Feed subscription already exists",
+  "feed_subscription_exists"
+)
+const jobTerminalProblem = problemVariant(
+  409,
+  "Episode job state conflict",
+  "job_terminal"
+)
+const jobNotFailedProblem = problemVariant(
+  409,
+  "Episode job state conflict",
+  "job_not_failed"
+)
+const unprocessableProblem = problemVariant(
   422,
-  "UnprocessableProblem"
+  "Feed subscription rejected",
+  "feed_subscription_rejected"
 )
-export const NotFoundProblemSchema = problemSchema(404, "NotFoundProblem")
-export const UnavailableProblemSchema = problemSchema(503, "UnavailableProblem")
+const unavailableProblem = problemVariant(
+  503,
+  "Upstream unavailable",
+  "upstream_unavailable"
+)
+
+export const BadRequestProblemSchema = badRequestProblem
+  .annotate({ identifier: "BadRequestProblem" })
+  .pipe(HttpApiSchema.status(400))
+export const UnauthorizedProblemSchema = unauthorizedProblem
+  .annotate({ identifier: "UnauthorizedProblem" })
+  .pipe(HttpApiSchema.status(401))
+export const ForbiddenProblemSchema = forbiddenProblem
+  .annotate({ identifier: "ForbiddenProblem" })
+  .pipe(HttpApiSchema.status(403))
+export const ConflictProblemSchema = Schema.Union([
+  idempotencyConflictProblem,
+  resourceConflictProblem,
+  feedSubscriptionExistsProblem,
+  jobTerminalProblem,
+  jobNotFailedProblem,
+])
+  .annotate({ identifier: "ConflictProblem" })
+  .pipe(HttpApiSchema.status(409))
+export const UnprocessableProblemSchema = unprocessableProblem
+  .annotate({ identifier: "UnprocessableProblem" })
+  .pipe(HttpApiSchema.status(422))
+export const NotFoundProblemSchema = Schema.Union([
+  episodeNotFoundProblem,
+  subscriptionNotFoundProblem,
+  resourceNotFoundProblem,
+  articleNotFoundProblem,
+  episodeJobNotFoundProblem,
+])
+  .annotate({ identifier: "NotFoundProblem" })
+  .pipe(HttpApiSchema.status(404))
+export const UnavailableProblemSchema = unavailableProblem
+  .annotate({ identifier: "UnavailableProblem" })
+  .pipe(HttpApiSchema.status(503))
+
+export const HttpProblemSchema = Schema.Union([
+  BadRequestProblemSchema,
+  UnauthorizedProblemSchema,
+  ForbiddenProblemSchema,
+  NotFoundProblemSchema,
+  ConflictProblemSchema,
+  UnprocessableProblemSchema,
+  UnavailableProblemSchema,
+])
+export type HttpProblem = Schema.Schema.Type<typeof HttpProblemSchema>
 
 export const healthEndpoint = HttpApiEndpoint.get("health", "/health", {
   success: HealthResponseSchema,
@@ -928,6 +1104,7 @@ export const addFeedSubscriptionEndpoint = HttpApiEndpoint.post(
     error: [
       BadRequestProblemSchema,
       UnauthorizedProblemSchema,
+      ConflictProblemSchema,
       UnprocessableProblemSchema,
       UnavailableProblemSchema,
     ],
@@ -1041,6 +1218,7 @@ export const registerFeedEndpoint = HttpApiEndpoint.post(
     success: RegisteredFeedSchema,
     error: [
       UnauthorizedProblemSchema,
+      ConflictProblemSchema,
       UnprocessableProblemSchema,
       UnavailableProblemSchema,
     ],
@@ -1105,6 +1283,88 @@ export const getArticleMarkdownEndpoint = HttpApiEndpoint.get(
     headers: SessionHeadersSchema,
     params: { articleId: ArticleIdSchema },
     success: ArticleMarkdownSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const getArticleSnapshotEndpoint = HttpApiEndpoint.get(
+  "getArticleSnapshot",
+  "/v1/me/articles/:articleId/snapshots/:snapshotId",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema, snapshotId: SnapshotIdSchema },
+    success: ArticleSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const getArticleSnapshotMarkdownEndpoint = HttpApiEndpoint.get(
+  "getArticleSnapshotMarkdown",
+  "/v1/me/articles/:articleId/snapshots/:snapshotId/markdown",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema, snapshotId: SnapshotIdSchema },
+    success: ArticleMarkdownSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const ArticleReplayLocationSchema = Schema.Struct({
+  url: Schema.String.check(
+    Schema.isPattern(
+      /^\/v1\/me\/article-snapshots\/[0-9a-f-]{36}\/replay\/index\.html$/
+    )
+  ),
+}).annotate({ identifier: "ArticleReplayLocation" })
+export const getArticleReplayEndpoint = HttpApiEndpoint.get(
+  "getArticleReplay",
+  "/v1/me/article-snapshots/:snapshotId/replay",
+  {
+    headers: SessionHeadersSchema,
+    params: { snapshotId: SnapshotIdSchema },
+    success: ArticleReplayLocationSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const streamArticleReplayEndpoint = HttpApiEndpoint.get(
+  "streamArticleReplay",
+  "/v1/me/article-snapshots/:snapshotId/replay/index.html",
+  {
+    headers: SessionHeadersSchema,
+    params: { snapshotId: SnapshotIdSchema },
+    success: HttpApiSchema.StreamUint8Array({ contentType: "text/html" }),
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const streamArticleReplayAssetEndpoint = HttpApiEndpoint.get(
+  "streamArticleReplayAsset",
+  "/v1/me/article-snapshots/:snapshotId/assets/:assetName",
+  {
+    headers: SessionHeadersSchema,
+    params: {
+      snapshotId: SnapshotIdSchema,
+      assetName: ReplayAssetNameSchema,
+    },
+    success: HttpApiSchema.StreamUint8Array({
+      contentType: "application/octet-stream",
+    }),
     error: [
       UnauthorizedProblemSchema,
       NotFoundProblemSchema,
@@ -1352,7 +1612,11 @@ export const enrichResetDailyEndpoint = HttpApiEndpoint.post(
   {
     headers: SessionHeadersSchema,
     success: EnrichmentResetSchema,
-    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      ForbiddenProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
 )
 
@@ -1394,6 +1658,11 @@ const articlesGroup = HttpApiGroup.make("articles")
     getArticleFacetsEndpoint,
     getArticleEndpoint,
     getArticleMarkdownEndpoint,
+    getArticleSnapshotEndpoint,
+    getArticleSnapshotMarkdownEndpoint,
+    getArticleReplayEndpoint,
+    streamArticleReplayEndpoint,
+    streamArticleReplayAssetEndpoint,
     patchArticleEndpoint,
     bulkPatchArticlesEndpoint,
     archiveArticleEndpoint,
@@ -1420,6 +1689,299 @@ const personalizationGroup = HttpApiGroup.make("personalization")
     enrichResetDailyEndpoint
   )
   .annotateMerge(OpenApi.annotations({ title: "Personalization" }))
+
+const operationDocumentation = {
+  health: {
+    summary: "Check Gateway health",
+    description:
+      "Returns the unauthenticated process health signal used by deployment probes.",
+  },
+  resolveSession: {
+    summary: "Resolve the current session",
+    description:
+      "Resolves the session cookie or authorization header and returns authentication state plus enabled login methods without exposing credentials.",
+  },
+  createEpisodeJob: {
+    summary: "Create an idempotent episode job",
+    description:
+      "Requires an authenticated owner and Idempotency-Key. Accepts 1 to 20 owned article IDs; replaying the same key and payload returns the same logical job, while a mismatched payload returns 409.",
+  },
+  listEpisodeJobs: {
+    summary: "List owned episode jobs",
+    description:
+      "Lists only jobs owned by the authenticated session, with an optional bounded result limit.",
+  },
+  getEpisodeJob: {
+    summary: "Get an owned episode job",
+    description:
+      "Returns one job in the authenticated owner scope. Missing and foreign job IDs are both reported as 404.",
+  },
+  cancelEpisodeJob: {
+    summary: "Cancel an owned episode job",
+    description:
+      "Requests cancellation in the authenticated owner scope. Terminal jobs return a 409 state conflict.",
+  },
+  retryEpisodeJob: {
+    summary: "Retry a failed episode job",
+    description:
+      "Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409.",
+  },
+  streamEpisodeJobEvents: {
+    summary: "Replay episode job events",
+    description:
+      "Streams the owned job snapshot and durable AG-UI progress events. Last-Event-ID or afterSequence resumes after an acknowledged sequence.",
+  },
+  listEpisodes: {
+    summary: "List owned completed episodes",
+    description:
+      "Lists completed episodes visible to the authenticated owner using the opaque next cursor returned by the previous page.",
+  },
+  getEpisode: {
+    summary: "Get an owned completed episode",
+    description:
+      "Returns a completed episode and its source provenance in the authenticated owner scope; foreign IDs are normalized to 404.",
+  },
+  streamEpisodeAudio: {
+    summary: "Stream owned episode audio",
+    description:
+      "Streams same-origin WAV audio for an owned episode and supports a single HTTP Range request without exposing the internal signed object URL.",
+  },
+  addFeedSubscription: {
+    summary: "Subscribe to an RSS feed",
+    description:
+      "Canonicalizes a credential-free, fragment-free HTTP(S) RSS/Atom URL, creates the authenticated owner's subscription, and queues synchronization; an existing canonical subscription returns 409.",
+  },
+  listFeedSubscriptions: {
+    summary: "List owned feed subscriptions",
+    description:
+      "Lists RSS subscriptions belonging only to the authenticated owner.",
+  },
+  listFeedSyncJobs: {
+    summary: "List owned feed synchronization jobs",
+    description:
+      "Lists synchronization status and bounded retry progress for the authenticated owner's feeds.",
+  },
+  syncFeedSubscription: {
+    summary: "Start immediate feed synchronization",
+    description:
+      "Queues an asynchronous synchronization for an owned subscription and returns the accepted job; foreign IDs are normalized to 404.",
+  },
+  deleteFeedSubscription: {
+    summary: "Delete an owned feed subscription",
+    description:
+      "Deletes a subscription in the authenticated owner scope. Missing and foreign IDs are both reported as 404.",
+  },
+  updateFeedSubscription: {
+    summary: "Update an owned feed subscription",
+    description:
+      "Enables or disables synchronization for a subscription belonging to the authenticated owner.",
+  },
+  listFeeds: {
+    summary: "Search the feed catalog",
+    description:
+      "Searches feeds visible to the authenticated owner by an optional bounded text query.",
+  },
+  registerFeed: {
+    summary: "Register a feed and subscribe",
+    description:
+      "Canonicalizes and registers a credential-free, fragment-free HTTP(S) RSS/Atom URL for the authenticated owner; an existing canonical subscription returns 409.",
+  },
+  listArticles: {
+    summary: "List owned articles",
+    description:
+      "Lists articles in the authenticated owner scope with state, feed, literal partial search, sort, and opaque cursor filters. Search covers title, source URL, owner tags, and the indexed persisted Markdown body of the deterministic latest snapshot. Limit is 1 to 100.",
+  },
+  getArticleFacets: {
+    summary: "Get owned article facets",
+    description:
+      "Returns state and feed counts for the authenticated owner's current article filters.",
+  },
+  getArticle: {
+    summary: "Get an owned article",
+    description:
+      "Returns one article visible to the authenticated owner; missing and foreign IDs are normalized to 404.",
+  },
+  patchArticle: {
+    summary: "Update owned article state",
+    description:
+      "Updates read, saved, later, or hidden state for an article in the authenticated owner scope.",
+  },
+  getArticleMarkdown: {
+    summary: "Get archived article Markdown",
+    description:
+      "Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials.",
+  },
+  getArticleSnapshot: {
+    summary: "Get an exact owned article snapshot",
+    description:
+      "Returns immutable snapshot metadata only when the snapshot belongs to both the supplied article and authenticated owner.",
+  },
+  getArticleSnapshotMarkdown: {
+    summary: "Get exact owned article snapshot Markdown",
+    description:
+      "Returns immutable snapshot Markdown only when the snapshot belongs to both the supplied article and authenticated owner.",
+  },
+  getArticleReplay: {
+    summary: "Resolve an owned article replay",
+    description:
+      "Authorizes an immutable snapshot and returns its same-origin replay URL.",
+  },
+  streamArticleReplay: {
+    summary: "Stream an owned article replay",
+    description:
+      "Proxies sandboxed archived HTML with a restrictive CSP and finite size budget.",
+  },
+  streamArticleReplayAsset: {
+    summary: "Stream an owned article replay asset",
+    description:
+      "Proxies one exact captured asset with its stored media type and finite size budget.",
+  },
+  bulkPatchArticles: {
+    summary: "Bulk update owned article state",
+    description:
+      "Applies one state patch to all articles matching the authenticated owner's supplied bounded filter.",
+  },
+  archiveArticle: {
+    summary: "Archive an owned article",
+    description:
+      "Captures and stores a fixed article snapshot for the authenticated owner within the bounded archive deadline.",
+  },
+  listArticleTags: {
+    summary: "List tags on an owned article",
+    description:
+      "Lists manual and AI tags attached to an article in the authenticated owner scope.",
+  },
+  setArticleTags: {
+    summary: "Replace tags on an owned article",
+    description:
+      "Replaces manual tags for an owned article; unknown tag IDs or incompatible state return a conflict.",
+  },
+  enrichArticle: {
+    summary: "Queue article enrichment",
+    description:
+      "Queues AI enrichment for an archived owned article. Work consumes the owner's configured daily enrichment budget.",
+  },
+  getSettings: {
+    summary: "Get owner settings",
+    description:
+      "Returns the authenticated owner's generation schedule and interest profile projection.",
+  },
+  updateSettings: {
+    summary: "Update owner settings",
+    description:
+      "Partially updates the authenticated owner's generation schedule or interest profile and returns the combined projection.",
+  },
+  listTags: {
+    summary: "List owner tags",
+    description: "Lists the authenticated owner's reusable tag vocabulary.",
+  },
+  createTag: {
+    summary: "Create an owner tag",
+    description:
+      "Creates a bounded tag name in the authenticated owner's vocabulary.",
+  },
+  deleteTag: {
+    summary: "Delete an owner tag",
+    description:
+      "Deletes a tag in the authenticated owner scope; missing and foreign IDs are normalized to 404.",
+  },
+  listTagSuggestions: {
+    summary: "List owner tag suggestions",
+    description:
+      "Lists AI-observed tag candidates for the authenticated owner without adding them to the vocabulary.",
+  },
+  promoteTagSuggestion: {
+    summary: "Promote a tag suggestion",
+    description:
+      "Promotes an observed suggestion into the authenticated owner's reusable tag vocabulary.",
+  },
+  listReadingDictionary: {
+    summary: "List reading dictionary entries",
+    description:
+      "Lists pronunciation overrides available to the authenticated owner's episode generation jobs.",
+  },
+  createReadingDictionary: {
+    summary: "Create a reading dictionary entry",
+    description:
+      "Creates an owner-scoped pronunciation override; a duplicate surface conflict returns 409.",
+  },
+  updateReadingDictionary: {
+    summary: "Update a reading dictionary entry",
+    description:
+      "Updates an owner-scoped pronunciation override; missing entries return 404 and duplicate surfaces return 409.",
+  },
+  deleteReadingDictionary: {
+    summary: "Delete a reading dictionary entry",
+    description:
+      "Deletes an owner-scoped pronunciation override; missing and foreign IDs are normalized to 404.",
+  },
+  getEnrichQueue: {
+    summary: "Get enrichment queue and budget",
+    description:
+      "Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily paid provider-attempt usage and limit counters. Failed provider calls consume this budget; pre-provider validation and expired leases do not.",
+  },
+  enrichReprocess: {
+    summary: "Requeue failed enrichment",
+    description:
+      "Requeues eligible failed work for the authenticated owner. Executions remain constrained by the reported daily enrichment budget.",
+  },
+  enrichResetDaily: {
+    summary: "Reset the daily enrichment budget",
+    description:
+      "Resets the authenticated owner's daily enrichment usage for the Gateway's current local date.",
+  },
+} as const
+
+type JsonRecord = Record<string, unknown>
+
+const isJsonRecord = (input: unknown): input is JsonRecord =>
+  typeof input === "object" && input !== null && !Array.isArray(input)
+
+const documentOperation = (input: unknown): unknown => {
+  if (!isJsonRecord(input) || typeof input.operationId !== "string")
+    return input
+  const operationName = input.operationId.slice(
+    input.operationId.lastIndexOf(".") + 1
+  )
+  if (!Object.hasOwn(operationDocumentation, operationName)) return input
+  const documentation =
+    operationDocumentation[operationName as keyof typeof operationDocumentation]
+  return { ...input, ...documentation }
+}
+
+const documentPathItem = (input: unknown): unknown =>
+  isJsonRecord(input)
+    ? Object.fromEntries(
+        Object.entries(input).map(([key, value]) => [
+          key,
+          documentOperation(value),
+        ])
+      )
+    : input
+
+const documentOpenApi = (specification: JsonRecord): JsonRecord => {
+  const paths = isJsonRecord(specification.paths)
+    ? Object.fromEntries(
+        Object.entries(specification.paths).map(([path, item]) => [
+          path,
+          documentPathItem(item),
+        ])
+      )
+    : specification.paths
+  const info = isJsonRecord(specification.info) ? specification.info : {}
+  return {
+    ...specification,
+    info: {
+      ...info,
+      contact: {
+        name: "RSS News Podcast API maintainers",
+        url: "https://github.com/r4ai/news-podcast/issues",
+      },
+    },
+    paths,
+  }
+}
+
 export const gatewayApi = HttpApi.make("gateway")
   .add(
     systemGroup,
@@ -1436,6 +1998,8 @@ export const gatewayApi = HttpApi.make("gateway")
       title: "RSS News Podcast API",
       version: "1.0.0",
       description: "Public gateway contract for RSS News Podcast.",
+      servers: [{ url: "/", description: "Same-origin public Gateway" }],
+      transform: documentOpenApi,
     })
   )
 

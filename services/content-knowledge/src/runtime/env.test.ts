@@ -2,8 +2,10 @@ import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { readContentKnowledgeConfig } from "./env.js"
+import { parseNodeServiceConfig } from "./node.js"
 
 const validEnvironment = {
+  APP_ENV: "development",
   CONTENT_KNOWLEDGE_DATABASE_PATH: "/data/content.sqlite",
   NATS_SERVERS: "nats://nats-a:4222, nats://nats-b:4222",
   CONTENT_RPC_QUEUE_GROUP: "content-rpc",
@@ -26,12 +28,78 @@ const validEnvironment = {
 }
 
 describe("content-knowledge environment boundary", () => {
+  it.each([undefined, "fake", "typo", "Live"] as const)(
+    "rejects production provider mode %s",
+    async (providerMode) => {
+      const exit = await Effect.runPromiseExit(
+        readContentKnowledgeConfig({
+          ...validEnvironment,
+          APP_ENV: "production",
+          PROVIDER_MODE: providerMode,
+          OPENAI_API_KEY: "test-key",
+          CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+        })
+      )
+
+      expect(exit._tag).toBe("Failure")
+    }
+  )
+
+  it.each([
+    ["missing API key", { OPENAI_API_KEY: undefined }],
+    ["missing model", { CONTENT_ENRICH_OPENAI_MODEL: undefined }],
+  ])("rejects production live mode with %s", async (_name, override) => {
+    const exit = await Effect.runPromiseExit(
+      readContentKnowledgeConfig({
+        ...validEnvironment,
+        APP_ENV: "production",
+        PROVIDER_MODE: "live",
+        OPENAI_API_KEY: "test-key",
+        CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+        ...override,
+      })
+    )
+
+    expect(exit._tag).toBe("Failure")
+  })
+
+  it("accepts production only with exact live mode and credentials", async () => {
+    const config = await Effect.runPromise(
+      readContentKnowledgeConfig({
+        ...validEnvironment,
+        APP_ENV: "production",
+        PROVIDER_MODE: "live",
+        OPENAI_API_KEY: "test-key",
+        CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+      })
+    )
+
+    expect(config.appEnvironment).toBe("production")
+    expect(config.enrichment.provider).toMatchObject({ model: "gpt-test" })
+  })
+
+  it("rejects a direct production service config that bypasses the env reader with fake mode", async () => {
+    const fake = await Effect.runPromise(
+      readContentKnowledgeConfig(validEnvironment)
+    )
+
+    const exit = await Effect.runPromiseExit(
+      parseNodeServiceConfig({
+        ...fake,
+        appEnvironment: "production",
+      })
+    )
+
+    expect(exit._tag).toBe("Failure")
+  })
+
   it("projects, parses, and freezes only service-owned configuration", async () => {
     const config = await Effect.runPromise(
       readContentKnowledgeConfig({ ...validEnvironment, UNRELATED: "ignored" })
     )
 
     expect(config).toEqual({
+      appEnvironment: "development",
       sqlitePath: "/data/content.sqlite",
       natsServers: ["nats://nats-a:4222", "nats://nats-b:4222"],
       rpc: { queueGroup: "content-rpc" },
@@ -45,9 +113,18 @@ describe("content-knowledge environment boundary", () => {
       },
       enrichment: {
         dailyLimit: 200,
+        resetDailyEnabled: false,
         provider: null,
         loop: {
           intervalMillis: 60_000,
+          initialBackoffMillis: 1_000,
+          maximumBackoffMillis: 30_000,
+        },
+      },
+      searchIndex: {
+        batchSize: 10,
+        loop: {
+          intervalMillis: 5_000,
           initialBackoffMillis: 1_000,
           maximumBackoffMillis: 30_000,
         },
@@ -74,6 +151,18 @@ describe("content-knowledge environment boundary", () => {
   })
 
   it.each([
+    [
+      "production enrichment reset",
+      {
+        ...validEnvironment,
+        APP_ENV: "production",
+        CONTENT_ENRICH_RESET_ENABLED: "true",
+      },
+    ],
+    [
+      "invalid enrichment reset flag",
+      { ...validEnvironment, CONTENT_ENRICH_RESET_ENABLED: "yes" },
+    ],
     [
       "shared database path",
       {
@@ -113,16 +202,6 @@ describe("content-knowledge environment boundary", () => {
         OPENAI_API_KEY: "test-key",
       },
     ],
-    [
-      "invalid OpenAI retry budget",
-      {
-        ...validEnvironment,
-        PROVIDER_MODE: "live",
-        OPENAI_API_KEY: "test-key",
-        OPENAI_MODEL: "gpt-test",
-        CONTENT_ENRICH_OPENAI_MAX_ATTEMPTS: "6",
-      },
-    ],
   ])("rejects %s", async (_name, environment) => {
     const exit = await Effect.runPromiseExit(
       readContentKnowledgeConfig(environment)
@@ -130,6 +209,35 @@ describe("content-knowledge environment boundary", () => {
 
     expect(exit._tag).toBe("Failure")
   })
+
+  it.each([
+    ["production", undefined, false],
+    ["development", undefined, false],
+    ["development", "false", false],
+    ["development", "true", true],
+    ["test", "true", true],
+  ] as const)(
+    "projects reset policy for APP_ENV=%s and flag=%s",
+    async (appEnvironment, flag, expected) => {
+      const config = await Effect.runPromise(
+        readContentKnowledgeConfig({
+          ...validEnvironment,
+          APP_ENV: appEnvironment,
+          CONTENT_ENRICH_RESET_ENABLED: flag,
+          ...(appEnvironment === "production"
+            ? {
+                PROVIDER_MODE: "live",
+                OPENAI_API_KEY: "test-key",
+                CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+              }
+            : {}),
+        })
+      )
+
+      expect(config.appEnvironment).toBe(appEnvironment)
+      expect(config.enrichment.resetDailyEnabled).toBe(expected)
+    }
+  )
 
   it("enables the OpenAI provider only when key and model are both configured", async () => {
     const config = await Effect.runPromise(
@@ -146,9 +254,6 @@ describe("content-knowledge environment boundary", () => {
       apiKey: "test-key",
       model: "gpt-test",
       requestTimeoutMillis: 60_000,
-      maximumAttempts: 3,
-      baseDelayMillis: 1_000,
-      maximumDelayMillis: 30_000,
     })
   })
 

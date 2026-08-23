@@ -8,6 +8,7 @@ import {
   retryFailedJob,
 } from "./job-control.js"
 import {
+  cancelJob,
   CreateJobCommandSchema,
   JobIdSchema,
   UtcTimestampSchema,
@@ -42,7 +43,17 @@ describe("episode job control", () => {
     const findOwned = vi.fn(() => Effect.succeed(queued))
     const listOwned = vi.fn(() => Effect.succeed([queued]))
     const cancelOwned = vi.fn(() =>
-      Effect.succeed({ _tag: "Canceled" as const, job: queued })
+      Effect.succeed({
+        _tag: "Canceled" as const,
+        job: cancelJob(
+          leaseQueuedJob(queued, {
+            token: "lease-cancel" as never,
+            startedAt: now,
+            leasedUntil: now,
+          }),
+          { canceledAt: now, reason: "requested_by_user" }
+        ),
+      })
     )
     const ports = { findOwned, listOwned, cancelOwned }
 
@@ -70,7 +81,7 @@ describe("episode job control", () => {
       }),
       {
         failedAt: now,
-        failure: { code: "provider-timeout" as never, retryable: false },
+        failure: { code: "script_timeout", retryable: false },
       }
     )
     const saveRetryIdempotently = vi.fn((_sourceJobId, job) =>
@@ -104,6 +115,43 @@ describe("episode job control", () => {
       originalId,
       expect.objectContaining({ jobId: retriedId })
     )
+  })
+
+  it("rejects manual retry for an auto-recoverable scheduled candidate miss", async () => {
+    const failed = failRunningJob(
+      leaseQueuedJob(queued, {
+        token: "lease-1" as never,
+        startedAt: now,
+        leasedUntil: now,
+      }),
+      {
+        failedAt: now,
+        failure: {
+          code: "no_generation_candidates" as never,
+          retryable: false,
+        },
+      }
+    )
+    const saveRetryIdempotently = vi.fn((_sourceJobId, job) =>
+      Effect.succeed(job)
+    )
+
+    const result = await Effect.runPromise(
+      retryFailedJob(
+        {
+          findOwned: () => Effect.succeed(failed),
+          nextJobId: Effect.succeed(retriedId),
+          now: Effect.succeed(now),
+          saveRetryIdempotently,
+        },
+        command.ownerId,
+        originalId,
+        "manual-retry-1" as never
+      )
+    )
+
+    expect(result).toEqual({ _tag: "NotFailed" })
+    expect(saveRetryIdempotently).not.toHaveBeenCalled()
   })
 
   it("does not retry missing or non-failed jobs", async () => {

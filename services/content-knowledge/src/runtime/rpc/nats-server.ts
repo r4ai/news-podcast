@@ -24,11 +24,19 @@ import { makePersonalizationRpcHandler } from "./personalization.js"
 import type { makeArticleLibraryHandler } from "./article-library-handler.js"
 import type { NodeContentKnowledgeRuntime, NodeRuntimeError } from "../node.js"
 import type { FeedPollWakeup } from "../loops/feed-poll.js"
+import { makeEnrichmentResetAudit } from "../enrichment-reset-audit.js"
+import {
+  noopObservability,
+  type Observability,
+} from "@news-podcast/observability"
 
 export type ContentKnowledgeRpcServerConfig = DeepReadonly<{
   readonly natsServers: readonly string[]
   readonly queueGroup: string
   readonly onReady?: () => void
+  readonly appEnvironment?: "development" | "test" | "production"
+  readonly enrichmentResetEnabled?: boolean
+  readonly observability?: Observability
 }>
 
 export type ContentKnowledgeRpcServerDependencies = Readonly<{
@@ -108,7 +116,16 @@ export const runNatsContentKnowledgeRpc = (
         const personalizationHandler =
           personalization === undefined
             ? undefined
-            : makePersonalizationRpcHandler(personalization, dependencies)
+            : makePersonalizationRpcHandler(personalization, {
+                ...dependencies,
+                enrichmentResetPolicy: {
+                  enabled: config.enrichmentResetEnabled ?? false,
+                  environment: config.appEnvironment ?? "production",
+                  audit: makeEnrichmentResetAudit(
+                    config.observability ?? noopObservability
+                  ),
+                },
+              })
         config.onReady?.()
         return runSequentialRpcLoop({
           receive: Effect.tryPromise({

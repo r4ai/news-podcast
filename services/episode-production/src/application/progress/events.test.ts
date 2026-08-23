@@ -15,7 +15,7 @@ const state: ProgressState = {
 describe("AG-UI progress events", () => {
   it("keeps different terminal errors in the same attempt independently idempotent", () => {
     const retry = runErrorEvent(state, "2026-08-16T00:00:00.000Z", {
-      code: "provider_unavailable",
+      code: "script_unavailable",
       retryable: true,
     })
     const canceled = runErrorEvent(

@@ -5,10 +5,7 @@ import { gatewayApi } from "../../contract.js"
 import type { GatewayHandlers } from "./definitions.js"
 
 /** エピソード生成ジョブの受付・照会・取り消しと、進捗のストリーミング。 */
-export const episodeJobsGroup = (
-  handlers: GatewayHandlers,
-  nextRetryIdempotencyKey: () => string
-) =>
+export const episodeJobsGroup = (handlers: GatewayHandlers) =>
   HttpApiBuilder.group(gatewayApi, "episodeJobs", (group) =>
     group
       .handle("createEpisodeJob", ({ headers, payload }) =>
@@ -37,9 +34,7 @@ export const episodeJobsGroup = (
         handlers.retryEpisodeJob({
           headers,
           jobId: params.jobId,
-          idempotencyKey:
-            headers["idempotency-key"] ??
-            `retry:${params.jobId}:${nextRetryIdempotencyKey()}`,
+          idempotencyKey: headers["idempotency-key"],
         })
       )
       .handle("streamEpisodeJobEvents", ({ headers, params, query }) => {

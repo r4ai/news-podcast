@@ -8,10 +8,7 @@ import {
   SnapshotIdSchema,
   createArticleSnapshot,
 } from "../domain/article.js"
-import {
-  parseJsonUnsafe,
-  stringifyJsonUnsafe,
-} from "../infrastructure/unsafe/json.js"
+import { stringifyJsonUnsafe } from "../infrastructure/unsafe/json.js"
 import { createArchiveStore } from "./persistence/archive/repository.js"
 import { openTestDatabase } from "./persistence/testing.js"
 
@@ -61,7 +58,6 @@ describe("SQLite archive store", () => {
     try {
       const store = await Effect.runPromise(
         createArchiveStore(database.db, {
-          parse: parseJsonUnsafe,
           stringify: stringifyJsonUnsafe,
         })
       )
@@ -87,6 +83,33 @@ describe("SQLite archive store", () => {
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'content_outbox'"
         )
       ).toBeUndefined()
+    } finally {
+      database.close()
+    }
+  })
+
+  it("classifies a schema-mismatched snapshot without exposing its content", async () => {
+    const database = openTestDatabase()
+    try {
+      const store = await Effect.runPromise(
+        createArchiveStore(database.db, {
+          stringify: stringifyJsonUnsafe,
+        })
+      )
+      await Effect.runPromise(store.commit({ snapshot }))
+      database.runSql(
+        "UPDATE article_snapshots SET snapshot_json = ? WHERE archive_request_id = ?",
+        ['{"legacySecret":"do-not-log"}', snapshot.archiveRequestId]
+      )
+
+      const exit = await Effect.runPromiseExit(
+        store.lookup(snapshot.archiveRequestId)
+      )
+      expect(exit._tag).toBe("Failure")
+      if (exit._tag === "Failure") {
+        expect(String(exit.cause)).toContain("CorruptRecord")
+        expect(String(exit.cause)).not.toContain("do-not-log")
+      }
     } finally {
       database.close()
     }

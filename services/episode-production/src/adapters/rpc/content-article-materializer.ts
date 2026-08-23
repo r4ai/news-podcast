@@ -1,4 +1,5 @@
 import { deepFreeze } from "@news-podcast/kernel"
+import type { EpisodeFailureCode } from "@news-podcast/contracts/episode-failure"
 import {
   MaterializeArticlesReplySchema,
   messageEnvelope,
@@ -20,7 +21,10 @@ const decodeReplyEnvelope = Schema.decodeUnknownEffect(
   }
 )
 
-const failure = (code: string, retryable: boolean): PipelineFailure =>
+const failure = (
+  code: Extract<EpisodeFailureCode, `content_materialization_${string}`>,
+  retryable: boolean
+): PipelineFailure =>
   deepFreeze({ _tag: "PipelineFailure" as const, code, retryable })
 
 /** Owner scope is carried exclusively by the authenticated message actor. */

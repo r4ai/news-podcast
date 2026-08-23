@@ -16,6 +16,7 @@ const validConfig = {
 
 const validServiceConfig = {
   ...validConfig,
+  appEnvironment: "development",
   rpc: { queueGroup: "content-rpc" },
   feedPoller: {
     http: { timeoutMillis: 1_000, maximumBytes: 8_192 },
@@ -27,11 +28,20 @@ const validServiceConfig = {
   },
   enrichment: {
     dailyLimit: 200,
+    resetDailyEnabled: false,
     provider: null,
     loop: {
       intervalMillis: 1_000,
       initialBackoffMillis: 100,
       maximumBackoffMillis: 1_000,
+    },
+  },
+  searchIndex: {
+    batchSize: 10,
+    loop: {
+      intervalMillis: 5_000,
+      initialBackoffMillis: 1_000,
+      maximumBackoffMillis: 30_000,
     },
   },
   archive: {
@@ -120,6 +130,7 @@ describe("content-knowledge Node runtime", () => {
     const closeSqlite = vi.fn()
     const ready = vi.fn()
     const runArchiveCleanup = vi.fn(() => Effect.never)
+    const runSearchIndex = vi.fn(() => Effect.never)
     const database = openContentKnowledgeDatabaseUnsafe(":memory:")
     const fiber = Effect.runFork(
       runNodeService(validServiceConfig, {
@@ -143,6 +154,7 @@ describe("content-knowledge Node runtime", () => {
         runPoller: () => Effect.never,
         enrichmentProvider: { enrich: () => Effect.die("unused") },
         runEnrichment: () => Effect.never,
+        runSearchIndex,
         runArchiveCleanup,
         onReady: ready,
       })
@@ -150,6 +162,7 @@ describe("content-knowledge Node runtime", () => {
 
     await vi.waitFor(() => expect(ready).toHaveBeenCalledOnce())
     expect(runArchiveCleanup).toHaveBeenCalledOnce()
+    expect(runSearchIndex).toHaveBeenCalledOnce()
     await Effect.runPromise(Fiber.interrupt(fiber))
     expect(closeSqlite).toHaveBeenCalledOnce()
     database.close()

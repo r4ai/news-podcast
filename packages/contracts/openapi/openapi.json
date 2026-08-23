@@ -3,7 +3,11 @@
   "info": {
     "title": "RSS News Podcast API",
     "version": "1.0.0",
-    "description": "Public gateway contract for RSS News Podcast."
+    "description": "Public gateway contract for RSS News Podcast.",
+    "contact": {
+      "name": "RSS News Podcast API maintainers",
+      "url": "https://github.com/r4ai/news-podcast/issues"
+    }
   },
   "paths": {
     "/health": {
@@ -26,7 +30,8 @@
             }
           }
         },
-        "summary": "Runtime health"
+        "summary": "Check Gateway health",
+        "description": "Returns the unauthenticated process health signal used by deployment probes."
       }
     },
     "/api/auth/state": {
@@ -84,7 +89,8 @@
             }
           }
         },
-        "summary": "Resolve the current session"
+        "summary": "Resolve the current session",
+        "description": "Resolves the session cookie or authorization header and returns authentication state plus enabled login methods without exposing credentials."
       }
     },
     "/v1/episode-jobs": {
@@ -225,7 +231,8 @@
             }
           },
           "required": true
-        }
+        },
+        "description": "Requires an authenticated owner and Idempotency-Key. Accepts 1 to 20 owned article IDs; replaying the same key and payload returns the same logical job, while a mismatched payload returns 409."
       },
       "get": {
         "tags": [
@@ -306,7 +313,8 @@
             }
           }
         },
-        "summary": "List episode jobs"
+        "summary": "List owned episode jobs",
+        "description": "Lists only jobs owned by the authenticated session, with an optional bounded result limit."
       }
     },
     "/v1/episode-jobs/{jobId}": {
@@ -398,7 +406,8 @@
             }
           }
         },
-        "summary": "Get an episode job"
+        "summary": "Get an owned episode job",
+        "description": "Returns one job in the authenticated owner scope. Missing and foreign job IDs are both reported as 404."
       }
     },
     "/v1/episode-jobs/{jobId}/cancel": {
@@ -500,7 +509,8 @@
             }
           }
         },
-        "summary": "Cancel an episode job"
+        "summary": "Cancel an owned episode job",
+        "description": "Requests cancellation in the authenticated owner scope. Terminal jobs return a 409 state conflict."
       }
     },
     "/v1/episode-jobs/{jobId}/retry": {
@@ -544,27 +554,20 @@
             "name": "idempotency-key",
             "in": "header",
             "schema": {
-              "anyOf": [
+              "type": "string",
+              "allOf": [
                 {
-                  "type": "string",
-                  "allOf": [
-                    {
-                      "minLength": 1
-                    },
-                    {
-                      "pattern": "\\S"
-                    },
-                    {
-                      "maxLength": 128
-                    }
-                  ]
+                  "minLength": 1
                 },
                 {
-                  "type": "null"
+                  "pattern": "\\S"
+                },
+                {
+                  "maxLength": 128
                 }
               ]
             },
-            "required": false
+            "required": true
           },
           {
             "name": "traceparent",
@@ -628,7 +631,8 @@
             }
           }
         },
-        "summary": "Retry an episode job"
+        "summary": "Retry a failed episode job",
+        "description": "Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409."
       }
     },
     "/v1/episode-jobs/{jobId}/events": {
@@ -847,7 +851,8 @@
             }
           }
         },
-        "summary": "Replay episode job events"
+        "summary": "Replay episode job events",
+        "description": "Streams the owned job snapshot and durable AG-UI progress events. Last-Event-ID or afterSequence resumes after an acknowledged sequence."
       }
     },
     "/v1/episodes": {
@@ -941,7 +946,8 @@
             }
           }
         },
-        "summary": "List completed episodes"
+        "summary": "List owned completed episodes",
+        "description": "Lists completed episodes visible to the authenticated owner using the opaque next cursor returned by the previous page."
       }
     },
     "/v1/episodes/{episodeId}": {
@@ -1033,7 +1039,8 @@
             }
           }
         },
-        "summary": "Get a completed episode"
+        "summary": "Get an owned completed episode",
+        "description": "Returns a completed episode and its source provenance in the authenticated owner scope; foreign IDs are normalized to 404."
       }
     },
     "/v1/episodes/{episodeId}/audio": {
@@ -1149,7 +1156,8 @@
             }
           }
         },
-        "summary": "Stream owned episode audio"
+        "summary": "Stream owned episode audio",
+        "description": "Streams same-origin WAV audio for an owned episode and supports a single HTTP Range request without exposing the internal signed object URL."
       }
     },
     "/v1/me/feed-subscriptions": {
@@ -1216,6 +1224,16 @@
               }
             }
           },
+          "409": {
+            "description": "ConflictProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictProblem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "UnprocessableProblem",
             "content": {
@@ -1237,7 +1255,7 @@
             }
           }
         },
-        "summary": "Subscribe to an RSS feed URL",
+        "summary": "Subscribe to an RSS feed",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1247,7 +1265,8 @@
             }
           },
           "required": true
-        }
+        },
+        "description": "Canonicalizes a credential-free, fragment-free HTTP(S) RSS/Atom URL, creates the authenticated owner's subscription, and queues synchronization; an existing canonical subscription returns 409."
       },
       "get": {
         "tags": [
@@ -1313,7 +1332,8 @@
             }
           }
         },
-        "summary": "List feed subscriptions"
+        "summary": "List owned feed subscriptions",
+        "description": "Lists RSS subscriptions belonging only to the authenticated owner."
       }
     },
     "/v1/me/feed-sync-jobs": {
@@ -1381,7 +1401,8 @@
             }
           }
         },
-        "summary": "List RSS feed synchronization jobs"
+        "summary": "List owned feed synchronization jobs",
+        "description": "Lists synchronization status and bounded retry progress for the authenticated owner's feeds."
       }
     },
     "/v1/me/feed-subscriptions/{subscriptionId}/sync": {
@@ -1483,7 +1504,8 @@
             }
           }
         },
-        "summary": "Start an immediate RSS feed synchronization"
+        "summary": "Start immediate feed synchronization",
+        "description": "Queues an asynchronous synchronization for an owned subscription and returns the accepted job; foreign IDs are normalized to 404."
       }
     },
     "/v1/me/feed-subscriptions/{subscriptionId}": {
@@ -1578,7 +1600,8 @@
             }
           }
         },
-        "summary": "Delete a feed subscription"
+        "summary": "Delete an owned feed subscription",
+        "description": "Deletes a subscription in the authenticated owner scope. Missing and foreign IDs are both reported as 404."
       },
       "patch": {
         "tags": [
@@ -1686,7 +1709,9 @@
             }
           },
           "required": true
-        }
+        },
+        "summary": "Update an owned feed subscription",
+        "description": "Enables or disables synchronization for a subscription belonging to the authenticated owner."
       }
     },
     "/v1/feeds": {
@@ -1779,7 +1804,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Search the feed catalog",
+        "description": "Searches feeds visible to the authenticated owner by an optional bounded text query."
       },
       "post": {
         "tags": [
@@ -1834,6 +1861,16 @@
               }
             }
           },
+          "409": {
+            "description": "ConflictProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictProblem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "UnprocessableProblem",
             "content": {
@@ -1864,7 +1901,9 @@
             }
           },
           "required": true
-        }
+        },
+        "summary": "Register a feed and subscribe",
+        "description": "Canonicalizes and registers a credential-free, fragment-free HTTP(S) RSS/Atom URL for the authenticated owner; an existing canonical subscription returns 409."
       }
     },
     "/v1/me/articles": {
@@ -2068,7 +2107,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "List owned articles",
+        "description": "Lists articles in the authenticated owner scope with state, feed, literal partial search, sort, and opaque cursor filters. Search covers title, source URL, owner tags, and the indexed persisted Markdown body of the deterministic latest snapshot. Limit is 1 to 100."
       }
     },
     "/v1/me/articles/facets": {
@@ -2186,7 +2227,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Get owned article facets",
+        "description": "Returns state and feed counts for the authenticated owner's current article filters."
       }
     },
     "/v1/me/articles/{articleId}": {
@@ -2277,7 +2320,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Get an owned article",
+        "description": "Returns one article visible to the authenticated owner; missing and foreign IDs are normalized to 404."
       },
       "patch": {
         "tags": [
@@ -2401,7 +2446,9 @@
             }
           },
           "required": true
-        }
+        },
+        "summary": "Update owned article state",
+        "description": "Updates read, saved, later, or hidden state for an article in the authenticated owner scope."
       }
     },
     "/v1/me/articles/{articleId}/markdown": {
@@ -2457,21 +2504,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "markdown": {
-                      "type": "string",
-                      "allOf": [
-                        {
-                          "maxLength": 1048576
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "markdown"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/components/schemas/Objects_"
                 }
               }
             }
@@ -2506,7 +2539,526 @@
               }
             }
           }
-        }
+        },
+        "summary": "Get archived article Markdown",
+        "description": "Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials."
+      }
+    },
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.getArticleSnapshot",
+        "parameters": [
+          {
+            "name": "articleId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Article",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get an exact owned article snapshot",
+        "description": "Returns immutable snapshot metadata only when the snapshot belongs to both the supplied article and authenticated owner."
+      }
+    },
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}/markdown": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.getArticleSnapshotMarkdown",
+        "parameters": [
+          {
+            "name": "articleId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Objects_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get exact owned article snapshot Markdown",
+        "description": "Returns immutable snapshot Markdown only when the snapshot belongs to both the supplied article and authenticated owner."
+      }
+    },
+    "/v1/me/article-snapshots/{snapshotId}/replay": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.getArticleReplay",
+        "parameters": [
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ArticleReplayLocation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleReplayLocation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resolve an owned article replay",
+        "description": "Authorizes an immutable snapshot and returns its same-origin replay URL."
+      }
+    },
+    "/v1/me/article-snapshots/{snapshotId}/replay/index.html": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.streamArticleReplay",
+        "parameters": [
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "x-effect-stream": {
+                  "encoding": "uint8array"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream an owned article replay",
+        "description": "Proxies sandboxed archived HTML with a restrictive CSP and finite size budget."
+      }
+    },
+    "/v1/me/article-snapshots/{snapshotId}/assets/{assetName}": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.streamArticleReplayAsset",
+        "parameters": [
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "assetName",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}\\.[a-z0-9]{1,16}$"
+                },
+                {
+                  "maxLength": 81
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "x-effect-stream": {
+                  "encoding": "uint8array"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream an owned article replay asset",
+        "description": "Proxies one exact captured asset with its stored media type and finite size budget."
       }
     },
     "/v1/me/articles/bulk-state": {
@@ -2663,7 +3215,9 @@
             }
           },
           "required": true
-        }
+        },
+        "summary": "Bulk update owned article state",
+        "description": "Applies one state patch to all articles matching the authenticated owner's supplied bounded filter."
       }
     },
     "/v1/me/articles/{articleId}/archive": {
@@ -2767,7 +3321,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Archive an owned article",
+        "description": "Captures and stores a fixed article snapshot for the authenticated owner within the bounded archive deadline."
       }
     },
     "/v1/me/articles/{articleId}/tags": {
@@ -2823,7 +3379,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_"
+                  "$ref": "#/components/schemas/Objects_1"
                 }
               }
             }
@@ -2844,105 +3400,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "UnavailableProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnavailableProblem"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Articles"
-        ],
-        "operationId": "articles.setArticleTags",
-        "parameters": [
-          {
-            "name": "articleId",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "format": "uuid"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/Union_"
-            },
-            "required": false
-          },
-          {
-            "name": "cookie",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/Union_"
-            },
-            "required": false
-          },
-          {
-            "name": "traceparent",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/Union_1"
-            },
-            "required": false
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Objects_"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedProblem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFoundProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundProblem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ConflictProblem",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictProblem"
                 }
               }
             }
@@ -2958,47 +3415,14 @@
             }
           }
         },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "tagIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "allOf": [
-                        {
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                          "format": "uuid"
-                        }
-                      ]
-                    },
-                    "allOf": [
-                      {
-                        "maxItems": 100
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "tagIds"
-                ],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/v1/me/articles/{articleId}/enrich": {
-      "post": {
+        "summary": "List tags on an owned article",
+        "description": "Lists manual and AI tags attached to an article in the authenticated owner scope."
+      },
+      "put": {
         "tags": [
           "Articles"
         ],
-        "operationId": "articles.enrichArticle",
+        "operationId": "articles.setArticleTags",
         "parameters": [
           {
             "name": "articleId",
@@ -3091,7 +3515,145 @@
               }
             }
           }
-        }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tagIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "allOf": [
+                        {
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                          "format": "uuid"
+                        }
+                      ]
+                    },
+                    "allOf": [
+                      {
+                        "maxItems": 100
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "tagIds"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Replace tags on an owned article",
+        "description": "Replaces manual tags for an owned article; unknown tag IDs or incompatible state return a conflict."
+      }
+    },
+    "/v1/me/articles/{articleId}/enrich": {
+      "post": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.enrichArticle",
+        "parameters": [
+          {
+            "name": "articleId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Objects_2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Queue article enrichment",
+        "description": "Queues AI enrichment for an archived owned article. Work consumes the owner's configured daily enrichment budget."
       }
     },
     "/v1/me/settings": {
@@ -3158,7 +3720,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Get owner settings",
+        "description": "Returns the authenticated owner's generation schedule and interest profile projection."
       },
       "patch": {
         "tags": [
@@ -3243,7 +3807,9 @@
             }
           },
           "required": true
-        }
+        },
+        "summary": "Update owner settings",
+        "description": "Partially updates the authenticated owner's generation schedule or interest profile and returns the combined projection."
       }
     },
     "/v1/me/tags": {
@@ -3310,7 +3876,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "List owner tags",
+        "description": "Lists the authenticated owner's reusable tag vocabulary."
       },
       "post": {
         "tags": [
@@ -3380,12 +3948,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_2"
+                "$ref": "#/components/schemas/Objects_3"
               }
             }
           },
           "required": true
-        }
+        },
+        "summary": "Create an owner tag",
+        "description": "Creates a bounded tag name in the authenticated owner's vocabulary."
       }
     },
     "/v1/me/tags/{tagId}": {
@@ -3469,7 +4039,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Delete an owner tag",
+        "description": "Deletes a tag in the authenticated owner scope; missing and foreign IDs are normalized to 404."
       }
     },
     "/v1/me/tag-suggestions": {
@@ -3536,7 +4108,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "List owner tag suggestions",
+        "description": "Lists AI-observed tag candidates for the authenticated owner without adding them to the vocabulary."
       }
     },
     "/v1/me/tag-suggestions/promote": {
@@ -3618,12 +4192,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_2"
+                "$ref": "#/components/schemas/Objects_3"
               }
             }
           },
           "required": true
-        }
+        },
+        "summary": "Promote a tag suggestion",
+        "description": "Promotes an observed suggestion into the authenticated owner's reusable tag vocabulary."
       }
     },
     "/v1/me/reading-dictionary": {
@@ -3690,7 +4266,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "List reading dictionary entries",
+        "description": "Lists pronunciation overrides available to the authenticated owner's episode generation jobs."
       },
       "post": {
         "tags": [
@@ -3826,7 +4404,9 @@
             }
           },
           "required": true
-        }
+        },
+        "summary": "Create a reading dictionary entry",
+        "description": "Creates an owner-scoped pronunciation override; a duplicate surface conflict returns 409."
       }
     },
     "/v1/me/reading-dictionary/{id}": {
@@ -4046,7 +4626,9 @@
             }
           },
           "required": true
-        }
+        },
+        "summary": "Update a reading dictionary entry",
+        "description": "Updates an owner-scoped pronunciation override; missing entries return 404 and duplicate surfaces return 409."
       },
       "delete": {
         "tags": [
@@ -4128,7 +4710,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Delete a reading dictionary entry",
+        "description": "Deletes an owner-scoped pronunciation override; missing and foreign IDs are normalized to 404."
       }
     },
     "/v1/me/enrich/queue": {
@@ -4195,7 +4779,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Get enrichment queue and budget",
+        "description": "Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily paid provider-attempt usage and limit counters. Failed provider calls consume this budget; pre-provider validation and expired leases do not."
       }
     },
     "/v1/me/enrich/reprocess": {
@@ -4237,7 +4823,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_1"
+                  "$ref": "#/components/schemas/Objects_2"
                 }
               }
             }
@@ -4262,7 +4848,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Requeue failed enrichment",
+        "description": "Requeues eligible failed work for the authenticated owner. Executions remain constrained by the reported daily enrichment budget."
       }
     },
     "/v1/me/enrich/reset-daily": {
@@ -4331,6 +4919,16 @@
               }
             }
           },
+          "403": {
+            "description": "ForbiddenProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenProblem"
+                }
+              }
+            }
+          },
           "503": {
             "description": "UnavailableProblem",
             "content": {
@@ -4341,7 +4939,9 @@
               }
             }
           }
-        }
+        },
+        "summary": "Reset the daily enrichment budget",
+        "description": "Resets the authenticated owner's daily enrichment usage for the Gateway's current local date."
       }
     }
   },
@@ -4464,20 +5064,15 @@
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Upstream unavailable"
             ]
           },
           "status": {
@@ -4488,20 +5083,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "upstream_unavailable"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -4609,20 +5193,15 @@
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Invalid subscription request"
             ]
           },
           "status": {
@@ -4633,20 +5212,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "invalid_subscription_request"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -4661,20 +5229,15 @@
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Authentication required"
             ]
           },
           "status": {
@@ -4685,20 +5248,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "authentication_required"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -4710,75 +5262,202 @@
         "additionalProperties": false
       },
       "ConflictProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Idempotency conflict"
+                ]
               },
-              {
-                "maxLength": 200
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "idempotency_conflict"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "status": {
-            "type": "number",
-            "enum": [
-              409
-            ]
-          },
-          "code": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Resource conflict"
+                ]
               },
-              {
-                "maxLength": 100
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "resource_conflict"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Feed subscription already exists"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "feed_subscription_exists"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode job state conflict"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_terminal"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode job state conflict"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "job_not_failed"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "type",
-          "title",
-          "status",
-          "code"
-        ],
-        "additionalProperties": false
+        ]
       },
       "UnprocessableProblem": {
         "type": "object",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
           },
           "title": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 200
-              }
+            "enum": [
+              "Feed subscription rejected"
             ]
           },
           "status": {
@@ -4789,20 +5468,9 @@
           },
           "code": {
             "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "\\S"
-              },
-              {
-                "maxLength": 100
-              }
+            "enum": [
+              "feed_subscription_rejected"
             ]
-          },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
           }
         },
         "required": [
@@ -4848,6 +5516,28 @@
           },
           "status": {
             "$ref": "#/components/schemas/JobStatus"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "scheduled"
+            ]
+          },
+          "scheduleStatus": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "retrying",
+                  "succeeded",
+                  "missed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "createdAt": {
             "type": "string"
@@ -4969,18 +5659,128 @@
                 "type": "object",
                 "properties": {
                   "code": {
-                    "type": "string",
-                    "allOf": [
+                    "anyOf": [
                       {
-                        "minLength": 1
+                        "type": "string",
+                        "enum": [
+                          "job_deadline_exceeded",
+                          "generation_planning_canceled",
+                          "generation_planning_unavailable",
+                          "generation_planning_invalid_reply",
+                          "generation_planning_correlation_mismatch",
+                          "generation_planning_invalid_request",
+                          "generation_planning_unauthenticated",
+                          "generation_planning_not_found",
+                          "generation_planning_storage_failure",
+                          "generation_planning_object_failure",
+                          "generation_planning_internal_error",
+                          "no_generation_candidates",
+                          "generation_plan_owner_mismatch",
+                          "invalid_generation_plan",
+                          "content_materialization_canceled",
+                          "content_materialization_unavailable",
+                          "content_materialization_invalid",
+                          "content_materialization_empty",
+                          "missing_materialized_articles",
+                          "invalid_script_sources",
+                          "script_quality_rejected",
+                          "dictionary_snapshot_owner_mismatch",
+                          "audio_store_canceled",
+                          "audio_store_unavailable",
+                          "audio_delete_unavailable",
+                          "invalid_audio",
+                          "invalid_job_transition",
+                          "invalid_completion_transition",
+                          "invalid_completion_outbox",
+                          "completion_outbox_missing",
+                          "nats_completion_publish",
+                          "sqlite_dictionary_prepare",
+                          "sqlite_dictionary_snapshot_conflict",
+                          "sqlite_checkpoint_missing_script",
+                          "script_rate_limited",
+                          "script_unavailable",
+                          "script_timeout",
+                          "script_incomplete",
+                          "script_client_error",
+                          "script_malformed_response",
+                          "script_refusal",
+                          "script_unexpected_status",
+                          "speech_rate_limited",
+                          "speech_unavailable",
+                          "speech_timeout",
+                          "speech_incomplete",
+                          "speech_client_error",
+                          "speech_malformed_response",
+                          "speech_refusal",
+                          "speech_unexpected_status",
+                          "sqlite_open_database",
+                          "sqlite_open_database_corrupt_record",
+                          "sqlite_lease_next",
+                          "sqlite_lease_next_corrupt_record",
+                          "sqlite_mark_step",
+                          "sqlite_mark_step_corrupt_record",
+                          "sqlite_report_stage_progress",
+                          "sqlite_report_stage_progress_corrupt_record",
+                          "sqlite_record_selected_articles",
+                          "sqlite_record_selected_articles_corrupt_record",
+                          "sqlite_renew_lease",
+                          "sqlite_renew_lease_corrupt_record",
+                          "sqlite_assert_lease",
+                          "sqlite_assert_lease_corrupt_record",
+                          "sqlite_load_checkpoint",
+                          "sqlite_load_checkpoint_corrupt_record",
+                          "sqlite_decode_checkpoint",
+                          "sqlite_decode_checkpoint_corrupt_record",
+                          "sqlite_load_generation_plan",
+                          "sqlite_load_generation_plan_corrupt_record",
+                          "sqlite_decode_generation_plan",
+                          "sqlite_decode_generation_plan_corrupt_record",
+                          "sqlite_list_used_automatic_articles",
+                          "sqlite_list_used_automatic_articles_corrupt_record",
+                          "sqlite_save_generation_plan",
+                          "sqlite_save_generation_plan_corrupt_record",
+                          "sqlite_load_dictionary_snapshot",
+                          "sqlite_load_dictionary_snapshot_corrupt_record",
+                          "sqlite_decode_dictionary_snapshot",
+                          "sqlite_decode_dictionary_snapshot_corrupt_record",
+                          "sqlite_save_dictionary_snapshot",
+                          "sqlite_save_dictionary_snapshot_corrupt_record",
+                          "sqlite_save_script_checkpoint",
+                          "sqlite_save_script_checkpoint_corrupt_record",
+                          "sqlite_save_audio_checkpoint",
+                          "sqlite_save_audio_checkpoint_corrupt_record",
+                          "sqlite_transition",
+                          "sqlite_transition_corrupt_record",
+                          "sqlite_complete_with_outbox",
+                          "sqlite_complete_with_outbox_corrupt_record",
+                          "sqlite_check_cancellation",
+                          "sqlite_check_cancellation_corrupt_record",
+                          "sqlite_find_job",
+                          "sqlite_find_job_corrupt_record",
+                          "sqlite_find_completion_outbox",
+                          "sqlite_find_completion_outbox_corrupt_record",
+                          "sqlite_list_completion_outbox",
+                          "sqlite_list_completion_outbox_corrupt_record",
+                          "sqlite_mark_completion_published",
+                          "sqlite_mark_completion_published_corrupt_record"
+                        ]
                       },
                       {
-                        "pattern": "\\S"
-                      },
-                      {
-                        "maxLength": 200
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "minLength": 1
+                          },
+                          {
+                            "pattern": "\\S"
+                          },
+                          {
+                            "maxLength": 200
+                          }
+                        ]
                       }
-                    ]
+                    ],
+                    "description": "Machine-readable Episode generation failure code. The enum lists known values; clients must safely handle bounded future values during rolling deployments."
                   },
                   "message": {
                     "type": "string",
@@ -5016,6 +5816,7 @@
         "required": [
           "id",
           "status",
+          "trigger",
           "createdAt",
           "attempt",
           "maxAttempts"
@@ -5054,56 +5855,188 @@
         "additionalProperties": false
       },
       "NotFoundProblem": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode not found"
+                ]
               },
-              {
-                "maxLength": 200
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "episode_not_found"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "status": {
-            "type": "number",
-            "enum": [
-              404
-            ]
-          },
-          "code": {
-            "type": "string",
-            "allOf": [
-              {
-                "minLength": 1
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
               },
-              {
-                "pattern": "\\S"
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Feed subscription not found"
+                ]
               },
-              {
-                "maxLength": 100
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "feed_subscription_not_found"
+                ]
               }
-            ]
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           },
-          "detail": {
-            "$ref": "#/components/schemas/Union_"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Resource not found"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "resource_not_found"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Article not found"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "article_not_found"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Episode job not found"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "episode_job_not_found"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "type",
-          "title",
-          "status",
-          "code"
-        ],
-        "additionalProperties": false
+        ]
       },
       "EpisodeSource": {
         "type": "object",
@@ -5299,11 +6232,7 @@
         "properties": {
           "feedUrl": {
             "type": "string",
-            "allOf": [
-              {
-                "maxLength": 2048
-              }
-            ]
+            "description": "Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; the canonical result must be at most 2,048 characters, and credentials and fragments are forbidden."
           }
         },
         "required": [
@@ -5827,8 +6756,11 @@
                 "pattern": "\\S"
               },
               {
-                "maxLength": 200,
-                "description": "Matches article title, source URL, or owner tag name."
+                "maxLength": 200
+              },
+              {
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "description": "Literal partial match against article title, source URL, owner tag name, or the persisted Markdown body of the latest snapshot accessible to the authenticated owner."
               }
             ]
           },
@@ -6139,6 +7071,40 @@
         ],
         "additionalProperties": false
       },
+      "Objects_": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "allOf": [
+              {
+                "maxLength": 1048576
+              }
+            ]
+          }
+        },
+        "required": [
+          "markdown"
+        ],
+        "additionalProperties": false
+      },
+      "ArticleReplayLocation": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^\\/v1\\/me\\/article-snapshots\\/[0-9a-f-]{36}\\/replay\\/index\\.html$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
       "Union_5": {
         "anyOf": [
           {
@@ -6149,7 +7115,7 @@
           }
         ]
       },
-      "Objects_": {
+      "Objects_1": {
         "type": "object",
         "properties": {
           "items": {
@@ -6246,7 +7212,7 @@
         ],
         "additionalProperties": false
       },
-      "Objects_1": {
+      "Objects_2": {
         "type": "object",
         "properties": {
           "enqueued": {
@@ -6457,7 +7423,7 @@
         ],
         "additionalProperties": false
       },
-      "Objects_2": {
+      "Objects_3": {
         "type": "object",
         "properties": {
           "name": {
@@ -7010,6 +7976,42 @@
           "reprocessable"
         ],
         "additionalProperties": false
+      },
+      "ForbiddenProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "about:blank"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "enum": [
+              "Operation forbidden"
+            ]
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              403
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "operation_forbidden"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "additionalProperties": false
       }
     },
     "securitySchemes": {}
@@ -7039,6 +8041,12 @@
     },
     {
       "name": "Personalization"
+    }
+  ],
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same-origin public Gateway"
     }
   ]
 }

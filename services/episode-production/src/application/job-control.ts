@@ -23,7 +23,10 @@ export type OwnerScopedJobQueryPorts<Error = never> = Readonly<{
 }>
 
 export type CancelOwnedJobResult =
-  | Readonly<{ readonly _tag: "Canceled"; readonly job: EpisodeJob }>
+  | Readonly<{
+      readonly _tag: "Canceled"
+      readonly job: Extract<EpisodeJob, { _tag: "Canceled" }>
+    }>
   | Readonly<{ readonly _tag: "NotFound" }>
   | Readonly<{ readonly _tag: "Terminal" }>
 
@@ -90,6 +93,14 @@ export const retryFailedJob = <FindError, SaveError>(
           )
         }
         if (original._tag !== "Failed") {
+          return Effect.succeed<RetryFailedJobResult>(
+            deepFreeze({ _tag: "NotFailed" as const })
+          )
+        }
+        if (
+          original.request.trigger === "scheduled" &&
+          original.failure.code === "no_generation_candidates"
+        ) {
           return Effect.succeed<RetryFailedJobResult>(
             deepFreeze({ _tag: "NotFailed" as const })
           )

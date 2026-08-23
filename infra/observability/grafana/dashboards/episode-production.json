@@ -82,7 +82,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "loki" },
-      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 40, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } }, "unit": "ops" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" }, "unit": "ms" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 },
       "id": 8,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
@@ -110,15 +110,35 @@
       "id": 10,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "editorMode": "code", "expr": "sum(rate(traces_spanmetrics_calls_total{service_name=\"episode-production\",status_code=\"STATUS_CODE_ERROR\"}[5m]))", "legendFormat": "error spans", "range": true, "refId": "A" },
-        { "editorMode": "code", "expr": "sum(episode_queue_oldest_age)", "legendFormat": "queue age", "range": true, "refId": "B" }
+        { "editorMode": "code", "expr": "max(episode_queue_oldest_age)", "legendFormat": "oldest ready age", "range": true, "refId": "A" },
+        { "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(episode_queue_wait_duration_bucket[5m])))", "legendFormat": "lease wait p95", "range": true, "refId": "B" }
       ],
-      "title": "Lease anomalies",
+      "title": "Queue age and lease wait",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 35, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 },
+      "id": 13,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "sum by (gen_ai_request_model, episode_script_prompt_version, episode_script_quality_prompt_version, quality_outcome, quality_reason) (increase(episode_script_quality_total[$__rate_interval]))", "legendFormat": "{{gen_ai_request_model}} · {{episode_script_prompt_version}} · {{episode_script_quality_prompt_version}} · {{quality_outcome}} · {{quality_reason}}", "range": true, "refId": "A" }],
+      "title": "Script quality outcomes by model and prompt version",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 35, "lineWidth": 1, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 29 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [{ "editorMode": "code", "expr": "sum by (schedule_outcome) (increase(episode_schedule_outcomes_total[$__rate_interval]))", "legendFormat": "{{schedule_outcome}}", "range": true, "refId": "A" }],
+      "title": "Daily schedule outcomes",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 21 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 37 },
       "id": 11,
       "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
       "targets": [{ "editorMode": "code", "expr": "{service_name=~\".*worker.*|.*episode.*\"} | detected_level =~ `error|warn`", "queryType": "range", "refId": "A" }],

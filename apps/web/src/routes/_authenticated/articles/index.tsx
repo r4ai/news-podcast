@@ -90,7 +90,7 @@ function ArticlesRoute() {
     if (id !== undefined && !hasSelection) listScroll.current = window.scrollY
     // 一覧と本文の入れ替えではrouterに位置を触らせない。routerのリセットは
     // 描き終えた後に効くので、こちらが移した位置を上書きしてしまう。
-    onSearchChange({ article: id }, { resetScroll: false })
+    onSearchChange({ article: id, snapshot: undefined }, { resetScroll: false })
   }
 
   return (
@@ -166,7 +166,8 @@ function ArticlesRoute() {
             <ArticleReader
               articleId={search.article}
               includeHidden={search.includeHidden}
-              key={search.article}
+              key={`${search.article}:${search.snapshot ?? "latest"}`}
+              snapshotId={search.snapshot}
             />
           )}
         </Panel>

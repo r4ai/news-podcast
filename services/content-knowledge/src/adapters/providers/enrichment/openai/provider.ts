@@ -4,22 +4,16 @@ import {
   type AiRuntimeFailure,
 } from "@news-podcast/ai-runtime"
 import { deepFreeze, parse } from "@news-podcast/kernel"
-import { Clock, Effect } from "effect"
+import { Effect } from "effect"
 import { LanguageModel } from "effect/unstable/ai"
 
-import type {
-  EnrichmentProvider,
-  EnrichmentProviderError,
-} from "../../../../application/enrichment.js"
-import {
-  EnrichmentProviderInputSchema,
-  type EnrichmentProviderOutput,
-} from "../../../../domain/enrichment.js"
+import type { EnrichmentProvider } from "../../../../application/enrichment.js"
+import { EnrichmentProviderInputSchema } from "../../../../domain/enrichment.js"
 import type {
   OpenAiEnrichmentProviderConfig,
   OpenAiEnrichmentProviderDependencies,
 } from "./config.js"
-import { applicationFailure, publicFailure, retryDelay } from "./failures.js"
+import { applicationFailure, publicFailure } from "./failures.js"
 import { enrichmentPrompt } from "./prompt.js"
 import { EnrichmentPayloadSchema } from "./schema.js"
 import { validateEnrichment } from "./validation.js"
@@ -66,9 +60,6 @@ export const makeOpenAiEnrichmentProvider = (
   config: OpenAiEnrichmentProviderConfig,
   dependencies: OpenAiEnrichmentProviderDependencies = {}
 ): EnrichmentProvider => {
-  const nowMillis = dependencies.nowMillis ?? (() => Clock.currentTimeMillis)
-  const sleep =
-    dependencies.sleep ?? ((milliseconds) => Effect.sleep(milliseconds))
   const languageModelLayer =
     dependencies.languageModelLayer ??
     makeOpenAiLanguageModelLayer(
@@ -91,37 +82,22 @@ export const makeOpenAiEnrichmentProvider = (
         Effect.mapError(() =>
           applicationFailure("Permanent", "invalid enrichment provider input")
         ),
-        Effect.flatMap((input) => {
-          const attempt = (
-            number: number
-          ): Effect.Effect<EnrichmentProviderOutput, EnrichmentProviderError> =>
-            applyAiRuntimePolicy(
-              LanguageModel.generateObject({
-                objectName: "article_enrichment_v1",
-                prompt: enrichmentPrompt(input),
-                schema: EnrichmentPayloadSchema,
-              }).pipe(Effect.provide(languageModelLayer)),
-              { requestTimeoutMillis: config.requestTimeoutMillis }
-            ).pipe(
-              Effect.mapError(providerFailureFromAi),
-              Effect.flatMap((response) =>
-                validateEnrichment(response.value, response.usage, input)
-              ),
-              Effect.matchEffect({
-                onFailure: (failure) =>
-                  nowMillis().pipe(
-                    Effect.flatMap((now) => {
-                      const delay = retryDelay(failure, number, now, config)
-                      return delay === undefined
-                        ? Effect.fail(publicFailure(failure))
-                        : sleep(delay).pipe(Effect.andThen(attempt(number + 1)))
-                    })
-                  ),
-                onSuccess: Effect.succeed,
-              })
-            )
-          return attempt(1)
-        })
+        Effect.flatMap((input) =>
+          applyAiRuntimePolicy(
+            LanguageModel.generateObject({
+              objectName: "article_enrichment_v1",
+              prompt: enrichmentPrompt(input),
+              schema: EnrichmentPayloadSchema,
+            }).pipe(Effect.provide(languageModelLayer)),
+            { requestTimeoutMillis: config.requestTimeoutMillis }
+          ).pipe(
+            Effect.mapError(providerFailureFromAi),
+            Effect.flatMap((response) =>
+              validateEnrichment(response.value, response.usage, input)
+            ),
+            Effect.mapError(publicFailure)
+          )
+        )
       ),
   })
 }

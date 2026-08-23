@@ -17,6 +17,16 @@ import type {
   ProviderRetryPolicy,
 } from "../../../domain/provider-reliability.js"
 import { scriptPrompt } from "./prompt.js"
+import { SCRIPT_PROMPT_VERSION } from "./prompt.js"
+import {
+  scriptQualityPrompt,
+  SCRIPT_QUALITY_PROMPT_VERSION,
+} from "./quality-prompt.js"
+import {
+  ScriptQualityPayloadSchema,
+  type ScriptQualityReasonCode,
+} from "./quality-schema.js"
+import { validateScriptQuality } from "./quality-validation.js"
 import { ScriptPayloadSchema } from "./schema.js"
 import { validateGeneratedScript } from "./validation.js"
 
@@ -35,6 +45,15 @@ export type OpenAiScriptGeneratorDependencies = Readonly<{
   readonly languageModelLayer?: Layer.Layer<LanguageModel.LanguageModel>
   readonly fetcher?: typeof fetch
   readonly retryRuntime?: ProviderRetryRuntime
+  readonly observeQuality?: (observation: ScriptQualityObservation) => void
+}>
+
+export type ScriptQualityObservation = Readonly<{
+  readonly model: string
+  readonly generationPromptVersion: typeof SCRIPT_PROMPT_VERSION
+  readonly qualityPromptVersion: typeof SCRIPT_QUALITY_PROMPT_VERSION
+  readonly outcome: "pass" | "reject"
+  readonly reasonCode: ScriptQualityReasonCode
 }>
 
 const providerFailure = (failure: AiRuntimeFailure): ProviderFailure =>
@@ -61,7 +80,17 @@ export const makeOpenAiScriptGenerator = (
     )
   return deepFreeze({
     generate: (request) => {
-      const operation = () =>
+      const withRetry = <Success>(
+        operation: () => Effect.Effect<Success, ProviderFailure>
+      ) =>
+        dependencies.retryRuntime === undefined
+          ? retryProvider(operation, config.retryPolicy)
+          : retryProvider(
+              operation,
+              config.retryPolicy,
+              dependencies.retryRuntime
+            )
+      const generateDraft = () =>
         applyAiRuntimePolicy(
           LanguageModel.generateObject({
             objectName: "episode_script_v1",
@@ -75,16 +104,50 @@ export const makeOpenAiScriptGenerator = (
         ).pipe(
           Effect.mapError(providerFailure),
           Effect.flatMap((response) =>
-            validateGeneratedScript(response.value, request)
+            validateGeneratedScript(response.value, request).pipe(
+              Effect.map((generated) => ({ generated, draft: response.value }))
+            )
           )
         )
-      return dependencies.retryRuntime === undefined
-        ? retryProvider(operation, config.retryPolicy)
-        : retryProvider(
-            operation,
-            config.retryPolicy,
-            dependencies.retryRuntime
+      const evaluateQuality = (draft: typeof ScriptPayloadSchema.Type) => () =>
+        applyAiRuntimePolicy(
+          LanguageModel.generateObject({
+            objectName: "episode_script_quality_v1",
+            prompt: scriptQualityPrompt(request, draft),
+            schema: ScriptQualityPayloadSchema,
+          }).pipe(Effect.provide(languageModelLayer)),
+          {
+            requestTimeoutMillis: config.requestTimeoutMillis,
+            ...(request.signal === undefined ? {} : { signal: request.signal }),
+          }
+        ).pipe(
+          Effect.mapError(providerFailure),
+          Effect.map((response) => response.value)
+        )
+      return withRetry(generateDraft).pipe(
+        Effect.flatMap(({ generated, draft }) =>
+          withRetry(evaluateQuality(draft)).pipe(
+            Effect.flatMap((quality) =>
+              Effect.sync(() => {
+                try {
+                  dependencies.observeQuality?.(
+                    deepFreeze({
+                      model: config.model,
+                      generationPromptVersion: SCRIPT_PROMPT_VERSION,
+                      qualityPromptVersion: SCRIPT_QUALITY_PROMPT_VERSION,
+                      outcome: quality.verdict,
+                      reasonCode: quality.reason_code,
+                    })
+                  )
+                } catch {
+                  return
+                }
+              }).pipe(Effect.andThen(validateScriptQuality(quality)))
+            ),
+            Effect.as(generated)
           )
+        )
+      )
     },
   })
 }

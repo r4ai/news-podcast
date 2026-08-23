@@ -39,7 +39,17 @@ pnpm dev:up
 | Web Vitals fake API | 4100 | `PERF_API_PORT` |
 | Web Vitals preview | 4473 | `PERF_WEB_PORT` |
 
-開発ログインは`.env`の`DEV_AUTH_PASSWORD`を使う。`APP_ENV=production`では開発ログインとfake providerを有効にできない。
+開発ログインは`.env`の`DEV_AUTH_PASSWORD`を使う。`APP_ENV=production`では開発ログインとfake providerを有効にできない。Content KnowledgeとEpisode Productionは同じprovider mode parserを使い、次の状態遷移をReady前に検証する。
+
+| `APP_ENV` | `PROVIDER_MODE` | 必須設定 | 起動結果 |
+| --- | --- | --- | --- |
+| `development` / `test` | `fake`（未指定時の既定） | 各serviceのlocal依存 | 起動 |
+| `development` / `test` | `live` | OpenAI key/modelと各service依存 | 起動 |
+| `production` | `live` | OpenAI key/modelと各service依存 | 起動 |
+| `production` | 未指定 / `fake` / 未知値 / 大文字違い | — | 起動拒否 |
+| 未知の`APP_ENV` | 任意 | — | 起動拒否 |
+
+成功した構成は`provider.configuration` log/metricへ`app.env`と`provider.mode`だけを記録し、secretは属性に含めない。詳細は[ADR-0077](adr/0077-fail-closed-production-provider-mode.md)を参照する。
 
 終了時はvolumeを残して停止する。
 
@@ -103,7 +113,7 @@ Webの`/api`と`/v1`はGatewayだけへproxyする。認証routeもGatewayが固
 
 ### 外部APIなしで検証する
 
-`.env`の既定値は`PROVIDER_MODE=fake`である。固定providerを使って認証、購読、記事、非同期job、Library、音声accessを確認できる。
+`.env`の既定値は`APP_ENV=development`かつ`PROVIDER_MODE=fake`である。固定providerを使って認証、購読、記事、非同期job、Library、音声accessを確認できる。未知値はfakeへ読み替えず設定エラーになる。
 
 ```bash
 pnpm test:e2e:functional
@@ -115,8 +125,10 @@ functional E2Eは実NATS/JetStreamを使うbackend縦断、Web E2Eは分離し�
 ### OpenAIとVOICEVOXを使う
 
 ```dotenv
+APP_ENV=development
 PROVIDER_MODE=live
 OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=gpt-5.6-luna
 ```
 
 ```bash
@@ -126,7 +138,7 @@ pnpm dev:up:observed # 同じlive providerをGrafanaで観測
 
 VOICEVOXへの長文入力は、音声推論のpeak memoryを抑えるため既定で200文字ごとに逐次合成する。`VOICEVOX_MAXIMUM_TEXT_CHARACTERS`を増やす場合は、実際の台本長でVOICEVOXコンテナのpeak memoryを確認すること。VOICEVOXは一時的なprocess停止やOOM後にComposeが再起動し、Episode Productionの有界retryが回復後の処理を引き継ぐ。
 
-本番生成はownerが選択しContentが版固定した記事だけを入力にする。Content KnowledgeとEpisode Productionは共通の`packages/ai-runtime`を通じてEffect AIの`LanguageModel.generateObject`を使い、strict structured output、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0057](adr/0057-effect-ai-as-llm-boundary.md)）。
+本番生成はownerが選択しContentが版固定した記事だけを入力にする。RSS title/markdownは未信頼データとして扱い、version付き生成promptのdraftを別requestのversion付きquality evaluatorが公開前に判定する。rejectはcheckpoint前にjobを失敗させ、VOICEVOXとLibraryへ進めない。Content KnowledgeとEpisode Productionは共通の`packages/ai-runtime`を通じてEffect AIの`LanguageModel.generateObject`を使い、strict structured output、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0057](adr/0057-effect-ai-as-llm-boundary.md)、[ADR-0080](adr/0080-gate-untrusted-article-scripts-before-publication.md)）。
 
 起動済みlive stackをOpenAPIからブラウザ操作し、実際の記事選択、OpenAI台本生成、VOICEVOX音声合成、durable AG-UI replay、Libraryでの再生まで検証する場合は、明示的に環境変数を読み込んで次を実行する。これはOpenAIへの課金requestを発生させる。
 
@@ -138,6 +150,8 @@ pnpm test:e2e:live
 ```
 
 進捗wire契約、`Last-Event-ID`、標準eventとtransport拡張の境界は[Episode Job進捗プロトコル](protocols/episode-job-ag-ui.md)を正本とする。
+
+Episode生成の失敗コードを追加する場合は`packages/contracts/src/episode-failure.ts`へcodeとfamilyを同時に追加し、Production、RPC、OpenAPI生成物、Webのcomponent testを更新する。Productionはこのclosed集合だけを生成し、RPC/Gatewayはrolling deployment中のboundedな未知値も中継する。`failure.message`は利用者向け文言ではなく、Webへ直接表示しない。未知コードはjob ID付きの安全な汎用文言へ縮退する（[ADR-0083](adr/0083-share-episode-failure-code-contract.md)）。
 
 ## OpenAPI契約
 
@@ -162,7 +176,7 @@ pnpm contract:lint
 
 契約変更では生成物を同じ変更に含め、`contract:check`で差分がないことを確認する。Better Authの`/api/auth/**`は認証provider側の契約で、アプリOpenAPIへ複製しない。
 
-外部provider DTOを変更する前に[外部provider契約台帳](external-provider-contracts.md)を更新する。通常CIは`pnpm provider-contract:check`だけを実行する。live refreshは資格情報とlocal providerを必要とする明示操作であり、`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後に行う。OpenAIは同じ環境で各serviceの`*.contract.test.ts`を実行し、`OPENAI_CONTRACT_SAMPLES`（既定3、最大25/adapter）で実リクエスト数を制御する。model変更は[移行手順](operations/openai-model-migration.md)に従う。
+外部provider DTOを変更する前に[外部provider契約台帳](external-provider-contracts.md)を更新する。通常CIは`pnpm provider-contract:check`だけを実行する。live refreshは資格情報とlocal providerを必要とする明示操作であり、`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後に行う。OpenAIは同じ環境で各serviceの`*.contract.test.ts`を実行し、`OPENAI_CONTRACT_SAMPLES`（既定3、最大25/adapter）で論理sample数を制御する。台本sampleはdraftとqualityの2 requestを使う。model変更は[移行手順](operations/openai-model-migration.md)に従い、本文や攻撃payloadを出力しない`pnpm provider-security-eval`を必須release gateとして実行する。
 
 ## 品質gate
 
@@ -193,6 +207,7 @@ pnpm audit --audit-level=high
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
 | `pnpm test:e2e:live` | 起動済みlive stackのOpenAPI・画面生成・AG-UI再開・音声再生（課金あり） |
 | `pnpm provider-contract:check` | 匿名化した外部契約fixtureのoffline検査 |
+| `pnpm provider-security-eval` | 固定model/promptの4-class adversarial eval + 正当系control（課金・API keyが必要、model変更時） |
 | `pnpm test:e2e` | Web主要journey |
 | `pnpm test:sqlite-state` | service別backup/restore拒否規則 |
 | `pnpm db:generate` | drizzle schemaからmigration SQLを生成（要レビュー） |
@@ -222,12 +237,15 @@ dockerが無い環境では実行できない。撮り方を変えるより、�
 
 ```bash
 pnpm --filter web perf:vitals   # FCP/LCP/CLS/INPを実測する
-pnpm --filter web perf:bundle   # 初期ロードのgzipサイズを予算と比べる
+pnpm --filter web build         # bundle計測にはmanifest付きproduction buildが必須
+pnpm --filter web perf:bundle   # 初期ロードと主要routeのgzip予算をblocking検査
 ```
 
 条件はCPU 4倍抑制、Slow 4G相当(1.6 Mbps / 150 ms)、**キャッシュが空のcontext**での初回訪問に固定してある。抑制しないと開発機の速さとlocalhostの帯域が差を潰し、バンドルを削っても数字が動かない。ログイン後のページ内遷移を測るのも同じ理由で無意味になる。
 
-タイミングの値は実行環境で揺れるのでCIでは`web-e2e` job内の非ブロッキングstepとして計測する。決定的なのは`perf:bundle`のgzipサイズで、退行はここで捕らえる。
+タイミングの値は実行環境で揺れるのでCIでは`web-e2e` job内の非ブロッキングstepとして計測する。決定的な`perf:bundle`はrequiredな`static` jobでブロックする。`dist`またはmanifestが無い単独実行は、先にbuildするコマンドを示して失敗する。
+
+予算は`scripts/bundle-budgets.ts`でbaseline、上限、変更理由を一組として管理する。初期ロードは`index.html`の資産、主要routeはVite manifestから静的依存を再帰的に集め、初期資産との重複を除いて測る。CI summaryのbaseline→current差と残量を確認し、上限変更時は実測差と理由を同じdiffへ残す。
 
 「どのcomponentが何回描かれたか」はVitestで予算にする。`shared/test/render-count`の`watchRenders`で実物のcomponentを`vi.mock`から包み、操作前後の差を数える。production側へ計測用のコードは入れない。詳細は[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)。
 
@@ -256,7 +274,7 @@ pnpm parser:check
 
 ## State backupと復旧
 
-online backup、別pathへの検証restore、offline cutover、rollbackは[Service state backup / restore](operations/service-state-recovery.md)を正本とする。既存DBへの上書きと別serviceのbackup復元はCLIが拒否する。
+4 SQLiteをwrite barrierで同じlogical cutへ固定し、SeaweedFS inventoryとProduction/Library横断不変条件を束ねる自動backup、週次restore drill、別pathへの検証restore、offline cutover、rollbackは[Coordinated service state backup / restore](operations/service-state-recovery.md)を正本とする。既存DBへの上書きと別serviceのbackup復元はCLIが拒否する。
 
 ## Observability
 
@@ -338,7 +356,7 @@ flowchart LR
 
 | 領域 | 主な変数 |
 | --- | --- |
-| runtime | `APP_ENV`、`PROVIDER_MODE`、`NATS_SERVERS` |
+| runtime | `APP_ENV`、`PROVIDER_MODE`、`NATS_SERVERS`、`CONTENT_ENRICH_RESET_ENABLED` |
 | auth | `BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`DEV_AUTH_*`、`GOOGLE_CLIENT_*` |
 | Gateway/Identity HTTP | `GATEWAY_PORT`、`IDENTITY_HTTP_ORIGIN`、`AUTH_PROXY_*` |
 | service DB | `IDENTITY_DATABASE_PATH`、`CONTENT_KNOWLEDGE_DATABASE_PATH`、`EPISODE_PRODUCTION_DATABASE_PATH`、`EPISODE_LIBRARY_DATABASE_PATH` |
@@ -346,7 +364,9 @@ flowchart LR
 | storage/TTS | `S3_*`、`CONTENT_ARCHIVE_*`、`VOICEVOX_*` |
 | scheduler | `EPISODE_SCHEDULER_INTERVAL_MS`、`EPISODE_SCHEDULER_FAILURE_BACKOFF_MS`、`EPISODE_SCHEDULER_REQUEST_TIMEOUT_MS` |
 
-secretをGitへ追加しない。`DEV_AUTH_ENABLED=true`と`APP_ENV=production`の組み合わせは起動時に拒否する。
+secretをGitへ追加しない。`DEV_AUTH_ENABLED=true`と`APP_ENV=production`の組み合わせは起動時に拒否する。日次補完枠のresetは既定で無効であり、非productionで`CONTENT_ENRICH_RESET_ENABLED=true`を明示した場合だけowner自身の枠に許可する。productionとの組み合わせは設定事故として起動時に拒否する。
+
+`CONTENT_ENRICH_DAILY_LIMIT`は成功記事数ではなく、owner別・UTC日付別のprovider送信試行上限である。429、timeout、schema不正を含む送信済み試行は消費し、本文取得・入力検証・lease失効など送信前の失敗は消費しない。Enrichment OpenAI adapterは内部retryを持たず、retryable failureはqueueの次回lease・次回予約へ戻す。`article.enrich.attempt{outcome=reserved|budget_exhausted}`で予約判断を監視し、owner IDをmetric属性へ入れない（[ADR-0084](adr/0084-reserve-paid-enrichment-attempts.md)）。
 
 ## トラブルシューティング
 

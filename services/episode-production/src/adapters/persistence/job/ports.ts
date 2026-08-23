@@ -11,6 +11,7 @@ export type StoredJobRow = Readonly<{
 export type LeasedJobRow = Readonly<{
   document: string
   recovered: boolean
+  readyAt: string
 }>
 
 export type StoredCheckpointRow = Readonly<{
@@ -89,6 +90,10 @@ export type SqliteJobHandle = Readonly<{
     | { readonly _tag: "Updated"; readonly document: string }
     | { readonly _tag: "NotFound" }
     | { readonly _tag: "Terminal" }
+  requeueRecoverableScheduled: (input: {
+    readonly jobId: string
+    readonly document: string
+  }) => void
   saveIdempotently: (input: {
     readonly ownerId: string
     readonly idempotencyScope: string
@@ -156,3 +161,46 @@ export type SqliteJobHandle = Readonly<{
   markCompletionPublished: (jobId: string, publishedAt: string) => boolean
   close: () => void
 }>
+
+export type JobReadHandle = Pick<
+  SqliteJobHandle,
+  | "findById"
+  | "findOwned"
+  | "listOwned"
+  | "statusSnapshot"
+  | "listOwnedAgUiEvents"
+>
+
+export type JobProgressHandle = Pick<
+  SqliteJobHandle,
+  | "markStep"
+  | "reportStageProgress"
+  | "recordSelectedArticles"
+  | "replaceOwnedActive"
+  | "requeueRecoverableScheduled"
+  | "saveIdempotently"
+  | "leaseNext"
+  | "hasLease"
+  | "renewLease"
+  | "transition"
+>
+
+export type JobPlanHandle = Pick<
+  SqliteJobHandle,
+  | "loadCheckpoint"
+  | "loadGenerationPlan"
+  | "listUsedAutomaticArticleIds"
+  | "saveGenerationPlan"
+  | "loadDictionarySnapshot"
+  | "saveDictionarySnapshot"
+  | "saveScriptCheckpoint"
+  | "saveAudioCheckpoint"
+>
+
+export type JobOutboxHandle = Pick<
+  SqliteJobHandle,
+  | "completeWithOutbox"
+  | "findCompletionOutbox"
+  | "listPendingCompletionOutbox"
+  | "markCompletionPublished"
+>

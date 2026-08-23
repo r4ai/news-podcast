@@ -33,7 +33,6 @@ export function AiEnrichPanel() {
       pending={panel.pending}
       reprocessableCount={panel.reprocessableCount}
       requestReprocess={panel.requestReprocess}
-      resetDaily={panel.resetDaily}
     />
   )
 }
@@ -46,7 +45,6 @@ export type AiEnrichPanelViewProps = {
   readonly requestReprocess: () => void
   readonly cancelReprocess: () => void
   readonly confirmReprocess: () => void
-  readonly resetDaily: () => void
 }
 
 const counter = new Intl.NumberFormat("ja-JP")
@@ -59,7 +57,6 @@ export function AiEnrichPanelView({
   requestReprocess,
   cancelReprocess,
   confirmReprocess,
-  resetDaily,
 }: AiEnrichPanelViewProps) {
   const remaining = daily ? Math.max(0, daily.limit - daily.used) : undefined
   const nothingToReprocess = reprocessableCount === 0
@@ -91,17 +88,17 @@ export function AiEnrichPanelView({
       <Progress
         getAriaValueText={(_, value) =>
           daily
-            ? `${counter.format(value ?? 0)}件 / ${counter.format(daily.limit)}件`
+            ? `${counter.format(value ?? 0)}回 / ${counter.format(daily.limit)}回`
             : "読み込み中"
         }
         max={daily?.limit ?? 100}
         value={daily?.used ?? null}
       >
-        <ProgressLabel>本日の処理上限</ProgressLabel>
+        <ProgressLabel>本日のAI試行上限</ProgressLabel>
         <ProgressValue>
           {(_, value) =>
             daily
-              ? `${counter.format(value ?? 0)} / ${counter.format(daily.limit)}件`
+              ? `${counter.format(value ?? 0)} / ${counter.format(daily.limit)}回`
               : "—"
           }
         </ProgressValue>
@@ -111,20 +108,9 @@ export function AiEnrichPanelView({
         {remaining === undefined
           ? "使用量を読み込んでいます。"
           : nothingToReprocess
-            ? `本日はあと${counter.format(remaining)}件処理できます。再処理できる処理済み記事はありません。`
-            : `本日はあと${counter.format(remaining)}件処理できます。上限を超えた分は翌日へ繰り越して処理されます。`}
+            ? `本日はあと${counter.format(remaining)}回AIを試行できます。再処理できる処理済み記事はありません。`
+            : `本日はあと${counter.format(remaining)}回AIを試行できます。上限を超えた分は翌日へ繰り越されます。`}
       </p>
-
-      {import.meta.env.DEV ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2">
-          <span className="text-xs text-muted-foreground">
-            開発用：日次上限をリセット
-          </span>
-          <Button onClick={resetDaily} size="sm" variant="outline">
-            リセット
-          </Button>
-        </div>
-      ) : null}
 
       <AlertDialog
         onOpenChange={(open) => (!open ? cancelReprocess() : undefined)}

@@ -10,6 +10,8 @@ import { parseRssFeed } from "./feed-parser.js"
 export type {
   FeedFetchError,
   FeedItem,
+  FeedItemValidationFailure,
+  FeedReadResult,
   RssFeedReader,
 } from "../../../application/ports/article-catalog.js"
 

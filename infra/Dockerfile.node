@@ -12,6 +12,7 @@ RUN --mount=type=cache,id=news-podcast-pnpm-store,target=/pnpm/store \
     pnpm fetch --frozen-lockfile
 
 COPY apps/gateway/package.json apps/gateway/package.json
+COPY apps/state-backup/package.json apps/state-backup/package.json
 COPY apps/watchdog/package.json apps/watchdog/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json

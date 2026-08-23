@@ -26,11 +26,15 @@ const command = Schema.decodeUnknownSync(CreateJobCommandSchema)({
 const at = Schema.decodeUnknownSync(UtcTimestampSchema)(
   "2026-08-12T00:00:00.000Z"
 )
+const later = Schema.decodeUnknownSync(UtcTimestampSchema)(
+  "2026-08-12T01:00:00.000Z"
+)
 const job = (
   id: string,
   trigger: "manual" | "scheduled" = "manual",
   articleIds?: readonly string[],
-  idempotencyKey: string = command.idempotencyKey
+  idempotencyKey: string = command.idempotencyKey,
+  enqueuedAt = at
 ) =>
   newQueuedJob({
     jobId: Schema.decodeUnknownSync(JobIdSchema)(id),
@@ -47,10 +51,67 @@ const job = (
             Schema.decodeUnknownSync(ArticleIdSchema)(id)
           ),
         }),
-    enqueuedAt: at,
+    enqueuedAt,
   })
 
 describe("SQLite job repository", () => {
+  it("observes accepted, replay, and conflict without exposing the key", async () => {
+    const observations: unknown[] = []
+    const first = job("10e2d4e1-c127-479f-a124-2ea037bd9319")
+    const replay = job("6518412b-ce2f-4641-9f2c-a02dd515bc31")
+    const conflict = job("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80", "scheduled")
+    const retrySourceId = first.jobId
+    const firstRetry = job(
+      "a7ad9b42-2aa7-48d6-b3fe-f0035e4ff879",
+      "manual",
+      undefined,
+      "retry-key"
+    )
+    const retryReplay = job(
+      "b3a605e7-eb36-4994-81c1-a5ac6de414f3",
+      "manual",
+      undefined,
+      "retry-key"
+    )
+    const retryConflict = job(
+      "fe6a7e1d-fd67-4e94-84e8-36f566df972d",
+      "scheduled",
+      undefined,
+      "retry-key"
+    )
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(
+            openProductionDatabaseUnsafe(":memory:").database,
+            (observation) =>
+              Effect.sync(() => void observations.push(observation))
+          )
+          yield* repository.saveIdempotently(first)
+          yield* repository.saveIdempotently(replay)
+          yield* repository.saveIdempotently(conflict).pipe(Effect.ignore)
+          yield* repository.saveRetryIdempotently(retrySourceId, firstRetry)
+          yield* repository.saveRetryIdempotently(retrySourceId, retryReplay)
+          yield* repository
+            .saveRetryIdempotently(retrySourceId, retryConflict)
+            .pipe(Effect.ignore)
+        })
+      )
+    )
+
+    expect(observations).toEqual([
+      { operation: "create", outcome: "accepted" },
+      { operation: "create", outcome: "replay" },
+      { operation: "create", outcome: "conflict" },
+      { operation: "retry", outcome: "accepted" },
+      { operation: "retry", outcome: "replay" },
+      { operation: "retry", outcome: "conflict" },
+    ])
+    expect(JSON.stringify(observations)).not.toContain(command.idempotencyKey)
+    expect(JSON.stringify(observations)).not.toContain("retry-key")
+  })
+
   it("reports job-state counts and the oldest active timestamp", async () => {
     const result = await Effect.runPromise(
       Effect.scoped(
@@ -79,6 +140,35 @@ describe("SQLite job repository", () => {
         status: "queued",
         count: 2,
         oldestActiveAt: "2026-08-12T00:00:00.000Z",
+      },
+    ])
+  })
+
+  it("reports a running job as ready at lease expiry, not start time", async () => {
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = openProductionDatabaseUnsafe(":memory:").database
+          const repository = yield* jobRepository(database)
+          const execution = yield* executionRepository(database)
+          yield* repository.saveIdempotently(
+            job("10e2d4e1-c127-479f-a124-2ea037bd9319")
+          )
+          yield* execution.leaseNext({
+            now: at,
+            leasedUntil: later,
+            leaseToken: Schema.decodeUnknownSync(LeaseTokenSchema)("lease-1"),
+          })
+          return yield* repository.statusSnapshot()
+        })
+      )
+    )
+
+    expect(result).toEqual([
+      {
+        status: "running",
+        count: 1,
+        oldestActiveAt: "2026-08-12T01:00:00.000Z",
       },
     ])
   })
@@ -162,7 +252,7 @@ describe("SQLite job repository", () => {
             state: failRunningJob(leased.job, {
               failedAt: at,
               failure: {
-                code: "provider-timeout" as never,
+                code: "script_timeout",
                 retryable: false,
               },
             }),
@@ -175,7 +265,7 @@ describe("SQLite job repository", () => {
     expect(repeated).toMatchObject({
       _tag: "Failed",
       jobId: firstRetry.jobId,
-      failure: { code: "provider-timeout" },
+      failure: { code: "script_timeout" },
     })
   })
 
@@ -237,6 +327,79 @@ describe("SQLite job repository", () => {
 
     expect(repeated.jobId).toBe(first.jobId)
     expect(repeated.request.articleIds).toEqual(first.request.articleIds)
+  })
+
+  it("requeues a candidate-missed scheduled job after a service restart", async () => {
+    const databasePath = join(
+      mkdtempSync(join(tmpdir(), "episode-production-schedule-")),
+      "jobs.sqlite"
+    )
+    const scheduled = job(
+      "10e2d4e1-c127-479f-a124-2ea037bd9319",
+      "scheduled",
+      undefined,
+      "scheduled:owner:2026-08-15"
+    )
+    const leaseToken = Schema.decodeUnknownSync(LeaseTokenSchema)("lease-1")
+    const first = openProductionDatabaseUnsafe(databasePath)
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(first.database)
+          const execution = yield* executionRepository(first.database)
+          yield* repository.saveScheduledIdempotently(scheduled)
+          const leased = yield* execution.leaseNext({
+            now: at,
+            leasedUntil: at,
+            leaseToken,
+          })
+          if (leased?.job._tag !== "Running") {
+            return yield* Effect.die("expected a running lease")
+          }
+          yield* execution.transition({
+            jobId: scheduled.jobId,
+            leaseToken,
+            state: failRunningJob(leased.job, {
+              failedAt: at,
+              failure: {
+                code: "no_generation_candidates" as never,
+                retryable: false,
+              },
+            }),
+          })
+        })
+      )
+    } finally {
+      first.close()
+    }
+
+    const restarted = openProductionDatabaseUnsafe(databasePath)
+    try {
+      const requeued = await Effect.runPromise(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(restarted.database)
+          return yield* repository.saveScheduledIdempotently(
+            job(
+              "6518412b-ce2f-4641-9f2c-a02dd515bc31",
+              "scheduled",
+              undefined,
+              "scheduled:owner:2026-08-15",
+              later
+            )
+          )
+        })
+      )
+
+      expect(requeued).toMatchObject({
+        _tag: "Queued",
+        jobId: scheduled.jobId,
+        attempt: 0,
+        createdAt: later,
+        enqueuedAt: later,
+      })
+    } finally {
+      restarted.close()
+    }
   })
 
   it("treats selected articles as an order-independent idempotency input", async () => {
@@ -419,6 +582,10 @@ describe("SQLite job repository", () => {
           const leaseExit = yield* Effect.exit(
             execution.assertLease({ jobId: queued.jobId, leaseToken: token })
           )
+          const cancellation = yield* execution.checkCancellation({
+            jobId: queued.jobId,
+            leaseToken: token,
+          })
           const events = yield* repository.listOwnedAgUiEvents({
             ownerId: command.ownerId,
             jobId: queued.jobId,
@@ -431,7 +598,15 @@ describe("SQLite job repository", () => {
             afterSequence: events[2]!.sequence,
             limit: 100,
           })
-          return { hidden, canceled, terminal, leaseExit, events, resumed }
+          return {
+            hidden,
+            canceled,
+            terminal,
+            leaseExit,
+            cancellation,
+            events,
+            resumed,
+          }
         })
       )
     )
@@ -443,6 +618,10 @@ describe("SQLite job repository", () => {
     })
     expect(result.terminal).toEqual({ _tag: "Terminal" })
     expect(result.leaseExit._tag).toBe("Failure")
+    expect(result.cancellation).toMatchObject({
+      _tag: "Canceled",
+      canceledAt: at,
+    })
     expect(
       result.events.map((event) => (event.event as { type: string }).type)
     ).toEqual([

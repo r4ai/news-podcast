@@ -4,13 +4,16 @@ import { Effect, Schema } from "effect"
 import {
   ArticleListQuerySchema,
   parseArticleStatePatch,
+  createOwnerReplayAccess,
   readOwnerArticleMarkdown,
+  readOwnerSnapshotMarkdown,
   triggerOwnerArticleArchive,
   type ArticleLibraryRepository,
 } from "../../application/article-library.js"
 import type { MarkdownObjectReader } from "../../application/ports/article-catalog.js"
 import {
   ArticleIdSchema,
+  SnapshotIdSchema,
   type ArchiveRequestId,
   type CapturedAt,
 } from "../../domain/article.js"
@@ -29,6 +32,11 @@ import type {
 const ArticleIdentitySchema = Schema.Struct({
   ownerId: OwnerIdSchema,
   articleId: ArticleIdSchema,
+})
+const SnapshotIdentitySchema = Schema.Struct({
+  ownerId: OwnerIdSchema,
+  articleId: ArticleIdSchema,
+  snapshotId: SnapshotIdSchema,
 })
 const ListInputSchema = Schema.Struct({
   ownerId: OwnerIdSchema,
@@ -89,10 +97,13 @@ const strict =
 export type ArticleLibraryHandlerDependencies = Readonly<{
   readonly articles: ArticleLibraryRepository
   readonly objects: MarkdownObjectReader
+  readonly replaySigner?: import("../../application/article-library.js").ReplayAccessSigner
   readonly now: () => CapturedAt
-  readonly deriveArchiveRequestId: (
-    articleId: Schema.Schema.Type<typeof ArticleIdSchema>
-  ) => ArchiveRequestId
+  readonly nowEpochMillis?: () => number
+  readonly deriveArchiveRequestId: (input: {
+    readonly articleId: Schema.Schema.Type<typeof ArticleIdSchema>
+    readonly messageId: ArchiveMessageContext["messageId"]
+  }) => ArchiveRequestId
   readonly archive: (
     invocation: ArchiveArticleInvocation
   ) => Effect.Effect<ArchiveArticleResult, ArchiveStoreError | CaptureError>
@@ -106,10 +117,26 @@ export const makeArticleLibraryHandler = (
     articles: dependencies.articles,
     objects: dependencies.objects,
   })
+  const snapshotMarkdown = readOwnerSnapshotMarkdown({
+    articles: dependencies.articles,
+    objects: dependencies.objects,
+  })
   const triggerArchive = triggerOwnerArticleArchive({
     articles: dependencies.articles,
     deriveArchiveRequestId: dependencies.deriveArchiveRequestId,
     archive: dependencies.archive,
+  })
+  const replayAccess = createOwnerReplayAccess({
+    articles: dependencies.articles,
+    signer:
+      dependencies.replaySigner ??
+      deepFreeze({
+        issue: () =>
+          Effect.fail(
+            deepFreeze({ _tag: "ReplayAccessSigningFailure" as const })
+          ),
+      }),
+    nowEpochMillis: dependencies.nowEpochMillis ?? Date.now,
   })
 
   return deepFreeze({
@@ -125,9 +152,42 @@ export const makeArticleLibraryHandler = (
           dependencies.articles.find(ownerId, articleId)
         )
       ),
+    findSnapshot: (input: unknown) =>
+      strict(SnapshotIdentitySchema)(input).pipe(
+        Effect.flatMap(({ ownerId, articleId, snapshotId }) =>
+          dependencies.articles.findSnapshot(ownerId, articleId, snapshotId)
+        )
+      ),
     markdown: (input: unknown) =>
       strict(ArticleIdentitySchema)(input).pipe(
         Effect.flatMap(({ ownerId, articleId }) => markdown(ownerId, articleId))
+      ),
+    snapshotMarkdown: (input: unknown) =>
+      strict(SnapshotIdentitySchema)(input).pipe(
+        Effect.flatMap(({ ownerId, articleId, snapshotId }) =>
+          snapshotMarkdown(ownerId, articleId, snapshotId)
+        )
+      ),
+    replayAccess: (input: unknown) =>
+      strict(
+        Schema.Struct({
+          ownerId: OwnerIdSchema,
+          snapshotId: SnapshotIdSchema,
+          object: Schema.Union([
+            Schema.Struct({ kind: Schema.Literal("Replay") }),
+            Schema.Struct({
+              kind: Schema.Literal("Asset"),
+              assetName: Schema.String.check(
+                Schema.isPattern(/^[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
+                Schema.isMaxLength(81)
+              ),
+            }),
+          ]),
+        })
+      )(input).pipe(
+        Effect.flatMap(({ ownerId, snapshotId, object }) =>
+          replayAccess(ownerId, snapshotId, object)
+        )
       ),
     patch: (input: unknown) =>
       strict(PatchInputSchema)(input).pipe(

@@ -4,8 +4,8 @@
 - Date: 2026-08-17
 - Decision owners: Product owner / Platform
 - Supersedes: N/A
-- Superseded by: N/A
-- Related: ADR-0037、`docs/design.md` §4、`content_enrichment_daily_progress`
+- Superseded by: ADR-0084（成功完了時の消費タイミングのみ）
+- Related: ADR-0037、ADR-0076、`docs/design.md` §4、`content_enrichment_daily_progress`
 
 ## コンテキストと変更契機
 
@@ -13,7 +13,7 @@ AI記事補完のキュー、結果、タグはowner単位である一方、日�
 
 ## 決定
 
-AI記事補完の日次上限は`ownerId + UTC localDate`ごとに評価する。成功完了時刻を1回取得し、そのUTC日付へ利用量を加算する。workerの残量判定、状態表示、開発用リセットも同じowner境界で実行する。日付をまたぐ処理は開始日ではなく完了日に属する。
+AI記事補完の日次上限は`ownerId + UTC localDate`ごとに評価する。本ADRが定めた成功完了時の消費は[ADR-0084](0084-reserve-paid-enrichment-attempts.md)によりprovider送信直前の有料試行予約へ置き換える。workerの残量判定、状態表示、許可されたリセットは同じowner境界で実行する。リセットを誰に許可するかは[ADR-0076](0076-fail-closed-enrichment-budget-reset.md)で定める。
 
 ```mermaid
 flowchart LR

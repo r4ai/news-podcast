@@ -2,18 +2,22 @@ import { queryOptions } from "@tanstack/react-query"
 
 import { AuthStateError, type AuthState } from "../model"
 
+export async function fetchAuthState(
+  fetch: typeof globalThis.fetch = globalThis.fetch
+): Promise<AuthState> {
+  const response = await fetch("/api/auth/state", {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  })
+  if (!response.ok) {
+    throw new AuthStateError(response.status)
+  }
+  return (await response.json()) as AuthState
+}
+
 export const authStateQueryOptions = queryOptions({
   queryKey: ["auth-state"],
-  queryFn: async (): Promise<AuthState> => {
-    const response = await fetch("/api/auth/state", {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    })
-    if (!response.ok) {
-      throw new AuthStateError(response.status)
-    }
-    return (await response.json()) as AuthState
-  },
+  queryFn: () => fetchAuthState(),
   staleTime: 15_000,
 })
 

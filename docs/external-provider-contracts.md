@@ -28,7 +28,7 @@ flowchart LR
 
 各adapterは`effect@4.0.0-rc.109`の`LanguageModel.generateObject`へEffect Schemaを渡す。`@effect/ai-openai@4.0.0-rc.109`がOpenAIのstrict structured outputへ変換し、`packages/ai-runtime`がbase URL、Redacted API key、deadline、応答byte上限、`AiError`変換を集約する。`OPENAI_API_URL`は既定`https://api.openai.com/v1`のbase URLであり、Responses endpointの完全URLは設定しない。
 
-adapterはSDKがschema検証したobjectとusageだけを受け取る。手書きBearer header、request JSON、`output_text`探索、JSON parse、JSON Schema生成は行わない。一意性、候補部分集合、出典完全性、タグallowlist、台本内の読み候補など、provider schemaだけでは保証できない業務契約はapplication側でfail closedする。台本生成では出典を`source-1`形式のopaque IDでmodelへ渡し、検証後に版固定snapshotのURLへ戻すため、完全URLをmodelに再生成させない。prompt、記事本文、台本、完全URL、API key、provider-onlyのreasoning/ID/annotationは保存・telemetry属性へ出さない。
+adapterはSDKがschema検証したobjectとusageだけを受け取る。手書きBearer header、request JSON、`output_text`探索、JSON parse、JSON Schema生成は行わない。一意性、候補部分集合、出典完全性、タグallowlist、台本内の読み候補など、provider schemaだけでは保証できない業務契約はapplication側でfail closedする。台本生成では出典を`source-1`形式のopaque IDでmodelへ渡し、検証後に版固定snapshotのURLへ戻すため、完全URLをmodelに再生成させない。さらに`episode-script-v2`で記事内命令を未信頼データとして分離し、別requestの`episode-script-quality-v1`が注入追従・根拠外断定・source偽装・InterestProfile上書きを判定する。`pass + none`以外はcheckpoint前に拒否する。prompt、記事本文、台本、完全URL、API key、provider-onlyのreasoning/ID/annotationは保存・telemetry属性へ出さない。
 
 429の`Retry-After`、一時的な5xx/network failure、schema不適合、refusal、timeout、caller cancellationは`AiError`から既存policyへ分類する。最大試行・最大経過時間・30秒の待機上限を維持し、token数はmodelに生成させずSDK usageを利用する。
 
@@ -44,5 +44,5 @@ RSS 2.0は`rss/channel/title/link/description`、Atomは`feed/id/title/updated`�
 
 - commitするのは[匿名fixture](../contracts/provider-contracts.json)だけ。秘密、本文、provider ID、署名URL、完全feed/article URLに加え、観測時刻、実リクエスト数、実feed件数も保存しない。
 - offline CIは`pnpm provider-contract:check`を実行する。
-- live再調査は`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後、この文書の4 probeを明示実行する。OpenAIは既存keyを表示せず、各serviceの`*.contract.test.ts`を実行する。`OPENAI_CONTRACT_SAMPLES`は既定3、最大25/adapter（合計最大50 request）で、retryは行わない。Effect AIまたはOpenAI adapterのversion更新も再調査条件とする。
+- live再調査は`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後、この文書の4 probeを明示実行する。OpenAIは既存keyを表示せず、各serviceの`*.contract.test.ts`を実行する。`OPENAI_CONTRACT_SAMPLES`は既定3、最大25/adapterの論理sample数で、retryは行わない。台本は1 sampleあたりdraft + qualityの2 request、記事補完は1 requestである。Effect AIまたはOpenAI adapterのversion更新も再調査条件とする。model/prompt変更時は続けて`pnpm provider-security-eval`を実行し、本文・marker・response IDではなくversion別のsafe pass、quality reject、provider fail-closed率だけを残す。
 - 公式仕様と実データが矛盾した場合はDTOを広げず停止し、version、status/header/content type、匿名化した構造差分を報告する。

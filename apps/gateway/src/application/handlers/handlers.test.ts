@@ -60,10 +60,22 @@ const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
   createdAt: "2026-08-12T00:00:00.000Z",
 })
 const unavailable = {
-  type: "about:blank",
-  title: "Unavailable",
+  type: "about:blank" as const,
+  title: "Upstream unavailable" as const,
   status: 503 as const,
-  code: "unavailable",
+  code: "upstream_unavailable" as const,
+}
+const episodeJobNotFound = {
+  type: "about:blank" as const,
+  title: "Episode job not found" as const,
+  status: 404 as const,
+  code: "episode_job_not_found" as const,
+}
+const episodeNotFound = {
+  type: "about:blank" as const,
+  title: "Episode not found" as const,
+  status: 404 as const,
+  code: "episode_not_found" as const,
 }
 
 const makePorts = (): GatewayPorts => ({
@@ -72,36 +84,12 @@ const makePorts = (): GatewayPorts => ({
   createEpisodeJob: () => Effect.succeed(jobReceipt),
   listEpisodeJobs: () =>
     Effect.succeed({ items: [], page: { hasMore: false } }),
-  getEpisodeJob: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
-  cancelEpisodeJob: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
+  getEpisodeJob: () => Effect.fail(episodeJobNotFound),
+  cancelEpisodeJob: () => Effect.fail(episodeJobNotFound),
   retryEpisodeJob: () => Effect.succeed(jobReceipt),
-  replayEpisodeJobEvents: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
+  replayEpisodeJobEvents: () => Effect.fail(episodeJobNotFound),
   listEpisodes: () => Effect.succeed({ items: [], page: { hasMore: false } }),
-  getEpisode: () =>
-    Effect.fail({
-      status: 404,
-      type: "about:blank",
-      title: "Not found",
-      code: "not_found",
-    }),
+  getEpisode: () => Effect.fail(episodeNotFound),
   createAudioAccess: () => Effect.succeed(audioAccess),
   addFeedSubscription: () => Effect.succeed(subscription),
   listFeedSubscriptions: () =>
@@ -115,7 +103,10 @@ const makePorts = (): GatewayPorts => ({
   registerFeed: () => Effect.fail(unavailable),
   listArticles: () => Effect.succeed({ items: [], page: { hasMore: false } }),
   getArticle: () => Effect.fail(unavailable),
+  getArticleSnapshot: () => Effect.fail(unavailable),
   getArticleMarkdown: () => Effect.fail(unavailable),
+  getArticleSnapshotMarkdown: () => Effect.fail(unavailable),
+  createArticleReplayAccess: () => Effect.fail(unavailable),
   patchArticle: () => Effect.fail(unavailable),
   bulkPatchArticles: () => Effect.succeed({ updated: 0 }),
   getArticleFacets: () =>
@@ -147,11 +138,7 @@ const makePorts = (): GatewayPorts => ({
 describe("gateway port handlers", () => {
   it("injects every external port into a buildable Effect HttpApi layer", async () => {
     const context = await Effect.runPromise(
-      Layer.build(
-        makeGatewayHandlerLayer(makePorts(), {
-          nextRetryIdempotencyKey: () => "retry-test",
-        })
-      ).pipe(Effect.scoped)
+      Layer.build(makeGatewayHandlerLayer(makePorts())).pipe(Effect.scoped)
     )
 
     expect(context).toBeDefined()
@@ -249,6 +236,7 @@ describe("gateway port handlers", () => {
     const running = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: jobReceipt.id,
       status: "running",
+      trigger: "manual",
       createdAt: jobReceipt.createdAt,
       attempt: 1,
       maxAttempts: 4,
@@ -257,6 +245,7 @@ describe("gateway port handlers", () => {
     const succeeded = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: jobReceipt.id,
       status: "succeeded",
+      trigger: "manual",
       createdAt: jobReceipt.createdAt,
       attempt: 1,
       maxAttempts: 4,
@@ -313,6 +302,7 @@ describe("gateway port handlers", () => {
     const succeeded = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: jobReceipt.id,
       status: "succeeded",
+      trigger: "manual",
       createdAt: jobReceipt.createdAt,
       attempt: 1,
       maxAttempts: 4,

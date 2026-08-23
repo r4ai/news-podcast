@@ -1,4 +1,9 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
+import {
+  decodePersistedJson,
+  decodePersistedJsonSync,
+  isDatabaseError,
+} from "@news-podcast/persistence"
 import { and, desc, eq, inArray, notInArray, sql, type SQL } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
@@ -20,7 +25,6 @@ import type {
 } from "../../../application/ports/article-catalog.js"
 import { ArticleSnapshotSchema } from "../../../domain/article.js"
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
-import type { JsonInterop } from "../json-interop.js"
 import { latestSnapshotOfArticle } from "../latest-article-snapshot.js"
 
 const RowSchema = Schema.Struct({
@@ -50,8 +54,7 @@ const projection = {
 const sortKey = sql`COALESCE(${feedItems.publishedAt}, ${feedItems.discoveredAt})`
 
 export const createArticleCatalog = (
-  database: ContentKnowledgeDatabase,
-  jsonInterop: Pick<JsonInterop, "parse">
+  database: ContentKnowledgeDatabase
 ): Effect.Effect<ArticleCatalog, ArticleCatalogError> =>
   Effect.sync(() => {
     /**
@@ -123,11 +126,11 @@ export const createArticleCatalog = (
       Effect.forEach(rows, (row) =>
         parseRow(row).pipe(
           Effect.flatMap((parsed) =>
-            Effect.try({
-              try: () => jsonInterop.parse(parsed.snapshotJson),
-              catch: () => failure("Find", "CorruptRecord"),
-            }).pipe(
-              Effect.flatMap((json) => parse(ArticleSnapshotSchema)(json)),
+            decodePersistedJson(
+              "article_snapshots.snapshot_json",
+              ArticleSnapshotSchema,
+              parsed.snapshotJson
+            ).pipe(
               Effect.map((snapshot) => ({
                 snapshot,
                 publishedAt: parsed.publishedAt,
@@ -152,6 +155,36 @@ export const createArticleCatalog = (
       Effect.try({
         try: () =>
           database.transaction((tx) => {
+            const existing = tx
+              .select({ captureFingerprint: feedItems.captureFingerprint })
+              .from(feedItems)
+              .where(eq(feedItems.articleId, input.articleId))
+              .get()
+            const latest = tx
+              .select({ snapshotJson: articleSnapshots.snapshotJson })
+              .from(articleSnapshots)
+              .where(eq(articleSnapshots.articleId, input.articleId))
+              .orderBy(
+                desc(articleSnapshots.capturedAt),
+                desc(articleSnapshots.snapshotId)
+              )
+              .get()
+            const latestSnapshot =
+              latest === undefined
+                ? undefined
+                : decodePersistedJsonSync(
+                    "article_snapshots.snapshot_json",
+                    ArticleSnapshotSchema,
+                    latest.snapshotJson
+                  )
+            const captureRequired =
+              input.captureFingerprint !== undefined &&
+              (latestSnapshot === undefined ||
+                (existing?.captureFingerprint === null
+                  ? latestSnapshot.sourceUrl !== input.sourceUrl ||
+                    latestSnapshot.title !== input.title
+                  : existing?.captureFingerprint !== input.captureFingerprint))
+
             tx.insert(feedItems)
               .values({
                 articleId: input.articleId,
@@ -161,6 +194,7 @@ export const createArticleCatalog = (
                 title: input.title,
                 publishedAt: input.publishedAt ?? null,
                 discoveredAt: input.discoveredAt,
+                captureFingerprint: null,
               })
               .onConflictDoUpdate({
                 target: [feedItems.feedId, feedItems.externalId],
@@ -187,7 +221,12 @@ export const createArticleCatalog = (
             const owners = tx
               .select({ ownerId: feedSubscriptions.ownerId })
               .from(feedSubscriptions)
-              .where(eq(feedSubscriptions.feedId, input.feedId))
+              .where(
+                and(
+                  eq(feedSubscriptions.feedId, input.feedId),
+                  eq(feedSubscriptions.enabled, 1)
+                )
+              )
               .all()
             if (owners.length > 0)
               tx.insert(articleOwnerAccess)
@@ -200,7 +239,30 @@ export const createArticleCatalog = (
                 )
                 .onConflictDoNothing()
                 .run()
+
+            return deepFreeze({
+              _tag: captureRequired
+                ? ("CaptureRequired" as const)
+                : ("Unchanged" as const),
+            })
           }),
+        catch: (cause) =>
+          failure(
+            "Upsert",
+            isDatabaseError(cause) && cause.reason === "CorruptRecord"
+              ? "CorruptRecord"
+              : "Unavailable"
+          ),
+      })
+
+    const markCaptured: ArticleCatalog["markCaptured"] = (input) =>
+      Effect.try({
+        try: () =>
+          database
+            .update(feedItems)
+            .set({ captureFingerprint: input.captureFingerprint })
+            .where(eq(feedItems.articleId, input.articleId))
+            .run(),
         catch: () => failure("Upsert"),
       }).pipe(Effect.asVoid)
 
@@ -330,6 +392,7 @@ export const createArticleCatalog = (
 
     return deepFreeze({
       upsert,
+      markCaptured,
       findAutomatic,
       findSelected,
       listGenerationCandidates,

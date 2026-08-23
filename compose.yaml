@@ -87,6 +87,7 @@ services:
       HEALTH_PORT: "4103"
       NATS_SERVERS: nats://nats:4222
       CONTENT_ENRICH_DAILY_LIMIT: "200"
+      CONTENT_ENRICH_RESET_ENABLED: "${CONTENT_ENRICH_RESET_ENABLED:-false}"
       CONTENT_ENRICH_INTERVAL_MS: "60000"
       CONTENT_ENRICH_INITIAL_BACKOFF_MS: "1000"
       CONTENT_ENRICH_MAX_BACKOFF_MS: "30000"
@@ -322,6 +323,66 @@ services:
       retries: 6
       start_period: 5s
 
+  state-backup:
+    profiles: [backup]
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.node
+      network: host
+    command: ["pnpm", "--filter", "@news-podcast/state-backup", "start"]
+    restart: unless-stopped
+    stop_grace_period: 5m
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-news-podcast}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-news-podcast-development-secret}
+      S3_BUCKET: ${S3_BUCKET:-news-podcast}
+      BACKUP_ARCHIVE_ENDPOINT: ${BACKUP_ARCHIVE_ENDPOINT:-}
+      BACKUP_ARCHIVE_REGION: ${BACKUP_ARCHIVE_REGION:-us-east-1}
+      BACKUP_ARCHIVE_BUCKET: ${BACKUP_ARCHIVE_BUCKET:-}
+      BACKUP_ARCHIVE_ACCESS_KEY_ID: ${BACKUP_ARCHIVE_ACCESS_KEY_ID:-}
+      BACKUP_ARCHIVE_SECRET_ACCESS_KEY: ${BACKUP_ARCHIVE_SECRET_ACCESS_KEY:-}
+      BACKUP_ARCHIVE_FORCE_PATH_STYLE: ${BACKUP_ARCHIVE_FORCE_PATH_STYLE:-false}
+      BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup-encryption-key
+      BACKUP_STATE_PATH: /var/lib/news-podcast-backup/state.json
+      BACKUP_STAGING_ROOT: /var/lib/news-podcast-backup/staging
+      BACKUP_PORT: "4198"
+      BACKUP_INTERVAL_MS: ${BACKUP_INTERVAL_MS:-86400000}
+      BACKUP_DRILL_INTERVAL_MS: ${BACKUP_DRILL_INTERVAL_MS:-604800000}
+      BACKUP_BARRIER_TIMEOUT_MS: ${BACKUP_BARRIER_TIMEOUT_MS:-30000}
+      BACKUP_RPO_HOURS: ${BACKUP_RPO_HOURS:-24}
+      BACKUP_RTO_HOURS: ${BACKUP_RTO_HOURS:-4}
+      BACKUP_RETAINED_GENERATIONS: ${BACKUP_RETAINED_GENERATIONS:-30}
+      BACKUP_IMMUTABLE_DAYS: ${BACKUP_IMMUTABLE_DAYS:-35}
+    ports:
+      - "127.0.0.1:4198:4198"
+    volumes:
+      # The coordinator only opens BEGIN IMMEDIATE/ROLLBACK transactions, but
+      # SQLite requires write-capable mounts to hold the cross-service barrier.
+      - identity-data:/source/identity
+      - content-data:/source/content
+      - production-data:/source/production
+      - library-data:/source/library
+      - backup-data:/var/lib/news-podcast-backup
+    secrets:
+      - backup-encryption-key
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4198/health/live').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
 volumes:
   identity-data:
   content-data:
@@ -330,3 +391,8 @@ volumes:
   nats-data:
   object-data:
   watchdog-data:
+  backup-data:
+
+secrets:
+  backup-encryption-key:
+    file: ${BACKUP_ENCRYPTION_KEY_FILE_HOST:-./.secrets/backup-encryption-key}

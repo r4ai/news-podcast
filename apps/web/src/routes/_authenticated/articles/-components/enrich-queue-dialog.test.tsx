@@ -39,6 +39,10 @@ describe("EnrichQueueDialog", () => {
     )
 
     expect(screen.getByText("本日の上限待ち 2件")).toBeTruthy()
+    expect(screen.getByText("本日のAI試行上限")).toBeTruthy()
+    expect(
+      screen.getByRole("progressbar", { name: "本日のAI試行上限の使用率" })
+    ).toBeTruthy()
     expect(screen.getByText("待ち")).toBeTruthy()
     expect(screen.queryByText("処理中")).toBeNull()
   })

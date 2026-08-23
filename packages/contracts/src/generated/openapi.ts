@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Runtime health */
+        /**
+         * Check Gateway health
+         * @description Returns the unauthenticated process health signal used by deployment probes.
+         */
         get: operations["health"];
         put?: never;
         post?: never;
@@ -28,7 +31,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Resolve the current session */
+        /**
+         * Resolve the current session
+         * @description Resolves the session cookie or authorization header and returns authentication state plus enabled login methods without exposing credentials.
+         */
         get: operations["resolveSession"];
         put?: never;
         post?: never;
@@ -45,10 +51,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List episode jobs */
+        /**
+         * List owned episode jobs
+         * @description Lists only jobs owned by the authenticated session, with an optional bounded result limit.
+         */
         get: operations["listEpisodeJobs"];
         put?: never;
-        /** Create an idempotent episode job */
+        /**
+         * Create an idempotent episode job
+         * @description Requires an authenticated owner and Idempotency-Key. Accepts 1 to 20 owned article IDs; replaying the same key and payload returns the same logical job, while a mismatched payload returns 409.
+         */
         post: operations["createEpisodeJob"];
         delete?: never;
         options?: never;
@@ -63,7 +75,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get an episode job */
+        /**
+         * Get an owned episode job
+         * @description Returns one job in the authenticated owner scope. Missing and foreign job IDs are both reported as 404.
+         */
         get: operations["getEpisodeJob"];
         put?: never;
         post?: never;
@@ -82,7 +97,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel an episode job */
+        /**
+         * Cancel an owned episode job
+         * @description Requests cancellation in the authenticated owner scope. Terminal jobs return a 409 state conflict.
+         */
         post: operations["cancelEpisodeJob"];
         delete?: never;
         options?: never;
@@ -99,7 +117,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retry an episode job */
+        /**
+         * Retry a failed episode job
+         * @description Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409.
+         */
         post: operations["retryEpisodeJob"];
         delete?: never;
         options?: never;
@@ -114,7 +135,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Replay episode job events */
+        /**
+         * Replay episode job events
+         * @description Streams the owned job snapshot and durable AG-UI progress events. Last-Event-ID or afterSequence resumes after an acknowledged sequence.
+         */
         get: operations["streamEpisodeJobEvents"];
         put?: never;
         post?: never;
@@ -131,7 +155,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List completed episodes */
+        /**
+         * List owned completed episodes
+         * @description Lists completed episodes visible to the authenticated owner using the opaque next cursor returned by the previous page.
+         */
         get: operations["listEpisodes"];
         put?: never;
         post?: never;
@@ -148,7 +175,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a completed episode */
+        /**
+         * Get an owned completed episode
+         * @description Returns a completed episode and its source provenance in the authenticated owner scope; foreign IDs are normalized to 404.
+         */
         get: operations["getEpisode"];
         put?: never;
         post?: never;
@@ -165,7 +195,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stream owned episode audio */
+        /**
+         * Stream owned episode audio
+         * @description Streams same-origin WAV audio for an owned episode and supports a single HTTP Range request without exposing the internal signed object URL.
+         */
         get: operations["streamEpisodeAudio"];
         put?: never;
         post?: never;
@@ -182,10 +215,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List feed subscriptions */
+        /**
+         * List owned feed subscriptions
+         * @description Lists RSS subscriptions belonging only to the authenticated owner.
+         */
         get: operations["listFeedSubscriptions"];
         put?: never;
-        /** Subscribe to an RSS feed URL */
+        /**
+         * Subscribe to an RSS feed
+         * @description Canonicalizes a credential-free, fragment-free HTTP(S) RSS/Atom URL, creates the authenticated owner's subscription, and queues synchronization; an existing canonical subscription returns 409.
+         */
         post: operations["addFeedSubscription"];
         delete?: never;
         options?: never;
@@ -200,7 +239,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List RSS feed synchronization jobs */
+        /**
+         * List owned feed synchronization jobs
+         * @description Lists synchronization status and bounded retry progress for the authenticated owner's feeds.
+         */
         get: operations["listFeedSyncJobs"];
         put?: never;
         post?: never;
@@ -219,7 +261,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start an immediate RSS feed synchronization */
+        /**
+         * Start immediate feed synchronization
+         * @description Queues an asynchronous synchronization for an owned subscription and returns the accepted job; foreign IDs are normalized to 404.
+         */
         post: operations["syncFeedSubscription"];
         delete?: never;
         options?: never;
@@ -237,10 +282,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a feed subscription */
+        /**
+         * Delete an owned feed subscription
+         * @description Deletes a subscription in the authenticated owner scope. Missing and foreign IDs are both reported as 404.
+         */
         delete: operations["deleteFeedSubscription"];
         options?: never;
         head?: never;
+        /**
+         * Update an owned feed subscription
+         * @description Enables or disables synchronization for a subscription belonging to the authenticated owner.
+         */
         patch: operations["feedSubscriptions.updateFeedSubscription"];
         trace?: never;
     };
@@ -251,8 +303,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Search the feed catalog
+         * @description Searches feeds visible to the authenticated owner by an optional bounded text query.
+         */
         get: operations["feeds.listFeeds"];
         put?: never;
+        /**
+         * Register a feed and subscribe
+         * @description Canonicalizes and registers a credential-free, fragment-free HTTP(S) RSS/Atom URL for the authenticated owner; an existing canonical subscription returns 409.
+         */
         post: operations["feeds.registerFeed"];
         delete?: never;
         options?: never;
@@ -267,6 +327,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List owned articles
+         * @description Lists articles in the authenticated owner scope with state, feed, literal partial search, sort, and opaque cursor filters. Search covers title, source URL, owner tags, and the indexed persisted Markdown body of the deterministic latest snapshot. Limit is 1 to 100.
+         */
         get: operations["articles.listArticles"];
         put?: never;
         post?: never;
@@ -283,6 +347,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get owned article facets
+         * @description Returns state and feed counts for the authenticated owner's current article filters.
+         */
         get: operations["articles.getArticleFacets"];
         put?: never;
         post?: never;
@@ -299,12 +367,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get an owned article
+         * @description Returns one article visible to the authenticated owner; missing and foreign IDs are normalized to 404.
+         */
         get: operations["articles.getArticle"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update owned article state
+         * @description Updates read, saved, later, or hidden state for an article in the authenticated owner scope.
+         */
         patch: operations["articles.patchArticle"];
         trace?: never;
     };
@@ -315,7 +391,111 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get archived article Markdown
+         * @description Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials.
+         */
         get: operations["articles.getArticleMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an exact owned article snapshot
+         * @description Returns immutable snapshot metadata only when the snapshot belongs to both the supplied article and authenticated owner.
+         */
+        get: operations["articles.getArticleSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get exact owned article snapshot Markdown
+         * @description Returns immutable snapshot Markdown only when the snapshot belongs to both the supplied article and authenticated owner.
+         */
+        get: operations["articles.getArticleSnapshotMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/article-snapshots/{snapshotId}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve an owned article replay
+         * @description Authorizes an immutable snapshot and returns its same-origin replay URL.
+         */
+        get: operations["articles.getArticleReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/article-snapshots/{snapshotId}/replay/index.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream an owned article replay
+         * @description Proxies sandboxed archived HTML with a restrictive CSP and finite size budget.
+         */
+        get: operations["articles.streamArticleReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/article-snapshots/{snapshotId}/assets/{assetName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream an owned article replay asset
+         * @description Proxies one exact captured asset with its stored media type and finite size budget.
+         */
+        get: operations["articles.streamArticleReplayAsset"];
         put?: never;
         post?: never;
         delete?: never;
@@ -333,6 +513,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Bulk update owned article state
+         * @description Applies one state patch to all articles matching the authenticated owner's supplied bounded filter.
+         */
         post: operations["articles.bulkPatchArticles"];
         delete?: never;
         options?: never;
@@ -349,6 +533,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Archive an owned article
+         * @description Captures and stores a fixed article snapshot for the authenticated owner within the bounded archive deadline.
+         */
         post: operations["articles.archiveArticle"];
         delete?: never;
         options?: never;
@@ -363,7 +551,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List tags on an owned article
+         * @description Lists manual and AI tags attached to an article in the authenticated owner scope.
+         */
         get: operations["articles.listArticleTags"];
+        /**
+         * Replace tags on an owned article
+         * @description Replaces manual tags for an owned article; unknown tag IDs or incompatible state return a conflict.
+         */
         put: operations["articles.setArticleTags"];
         post?: never;
         delete?: never;
@@ -381,6 +577,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Queue article enrichment
+         * @description Queues AI enrichment for an archived owned article. Work consumes the owner's configured daily enrichment budget.
+         */
         post: operations["articles.enrichArticle"];
         delete?: never;
         options?: never;
@@ -395,12 +595,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get owner settings
+         * @description Returns the authenticated owner's generation schedule and interest profile projection.
+         */
         get: operations["personalization.getSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update owner settings
+         * @description Partially updates the authenticated owner's generation schedule or interest profile and returns the combined projection.
+         */
         patch: operations["personalization.updateSettings"];
         trace?: never;
     };
@@ -411,8 +619,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List owner tags
+         * @description Lists the authenticated owner's reusable tag vocabulary.
+         */
         get: operations["personalization.listTags"];
         put?: never;
+        /**
+         * Create an owner tag
+         * @description Creates a bounded tag name in the authenticated owner's vocabulary.
+         */
         post: operations["personalization.createTag"];
         delete?: never;
         options?: never;
@@ -430,6 +646,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /**
+         * Delete an owner tag
+         * @description Deletes a tag in the authenticated owner scope; missing and foreign IDs are normalized to 404.
+         */
         delete: operations["personalization.deleteTag"];
         options?: never;
         head?: never;
@@ -443,6 +663,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List owner tag suggestions
+         * @description Lists AI-observed tag candidates for the authenticated owner without adding them to the vocabulary.
+         */
         get: operations["personalization.listTagSuggestions"];
         put?: never;
         post?: never;
@@ -461,6 +685,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Promote a tag suggestion
+         * @description Promotes an observed suggestion into the authenticated owner's reusable tag vocabulary.
+         */
         post: operations["personalization.promoteTagSuggestion"];
         delete?: never;
         options?: never;
@@ -475,8 +703,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * List reading dictionary entries
+         * @description Lists pronunciation overrides available to the authenticated owner's episode generation jobs.
+         */
         get: operations["personalization.listReadingDictionary"];
         put?: never;
+        /**
+         * Create a reading dictionary entry
+         * @description Creates an owner-scoped pronunciation override; a duplicate surface conflict returns 409.
+         */
         post: operations["personalization.createReadingDictionary"];
         delete?: never;
         options?: never;
@@ -492,8 +728,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /**
+         * Update a reading dictionary entry
+         * @description Updates an owner-scoped pronunciation override; missing entries return 404 and duplicate surfaces return 409.
+         */
         put: operations["personalization.updateReadingDictionary"];
         post?: never;
+        /**
+         * Delete a reading dictionary entry
+         * @description Deletes an owner-scoped pronunciation override; missing and foreign IDs are normalized to 404.
+         */
         delete: operations["personalization.deleteReadingDictionary"];
         options?: never;
         head?: never;
@@ -507,6 +751,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Get enrichment queue and budget
+         * @description Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily paid provider-attempt usage and limit counters. Failed provider calls consume this budget; pre-provider validation and expired leases do not.
+         */
         get: operations["personalization.getEnrichQueue"];
         put?: never;
         post?: never;
@@ -525,6 +773,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Requeue failed enrichment
+         * @description Requeues eligible failed work for the authenticated owner. Executions remain constrained by the reported daily enrichment budget.
+         */
         post: operations["personalization.enrichReprocess"];
         delete?: never;
         options?: never;
@@ -541,6 +793,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Reset the daily enrichment budget
+         * @description Resets the authenticated owner's daily enrichment usage for the Gateway's current local date.
+         */
         post: operations["personalization.enrichResetDaily"];
         delete?: never;
         options?: never;
@@ -573,12 +829,14 @@ export interface components {
             loginMethods: components["schemas"]["LoginMethods"];
         };
         UnavailableProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Upstream unavailable";
             /** @enum {number} */
             status: 503;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "upstream_unavailable";
         };
         CreateEpisodeJobRequest: {
             /** @enum {string} */
@@ -596,36 +854,80 @@ export interface components {
             maxAttempts: 4;
         };
         BadRequestProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Invalid subscription request";
             /** @enum {number} */
             status: 400;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "invalid_subscription_request";
         };
         UnauthorizedProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Authentication required";
             /** @enum {number} */
             status: 401;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "authentication_required";
         };
         ConflictProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Idempotency conflict";
             /** @enum {number} */
             status: 409;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "idempotency_conflict";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Resource conflict";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "resource_conflict";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Feed subscription already exists";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "feed_subscription_exists";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode job state conflict";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "job_terminal";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode job state conflict";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "job_not_failed";
         };
         UnprocessableProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Feed subscription rejected";
             /** @enum {number} */
             status: 422;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "feed_subscription_rejected";
         };
         /** @enum {string} */
         JobStage: "selecting_articles" | "materializing_articles" | "generating_script" | "preparing_pronunciation" | "synthesizing_audio" | "storing_episode";
@@ -633,6 +935,9 @@ export interface components {
         EpisodeJob: {
             id: string & unknown;
             status: components["schemas"]["JobStatus"];
+            /** @enum {string} */
+            trigger: "manual" | "scheduled";
+            scheduleStatus?: ("retrying" | "succeeded" | "missed") | null;
             createdAt: string;
             articleIds?: (string & unknown)[] | null;
             attempt: number & unknown;
@@ -651,7 +956,8 @@ export interface components {
             nextAttemptAt?: components["schemas"]["Union_2"];
             episodeId?: (string & unknown) | null;
             failure?: {
-                code: string & (unknown & unknown & unknown);
+                /** @description Machine-readable Episode generation failure code. The enum lists known values; clients must safely handle bounded future values during rolling deployments. */
+                code: ("job_deadline_exceeded" | "generation_planning_canceled" | "generation_planning_unavailable" | "generation_planning_invalid_reply" | "generation_planning_correlation_mismatch" | "generation_planning_invalid_request" | "generation_planning_unauthenticated" | "generation_planning_not_found" | "generation_planning_storage_failure" | "generation_planning_object_failure" | "generation_planning_internal_error" | "no_generation_candidates" | "generation_plan_owner_mismatch" | "invalid_generation_plan" | "content_materialization_canceled" | "content_materialization_unavailable" | "content_materialization_invalid" | "content_materialization_empty" | "missing_materialized_articles" | "invalid_script_sources" | "script_quality_rejected" | "dictionary_snapshot_owner_mismatch" | "audio_store_canceled" | "audio_store_unavailable" | "audio_delete_unavailable" | "invalid_audio" | "invalid_job_transition" | "invalid_completion_transition" | "invalid_completion_outbox" | "completion_outbox_missing" | "nats_completion_publish" | "sqlite_dictionary_prepare" | "sqlite_dictionary_snapshot_conflict" | "sqlite_checkpoint_missing_script" | "script_rate_limited" | "script_unavailable" | "script_timeout" | "script_incomplete" | "script_client_error" | "script_malformed_response" | "script_refusal" | "script_unexpected_status" | "speech_rate_limited" | "speech_unavailable" | "speech_timeout" | "speech_incomplete" | "speech_client_error" | "speech_malformed_response" | "speech_refusal" | "speech_unexpected_status" | "sqlite_open_database" | "sqlite_open_database_corrupt_record" | "sqlite_lease_next" | "sqlite_lease_next_corrupt_record" | "sqlite_mark_step" | "sqlite_mark_step_corrupt_record" | "sqlite_report_stage_progress" | "sqlite_report_stage_progress_corrupt_record" | "sqlite_record_selected_articles" | "sqlite_record_selected_articles_corrupt_record" | "sqlite_renew_lease" | "sqlite_renew_lease_corrupt_record" | "sqlite_assert_lease" | "sqlite_assert_lease_corrupt_record" | "sqlite_load_checkpoint" | "sqlite_load_checkpoint_corrupt_record" | "sqlite_decode_checkpoint" | "sqlite_decode_checkpoint_corrupt_record" | "sqlite_load_generation_plan" | "sqlite_load_generation_plan_corrupt_record" | "sqlite_decode_generation_plan" | "sqlite_decode_generation_plan_corrupt_record" | "sqlite_list_used_automatic_articles" | "sqlite_list_used_automatic_articles_corrupt_record" | "sqlite_save_generation_plan" | "sqlite_save_generation_plan_corrupt_record" | "sqlite_load_dictionary_snapshot" | "sqlite_load_dictionary_snapshot_corrupt_record" | "sqlite_decode_dictionary_snapshot" | "sqlite_decode_dictionary_snapshot_corrupt_record" | "sqlite_save_dictionary_snapshot" | "sqlite_save_dictionary_snapshot_corrupt_record" | "sqlite_save_script_checkpoint" | "sqlite_save_script_checkpoint_corrupt_record" | "sqlite_save_audio_checkpoint" | "sqlite_save_audio_checkpoint_corrupt_record" | "sqlite_transition" | "sqlite_transition_corrupt_record" | "sqlite_complete_with_outbox" | "sqlite_complete_with_outbox_corrupt_record" | "sqlite_check_cancellation" | "sqlite_check_cancellation_corrupt_record" | "sqlite_find_job" | "sqlite_find_job_corrupt_record" | "sqlite_find_completion_outbox" | "sqlite_find_completion_outbox_corrupt_record" | "sqlite_list_completion_outbox" | "sqlite_list_completion_outbox_corrupt_record" | "sqlite_mark_completion_published" | "sqlite_mark_completion_published_corrupt_record") | (string & (unknown & unknown & unknown));
                 message: string & (unknown & unknown & unknown);
                 retryable: boolean;
             } | null;
@@ -664,12 +970,50 @@ export interface components {
             };
         };
         NotFoundProblem: {
-            type: string;
-            title: string & (unknown & unknown & unknown);
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode not found";
             /** @enum {number} */
             status: 404;
-            code: string & (unknown & unknown & unknown);
-            detail?: components["schemas"]["Union_"];
+            /** @enum {string} */
+            code: "episode_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Feed subscription not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "feed_subscription_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Resource not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "resource_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Article not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "article_not_found";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Episode job not found";
+            /** @enum {number} */
+            status: 404;
+            /** @enum {string} */
+            code: "episode_job_not_found";
         };
         EpisodeSource: {
             articleId?: (string & unknown) | null;
@@ -694,7 +1038,8 @@ export interface components {
             };
         };
         AddFeedSubscriptionRequest: {
-            feedUrl: string & unknown;
+            /** @description Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; the canonical result must be at most 2,048 characters, and credentials and fragments are forbidden. */
+            feedUrl: string;
         };
         CreatedFeedSubscription: {
             id: string & unknown;
@@ -779,7 +1124,7 @@ export interface components {
             feed: components["schemas"]["Feed"];
             subscription: components["schemas"]["FeedSubscription"];
         };
-        Union_4: (string & (unknown & unknown & unknown)) | null;
+        Union_4: (string & (unknown & unknown & unknown & unknown)) | null;
         Article: {
             id: string & unknown;
             feedId: string & unknown;
@@ -824,8 +1169,14 @@ export interface components {
             }[];
             aiPending: number & unknown;
         };
-        Union_5: boolean | null;
         Objects_: {
+            markdown: string & unknown;
+        };
+        ArticleReplayLocation: {
+            url: string & unknown;
+        };
+        Union_5: boolean | null;
+        Objects_1: {
             items: {
                 articleId: string & unknown;
                 tagId: string & unknown;
@@ -835,7 +1186,7 @@ export interface components {
                 confidence: ((number & unknown) | ("Infinity" | "-Infinity" | "NaN")) | null;
             }[] & unknown;
         };
-        Objects_1: {
+        Objects_2: {
             enqueued: number & unknown;
         };
         GenerationSchedule: {
@@ -870,7 +1221,7 @@ export interface components {
                 hasMore: false;
             };
         };
-        Objects_2: {
+        Objects_3: {
             name: string & (unknown & unknown & unknown);
         };
         CreatedTag: {
@@ -954,6 +1305,16 @@ export interface components {
             reprocessable: {
                 count: number & unknown;
             };
+        };
+        ForbiddenProblem: {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
+            title: "Operation forbidden";
+            /** @enum {number} */
+            status: 403;
+            /** @enum {string} */
+            code: "operation_forbidden";
         };
     };
     responses: never;
@@ -1254,10 +1615,10 @@ export interface operations {
     retryEpisodeJob: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 authorization?: components["schemas"]["Union_"];
                 cookie?: components["schemas"]["Union_"];
-                "idempotency-key"?: (string & (unknown & unknown & unknown)) | null;
+                "idempotency-key": string & (unknown & unknown & unknown);
                 traceparent?: components["schemas"]["Union_1"];
             };
             path: {
@@ -1612,6 +1973,15 @@ export interface operations {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
             /** @description UnprocessableProblem */
             422: {
                 headers: {
@@ -1934,6 +2304,15 @@ export interface operations {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
             /** @description UnprocessableProblem */
             422: {
                 headers: {
@@ -2195,9 +2574,275 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        markdown: string & unknown;
-                    };
+                    "application/json": components["schemas"]["Objects_"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleSnapshot": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                articleId: string & unknown;
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleSnapshotMarkdown": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                articleId: string & unknown;
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Objects_"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleReplay": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ArticleReplayLocation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleReplayLocation"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.streamArticleReplay": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.streamArticleReplayAsset": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                snapshotId: string & unknown;
+                assetName: string & (unknown & unknown);
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
                 };
             };
             /** @description UnauthorizedProblem */
@@ -2372,7 +3017,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_"];
+                    "application/json": components["schemas"]["Objects_1"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -2431,7 +3076,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_"];
+                    "application/json": components["schemas"]["Objects_1"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -2493,7 +3138,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_1"];
+                    "application/json": components["schemas"]["Objects_2"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -2686,7 +3331,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Objects_2"];
+                "application/json": components["schemas"]["Objects_3"];
             };
         };
         responses: {
@@ -2825,7 +3470,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Objects_2"];
+                "application/json": components["schemas"]["Objects_3"];
             };
         };
         responses: {
@@ -3158,7 +3803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_1"];
+                    "application/json": components["schemas"]["Objects_2"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -3213,6 +3858,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description ForbiddenProblem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForbiddenProblem"];
                 };
             };
             /** @description UnavailableProblem */

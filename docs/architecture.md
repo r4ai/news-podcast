@@ -1,6 +1,6 @@
 # システムアーキテクチャ
 
-- 更新日: 2026-08-16
+- 更新日: 2026-08-20
 - 対象: 関数型マイクロサービス（旧実装削除済み）
 - 関連文書: [詳細設計](design.md) / [移行ガイド](functional-ddd-migration.md) / [ADR](adr/) / [開発ガイド](development.md)
 
@@ -57,11 +57,14 @@ flowchart LR
 
 - `ownerId` はセッションから導出し、URLやリクエスト本文から受け取らない。
 - ジョブ作成は `owner + operation scope + Idempotency-Key` で一意。同じscope・キーと異なる入力の組み合わせは競合とする。retry scopeは元job IDを含み、作成操作や別jobのretryと衝突しない。
-- 失敗ジョブの手動retryは新しいjobを作る。retry APIでキーを省略した呼び出しは毎回一意なキーをGatewayが発行し、明示キーの再送だけは既存jobの現在状態へ収束させる。
+- 失敗ジョブの手動retryは新しいjobを作る。retry APIにも `Idempotency-Key` を必須とし、同じ論理HTTP操作の再送は既存jobの現在状態へ収束させる。Gatewayはキーを補完しない（[ADR-0085](adr/0085-bind-idempotency-keys-to-logical-generation-actions.md)）。
+- 生成失敗コードは`@news-podcast/contracts/episode-failure`の有限集合だけをProductionが生成する。rolling deployment中も新コードを中継できるようRPCとGateway/OpenAPIはboundedな未知値を受理し、Webだけが既知コードを利用者向け文言と復旧操作へ変換する。未知コードは汎用文言とjob IDへ縮退し、`failure.code`と`job.id`はlog/traceで相関する（job IDはmetric属性へ入れない。詳細は[ADR-0083](adr/0083-share-episode-failure-code-contract.md)）。
 - 手動生成は選択記事IDを必須とする。定期生成は記事IDなしでjobを作り、worker開始時の最新InterestProfileから選定したGenerationPlanをfirst-write-winsで固定する。
 - 台本が返す出典URLは、ownerが選択しContentが版固定した入力記事だけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
-- 署名付き音声URLは永続化・公開せず、Gatewayがアクセス要求ごとに内部発行してRange streamする。
+- 任意登録feedはprivateとし、媒体カタログはowner自身の購読または明示的なpublic listingだけを返す。
+- 署名付きprivate artifact URLは永続化・公開せず、Gatewayがowner認可後に内部発行してstreamする。記事replayはsnapshot metadataとも完全一致させる。
+- Episode出典のreaderは`articleId + snapshotId`を保持し、owner access・article・snapshotの三者一致後に生成時metadata/Markdown/replayだけを返す。snapshot IDがないlegacy sourceだけlatestへfallbackする。
 
 ## 3. レイヤー構成と依存方向
 
@@ -70,6 +73,7 @@ flowchart LR
 | パス | レイヤー | 現在の責務 |
 | --- | --- | --- |
 | `apps/gateway` | Presentation / Integration | Effect HttpApi、認証proxy、NATS RPC adapter、OpenAPI正本 |
+| `apps/state-backup` | Operations / Durability | 4 SQLite write barrier + SeaweedFS inventory同一世代、横断不変条件、暗号化外部保管、restore drill、Prometheus metrics |
 | `apps/watchdog` | Operations | 全service health/freshness監視、Prometheus metrics、SMTP/構造化log通知state |
 | `apps/web` | Presentation | React、TanStack Router/Query、生成OpenAPI client |
 | `services/*` | Bounded Context | service内のdomain、application、adapter、runtime |
@@ -100,6 +104,28 @@ flowchart LR
 ```
 
 HTTP契約の正本は`apps/gateway/src/contract.ts`であり、`packages/contracts`のOpenAPIとWeb用TypeScript型を生成する。Gatewayは生成契約とScalar API Referenceを読み取り専用で配信する。Webはservice実装やdomain型ではなく、公開契約だけに依存する。
+
+公開operationのsummary/descriptionは同じ正本内の一元表から生成時に付与する。説明は認証、owner境界、冪等性、入力上限、日次AI予算を含み、responseはclosed HTTP Problem unionを参照する。operation追加時は全件説明テスト、Spectral warning/error 0、生成差分検査を必須にし、生成物の直接編集を禁止する。
+
+```mermaid
+flowchart LR
+  Contract["Gateway endpoint / Schema"] --> OpenAPI["OpenAPI生成"]
+  Usage["operation利用条件"] --> OpenAPI
+  OpenAPI --> Reference["Scalar API Reference"]
+  OpenAPI --> Client["Web生成client"]
+  OpenAPI --> Gate["全件説明 + Spectral + 差分gate"]
+```
+
+公開HTTP Problemはstatusごとの自由文字列ではなく、`status + code + title`のclosed unionである。Gateway adapterは文脈固有の上流codeを公開variantへ変換し、Schema/RPC/未知failureは内部detailを含めず`503 upstream_unavailable`へ畳む。OpenAPIの全codeと実装表、Episode Jobの全conflict codeは型検査で全件対応を要求する。
+
+```mermaid
+flowchart LR
+  Upstream[Context / RPC failure] --> Map[Gateway context mapper]
+  Map -->|known variant| Problem[typed HTTP Problem]
+  Map -->|unknown / invalid| Redact[redacted 503]
+  Problem --> Client[OpenAPI response]
+  Redact --> Client
+```
 
 ### 3.3 service構成
 
@@ -161,7 +187,7 @@ NATS RPCは共有payload schemaを`messageEnvelope`で包む。受信時にprodu
 | Grafana相関監視 | P0 done | 8 dashboard、Gateway Browser OTLP proxy、Episode state metrics、LGTM provisioning、smoke script |
 | Effect HttpApi Gateway | Done | 公開API parity、認証proxy、Gateway OpenAPI、functional E2E |
 | Web生成client | Done | Gateway生成型とproxyへ切替、Web E2E 13/13 |
-| state backup/recovery | Implemented | service種別検証、online backup、検証restore、rollback drill |
+| state backup/recovery | Implemented | 4 SQLite write barrier + object inventory logical cut、Production/Library横断検査、AES-256-GCM、off-host Object Lock、commit境界、全参照restore drill |
 | 旧実装 | Removed | source、workspace、Docker、CI、文書から物理削除 |
 
 削除内容と最終gateは[移行ガイド](functional-ddd-migration.md)を参照する。
@@ -190,7 +216,18 @@ sequenceDiagram
   Production->>Content: GenerationPlan作成 / Markdownをmaterialize
   Production-->>Gateway: durable AG-UI events
   Gateway-->>Web: SSE + Last-Event-ID
-  Production->>Providers: Effect AI strict output → 音声合成
+  Production->>Providers: Effect AI strict draft
+  Production->>Providers: 独立quality evaluation
+  alt quality reject
+    Production->>Production: failed / checkpointなし
+  else quality pass
+    Production->>Providers: VOICEVOX音声合成
+  end
+  opt 利用者が実行中jobをcancel
+    Gateway->>Production: cancel RPC
+    Production->>Production: SQLite Canceled commit + token fence
+    Production-xProviders: 同一process即時 / 別process最大5秒でAbortSignal
+  end
   Production->>Objects: WAVを保存
   Production->>Library: durable completion event
   Web->>Gateway: GET /v1/episodes/{id}/audio<br/>Range: bytes=...
@@ -201,7 +238,7 @@ sequenceDiagram
   Gateway-->>Web: same-origin audio stream
 ```
 
-定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はjob作成成功後だけ進める。
+定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{ownerId}:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はEpisodeが`Succeeded`、またはcancel・回復対象外の終端失敗を`missed`と判定した後だけ進める。`Queued / Running / Retrying`はdueを維持し、`no_generation_candidates`は同じjobを再queueして候補到着後に回復する（[ADR-0074](adr/0074-complete-daily-schedule-on-terminal-outcome.md)）。
 
 completion consumerはLibrary保存transactionが成功してからACKする。DB保存失敗は上限付き指数backoffでNACKし、JetStream側では再配送を打ち切らない。設定済み回数は停止上限ではなくerror通知の開始閾値である。JSON・protocol・domain契約違反はACKして破棄し、failure tagと検証済み識別子をerror eventへ残してpoison payloadの無限再配送を防ぐ。詳細は[ADR-0070](adr/0070-recover-episode-completion-after-redelivery-threshold.md)を正本とする。
 
@@ -213,7 +250,9 @@ flowchart LR
   Plan --> Input["版固定記事snapshot"]
   Input --> Script["Effect AI structured generation"]
   Script --> Verify["strict schema・入力出典・上限を検証"]
-  Verify --> Dictionary["owner辞書抽出・job snapshot"]
+  Verify --> Quality{"独立quality gate"}
+  Quality -->|reject| Failed["terminal failure<br/>checkpointなし"]
+  Quality -->|pass| Dictionary["owner辞書抽出・job snapshot"]
   Dictionary --> TTS["読み置換後にVOICEVOXでWAV生成"]
   TTS --> Store["音声を保存"]
   Store --> Commit["Episode・出典・Jobをcommit"]
@@ -243,7 +282,54 @@ stateDiagram-v2
 
 `running`中のstageは`selecting_articles`、`materializing_articles`、`generating_script`、`preparing_pronunciation`、`synthesizing_audio`、`storing_episode`に限定する。
 
-### 4.4 記事archive objectの回収
+### 4.4 記事更新とsnapshot
+
+```mermaid
+stateDiagram-v2
+  [*] --> FirstCapture: 新しいfeed + GUID
+  FirstCapture --> SameSnapshot: 同じcapture fingerprint
+  SameSnapshot --> SameSnapshot: retry / 定期poll
+  FirstCapture --> NewSnapshot: URL・title・日時・本文fingerprint更新
+  SameSnapshot --> NewSnapshot: 更新を検知
+  NewSnapshot --> SameSnapshot: 更新版のretry
+```
+
+`articleId`はfeed + GUIDで安定させ、`archiveRequestId`だけをRSS capture fingerprintでversion化する。fingerprintはXHTMLのelement・属性もcanonical化し、archive成功後にだけcatalogへ記録する。既存のfingerprint未記録記事はlatest URL・title一致時に再取得せずbaseline化する。新snapshot追加後も既存Episodeはcheckpoint済み`articleId + snapshotId`を維持し、新しい生成のlatest queryだけが更新版を選ぶ。手動archiveはRPC message IDをrefresh intentに含める（[ADR-0073](adr/0073-version-article-capture-intents.md)）。
+
+RSS parserはitemを無言で破棄せず、valid itemとsanitized validation failureに分ける。不正itemも同期jobの`discovered`/`failed`へ反映し、定数reasonだけを既存`error`へ保存する。mixed feedはvalid itemを処理し、全件不正はdegradedな`Succeeded`として運用警告とAPI/UIに現れる（[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)）。
+
+### 4.5 owner限定の静的replay配信
+
+```mermaid
+sequenceDiagram
+  participant W as Web iframe
+  participant G as Gateway
+  participant C as Content Knowledge
+  participant S as Private S3
+  W->>G: snapshot replay / hashed asset
+  G->>C: owner-scoped ReplayAccess
+  C->>C: article_owner_access + snapshot metadata
+  C-->>G: 1分署名URL + type/size/hash
+  G->>S: signed GET
+  G-->>W: CSP/sandbox + verified bounded body
+```
+
+resolve、HTML、assetの3 routeはすべてowner認可付きである。Gatewayは署名URLとobject keyを公開せず、上限内でbodyを読み切り、保存metadataのbyte lengthとSHA-256が一致するobjectだけをsame-originで返す。購読解除後も`article_owner_access`を削除しないため、本人の過去snapshotは引き続き読める（[ADR-0079](adr/0079-deliver-owned-private-artifacts-through-gateway.md)）。
+
+### 4.6 Episode出典の固定snapshot閲覧
+
+```mermaid
+flowchart LR
+  Source["Episode source<br/>articleId + snapshotId"] --> Web["Articles URL state"]
+  Web --> Exact["Gateway exact metadata / Markdown"]
+  Exact --> Join["owner access ∩ article ∩ snapshot"]
+  Join --> Fixed["生成時snapshot"]
+  Source -. "snapshotIdなし" .-> Latest["legacy latest fallback"]
+```
+
+固定出典はmetadata/Markdownをarticle + snapshot複合route、replayをowner認可済みsnapshot routeから読む。外部サイト、生成時の保存版、legacyの最新保存版はUI上の名前を分ける。HTTP route spanとNATS messaging spanでoperation/outcomeを観測し、article/snapshot ID、本文、完全URLはtelemetryへ記録しない（[ADR-0081](adr/0081-bind-episode-reader-to-source-snapshot.md)）。
+
+### 4.7 記事archive objectの回収
 
 ```mermaid
 flowchart LR
@@ -267,6 +353,8 @@ erDiagram
   FEED_CATALOG ||--o{ FEED_SYNC_JOB : queues
   FEED_CATALOG ||--o{ FEED_ITEM : publishes
   FEED_ITEM ||--o{ ARTICLE_SNAPSHOT : archived_as
+  ARTICLE_SNAPSHOT ||--o| SEARCH_INDEX_QUEUE : awaits_index
+  ARTICLE_SNAPSHOT ||--o{ ARTICLE_SEARCH_INDEX : indexed_as
   USER ||--o{ ARTICLE_OWNER_ACCESS : acquired
   FEED_ITEM ||--o{ ARTICLE_OWNER_ACCESS : grants
   USER ||--o{ ARTICLE_USER_STATE : tracks
@@ -284,16 +372,17 @@ erDiagram
 
 | データ | 設計上の意味 |
 | --- | --- |
-| `feed_catalog` / `feed_subscriptions` | 共通の媒体カタログとユーザーの選択を分離 |
-| `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。個別記事失敗はdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
+| `feed_catalog` / `feed_subscriptions` / `public_feed_listings` | HTTP境界でcanonicalizeしたfeed URL identity、ownerごとの購読状態、明示公開listingを分離。既登録は409、削除後は同じfeedへ再購読する（ADR-0087） |
+| `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。parser validationを含む個別記事失敗は件数とsanitized reasonをdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
-| `article_owner_access` | 購読解除後も残る、ownerが一度取り込んだ記事への恒久アクセス権 |
+| `article_search_index_queue` / `article_search_fts` / `article_search_short_grams` | snapshot commit後に再試行可能に更新するMarkdown本文索引。記事一覧検索はowner access内の最新snapshotだけを参照 |
+| `article_owner_access` | 購読解除・一時停止後も既存分は残り、再開時に未付与分を補うowner単位の恒久アクセス権 |
 | `article_owner_states` | ユーザーごとの既読・保存状態 |
 | `episode_jobs` / `episode_generation_plans` / `episode_job_articles` | 状態、lease、retry、冪等性、初回実行時に固定した嗜好・記事集合 |
 | `episodes` / `episode_sources` | 台本・音声keyと、`articleId`・snapshot・入力RSSへ遡れるprovenance。legacy sourceだけ`articleId`がnullable |
 | `episode_job_agui_events` | 公式AG-UI event envelopeを保存する再開可能な進捗ログ |
 | `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
-| `content_enrichment_daily_progress` | ownerとUTC日付ごとのAI記事補完使用量。別ownerの枯渇・リセットから分離 |
+| `content_enrichment_daily_progress` | ownerとUTC日付ごとの有料AI試行数。provider送信直前に原子的に予約し、成功・失敗を問わずhard limitを守る |
 | `job_outbox` | Productionが完成eventをJetStreamへ確実に配信するtransactional outbox |
 | Better Auth tables | user、session、account、verification |
 
@@ -308,12 +397,43 @@ DBアクセスは全service で **Drizzle ORM** に統一する（[ADR-0043](adr
 | 接続確立・PRAGMA・span属性 | `@news-podcast/persistence` |
 | driver接触面 | `services/<svc>/src/infrastructure/unsafe/drizzle/open.ts` |
 | query | `services/<svc>/src/adapters/persistence/<集約>/` |
+| JSON保存値の復号 | `@news-podcast/persistence` のstrict decoder（構文 + Schema + excess property拒否） |
 
-接続はservice processにつき1本である。起動時DDL（`CREATE TABLE IF NOT EXISTS`）は存在せず、`bootstrap.ts` がmigrationを適用する。testも本番と同一のmigrationでDBを構築するため、test用schemaが本番から乖離する余地はない。
+接続はservice processにつき1本である。process composition rootだけがopen/closeを所有し、同居するRPC・worker・relay・schedulerへ同じDrizzle databaseを注入する。単独起動するruntimeは自身のscopeで1本だけを所有する。起動時DDL（`CREATE TABLE IF NOT EXISTS`）は存在せず、`bootstrap.ts` がmigrationを適用する。testも本番と同一のmigrationでDBを構築するため、test用schemaが本番から乖離する余地はない。
 
 drizzle-kitが生成できない `STRICT` はmigration SQLへ手で追記し、`sqlite_master` を検査する `schema.test.ts` で固定する。
 
+FTS5仮想テーブルもDrizzle schemaで表現できないためmigrationを正本とする。Content Knowledgeの単一process workerがSeaweedFSからqueue済みMarkdownを読み、FTS/short grams更新とackをSQLite transactionでまとめる（[ADR-0082](adr/0082-index-latest-article-markdown-for-search.md)）。
+
+JSON保存値は読込直後にstrict decodeし、domainへ渡す前にowner/job/episode/articleなどのbrandと日時を復元する。構文不正・Schema不一致・未対応の旧形式は、値をログやfailureへ含めず`CorruptRecord`へ分類する。互換対応はfieldごとに明示し、Productionではmaterialization導入前の空`selected_articles`だけを`selected_article_ids`から復元する。
+
+```mermaid
+flowchart LR
+  Stored[SQLite / state file JSON] --> Syntax[JSON syntax]
+  Syntax --> Strict[Effect Schema strict decode]
+  Strict --> Brand[brand + domain value]
+  Syntax -->|failure| Corrupt[CorruptRecord]
+  Strict -->|failure| Corrupt
+  Corrupt --> Safe[operationのみ記録]
+```
+
 `episode_jobs`はjob状態機械を実カラムへ正規化しており、状態更新と`episode_job_agui_events`追記はtriggerではなく書き込み側が同一transactionで行う（[ADR-0044](adr/0044-normalized-episode-job-state.md)、[ADR-0058](adr/0058-durable-ag-ui-episode-progress.md)）。
+
+Episode Productionのjob persistenceは、query-onlyの`read-handle`、状態遷移とleaseを担う`progress-handle`、生成計画・辞書・checkpointの`plan-handle`、完了遷移と配送を原子的に扱う`outbox-handle`へ分割する。4つは同じprocess-owned databaseを注入で共有し、`makeJobHandle`がapplication層向け互換契約を合成する。
+
+```mermaid
+flowchart LR
+  Application --> Facade[makeJobHandle]
+  Facade --> Read[read]
+  Facade --> Progress[progress]
+  Facade --> Plan[plan]
+  Facade --> Outbox[outbox]
+  Progress -->|state + durable event| Tx[(transaction)]
+  Plan -->|lease + immutable artifacts| Tx
+  Outbox -->|succeeded + event| Tx
+  Read --> DB[(Production SQLite)]
+  Tx --> DB
+```
 
 ## 6. 実行環境
 
@@ -325,6 +445,7 @@ supported runtimeはNode self-hostだけである（[ADR-0039](adr/0039-support-
 | 業務service | Identity、Content、Production、LibraryのNode process |
 | DB / messaging | service別SQLite / NATS JetStream |
 | object / TTS | SeaweedFS S3 / VOICEVOX |
+| state durability | `backup` profile / bounded SQLite write barrier / off-host immutable S3 / 24h RPO / weekly restore drill |
 | 起動定義 | `compose.yaml` |
 
 Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、事業要件、owner、contract suiteを揃えた後続ADRで新規設計する。
@@ -335,8 +456,9 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 | --- | --- |
 | 認証 | Better Authのsession cookie。Google OIDCはログイン上流であり、Google tokenをAPI bearerとして扱わない |
 | 認可 | 全 `/v1` resourceをowner scopeで検索し、他人のIDと存在しないIDをともに404へ正規化 |
-| API契約 | Effect HttpApi code-first OpenAPI、RFC 9457 Problem Details、生成型の差分検査 |
+| API契約 | Effect HttpApi code-first OpenAPI、全operation利用条件、closed typed Problem union（公開detailなし）、Spectral 0件、生成型の差分検査 |
 | 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。BrowserはGatewayの相対OTLP proxyを経由し、Collector originを公開しない。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
+| 永続性 | 4 SQLiteをwrite barrierで同じlogical cutへ固定し、その内側のSeaweedFS inventoryとProduction/Library横断不変条件を暗号化manifestへ記録する。全成果物のimmutable Put後だけcommitし、24時間RPO、4時間RTO、30成功世代、週次full restore drillをADR-0075/0078で固定する |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |
@@ -373,6 +495,9 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0041: RSS同期を永続キューで実行し購読直後に起動する](adr/0041-durable-rss-sync-queue.md)
 - [ADR-0042: 構造化入力を著名なパーサーとAST pipelineで処理する](adr/0042-structured-input-parser-boundaries.md)
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
+- [ADR-0075: 4 SQLiteとObjectStoreをcommit marker付き同一世代で保護する](adr/0075-coordinate-durable-state-backup-generations.md)
+- [ADR-0078: coordinated backupをSQLite write barrierと横断不変条件で固定する](adr/0078-bound-coordinated-backup-with-write-barrier.md)
+- [ADR-0079: owner限定private artifactをGateway経由で配信する](adr/0079-deliver-owned-private-artifacts-through-gateway.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
 - [ADR-0015: Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)
@@ -384,4 +509,10 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0068: 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
 - [ADR-0069: 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070: Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
+- [ADR-0071: ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
+- [ADR-0087: RSS URLをHTTP境界でcanonicalizeしてfeed identityへ変換する](adr/0087-canonicalize-feed-url-at-http-boundary.md)
+- [ADR-0072: Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
+- [ADR-0073: 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
+- [ADR-0074: 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)
+- [ADR-0080: 未信頼記事の台本を公開前quality gateで拒否する](adr/0080-gate-untrusted-article-scripts-before-publication.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

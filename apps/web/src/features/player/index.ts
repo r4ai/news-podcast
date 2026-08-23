@@ -6,6 +6,7 @@ export {
   isPlayingAtom,
   playEpisodeAtom,
   progressEntryAtomFamily,
+  resetOwnerPlaybackAtom,
   togglePlaybackAtom,
   type PlayerTrack,
 } from "./atoms"

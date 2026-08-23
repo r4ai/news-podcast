@@ -19,6 +19,7 @@ RSSからニュース項目を取得し、ownerが選択した版固定済み記
 - Web: Vite / React / TypeScript / Tailwind CSS / shadcn/ui neutral / Base UI。
 - API: Effect HttpApi、code-first OpenAPI。
 - 認証: Better Authのアプリセッション。初期ログインはGoogle OIDCで、将来ほかのOIDCを追加可能にする。
+- session終了: serverの終了成功後だけ、再生・owner依存Jotai/localStorage・Query cacheを破棄してlogin documentへ置き換える。失敗時は認証済みstateを保持して再試行する（[ADR-0078](adr/0078-terminate-session-before-clearing-owner-state.md)）。
 - ニュース源: RSSのみ。初期カタログはZenn、azukiazusaさんの技術ブログ、Hacker News。媒体カタログとユーザー購読は分離する。
 - AI: Effect AI + `@effect/ai-openai`のstrict structured outputを正本とする。OpenAI `gpt-5.6-luna` が既定で、base URLとモデルIDは環境変数で差し替える。キーなしでビルド・テストできる。
 - TTS: 外部VOICEVOX Engine。既定キャラクター名は「ずんだもん」。数値style IDは起動中Engineの `/speakers` から解決し、固定しない。
@@ -57,18 +58,28 @@ flowchart LR
 1. 認証済みユーザーが `Idempotency-Key` 付きで生成ジョブを作成する。
 2. APIは `owner + method + canonical route + key` を一意に保存し、同一request hashなら同じreceiptを返す。異なるhashなら409にする。
 3. Episode Productionはジョブをleaseして `queued -> running` へ遷移する。
-4. 実行開始時に最新InterestProfileと候補metadataから`GenerationPlan`をfirst-write-winsで固定し、その記事snapshot取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にする。
-5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
+4. 実行開始時に最新InterestProfileと候補metadataから`GenerationPlan`をfirst-write-winsで固定し、その記事snapshot取得、台本生成、独立quality gate、VOICEVOX合成、音声保存を順に実行する。quality rejectはcheckpoint前のterminal failureとし、音声化・公開しない。
+5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は共有`EpisodeFailureCode`だけを持つfailureへ `failed`。RPC/Gatewayはrolling deployment中の未知コードをboundedな文字列として中継する。Webは既知コードを利用者向け説明と`retry / reselect / admin`へ変換し、未知コードでは上流messageを表示せず安全な汎用文言とjob IDを示す。内部コードとjob IDはlog/traceに保持し、job IDをmetric属性へ入れない（[ADR-0083](adr/0083-share-episode-failure-code-contract.md)）。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 7. Webはjobの`succeeded`を生成完了として受け取った後、`episodeId`の詳細がLibraryから読めるまで初回を含む最大5回・500ms間隔で確認する。確認中は再生可能な「完成」と区別し、上限到達後は利用者の再確認操作で回復できる。
 
+日次予約はjob受付では完了しない。`scheduled:{ownerId}:{localDate}`をschedule intentの相関キーとして、active jobは`retrying`、Episode完成は`succeeded`、利用者cancelと回復対象外の終端失敗は`missed`として調整する。候補記事なしは同じjobを再queueし、後続feed同期後に同日中の生成へ回復する。REST/Webと`episode.schedule.outcomes` metricはこの3状態を同じ語彙で示す。詳細は[ADR-0074](adr/0074-complete-daily-schedule-on-terminal-outcome.md)を正本とする。
+
 RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs`へfeedごとに1件のjobを保存し、`queued -> processing -> succeeded / failed`をlease tokenでfenceしたworkerで進める。claim・完了ごとに現在時刻を再取得し、期限切れleaseのworkerによる完了上書きを拒否する。購読登録時はpollerへwake通知を送り、既定5分の定期cycleを待たずに初回同期を開始する。所有者は`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`で有効な購読を同じキューへ再投入でき、失敗後の再試行や最新RSSの確認を明示的に開始できる。feed取得・catalog永続化・worker基盤の失敗だけを`failed`として最大4回の試行上限へ数え、個別記事のvalidation・archive失敗は件数とerrorを持つdegradedな`succeeded`として試行回数を引き継がず、次回の定期同期を継続する。Webは`GET /v1/me/feed-sync-jobs`を表示し、処理中だけ状態と記事一覧を短い間隔で再取得する。degraded時は失敗記事数を警告し、runtimeは`rss.sync.degraded`、feed scope failureは`rss.sync.failed`を記録する。詳細は[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)を正本とする。
 
-購読は将来の同期・自動生成対象、`article_owner_access`はownerが一度取り込んだ記事への恒久的な参照権として分離する。RSS itemのcatalog登録時に現在の購読ownerへaccessを付与し、既存feedへの購読時は保存済みitemをbackfillする。購読解除ではaccess、記事状態、snapshotを削除しないため、一覧・詳細・Markdown・手動生成の保存版出典は引き続き参照できる。一方、自動生成候補は有効な購読とのjoinを維持する。詳細は[ADR-0069](adr/0069-separate-subscription-from-article-access.md)を正本とする。
+購読登録のHTTP入力はGatewayでWHATWG URLへ1回canonicalizeし、その結果にHTTP(S)・userinfoなし・fragmentなし・2,048文字以下を検証する。内部RPC/domain/DBはcanonical-onlyとし、`feed_catalog.feed_url`をfeed identity、`feed_subscriptions`をownerごとの購読状態として分離する。同値URLと同じownerは409 `feed_subscription_exists`へ収束し同期を再発火せず、削除後の再購読は同じfeedへ新しい購読を作る。pause/resumeはfeed identityを変えず`enabled`だけを扱う。取得不能と非RSS/Atom応答は非同期同期jobのsanitized reasonとしてWebに区別表示する（[ADR-0087](adr/0087-canonicalize-feed-url-at-http-boundary.md)）。
 
-AI記事補完のキュー、結果、タグ、日次使用量はすべてowner単位である。workerはownerごとに`CONTENT_ENRICH_DAILY_LIMIT`の使用量を読み、枯渇したownerだけをskipして次のownerを処理する。成功完了時刻からUTC日付を導出し、成功確定と`(owner_id, local_date)`使用量の加算を同じtransactionで行うため、外部処理が日付をまたいでも開始日へ誤計上しない。開発用リセットも認証actorのownerだけを対象にする。詳細は[ADR-0063](adr/0063-scope-enrichment-daily-budget-by-owner.md)を正本とする。
+RSS記事の`articleId`は`feedId + GUID`で安定させ、capture intentだけをcanonical URL・title・published/updated時刻・本文系field（XHTMLのelement・属性を含む）のSHA-256 fingerprintでversion化する。同じ配送retryは既存snapshotへ収束し、同じGUIDの実更新はimmutable snapshotを追加してlatest参照を更新する。fingerprint列追加前の既存記事はlatest URL・title一致時に再取得せずbaseline化し、archive成功後だけfingerprintを進める。手動archiveはRPC message IDごとに明示refreshし、同じdelivery retryだけを冪等にする。詳細は[ADR-0073](adr/0073-version-article-capture-intents.md)を正本とする。
 
-Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)を正本とする。
+購読は将来の同期・自動生成・AI enrichment対象、`article_owner_access`はownerが一度取り込んだ記事への恒久的な参照権として分離する。RSS itemのcatalog登録時は有効な購読ownerだけへaccessを付与し、一時停止中のownerへ共有同期由来の新着を配布しない。再開時は停止中に保存されたitemを明示的にbackfillする。購読解除・一時停止では既存access、記事状態、snapshotを削除しないため、一覧・詳細・Markdown・手動生成の保存版出典は引き続き参照できる。一方、自動生成候補とAI queueは有効な購読とのjoinを維持する。詳細は[ADR-0069](adr/0069-separate-subscription-from-article-access.md)を正本とする。
+
+任意登録feedはprivate-by-defaultとし、`/v1/feeds`はrequest owner自身が購読するfeedと`public_feed_listings`へ明示掲載したfeedだけを返す。query/path tokenを文字列判定やredactionで加工せず、DB可視性条件で別ownerから閉じる。既存feedはmigrationで公開推測せず全件privateにする。将来の公開化は、認証なしの取得可能性・credential非包含・owner同意を検証するworkflowができるまで提供しない（[ADR-0071](adr/0071-keep-user-registered-feed-urls-private.md)）。
+
+AI記事補完のキュー、結果、タグ、日次AI試行枠はすべてowner単位である。workerはownerごとに`CONTENT_ENRICH_DAILY_LIMIT`の使用量を読み、枯渇したownerだけをskipして次のownerを処理する。本文・語彙・profile・入力schemaを検証した後、provider送信の直前にlive leaseと残枠を同じtransactionで検査し、`(owner_id, UTC local_date)`へ有料試行を予約する。OpenAI adapterは内部retryをせず、1予約を1 HTTP requestへ固定する。成功だけでなく429、timeout、不正応答も1試行を消費する一方、送信前失敗と期限切れleaseは消費しない。日次枠resetはContent KnowledgeのRPC境界で既定拒否し、非productionでserver flagを明示した場合だけactor自身のowner枠へ許可する。予約・枯渇とresetの成功・拒否を低cardinality metricへ記録する。所有境界は[ADR-0063](adr/0063-scope-enrichment-daily-budget-by-owner.md)、試行契約は[ADR-0084](adr/0084-reserve-paid-enrichment-attempts.md)、reset認可は[ADR-0076](adr/0076-fail-closed-enrichment-budget-reset.md)を正本とする。
+
+Episode Productionのloopは単一flightで動く。leaseは期限切れRunning、dueなRetrying、Queuedの順に優先し、同一状態では`leasedUntil`、`retryAt`、`enqueuedAt`の昇順、同時刻だけ`jobId`で決定する。選択したready時刻はqueue wait計測にも使い、oldest ageと実行順を一致させる。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。cancelは永続化後の同一process通知で即時abortし、別processはleaseを延長しないread-only checkで既定250ms・最大5秒以内に検知する。commit安全性の正本は引き続きSQLite fencingとする。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0072](adr/0072-propagate-episode-cancellation-immediately.md)、[ADR-0086](adr/0086-order-episode-leases-by-ready-time.md)を正本とする。
+
+Content KnowledgeとEpisode Productionのprovider modeは共有runtime parserで決定する。productionは厳密な`APP_ENV=production`、`PROVIDER_MODE=live`、必須key/modelの組み合わせだけを受理し、未指定・fake・未知値・大文字違いはReady前に拒否する。development/testのfakeは明示的なno-network境界として維持する。成功構成はsecretを含めず`app.env`と`provider.mode`をlog/metricへ記録する。詳細は[ADR-0077](adr/0077-fail-closed-production-provider-mode.md)を正本とする。
 
 ## 5. REST契約方針
 
@@ -78,13 +89,14 @@ Episode Productionのloopは単一flightで動く。すべての更新とEpisode
 - 401はセッション欠落/失効、403は認証済みだが許可されない操作。エラーはRFC 9457 Problem Details。
 - 一覧はopaque cursor、`limit` 1..100、安定順序、filterに束縛する。`totalCount`は初期契約に入れない。
   - 記事一覧`GET /v1/me/articles`は`cursor`クエリと`page.hasMore` / `page.nextCursor`で継続する。cursorは`(公開日時 ?? 発見日時, articleId)`のkeyset位置をbase64urlへ畳んだ不透明tokenで、Content Knowledgeだけが解釈する。OFFSETと違い、ページを跨いで記事が増減しても重複・欠落しない。復号できないcursorは不正要求として閉じる。
-  - `q`はownerの記事全体をタイトル・出典URL・ownerタグ名の部分一致で絞る。手動番組の記事選択は読み込み済みの先頭ページをクライアントで再検索せず、入力をdeferして同じAPIの先頭から再取得する。取得中は直前の候補を保持し、空結果と失敗は別状態として表示する。
+  - `q`はownerの記事全体をタイトル・出典URL・ownerタグ名と、決定的に選んだ最新snapshotの保存済みMarkdown本文でliteral部分一致する。本文はquery時にobjectを走査せず、durable queueが更新するFTS5 trigram（3文字以上）/short gram索引（1〜2文字）を使う。手動番組の記事選択は読み込み済みの先頭ページをクライアントで再検索せず、入力をdeferして同じAPIの先頭から再取得する。取得中は直前の候補を保持し、空結果と失敗は別状態として表示する。詳細は[ADR-0082](adr/0082-index-latest-article-markdown-for-search.md)を正本とする。
 - 手動archive `POST /v1/me/articles/{articleId}/archive` は同期結果を返す。GatewayはContent captureと同じ30秒のend-to-end deadlineを送り、archive RPCだけ5秒の返信余裕を加えて待つ。Contentは期限切れ処理を中断してcommitしないため、Gatewayの失敗後にarchiveだけ成功する状態を作らない。詳細は[ADR-0065](adr/0065-bound-manual-archive-rpc-deadline.md)を正本とする。
   - S3の一部Put失敗は全Putのsettle後に成功キーをbest-effort削除する。process停止・DB commit失敗・Delete失敗は、SQLiteの`article_snapshots.snapshot_id`を参照正本とする定期照合で回収する。未参照でも24時間以内のobjectは in-flight capture 保護のため残す。詳細は[ADR-0066](adr/0066-reconcile-orphan-article-archive-objects.md)を正本とする。
+- 保存replayは`GET /v1/me/article-snapshots/{snapshotId}/replay`でowner権限と存在を先に確認し、返されたsame-origin URLを`sandbox=""` iframeで開く。HTMLとassetの各readでも`article_owner_access`とsnapshot metadataを再照合し、Contentが発行した1分の内部署名URLをGatewayだけが使用する。HTMLは5 MiB、assetは20 MiB、保存時`Content-Length`完全一致を要求し、CSP `sandbox`/`default-src 'none'`、`nosniff`、`private, no-store`を付ける。取得失敗時は再試行とMarkdown fallbackを残す（[ADR-0079](adr/0079-deliver-owned-private-artifacts-through-gateway.md)）。
 - Episodeへ署名URLを保存・公開しない。`GET /v1/episodes/{episodeId}/audio`はGatewayがowner認可後にprivate S3からRange streamし、`Cache-Control: private, no-store`を返す。
 - Better Authの `/api/auth/**` はBetter Auth側の生成契約を正本とし、アプリOpenAPIへ複製しない。Google tokenを `/v1` のbearer tokenとして扱わない。
 
-`POST /v1/episode-jobs` は手動生成を表し、重複のない1〜20件の`articleIds`を必須とする。重複IDはqueueへ入れる前にHTTP境界で拒否し、Episode ProductionのRPC境界でも同じ不変条件を再検証する。定期生成は記事IDなしの`automatic` jobを作成し、workerが最新InterestProfileを1回だけ読み、有効な購読に属する未使用記事を最大50件取得して1〜20件を選定する。成功済み自動GenerationPlanの記事は期限なしで候補から除外し、手動指定では再利用を許す。空profileではLLMを呼ばず媒体を跨ぐ決定論的fallbackを使う。`POST`の成功は現在のjob状態と`Location`を返し、冪等再送でもqueuedへ巻き戻さない。`GET /v1/episode-jobs/{jobId}/events`はdurable AG-UI eventを100件ずつreplayし、`Last-Event-ID`以降をterminal状態まで追尾する。詳細は[進捗protocol](protocols/episode-job-ag-ui.md)を正本とする。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
+`POST /v1/episode-jobs` は手動生成を表し、重複のない1〜20件の`articleIds`を必須とする。重複IDはqueueへ入れる前にHTTP境界で拒否し、Episode ProductionのRPC境界でも同じ不変条件を再検証する。定期生成は記事IDなしの`automatic` jobを作成し、workerが最新InterestProfileを1回だけ読み、有効な購読に属する未使用記事を最大50件取得して1〜20件を選定する。成功済み自動GenerationPlanの記事は期限なしで候補から除外し、手動指定では再利用を許す。空profileではLLMを呼ばず媒体を跨ぐ決定論的fallbackを使う。`POST`の成功は現在のjob状態と`Location`を返し、冪等再送でもqueuedへ巻き戻さない。Webは記事選択を確定した論理送信ごとにkeyを1つ割り当て、receipt未確認の同一選択では再利用する。選択変更、dialog破棄、明示的新規生成だけがkeyを切り替える。failed jobの`POST .../retry`もkey必須で、同じsource jobへの曖昧な再送は同じkeyを使う。永続化境界はkeyを記録せず`accepted / replay / conflict`を観測する（[ADR-0085](adr/0085-bind-idempotency-keys-to-logical-generation-actions.md)）。`GET /v1/episode-jobs/{jobId}/events`はdurable AG-UI eventを100件ずつreplayし、`Last-Event-ID`以降をterminal状態まで追尾する。詳細は[進捗protocol](protocols/episode-job-ag-ui.md)を正本とする。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。
 
 ## 6. 配備トポロジー
 
@@ -116,7 +128,7 @@ flowchart LR
   Watchdog -->|"SMTP / structured stderr"| OnCall["Operations"]
 ```
 
-Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packages/observability`を使う。BrowserからGatewayまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Productionは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はProduction trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
+Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packages/observability`を使う。BrowserからGatewayまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Productionは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はProduction trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。台本qualityはmodel・生成prompt version・quality prompt version・pass/reject・固定reasonだけをmetric/logへ記録し、記事と台本は記録しない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
 Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。OTLPはGatewayの相対proxyを通し、Collector originをBrowserへ公開しない。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningで8 dashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理する。watchdogは通常構成でも常駐し、SMTP完全設定時はメール、未設定時は構造化stderrへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0040](adr/0040-full-path-observability-validation.md)、[ADR-0048](adr/0048-grafana-mcp-observability.md)、[ADR-0052](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
@@ -135,17 +147,19 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 
 計装は呼び出しごとの手動spanではなく、**自動計装（`instrumentation-http` + `instrumentation-undici`）を正本**にする。Node processはbootstrapで`@news-podcast/observability/node/register`を初期化してからcomposition rootを動的importし、依存moduleの評価より先に`node:http`をpatchする。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）へspanを自動生成する。W3C trace headerの注入はallowlist（既定`api.openai.com`・`localhost`・`127.0.0.1`、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは注入しない（ADR-0017の「外部へ送らない」方針を部分改訂）。span自体は生成・記録され続け、受信は常にW3Cで継続する。schedulerやconsumerなど非HTTP入口は`withGuaranteedSpan`でroot spanを合成して`trace.entry.synthesized`を計数し、本番はmetric/ruleで、非本番は`assertActiveSpan`で計装欠落を検出する。エラー詳細はredact済み`error.message`・`error.type`をlogs/spansへ記録し、metric属性は低cardinalityに限定する（高cardinalityの`error.message`はmetricsへ入れない）。詳細は[ADR-0025](adr/0025-automatic-instrumentation-and-trace-guarantee.md)を正本とする。
 
+記事replay proxyはbounded bodyの読了とSHA-256照合後だけ成功として`article.replay_proxy`を記録し、途中切断・digest不一致を失敗に含める。属性は`object_kind`（`replay`/`asset`）、`outcome`、`duration_ms`だけに限定する。署名URL、object key、元記事URL、owner/snapshot IDは記録しない。
+
 ## 7. 品質戦略
 
 - Domain: 公開interfaceから確認できる規則をunit testし、ドメインロジック100%を維持する。行カバレッジを全体KPIにはしない。
 - Application: portのfakeを使ったユースケース統合テスト。
-- Adapters: SQLite、SeaweedFS S3、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは採用モデルのstrict schemaと実行時allow-listを通し、モデル変更時は実API smokeで適合性を確認する。外部実通信は資格情報のないCIでは行わない。
+- Adapters: SQLite、SeaweedFS S3、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは採用モデルのstrict schemaと実行時allow-listを通し、モデル変更時は実API smokeとversion固定prompt-injection evalで適合性を確認する。外部実通信は資格情報のないCIでは行わない。
 - External contract gate: 公式仕様→稼働version/digest→実データの順に照合し、匿名fixtureを`provider-contract:check`でoffline再生する。詳細は[外部provider契約台帳](external-provider-contracts.md)。
 - API: OpenAPI lint/validation、型生成差分、認証matrix、Problem Details、owner isolation、pagination、冪等性競合。
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
 - Web(a11y): axe検査は視覚回帰から切り離し、`tests/e2e/accessibility.spec.ts`が全ページ（ログイン、今日、記事、記事表示中、購読、生成時刻、ライブラリ、設定）を検査する。スキップリンクと非同期状態のlive regionも同じところで確認する。
-- Web(性能): 本番ビルドに対する実測を常設する。Web Vitals（FCP/LCP/CLS/INP）は`pnpm --filter web perf:vitals`、初期ロードのgzipサイズは`perf:bundle`。描画回数はVitestで予算化する（`shared/test/render-count`）。計測値は環境で揺れるためCIでは非ブロッキングで回し、決定的なバンドル予算で退行を捕らえる（[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)）。
-- E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生を重要導線として確認するが、確認ゲート後に実装する。
+- Web(性能): 本番ビルドに対する実測を常設する。Web Vitals（FCP/LCP/CLS/INP）は`pnpm --filter web perf:vitals`としてCIで非ブロッキング、初期ロードと6主要routeのgzipサイズは`perf:bundle`としてrequiredな`static` jobでblocking検査する。route payloadはVite manifestの静的依存から初期資産との重複を除いて測る。描画回数はVitestで予算化する（`shared/test/render-count`）。予算変更はbaseline、計測差、理由を同じdiffへ残す（[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)）。
+- E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生に加え、owner Aのlogoutからowner Bへの切替でprivate client stateが残らないことを重要導線として確認する。
 
 ### 7.1 UI設計原則
 
@@ -197,7 +211,7 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 - 鳴っている間に動く面の周りへ`backdrop-filter`を置かない。透過とぼかしを持つ面は背後が変わるたびに焼き直しになるので、目盛りが動くだけで再生バーと下部ナビまで描き直される。下端に居座る帯は不透明にし、進んだ量は背景のグラデーションではなく`transform: scaleX()`で示す（帯そのものを描き直さずに済む）。
 - 押してから鳴り始めるまでの間を、失敗と区別して伝える。音声はGateway経由でS3からstreamされるので間が空くが、その間`playbackStatus`は既に`playing`で、ボタンだけが一時停止の形になり何も聞こえない。`waiting`/`playing`から導いた待ち状態を操作の隣へ出し、再生ボタンには`aria-busy`を付ける（名札と押し所は変えない）。鳴らせなかった場合は`alert`で伝え、同じ行から再試行させる。同じURLを代入し直しても要素は取りに行かないので`load()`を明示し、戻る位置は端末の記録から取る（失敗時の`currentTime`は0へ落ちていることがある）。
 - ロック画面の目盛りへは長さ・位置・速度を渡す（`setPositionState`）。渡さないとOS側の目盛りは長さを持たないまま止まって見え、掴んで飛ばす操作も出ない。報告はまばらな出来事（総時間の判明・飛ばし・速度変更・再生/停止）のときだけにする。OSは最後に報告した位置を実時間で外挿するので毎秒叩く必要がなく、逆に位置を購読すると`PlayerHost`ごと毎秒数回描き直されて再生バー全体を巻き込む。飛ばしはまばらな値（`seekGenerationAtom`）として取り出す。
-- 端末に残す再生の記録は、ログイン画面へ着いた時点で捨てる。保存領域はorigin単位なので、同じブラウザで別の利用者がログインすると前の利用者の番組名と続きが復元される。別タブの書き込みを取り込むのは単独で意味を持つ値、つまり再生記録だけ。載っている番組・速度・音量・消音はいずれもそのタブの`<audio>`と対で初めて意味を持つので取り込まない。取り込むと、要素へ届けないまま写しだけが動き、目盛りと消音の印が耳に届く音と食い違う。
+- 端末に残す再生の記録は、明示logoutではserver session終了成功後、失効sessionでlogin画面へ到達した場合はその時点で捨てる。保存領域はorigin単位なので、同じブラウザで別の利用者がログインすると前の利用者の番組名と続きが復元される。明示logoutでは鳴っているaudioも停止・unloadしてからdocumentを置き換える。別タブの書き込みを取り込むのは単独で意味を持つ値、つまり再生記録だけ。載っている番組・速度・音量・消音はいずれもそのタブの`<audio>`と対で初めて意味を持つので取り込まない。詳細は[ADR-0078](adr/0078-terminate-session-before-clearing-owner-state.md)。
 - OSのロック画面やメディアキーから届くのは命令であって切り替えではない。再生と停止は別々に持ち、同じ命令が二度届いても状態が反転しないようにする。切り替えるのは画面のボタンだけ。
 - 再生位置は番組ごとに端末へ残し、続きから再開する。末尾の15秒以内まで達していれば再生済みとして次は先頭から鳴らす(末尾から再開しても何も鳴らない)。リロード後はバーに前回の番組が戻るが、音は自動では鳴らさない。
 - ライブラリは記事ページと同じ2ペインにする。左が番組一覧(日付で括った行だけ)、右が詳細で、原稿を主・出典を右レールに置く。台本は最大20,000字あり、カードへ積むと一覧性と可読性のどちらも成り立たない。選択は`?episode=`でURLが正本。
@@ -267,7 +281,7 @@ flowchart LR
 | GenerationPlanning | 最新InterestProfile、候補選定、first-write-wins plan | LanguageModel、GenerationPlanRepository |
 | EpisodeProduction | 有界生成、draft検証、出典、TTS、durable進捗、完成処理 | LanguageModel、SpeechSynthesizer、EpisodeRepository |
 
-構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後にFeedItemへ正規化する。記事HTMLはscript/resource無効の`jsdom`でDOM化し、共有Feature Ruleでcode/callout/embed/mathを保持してから、Site Profileの明示root、semantic `article`、Readabilityの順で本文を抽出する。その後`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。Profileはselectorと意味対応だけを所有し、汎用抽出・serializeを複製しない。XML/HTML/Markdownのタグ境界を正規表現で解釈せず、`pnpm parser:check`で依存境界を検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)、[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)）。
+構造化入力は専用parserを通す。RSS/Atomは`fast-xml-parser`で整形式検証後、validなFeedItemとsanitized validation failureへ分離する。title/link欠落、非HTTP(S) URL、title長超過は原文を含まない定数reasonとして`discovered`/`failed`へ数え、valid/invalid混在時もvalid itemのarchiveを継続する。全件不正はdegradedな同期としてAPI/UIへ件数と理由を返す。記事HTMLはscript/resource無効の`jsdom`でDOM化し、共有Feature Ruleでcode/callout/embed/mathを保持してから、Site Profileの明示root、semantic `article`、Readabilityの順で本文を抽出する。その後`rehype-parse` → `rehype-sanitize` → `rehype-remark` → `remark-stringify`でMarkdownへ変換する。Profileはselectorと意味対応だけを所有し、汎用抽出・serializeを複製しない。XML/HTML/Markdownのタグ境界を正規表現で解釈せず、`pnpm parser:check`で依存境界を検査する（[ADR-0042](adr/0042-structured-input-parser-boundaries.md)、[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)、[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)）。
 
 保存MarkdownはGFM、math、Mermaid、Obsidian/GitHub型callout、`@[card]`、`@[embed]`、code fence metadataを扱う。code言語は明示属性、filename、shebang/modeline、閾値付きoffline検出の順に決める。Webはcalloutを`@r4ai/remark-callout`で描画し、embedはHTTPS provider allowlist、sandbox、`no-referrer`を満たす場合だけ自動ロードする。sandboxの権限はprovider単位で宣言し、必要な物だけを与える。動画プレイヤーやスライドはJavaScriptなしでは何も描けないため`allow-scripts`を与えるが、`allow-same-origin`は型で表現できないようにして決して与えない（両方揃うとiframeが自分でsandbox属性を外せる）。許可リストに載らないhostnameは、URLがどれだけ安全に見えてもiframeにせずリンクへ落とす。
 
@@ -287,6 +301,8 @@ episodes/{sha256(owner-id)}/{job-id}/{episode-id}.wav
 ```
 
 bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去し、認可済みの専用routeからCSP付きで返す。記事更新時は上書きせずsnapshotを追加する。
+
+Episode出典から保存版を開く場合は、出典が保持する`articleId + snapshotId`をURL stateへ渡し、metadataとMarkdownをowner/article/snapshot複合認可、replayをowner認可済みsnapshot routeで読む。これにより同じ記事の新snapshot追加後も生成時のtitle・本文・保存ページを表示する。snapshot IDがないlegacy sourceだけarticle単位latestへfallbackし、UIでは「外部サイト」「生成時の保存版」「最新の保存版」を区別する（[ADR-0081](adr/0081-bind-episode-reader-to-source-snapshot.md)）。
 
 初期HTMLで参照される静的resourceは、linked stylesheetを起点にCSSの`@import`と`url()`を再帰取得し、inline style、画像、`srcset`、font、audio/videoも同一snapshotへ保存する。content hashが同じresourceは上限へ重複計上しない。既定上限はHTML 5 MiB、単一asset 20 MiB、snapshotあたりasset 512件かつ合計100 MiBとし、環境変数で変更できる。主要stylesheetが取得失敗または上限超過した場合は、壊れた元レイアウトではなく保存本文をreader viewで返す。JavaScript実行後にだけ生成されるDOMは対象外とする。
 
@@ -362,7 +378,7 @@ flowchart TD
 - OpenAIのproviderエラーや生成根拠を外部レスポンスへ露出しない。
 - 任意RSSと記事redirectによるSSRF。接続前とredirectごとに解決IPを検査する。
 - SQLiteとObjectStore間の孤児object。現在は冪等keyと再試行で利用経路を保護し、運用reconcilerを追加する。
-- LLMの費用・latency・非決定性。strict schema、実行limit、代表fixtureのevalを持つ。
+- LLMの費用・latency・非決定性と、同一modelの生成/評価に残るprompt injection false negative。strict schema、公開前quality gate、実行limit、version固定evalを持つ。
 
 ## 12. ADR一覧
 
@@ -399,3 +415,13 @@ flowchart TD
 - [ADR-0068 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
 - [ADR-0069 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070 Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
+- [ADR-0071 ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
+- [ADR-0072 Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
+- [ADR-0073 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
+- [ADR-0074 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)
+- [ADR-0080 未信頼記事から生成した台本を独立quality gateで公開前に拒否する](adr/0080-gate-untrusted-article-scripts-before-publication.md)
+- [ADR-0081 Episode readerを生成元snapshotへ固定する](adr/0081-bind-episode-reader-to-source-snapshot.md)
+- [ADR-0082 最新記事Markdownを本文検索用に索引する](adr/0082-index-latest-article-markdown-for-search.md)
+- [ADR-0083 Episode生成失敗コードと利用者向け復旧案内を分離する](adr/0083-share-episode-failure-code-contract.md)
+- [ADR-0084 AI記事補完の有料試行をprovider送信前に予約する](adr/0084-reserve-paid-enrichment-attempts.md)
+- [ADR-0086 Episode leaseを優先度とready時刻で決定する](adr/0086-order-episode-leases-by-ready-time.md)

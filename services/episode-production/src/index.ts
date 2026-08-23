@@ -3,6 +3,7 @@ export {
   makeOpenAiScriptGenerator,
   type OpenAiScriptGeneratorConfig,
   type OpenAiScriptGeneratorDependencies,
+  type ScriptQualityObservation,
 } from "./adapters/providers/openai-script-generator.js"
 export {
   makeNoopReadingTermExtractor,
@@ -109,6 +110,7 @@ export {
   parseNodeCreateJobRpcConfig,
   runNodeCreateJobRpc,
   runNodeProductionRpc,
+  runProductionRpcWithDatabase,
   type NodeCreateJobRpcDependencies,
   type NodeCreateJobRpcError,
 } from "./runtime/node.js"

@@ -132,8 +132,7 @@ export const runNodeGateway = (
           }).pipe(Effect.mapError(() => runtimeError("Nats")))
           const web = makeGatewayWebHandler(
             ports,
-            dependencies.telemetry ?? Layer.empty,
-            { nextRetryIdempotencyKey: dependencies.nextMessageId }
+            dependencies.telemetry ?? Layer.empty
           )
           const authProxy = makeGatewayAuthProxy({
             upstream: new URL(config.identityHttpOrigin),

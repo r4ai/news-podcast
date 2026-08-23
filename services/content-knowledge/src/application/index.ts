@@ -1,4 +1,5 @@
 export * from "./archive-article.js"
+export * from "./article-search-index.js"
 export * from "./ports/article-catalog.js"
 export * from "./article-library.js"
 export * from "./materialize-articles.js"

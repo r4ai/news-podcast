@@ -13,3 +13,7 @@ export {
   type ServiceProcessDependencies,
   type StructuredRuntimeFailure,
 } from "./process.js"
+export {
+  readProviderRuntimeMode,
+  type ProviderRuntimeMode,
+} from "./provider-mode.js"

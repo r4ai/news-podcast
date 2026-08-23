@@ -70,6 +70,13 @@ const storageCode = (
     failure._tag === "MarkdownObjectFailed"
   )
     return "OBJECT_FAILURE"
+  if (
+    typeof failure === "object" &&
+    failure !== null &&
+    "_tag" in failure &&
+    failure._tag === "ReplayAccessSigningFailure"
+  )
+    return "OBJECT_FAILURE"
   return "STORAGE_FAILURE"
 }
 
@@ -130,6 +137,23 @@ export const makeArticleLibraryRpcHandler =
                             : deepFreeze({ _tag: "NotFound" })
                         )
                       )
+                  case "FindSnapshot":
+                    return library
+                      .findSnapshot({
+                        ownerId,
+                        articleId: command.articleId,
+                        snapshotId: command.snapshotId,
+                      })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "Found",
+                                article: value.article,
+                              })
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
                   case "Markdown":
                     return library
                       .markdown({ ownerId, articleId: command.articleId })
@@ -139,6 +163,43 @@ export const makeArticleLibraryRpcHandler =
                             ? deepFreeze({
                                 _tag: "Markdown",
                                 markdown: value.markdown,
+                              })
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
+                  case "SnapshotMarkdown":
+                    return library
+                      .snapshotMarkdown({
+                        ownerId,
+                        articleId: command.articleId,
+                        snapshotId: command.snapshotId,
+                      })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "Markdown",
+                                markdown: value.markdown,
+                              })
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
+                  case "ReplayAccess":
+                    return library
+                      .replayAccess({
+                        ownerId,
+                        snapshotId: command.snapshotId,
+                        object: command.object,
+                      })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "ReplayAccess",
+                                url: value.url,
+                                mediaType: value.mediaType,
+                                byteLength: value.byteLength,
+                                sha256: value.sha256,
                               })
                             : deepFreeze({ _tag: "NotFound" })
                         )

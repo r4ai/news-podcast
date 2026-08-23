@@ -10,7 +10,9 @@ const dependencies = () => ({
   articles: {
     list: vi.fn(() => Effect.succeed([])),
     find: vi.fn(() => Effect.succeed({ _tag: "NotFound" })),
+    findSnapshot: vi.fn(() => Effect.succeed({ _tag: "NotFound" })),
     findMarkdown: vi.fn(() => Effect.succeed({ _tag: "NotFound" })),
+    findSnapshotMarkdown: vi.fn(() => Effect.succeed({ _tag: "NotFound" })),
     patch: vi.fn(() => Effect.succeed({ _tag: "NotFound" })),
     bulkPatch: vi.fn(() => Effect.succeed(0)),
     facets: vi.fn(() =>
@@ -132,6 +134,10 @@ describe("article library handler", () => {
       ownerId: "owner-a",
       articleId: "5af55f2e-ff0b-475c-866a-f2cff48c101d",
     }
+    const snapshotIdentity = {
+      ...identity,
+      snapshotId: "651b86e0-481a-42e2-aef4-7b6419d7447a",
+    }
     const filter = { includeHidden: false, feedIds: [] }
     const listQuery = {
       ...filter,
@@ -144,7 +150,9 @@ describe("article library handler", () => {
       handler.list({ ownerId: identity.ownerId, query: listQuery })
     )
     await Effect.runPromise(handler.find(identity))
+    await Effect.runPromise(handler.findSnapshot(snapshotIdentity))
     await Effect.runPromise(handler.markdown(identity))
+    await Effect.runPromise(handler.snapshotMarkdown(snapshotIdentity))
     await Effect.runPromise(
       handler.bulkPatch({
         ownerId: identity.ownerId,
@@ -159,7 +167,17 @@ describe("article library handler", () => {
 
     expect(ports.articles.list).toHaveBeenCalledOnce()
     expect(ports.articles.find).toHaveBeenCalledTimes(2)
+    expect(ports.articles.findSnapshot).toHaveBeenCalledWith(
+      identity.ownerId,
+      identity.articleId,
+      snapshotIdentity.snapshotId
+    )
     expect(ports.articles.findMarkdown).toHaveBeenCalledOnce()
+    expect(ports.articles.findSnapshotMarkdown).toHaveBeenCalledWith(
+      identity.ownerId,
+      identity.articleId,
+      snapshotIdentity.snapshotId
+    )
     expect(ports.articles.bulkPatch).toHaveBeenCalledOnce()
     expect(ports.articles.facets).toHaveBeenCalledOnce()
   })

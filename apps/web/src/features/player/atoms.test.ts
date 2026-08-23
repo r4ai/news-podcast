@@ -24,6 +24,7 @@ import {
   playbackRateAtom,
   progressEntryAtomFamily,
   progressMapAtom,
+  resetOwnerPlaybackAtom,
   resumePlaybackAtom,
   retryPlaybackAtom,
   seekToAtom,
@@ -57,6 +58,9 @@ class FakeAudio {
     this.paused = true
   })
   readonly load = vi.fn()
+  readonly removeAttribute = vi.fn((name: string) => {
+    if (name === "src") this.src = ""
+  })
 }
 
 const track: PlayerTrack = {
@@ -664,5 +668,26 @@ describe("再生の失敗", () => {
 
     expect(audio.load).not.toHaveBeenCalled()
     expect(audio.play).not.toHaveBeenCalled()
+  })
+})
+
+describe("resetOwnerPlaybackAtom", () => {
+  it("stops playback and clears both in-memory and persisted owner state", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    loaded(store, audio, 600)
+    audio.currentTime = 42
+    store.set(handleTimeUpdateAtom)
+
+    store.set(resetOwnerPlaybackAtom)
+
+    expect(audio.pause).toHaveBeenCalledOnce()
+    expect(audio.src).toBe("")
+    expect(store.get(currentTrackAtom)).toBeNull()
+    expect(store.get(progressMapAtom)).toEqual({})
+    expect(store.get(playbackPositionAtom)).toBe(0)
+    expect(store.get(playbackDurationAtom)).toBeUndefined()
+    expect(localStorage.getItem("player.track")).toBeNull()
+    expect(localStorage.getItem("player.progress")).toBeNull()
   })
 })

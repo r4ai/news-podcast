@@ -1,4 +1,5 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
+import { decodePersistedJson } from "@news-podcast/persistence"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
@@ -36,25 +37,21 @@ const archiveStoreError = (
         : ("Unavailable" as const),
   })
 
-const parseSnapshotJson = (
-  input: string,
-  operation: ArchiveStoreError["operation"],
-  jsonInterop: JsonInterop
-) =>
-  Effect.try({
-    try: () => jsonInterop.parse(input),
-    catch: () => archiveStoreError(operation),
-  }).pipe(
-    Effect.flatMap((json) => parse(ArticleSnapshotSchema)(json)),
-    Effect.mapError(() => archiveStoreError(operation))
-  )
+const corruptArchiveRecord = (
+  operation: ArchiveStoreError["operation"]
+): ArchiveStoreError =>
+  deepFreeze({
+    _tag: "ArchiveStoreFailed" as const,
+    operation,
+    reason: "CorruptRecord" as const,
+  })
 
 export type ArchiveStore = Pick<ArchiveArticlePorts, "lookup" | "commit"> &
   ArchiveMaintenancePorts
 
 export const createArchiveStore = (
   database: ContentKnowledgeDatabase,
-  jsonInterop: JsonInterop
+  jsonInterop: Pick<JsonInterop, "stringify">
 ): Effect.Effect<ArchiveStore, ArchiveStoreError> =>
   Effect.sync(() => {
     const selectSnapshotJson = (tx: QueryRunner, archiveRequestId: string) =>
@@ -76,7 +73,13 @@ export const createArchiveStore = (
               : parseSnapshotRow(row).pipe(
                   Effect.mapError(() => archiveStoreError("Lookup")),
                   Effect.flatMap(({ snapshotJson }) =>
-                    parseSnapshotJson(snapshotJson, "Lookup", jsonInterop)
+                    decodePersistedJson(
+                      "article_snapshots.snapshot_json",
+                      ArticleSnapshotSchema,
+                      snapshotJson
+                    ).pipe(
+                      Effect.mapError(() => corruptArchiveRecord("Lookup"))
+                    )
                   ),
                   Effect.map((snapshot) =>
                     deepFreeze({ _tag: "Archived" as const, snapshot })
@@ -116,7 +119,13 @@ export const createArchiveStore = (
               : parseSnapshotRow(result.row).pipe(
                   Effect.mapError(() => archiveStoreError("Commit")),
                   Effect.flatMap(({ snapshotJson }) =>
-                    parseSnapshotJson(snapshotJson, "Commit", jsonInterop)
+                    decodePersistedJson(
+                      "article_snapshots.snapshot_json",
+                      ArticleSnapshotSchema,
+                      snapshotJson
+                    ).pipe(
+                      Effect.mapError(() => corruptArchiveRecord("Commit"))
+                    )
                   ),
                   Effect.map((snapshot) =>
                     deepFreeze({

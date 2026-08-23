@@ -1,3 +1,4 @@
+import { episodeFailureCodes } from "@news-podcast/contracts/episode-failure"
 import { parse } from "@news-podcast/kernel"
 import { Schema } from "effect"
 
@@ -40,6 +41,10 @@ const EpisodeJobStageSchema = Schema.Literals([
   "preparing_pronunciation",
   "synthesizing_audio",
   "storing_episode",
+])
+const ForwardCompatibleEpisodeFailureCodeSchema = Schema.Union([
+  Schema.Literals(episodeFailureCodes),
+  boundedText(200),
 ])
 
 export const CreateEpisodeJobReplySchema = Schema.Union([
@@ -89,7 +94,7 @@ export const ProductionEpisodeJobSchema = Schema.Union([
     attempt: Schema.Literals([1, 2, 3]),
     retryAt: UtcInstantSchema,
     failure: Schema.Struct({
-      code: boundedText(200),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       retryable: Schema.Literal(true),
     }),
   }),
@@ -106,7 +111,7 @@ export const ProductionEpisodeJobSchema = Schema.Union([
     attempt: Schema.Literals([1, 2, 3, 4]),
     failedAt: UtcInstantSchema,
     failure: Schema.Struct({
-      code: boundedText(200),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       retryable: Schema.Literal(false),
     }),
   }),

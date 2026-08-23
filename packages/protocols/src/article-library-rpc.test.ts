@@ -8,6 +8,7 @@ import {
 
 const articleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
 const feedId = "0c6bd9aa-f349-4c16-af84-acb845aa9d47"
+const snapshotId = "6518412b-ce2f-4641-9f2c-a02dd515bc31"
 
 describe("article library RPC", () => {
   it("accepts bounded owner-free operations", async () => {
@@ -114,6 +115,48 @@ describe("article library RPC", () => {
     if (reply._tag === "Listed") {
       expect(Object.isFrozen(reply.articles)).toBe(true)
       expect(reply.nextCursor).toBeNull()
+    }
+  })
+
+  it("bounds replay access to an exact snapshot object name", async () => {
+    await expect(
+      Effect.runPromise(
+        parseArticleLibraryRequest({
+          operation: "ReplayAccess",
+          snapshotId,
+          object: { kind: "Asset", assetName: `${"a".repeat(64)}.css` },
+        })
+      )
+    ).resolves.toMatchObject({ operation: "ReplayAccess" })
+
+    for (const assetName of [
+      "../secret",
+      "a.css",
+      `${"a".repeat(64)}.exe/../x`,
+    ]) {
+      await expect(
+        Effect.runPromise(
+          parseArticleLibraryRequest({
+            operation: "ReplayAccess",
+            snapshotId,
+            object: { kind: "Asset", assetName },
+          })
+        )
+      ).rejects.toBeDefined()
+    }
+  })
+
+  it("binds snapshot metadata and Markdown reads to both article and snapshot", async () => {
+    for (const operation of ["FindSnapshot", "SnapshotMarkdown"] as const) {
+      await expect(
+        Effect.runPromise(
+          parseArticleLibraryRequest({ operation, articleId, snapshotId })
+        )
+      ).resolves.toMatchObject({ operation, articleId, snapshotId })
+
+      await expect(
+        Effect.runPromise(parseArticleLibraryRequest({ operation, snapshotId }))
+      ).rejects.toBeDefined()
     }
   })
 

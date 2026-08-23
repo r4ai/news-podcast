@@ -55,7 +55,6 @@ const views = [
         pending={false}
         reprocessableCount={5}
         requestReprocess={vi.fn()}
-        resetDaily={vi.fn()}
       />
     ),
   },
@@ -89,6 +88,13 @@ const views = [
 ] as const
 
 describe("設定カードの構造", () => {
+  it("AIの日次値を成功件数ではなくprovider試行枠として説明する", () => {
+    render(views[1].render())
+
+    expect(screen.getByText("本日のAI試行上限")).toBeTruthy()
+    expect(screen.getByText(/あと188回AIを試行できます/)).toBeTruthy()
+  })
+
   for (const view of views) {
     it(`${view.name}: どのカードも見出しと本文を直接の子に持つ`, () => {
       const { container } = render(view.render())

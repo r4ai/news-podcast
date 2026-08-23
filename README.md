@@ -22,6 +22,8 @@ RSSから選んだニュースを、出典付きの短い音声番組として�
 
 環境構築、ローカルでの操作、コマンド、環境変数は[開発ガイド](docs/development.md)を参照してください。
 
+本番runtimeは`APP_ENV=production`かつ厳密な`PROVIDER_MODE=live`と必須provider設定が揃わない限りReadyになりません。ローカル既定のfake modeと本番のfail-closed規則は[ADR-0077](docs/adr/0077-fail-closed-production-provider-mode.md)に記録しています。
+
 システムの全体像は[アーキテクチャ](docs/architecture.md)、詳細設計と判断の記録は[設計書](docs/design.md)と[ADR](docs/adr/)にあります。
 
 ## Observability

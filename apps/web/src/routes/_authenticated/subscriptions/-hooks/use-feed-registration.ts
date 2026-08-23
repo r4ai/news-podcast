@@ -11,6 +11,53 @@ import {
 import { api } from "@/shared/api"
 import { feedUrlDraftAtom } from "../-atoms"
 
+type FeedUrlValidation =
+  | { readonly valid: true; readonly url: string }
+  | { readonly valid: false; readonly message: string }
+
+export function validateFeedUrlInput(value: string): FeedUrlValidation {
+  const input = value.trim()
+  try {
+    const url = new URL(input)
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.hash !== "" ||
+      input.includes("#") ||
+      url.href.length > 2_048
+    ) {
+      return {
+        valid: false,
+        message:
+          "安全上登録できないURLです。HTTP(S)を使い、認証情報と#以降を除いてください。",
+      }
+    }
+    return { valid: true, url: input }
+  } catch {
+    return { valid: false, message: "URLの形式が正しくありません。" }
+  }
+}
+
+export function feedRegistrationErrorMessage(error: unknown): string {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? error.code
+      : undefined
+  switch (code) {
+    case "invalid_subscription_request":
+      return "URLの形式が正しくありません。"
+    case "feed_subscription_rejected":
+      return "このURLはRSS/Atomフィードとして登録できません。"
+    case "feed_subscription_exists":
+      return "このフィードは既に購読しています。"
+    case "upstream_unavailable":
+      return "現在フィードを登録できません。しばらくしてからもう一度お試しください。"
+    default:
+      return "RSSフィードを登録できませんでした。"
+  }
+}
+
 export function useFeedRegistration() {
   const queryClient = useQueryClient()
   const register = api.useMutation("post", "/v1/feeds")
@@ -19,11 +66,14 @@ export function useFeedRegistration() {
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    const url = store.get(feedUrlDraftAtom).trim()
-    if (!url) return
+    const validation = validateFeedUrlInput(store.get(feedUrlDraftAtom))
+    if (!validation.valid) {
+      toast.error(validation.message)
+      return
+    }
     startTransition(async () => {
       try {
-        await register.mutateAsync({ body: { feedUrl: url } })
+        await register.mutateAsync({ body: { feedUrl: validation.url } })
         store.set(feedUrlDraftAtom, "")
         await Promise.all([
           queryClient.invalidateQueries({
@@ -37,8 +87,8 @@ export function useFeedRegistration() {
           }),
         ])
         toast.success("RSSフィードを登録しました")
-      } catch {
-        toast.error("RSSフィードを確認できませんでした")
+      } catch (error) {
+        toast.error(feedRegistrationErrorMessage(error))
       }
     })
   }

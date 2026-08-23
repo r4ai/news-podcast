@@ -3,9 +3,42 @@ import type {
   TelemetryAttributes,
 } from "@news-podcast/observability"
 
+import type { ScriptQualityObservation } from "../adapters/providers/openai-script-generator.js"
 import type { EpisodeWorkerEvent } from "./loops/worker.js"
+import type { CancellationPropagation } from "./loops/worker.js"
 
-type WorkerTelemetry = Pick<Observability, "count" | "log">
+type WorkerTelemetry = Pick<Observability, "count" | "log"> &
+  Partial<Pick<Observability, "measure">>
+
+export const recordScriptQualityObservation = (
+  observability: WorkerTelemetry,
+  observation: ScriptQualityObservation
+): void => {
+  const attributes = {
+    "gen_ai.request.model": observation.model,
+    "episode.script.prompt.version": observation.generationPromptVersion,
+    "episode.script.quality_prompt.version": observation.qualityPromptVersion,
+    "quality.outcome": observation.outcome,
+    "quality.reason": observation.reasonCode,
+  } as const
+  observability.count("episode.script.quality", 1, attributes)
+  observability.log({
+    name: "episode.script.quality_evaluated",
+    level: observation.outcome === "reject" ? "warn" : "info",
+    attributes,
+  })
+}
+
+export const recordCancellationPropagation = (
+  observability: Pick<Observability, "measure">,
+  event: CancellationPropagation
+): void => {
+  observability.measure(
+    "episode.cancellation.propagation.duration",
+    event.latencyMillis,
+    { source: event.source }
+  )
+}
 
 const failureAttributes = (
   event: Extract<EpisodeWorkerEvent, { _tag: "JobFinished" }>
@@ -35,6 +68,10 @@ export const recordEpisodeWorkerEvent = (
       observability.count("episode.started", 1, {
         "job.attempt": event.attempt,
       })
+      observability.measure?.(
+        "episode.queue.wait.duration",
+        event.queueWaitMillis
+      )
       if (event.recovered) observability.count("episode.lease.recovered")
       return
     case "JobFinished":
@@ -50,6 +87,8 @@ export const recordEpisodeWorkerEvent = (
       }
       if (event.outcome._tag === "Failed") {
         observability.count("episode.failed")
+        if (event.outcome.failureCode === "job_deadline_exceeded")
+          observability.count("episode.deadline.exceeded")
         observability.log({
           name: "episode.failed",
           level: "error",

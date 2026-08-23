@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { classifyDatabaseFailure, databaseError } from "./errors.js"
+import {
+  classifyDatabaseFailure,
+  databaseError,
+  isDatabaseError,
+} from "./errors.js"
 
 describe("databaseError", () => {
   it("defaults to Unavailable so callers must opt into finer reasons", () => {
@@ -43,5 +47,14 @@ describe("classifyDatabaseFailure", () => {
 
   it("handles a non-Error cause without throwing", () => {
     expect(classifyDatabaseFailure("boom")).toBe("Unavailable")
+  })
+})
+
+describe("isDatabaseError", () => {
+  it("recognizes only the public failure shape", () => {
+    expect(isDatabaseError(databaseError("Decode", "CorruptRecord"))).toBe(true)
+    expect(isDatabaseError({ _tag: "DatabaseFailed", reason: "secret" })).toBe(
+      false
+    )
   })
 })

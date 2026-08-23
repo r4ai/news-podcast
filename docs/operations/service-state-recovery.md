@@ -1,16 +1,17 @@
-# Service state backup / restore
+# Coordinated service state backup / restore
 
-対象はfunctional backendの4つのservice専用SQLiteである。online backupは稼働中に取得できる。restoreとcutoverは対象serviceを停止し、別pathへ検証復元してから行う。既存DBへの上書きと別serviceのDB復元はCLIが拒否する。
+正本は、4つのservice専用SQLiteとSeaweedFS上のarticle archive・Episode audioを同じ世代へ束ねる`state-backup`である。個別SQLite CLIはcutoverと限定的な手動退避にだけ使い、DBだけの退避を災害復旧可能な世代と扱わない。
 
 ```mermaid
 flowchart LR
-  Live["live SQLite / WAL"] -->|"online backup API"| Archive["immutable backup"]
-  Archive --> I["integrity_check"]
-  I --> S["service profile table check"]
-  S --> R["new *.restored.sqlite"]
-  R --> C["offline atomic cutover"]
-  C --> H["readiness + business smoke"]
-  H -->|"failure"| Rollback["quarantined previous DB"]
+  Barrier["4 SQLite BEGIN IMMEDIATE"] --> DB["same-cut online backups"]
+  Barrier --> Objects["SeaweedFS inventory × 2"]
+  DB --> Validate["schema + Production/Library invariant"]
+  Objects --> Validate
+  Validate --> Encrypt["AES-256-GCM"]
+  Encrypt --> Remote["off-host S3<br/>versioning + Object Lock"]
+  Remote --> Commit["commit.json<br/>success boundary"]
+  Commit --> Drill["weekly restore drill"]
 ```
 
 ## 対象
@@ -22,9 +23,80 @@ flowchart LR
 | `episode-production` | `production` | `/app/data/production.sqlite` | `episode_jobs` |
 | `episode-library` | `library` | `/app/data/library.sqlite` | `episodes` |
 
-## Backup
+SeaweedFSの対象bucketは、同じinventoryに含まれる全objectである。`article_snapshots.snapshot_json`内のraw/replay/Markdown/assetsと、`episodes.audio_object_key`の全参照がinventoryのhash・sizeと一致しなければ世代をcommitしない。
 
-例はProduction。日時を固定した一意なfile名に置き換える。
+## 保護方針
+
+| 項目 | 決定 | 運用境界 |
+| --- | --- | --- |
+| RPO | 24時間 | schedulerは24時間ごと。25時間でcritical alert |
+| RTO | 4時間 | 最新commit世代の復号・検証、object復元、4 DB cutover、read smokeまで |
+| 世代保持 | 直近30成功世代 | bucket lifecycleはObject Lock満了前に削除してはならない |
+| 改変不能期間 | 最低35日 | 各PutをS3 Object Lock `COMPLIANCE`で固定 |
+| 暗号化 | client-side AES-256-GCM | 32 byte鍵はCompose secret。外部bucket管理者から分離保管 |
+| 外部保管 | sourceと異なるoff-host S3 bucket | versioningとObject Lockが起動時の必須検査 |
+| drill | 7日ごと | 8日未成功でcritical alert |
+| write barrier | 既定30秒、最大120秒 | 4 DB snapshotとobject inventoryだけを囲み、25秒超または拒否でalert |
+
+bucket lifecycleは「35日間は保持し、30成功世代を下回らない」規則に設定する。鍵を失うと全世代を復号できない。鍵はrepository・同一host・同一S3 accountに保管せず、rotationは旧鍵で保護した全世代が保持対象外になった後に行う。
+
+## 初期設定と自動Backup
+
+外部bucketは作成時にObject Lockを有効にし、versioningを停止しない。sourceと同じSeaweedFS bucketは設定検査で拒否される。32 byte鍵をhexまたはbase64でsecret fileへ保存し、権限をowner read-onlyにする。
+
+```bash
+mkdir -p .secrets
+openssl rand -hex 32 > .secrets/backup-encryption-key
+chmod 600 .secrets/backup-encryption-key
+
+docker compose --profile backup up -d --build state-backup
+docker compose --profile backup ps state-backup
+curl --fail --silent http://127.0.0.1:4198/metrics
+```
+
+endpoint、bucket、専用credentialsは`.env`の`BACKUP_ARCHIVE_*`へ設定する。`BACKUP_ENCRYPTION_KEY_FILE_HOST`はhost上のsecret fileを指す。`BACKUP_BARRIER_TIMEOUT_MS`は既定30秒、最大120秒で、通常は変更しない。state-backupのsource volumeはSQLite lock取得に必要なwrite-capable mountだが、coordinatorが実行するSQLは`BEGIN IMMEDIATE`と`ROLLBACK`だけである。起動直後に1世代を作り、全成果物のimmutable Putが成功した最後にだけ`generations/<generation>/commit.json`を置く。
+
+```mermaid
+stateDiagram-v2
+  [*] --> Staging
+  Staging --> Validated: barrier + 4 DB + stable inventory + cross invariant OK
+  Staging --> Partial: backup / download / validation failed
+  Validated --> Uploaded: encrypted artifacts + manifest uploaded
+  Uploaded --> Committed: immutable commit marker uploaded
+  Partial --> [*]: failure metric / successにならない
+  Committed --> [*]: last successを更新
+```
+
+manifest v2はgeneration、4 DBのprofile/schema/hash、SeaweedFS inventory fingerprint、全objectのkey/hash/size、参照件数、保護policyに加え、barrier時間・inventory方式・横断不変条件versionを持ち、manifest自体も暗号化する。途中uploadだけが残ったprefixにはcommit markerがないため、restore候補にも成功metricにも現れない。
+
+Production/Libraryは次を同時に満たす世代だけを受理する。`Succeeded` JobとCompletion Outboxは同じjob/episode、published OutboxとLibrary Inbox/Episodeは同じjob/episode/payload fingerprint、Library側のInbox/Episodeは必ずProduction側に対応物を持つ。NATS配送中などLibrary未反映のpublished completionがある場合は安全側に拒否し、schedulerが次のtickで再試行する。
+
+## 自動Restore drillと監視
+
+daemonは週次に最新commit世代を隔離stagingへ取得し、次をすべて検証してから一時復元物を消す。live volumeは変更しない。
+
+1. commitと暗号化manifestのSHA-256、AES-GCM認証tag
+2. 4 DBの平文SHA-256、`integrity_check`、service anchor table
+3. 全objectの平文SHA-256とsize
+4. 全article archive objectと全Episode audioのDB参照整合性
+5. Production Job/Completion OutboxとLibrary Completion Inbox/EpisodeのID・状態・payload fingerprint整合性
+
+| metric / alert | 意味 | 初動 |
+| --- | --- | --- |
+| `news_podcast_backup_last_success_timestamp_seconds` | 最後のcommit時刻 | generation prefixと構造化failure logを確認 |
+| `news_podcast_backup_generation_age_seconds` / `np-backup-rpo` | 最新世代age / 25時間超過 | source DB・SeaweedFS・外部S3を切り分ける |
+| `news_podcast_backup_failures_total` / `np-backup-failure` | backup失敗 | commitなしprefixを成功扱いしない |
+| `news_podcast_backup_duration_seconds` | 直近backup試行の所要時間 | 24時間RPOへ近づく増加を容量・転送・外部S3別に切り分ける |
+| `news_podcast_backup_barrier_duration_seconds` / `np-backup-consistency` | 直近barrier時間 / 25秒超過 | 長時間transaction、DB容量、writer競合を確認する |
+| `news_podcast_backup_rejections_total{reason}` / `np-backup-consistency` | barrier・inventory・object・横断不変条件による拒否 | reasonと構造化logを確認し、拒否世代を手動commitしない |
+| `news_podcast_restore_drill_last_success_timestamp_seconds` / `np-backup-drill-stale` | drill成功時刻 / 8日超過 | 最新commitの復号、hash、参照失敗を確認 |
+| `news_podcast_restore_drill_failures_total` | drill失敗 | 鍵、retention、破損object、DB schemaを確認 |
+
+barrierはRPOを変えず、成功世代が24時間以内に得られない場合は既存RPO alertが発火する。通常のwrite停止予算は30秒以内で、object本体のdownload/encrypt/uploadはbarrier解放後に行うためRTO 4時間の復元手順は不変である。barrier拒否が続く場合にtimeoutを広げて成功扱いせず、まず長時間writerとcompletion配送lagを解消する。
+
+## 個別SQLite backup（限定用途）
+
+例はProduction。migration直前の短期退避などに限定し、これ単独をcoordinated generationと呼ばない。日時を固定した一意なfile名に置き換える。
 
 ```bash
 docker compose exec episode-production \
@@ -41,9 +113,9 @@ sha256sum backups/production-20260813T030000Z.sqlite
 
 - 同名destinationが存在すると失敗する。世代を暗黙に上書きしない。
 - backup後に`integrity_check`とprofile検査を自動実行する。
-- SQLite backupとS3 objectは別々の世代にしない。episode audio/article archiveを含むS3 snapshot IDとSQLite backup hashを同じ運用記録へ残す。
+- 災害復旧用には`state-backup`のcommit世代を使い、個別SQLiteとS3 objectを別々の世代として組み合わせない。
 
-## Restore drill / cutover
+## 障害時cutover
 
 まず外部保管したfileを対象volumeへ置き、live DBとは別名で復元する。
 
@@ -76,13 +148,13 @@ curl --fail --silent http://127.0.0.1:4104/health/ready
 
 readiness後にowner-scoped job GET/listと、外部副作用を起こさないread smokeを行う。失敗時はserviceを停止し、`production.pre-restore.sqlite`を元のpathへ戻す。成功確認と保管期間終了まではquarantine DBを削除しない。
 
-## 受け入れ記録
+## 復旧記録
 
 | 記録 | 必須値 |
 | --- | --- |
-| backup | service/profile、UTC日時、SHA-256、S3 snapshot ID |
-| restore | source SHA-256、復元先、`integrity_check`結果 |
-| smoke | readiness、owner-scoped read、件数/hash照合 |
+| backup | commit generation、UTC日時、manifest cipher SHA-256、source object generation |
+| restore | 4 DB SHA-256、全object hash/size、`integrity_check`結果 |
+| smoke | readiness、owner-scoped read、article archive、Episode audio参照照合 |
 | rollback | 実施有無、quarantine path、原因trace ID |
 
 ## Runtime障害の切り分け
@@ -104,6 +176,10 @@ flowchart LR
 
 SIGINT/SIGTERMはresource drainとtelemetry flush後にexit 0、subscription/connection終了、初期化失敗、process fatalはexit 1である。NATS drainが1秒以内に終わらない場合はconnectionをcloseし、終了処理自体の停止を防ぐ。Docker healthは観測専用であり、回復不能状態はapplication自身が終了する。詳細は[ADR-0052](../adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)を参照する。
 
+SQLite接続は各serviceのprocess rootが1本だけopenし、停止時に子runtimeを終了してからcloseする。Episode ProductionではRPC、worker、completion relay、schedulerが同じconnectionを共有するため、同一pathへのnested connectionを前提にロック障害を調査しない。`SQLITE_BUSY`が継続する場合は別processのCLI、backup、旧containerが同じvolumeへ接続していないかを確認する。
+
+`CorruptRecord` は一時的なDB障害としてretryしない。failure/logに保存値自体は出ないため、`operation`（例: `episode_generation_plans.selected_article_ids`）から対象列を特定する。稼働中DBを直接編集せず、backupを複製してSchema検証し、正常なbackupから復元するか、検証済みmigrationとして修復する。Productionの旧`selected_articles=[]`だけは互換経路で自動復元される。
+
 ## Article archive orphan cleanup
 
 Content Knowledgeは部分Put失敗時に成功済みobjectを即時削除し、さらに既定6時間ごとにS3とSQLiteを照合する。`CONTENT_ARCHIVE_ORPHAN_RETENTION_MS`（既定24時間）より古く、`article_snapshots`に参照がないUUID snapshot prefixだけが対象になる。
@@ -115,6 +191,19 @@ Content Knowledgeは部分Put失敗時に成功済みobjectを即時削除し、
 | 対象が0件 | 正常。object keyはlog/metricへ出ない |
 
 間隔は`CONTENT_ARCHIVE_CLEANUP_INTERVAL_MS`で調整できる。保持期間をcapture timeoutより短くしない。詳細は[ADR-0066](../adr/0066-reconcile-orphan-article-archive-objects.md)を参照する。
+
+### 記事本文検索索引の回復
+
+`article_search_index_queue`はsnapshot commitとmigration backfillで作られ、Content Knowledge再起動後も残る。Markdown取得失敗は`attempt`とsanitized `last_failure`を更新し、本文・object key・snapshot IDをtelemetryへ出さず`article.search_body.index_failed`を記録する。
+
+| 設定 | 既定値 | 用途 |
+| --- | ---: | --- |
+| `CONTENT_SEARCH_INDEX_BATCH_SIZE` | 10 | 1 cycleの最大snapshot数 |
+| `CONTENT_SEARCH_INDEX_INTERVAL_MS` | 5000 | 成功cycle間隔 |
+| `CONTENT_SEARCH_INDEX_INITIAL_BACKOFF_MS` | 1000 | SQLite失敗時の初回backoff |
+| `CONTENT_SEARCH_INDEX_MAX_BACKOFF_MS` | 30000 | SQLite失敗時のbackoff上限 |
+
+queue滞留は`article.search_body.queue.depth`の推移を起点に、object store到達性とSQLite書込可否を確認する。手動削除せず、原因解消後の自動再試行でFTS/short gram更新とqueue ackを同一transactionに完了させる。大きなMarkdownのshort gramは有界batchで書き込まれるため、深さが減らない場合は本文サイズより先に上記依存先障害を切り分ける。詳細は[ADR-0082](../adr/0082-index-latest-article-markdown-for-search.md)を参照する。
 
 ## Content Outbox廃止migration記録
 

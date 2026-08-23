@@ -36,7 +36,7 @@ function renderReader(markdown: string) {
   return render(
     <TestProviders queryClient={createTestQueryClient()}>
       <ArticleReaderView
-        archiveHtml={undefined}
+        archiveUrl={undefined}
         archiveUnavailable={false}
         article={makeArticle()}
         articleId="a"
@@ -47,6 +47,7 @@ function renderReader(markdown: string) {
         markdown={markdown}
         markUnread={noop}
         recalculateAi={asyncNoop}
+        retryArchive={asyncNoop}
         setSource={noop}
         source="markdown"
         toggleHidden={noop}
@@ -165,7 +166,7 @@ describe("ArticleReaderView table of contents", () => {
     const { container } = render(
       <TestProviders queryClient={createTestQueryClient()}>
         <ArticleReaderView
-          archiveHtml="<html><body>archive</body></html>"
+          archiveUrl="/v1/me/article-snapshots/snapshot/replay/index.html"
           archiveUnavailable={false}
           article={makeArticle()}
           articleId="a"
@@ -176,6 +177,7 @@ describe("ArticleReaderView table of contents", () => {
           markdown={"# 章\n\n本文\n\n# 別の章"}
           markUnread={() => {}}
           recalculateAi={async () => {}}
+          retryArchive={async () => {}}
           setSource={() => {}}
           source="archive"
           toggleHidden={() => {}}
