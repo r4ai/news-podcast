@@ -33,7 +33,7 @@
     "test:coverage:functional": "bash scripts/run-functional-coverage.sh",
     "test:coverage:reliability": "pnpm --filter @news-podcast/service-runtime test:coverage && pnpm --filter @news-podcast/nats-runtime test:coverage",
     "test:sqlite-state": "node --test scripts/sqlite-state.test.mjs",
-    "test:runtime-config": "node --test scripts/voicevox-runtime-config.test.mjs",
+    "test:runtime-config": "node --test scripts/content-enrichment-reset-config.test.mjs scripts/voicevox-runtime-config.test.mjs",
     "test:sse-reader": "node --test scripts/read-first-sse-event.test.mjs",
     "test:publication-safety": "node --test scripts/publication-safety.test.mjs && pnpm provider-contract:check",
     "test:visual": "bash scripts/run-visual.sh",
