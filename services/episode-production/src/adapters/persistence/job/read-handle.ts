@@ -49,7 +49,7 @@ export const makeJobReadHandle = (
             CASE ${episodeJobs.status}
               WHEN 'Queued' THEN ${episodeJobs.enqueuedAt}
               WHEN 'Retrying' THEN ${episodeJobs.retryAt}
-              WHEN 'Running' THEN ${episodeJobs.startedAt}
+              WHEN 'Running' THEN ${episodeJobs.leasedUntil}
             END
           )`.as("oldestActiveAt"),
         })

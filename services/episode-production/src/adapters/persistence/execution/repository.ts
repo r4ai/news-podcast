@@ -400,6 +400,9 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
                   row.document
                 ) as RunningJob,
                 recovered: row.recovered,
+                readyAt: Schema.decodeUnknownSync(UtcTimestampSchema)(
+                  row.readyAt
+                ),
               })
         )
       ),

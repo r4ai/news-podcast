@@ -11,6 +11,7 @@ export type StoredJobRow = Readonly<{
 export type LeasedJobRow = Readonly<{
   document: string
   recovered: boolean
+  readyAt: string
 }>
 
 export type StoredCheckpointRow = Readonly<{

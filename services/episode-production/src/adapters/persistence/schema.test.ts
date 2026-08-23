@@ -55,11 +55,55 @@ describe("episode-production migrated schema", () => {
    * 正規化前は json_extract の式インデックスでしか状態を引けなかった。
    * 実カラム化されたことを、索引の形で固定する。
    */
-  it("indexes the job status as a real column, not an expression", () => {
-    const index = schemaSql().get("episode_jobs_execution_state") ?? ""
+  it("indexes the exact lease priority and business-time order", () => {
+    const index = schemaSql().get("episode_jobs_execution_priority") ?? ""
 
-    expect(index).toContain("status")
+    expect(index).toContain("CASE")
+    expect(index).toContain("leased_until")
+    expect(index).toContain("retry_at")
+    expect(index).toContain("enqueued_at")
+    expect(index).toContain("job_id")
     expect(index).not.toContain("json_extract")
+  })
+
+  it("uses the lease-priority index without a temporary ORDER BY", () => {
+    const handle = open()
+    try {
+      const plan = handle.client
+        .prepare(
+          `EXPLAIN QUERY PLAN
+           SELECT job_id FROM episode_jobs
+           WHERE status = 'Queued'
+              OR (status = 'Retrying' AND retry_at <= ?)
+              OR (status = 'Running' AND leased_until <= ?)
+           ORDER BY
+             CASE status
+               WHEN 'Running' THEN 0
+               WHEN 'Retrying' THEN 1
+               WHEN 'Queued' THEN 2
+               ELSE 3
+             END,
+             CASE status
+               WHEN 'Running' THEN leased_until
+               WHEN 'Retrying' THEN retry_at
+               WHEN 'Queued' THEN enqueued_at
+               ELSE created_at
+             END,
+             job_id
+           LIMIT 1`
+        )
+        .all("2026-08-13T00:00:00.000Z", "2026-08-13T00:00:00.000Z") as {
+        readonly detail: string
+      }[]
+      const details = plan.map(({ detail }) => detail).join("\n")
+
+      expect(details).toContain(
+        "SCAN episode_jobs USING INDEX episode_jobs_execution_priority"
+      )
+      expect(details).not.toContain("USE TEMP B-TREE FOR ORDER BY")
+    } finally {
+      handle.close()
+    }
   })
 
   it("keeps no trigger on episode_jobs, since events are appended by the writer", () => {

@@ -94,7 +94,7 @@ provisioningされるダッシュボード:
 - `Service Map & Tracing`: サービス依存、edge別RED、代表trace
 - `Service Drilldown`: サービス/operation別RED、p95、exemplar、TraceQL、相関ログ
 - `Correlated Logs`: level別volume、trace coverage、traceへ戻れるログ
-- `Episode Production`: queue、worker state、stage/span、retry diagnostics、provider/client、storage、lease、model/prompt version別script quality
+- `Episode Production`: oldest queue ageとlease時queue wait、worker state、stage/span、retry/deadline diagnostics、provider/client、storage、lease、model/prompt version別script quality
 - `Web Experience`: Browser span/error、Web Vital OTLP、Browser TraceQL、相関ログ
 - `Dependencies`: service map、client/NATS/HTTP依存、依存先p95、相関ログ
 - `Telemetry Platform`: Collector queue/export、backend、host resource

@@ -75,7 +75,7 @@ RSS記事の`articleId`は`feedId + GUID`で安定させ、capture intentだけ�
 
 AI記事補完のキュー、結果、タグ、日次使用量はすべてowner単位である。workerはownerごとに`CONTENT_ENRICH_DAILY_LIMIT`の使用量を読み、枯渇したownerだけをskipして次のownerを処理する。成功完了時刻からUTC日付を導出し、成功確定と`(owner_id, local_date)`使用量の加算を同じtransactionで行うため、外部処理が日付をまたいでも開始日へ誤計上しない。日次枠resetはContent KnowledgeのRPC境界で既定拒否し、非productionでserver flagを明示した場合だけactor自身のowner枠へ許可する。成功・拒否はactor、owner、環境、理由を監査し、回数をmetricへ記録する。所有境界は[ADR-0063](adr/0063-scope-enrichment-daily-budget-by-owner.md)、reset認可は[ADR-0076](adr/0076-fail-closed-enrichment-budget-reset.md)を正本とする。
 
-Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。cancelは永続化後の同一process通知で即時abortし、別processはleaseを延長しないread-only checkで既定250ms・最大5秒以内に検知する。commit安全性の正本は引き続きSQLite fencingとする。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)と[ADR-0072](adr/0072-propagate-episode-cancellation-immediately.md)を正本とする。
+Episode Productionのloopは単一flightで動く。leaseは期限切れRunning、dueなRetrying、Queuedの順に優先し、同一状態では`leasedUntil`、`retryAt`、`enqueuedAt`の昇順、同時刻だけ`jobId`で決定する。選択したready時刻はqueue wait計測にも使い、oldest ageと実行順を一致させる。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。cancelは永続化後の同一process通知で即時abortし、別processはleaseを延長しないread-only checkで既定250ms・最大5秒以内に検知する。commit安全性の正本は引き続きSQLite fencingとする。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0072](adr/0072-propagate-episode-cancellation-immediately.md)、[ADR-0086](adr/0086-order-episode-leases-by-ready-time.md)を正本とする。
 
 Content KnowledgeとEpisode Productionのprovider modeは共有runtime parserで決定する。productionは厳密な`APP_ENV=production`、`PROVIDER_MODE=live`、必須key/modelの組み合わせだけを受理し、未指定・fake・未知値・大文字違いはReady前に拒否する。development/testのfakeは明示的なno-network境界として維持する。成功構成はsecretを含めず`app.env`と`provider.mode`をlog/metricへ記録する。詳細は[ADR-0077](adr/0077-fail-closed-production-provider-mode.md)を正本とする。
 
@@ -404,6 +404,7 @@ flowchart TD
 - [ADR-0067 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)
 - [ADR-0068 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
 - [ADR-0083 Episode生成失敗コードと利用者向け復旧案内を分離する](adr/0083-share-episode-failure-code-contract.md)
+- [ADR-0086 Episode leaseを優先度とready時刻で決定する](adr/0086-order-episode-leases-by-ready-time.md)
 - [ADR-0069 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070 Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
 - [ADR-0071 ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)

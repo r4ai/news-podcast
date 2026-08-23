@@ -258,7 +258,14 @@ export const makeJobProgressHandle = (
           sql`CASE ${episodeJobs.status}
                 WHEN 'Running' THEN 0
                 WHEN 'Retrying' THEN 1
-                ELSE 2
+                WHEN 'Queued' THEN 2
+                ELSE 3
+              END`,
+          sql`CASE ${episodeJobs.status}
+                WHEN 'Running' THEN ${episodeJobs.leasedUntil}
+                WHEN 'Retrying' THEN ${episodeJobs.retryAt}
+                WHEN 'Queued' THEN ${episodeJobs.enqueuedAt}
+                ELSE ${episodeJobs.createdAt}
               END`,
           asc(episodeJobs.jobId)
         )
@@ -288,7 +295,14 @@ export const makeJobProgressHandle = (
           )
         }
       }
-      return { document: next, recovered }
+      const readyAt =
+        candidate.status === "Running"
+          ? candidate.leasedUntil
+          : candidate.status === "Retrying"
+            ? candidate.retryAt
+            : candidate.enqueuedAt
+      if (readyAt === null) throw new Error("lease candidate has no ready time")
+      return { document: next, recovered, readyAt }
     }),
 
   hasLease: (jobId, leaseToken) =>
