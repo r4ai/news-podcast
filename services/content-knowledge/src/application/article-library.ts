@@ -36,6 +36,8 @@ import type {
 const uniqueFeedIds = Schema.makeFilter<readonly FeedId[]>((feedIds) =>
   new Set(feedIds).size === feedIds.length ? true : "feed IDs must be unique"
 )
+// oxlint-disable-next-line eslint/no-control-regex -- SQLite FTS cannot accept NUL, so reject controls at the RPC boundary.
+const searchableTextPattern = new RegExp("^[^\\u0000-\\u001f\\u007f]*$")
 
 export const parseArticleStatePatch = parse(ArticleStatePatchSchema)
 
@@ -54,7 +56,8 @@ export const ArticleListQuerySchema = Schema.Struct({
     Schema.String.check(
       Schema.isTrimmed(),
       Schema.isMinLength(1),
-      Schema.isMaxLength(200)
+      Schema.isMaxLength(200),
+      Schema.isPattern(searchableTextPattern)
     )
   ),
   order: Schema.Literals(["Newest", "Oldest"]),

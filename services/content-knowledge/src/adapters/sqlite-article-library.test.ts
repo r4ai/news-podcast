@@ -27,6 +27,7 @@ import { openTestDatabase, type TestDatabase } from "./persistence/testing.js"
 import { createArchiveStore } from "./persistence/archive/repository.js"
 import { createArticleCatalog } from "./persistence/article-catalog/repository.js"
 import { createArticleLibrary } from "./persistence/article-library/repository.js"
+import { createArticleSearchIndexRepository } from "./persistence/article-search-index/repository.js"
 import { createSubscriptionRepository } from "./persistence/subscription/repository.js"
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
@@ -442,6 +443,98 @@ describe("SQLite article library", () => {
       articles.list(ids.ownerB, await query({ q: "observability" }))
     )
     expect(otherOwner.items).toEqual([])
+  })
+
+  it.each([
+    ["Japanese substring", "永続化された日本語全文検索", "日本語全文"],
+    ["short Japanese substring", "永続化された日本語全文検索", "日本"],
+    ["whitespace phrase", "alpha  beta with spaces", "alpha  beta"],
+    ["FTS quote", 'literal body with a "quoted" value', 'a "quoted"'],
+    ["FTS operators", "literal OR * NEAR token", "OR * NEAR"],
+  ])(
+    "finds body-only text through the persisted index: %s",
+    async (_case, body, search) => {
+      const { articles, database, snapshot } = await setup()
+      const searchIndex = createArticleSearchIndexRepository(database.db)
+      const pending = (
+        await Effect.runPromise(searchIndex.listPending(10))
+      ).find((entry) => entry.snapshotId === snapshot.snapshotId)
+      expect(pending).toBeDefined()
+      await Effect.runPromise(searchIndex.index({ pending: pending!, body }))
+
+      const found = await Effect.runPromise(
+        articles.list(ids.ownerA, await query({ q: search }))
+      )
+
+      expect(found.items.map((item) => item.articleId)).toEqual([ids.articleA])
+      expect(
+        await Effect.runPromise(
+          articles.list(ids.ownerB, await query({ q: search }))
+        )
+      ).toEqual({ items: [], nextCursor: null })
+    }
+  )
+
+  it("searches indexed bodies beyond the first page and only in the latest snapshot", async () => {
+    const { articles, archiveStore, catalog, database, snapshot } =
+      await setup()
+    await Effect.runPromise(
+      catalog.upsert({
+        articleId: ids.articleC,
+        feedId: ids.feedA,
+        externalId: "entry-c",
+        sourceUrl: "https://news.example.com/c" as never,
+        title: "Newest unrelated article" as never,
+        publishedAt: "2026-08-14T00:00:00.000Z",
+        discoveredAt: "2026-08-14T01:01:00.000Z",
+      })
+    )
+    const latest = createArticleSnapshot({
+      command: decode(ArchiveCommandSchema, {
+        archiveRequestId: "37b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
+        articleId: ids.articleA,
+        sourceUrl: "https://news.example.com/a-latest",
+        title: "Latest title",
+      }),
+      snapshotId: decode(
+        SnapshotIdSchema,
+        "66c2eef5-a205-4526-8640-dc3ea84d88b4"
+      ),
+      capturedAt: decode(CapturedAtSchema, "2026-08-14T01:03:00.000Z"),
+      capture: snapshot.capture,
+    })
+    await Effect.runPromise(archiveStore.commit({ snapshot: latest }))
+    const searchIndex = createArticleSearchIndexRepository(database.db)
+    const pending = await Effect.runPromise(searchIndex.listPending(10))
+    for (const [snapshotId, body] of [
+      [snapshot.snapshotId, "superseded-only-needle"],
+      [latest.snapshotId, "latest-body-needle"],
+    ] as const) {
+      const work = pending.find((entry) => entry.snapshotId === snapshotId)
+      expect(work).toBeDefined()
+      await Effect.runPromise(searchIndex.index({ pending: work!, body }))
+    }
+
+    const firstPage = await Effect.runPromise(
+      articles.list(ids.ownerA, await query({ limit: 1 }))
+    )
+    expect(firstPage.items.map((item) => item.articleId)).toEqual([
+      ids.articleC,
+    ])
+    expect(firstPage.nextCursor).not.toBeNull()
+    expect(
+      await Effect.runPromise(
+        articles.list(ids.ownerA, await query({ q: "latest-body" }))
+      )
+    ).toEqual({
+      items: [expect.objectContaining({ articleId: ids.articleA })],
+      nextCursor: null,
+    })
+    expect(
+      await Effect.runPromise(
+        articles.list(ids.ownerA, await query({ q: "superseded-only" }))
+      )
+    ).toEqual({ items: [], nextCursor: null })
   })
 
   it("uses the latest snapshot once for automatic and selected generation", async () => {

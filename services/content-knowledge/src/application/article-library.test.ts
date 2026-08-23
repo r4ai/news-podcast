@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  parseArticleListQuery,
   parseArticleStatePatch,
   triggerOwnerArticleArchive,
 } from "./article-library.js"
@@ -12,6 +13,21 @@ const context = {
   traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
   actor: { _tag: "User", userId: "owner-a" },
 } as never
+
+it("rejects NUL in an article search query before FTS", async () => {
+  await expect(
+    Effect.runPromise(
+      parseArticleListQuery({
+        limit: 50,
+        state: "All",
+        includeHidden: false,
+        feedIds: [],
+        q: "abc\0def",
+        order: "Newest",
+      })
+    )
+  ).rejects.toBeDefined()
+})
 
 describe("triggerOwnerArticleArchive", () => {
   it("rejects an empty or excess-property state patch", async () => {

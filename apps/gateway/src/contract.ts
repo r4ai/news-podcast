@@ -502,9 +502,14 @@ export const ArticleFacetsSchema = Schema.Struct({
   ),
   aiPending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({ identifier: "ArticleFacets" })
-const ArticleSearchQuerySchema = boundedText(200).annotate({
-  description: "Matches article title, source URL, or owner tag name.",
-})
+// oxlint-disable-next-line eslint/no-control-regex -- SQLite FTS cannot accept NUL; expose the full boundary in OpenAPI.
+const searchableTextPattern = new RegExp("^[^\\u0000-\\u001f\\u007f]*$")
+export const ArticleSearchQuerySchema = boundedText(200)
+  .check(Schema.isPattern(searchableTextPattern))
+  .annotate({
+    description:
+      "Literal partial match against article title, source URL, owner tag name, or the persisted Markdown body of the latest snapshot accessible to the authenticated owner.",
+  })
 export const BulkArticleStateSchema = Schema.Struct({
   state: Schema.optional(ArticleStateFilterSchema),
   includeHidden: Schema.optional(Schema.Boolean),
@@ -1693,7 +1698,7 @@ const operationDocumentation = {
   listArticles: {
     summary: "List owned articles",
     description:
-      "Lists articles in the authenticated owner scope with state, feed, search, sort, and opaque cursor filters. Limit is 1 to 100.",
+      "Lists articles in the authenticated owner scope with state, feed, literal partial search, sort, and opaque cursor filters. Search covers title, source URL, owner tags, and the indexed persisted Markdown body of the deterministic latest snapshot. Limit is 1 to 100.",
   },
   getArticleFacets: {
     summary: "Get owned article facets",

@@ -7,6 +7,7 @@ export {
 } from "./persistence/archive/repository.js"
 export { createArticleCatalog } from "./persistence/article-catalog/repository.js"
 export { createArticleLibrary } from "./persistence/article-library/repository.js"
+export { createArticleSearchIndexRepository } from "./persistence/article-search-index/repository.js"
 export { createContentTaxonomy } from "./persistence/content-taxonomy/repository.js"
 export { createEnrichmentQueue } from "./persistence/enrichment-queue/repository.js"
 export {

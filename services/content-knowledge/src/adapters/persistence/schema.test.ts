@@ -25,6 +25,8 @@ const TABLES = [
   "article_owner_states",
   "article_owner_access",
   "article_snapshots",
+  "article_search_index_queue",
+  "article_search_short_grams",
   "feed_sync_jobs",
   "content_interest_profiles",
   "content_tags",
@@ -164,6 +166,15 @@ describe("content-knowledge migrated schema", () => {
 
   it("indexes the latest snapshot lookup that replaced json_extract", () => {
     expect(schemaSql().get("article_snapshots_latest")).toContain("article_id")
+  })
+
+  it("uses a persistent trigram FTS index and queues every snapshot", () => {
+    const schema = schemaSql()
+    expect(schema.get("article_search_fts")).toContain("tokenize='trigram'")
+    expect(
+      schema.get("article_search_index_queue_after_snapshot_insert")
+    ).toContain("article_search_index_queue")
+    expect(schema.get("article_search_short_grams_lookup")).toContain("gram")
   })
 
   it("backfills durable article access before subscriptions can be removed", () => {

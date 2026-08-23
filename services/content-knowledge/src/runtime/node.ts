@@ -9,6 +9,7 @@ import { Effect, Schema } from "effect"
 import {
   createArticleCatalog,
   createArticleLibrary,
+  createArticleSearchIndexRepository,
   createArchiveStore,
   createContentTaxonomy as createContentTaxonomyRepository,
   createEnrichmentQueue,
@@ -31,6 +32,10 @@ import { createInterestProfileOperations } from "../application/interest-profile
 import type { SubscriptionRepository } from "../application/ports/subscription.js"
 import type { FeedSyncQueueRepository } from "../application/feed-sync-queue.js"
 import { archiveArticle } from "../application/archive-article.js"
+import {
+  runArticleSearchIndexCycle,
+  type ArticleSearchIndexRepository,
+} from "../application/article-search-index.js"
 import {
   openHttpS3ArticleCaptureUnsafe,
   type HttpS3ArticleCaptureConfig,
@@ -68,6 +73,8 @@ import {
   runArchiveCleanupLoop,
 } from "./loops/archive-cleanup.js"
 import { makeArchiveCleanupObserver } from "./archive-cleanup-observability.js"
+import { makeArticleSearchIndexObserver } from "./article-search-index-observability.js"
+import { runArticleSearchIndexLoop } from "./loops/article-search-index.js"
 
 const SqlitePathSchema = Schema.String.check(
   Schema.isTrimmed(),
@@ -102,6 +109,10 @@ const AssetBytesSchema = Schema.Int.check(
 const DailyLimitSchema = Schema.Int.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(10_000)
+)
+const SearchIndexBatchSizeSchema = Schema.Int.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(100)
 )
 const S3TextSchema = Schema.NonEmptyString.check(Schema.isMaxLength(1_024))
 const HttpEndpointSchema = Schema.String.check(
@@ -172,6 +183,14 @@ export const NodeServiceConfigSchema = Schema.Struct({
       maximumBackoffMillis: LoopDelaySchema,
     }),
   }),
+  searchIndex: Schema.Struct({
+    batchSize: SearchIndexBatchSizeSchema,
+    loop: Schema.Struct({
+      intervalMillis: LoopDelaySchema,
+      initialBackoffMillis: LoopDelaySchema,
+      maximumBackoffMillis: LoopDelaySchema,
+    }),
+  }),
   archive: Schema.Struct({
     endpoint: HttpEndpointSchema,
     region: S3TextSchema,
@@ -201,6 +220,8 @@ export const parseNodeServiceConfig = (input: unknown) =>
           config.feedPoller.loop.maximumBackoffMillis &&
         config.enrichment.loop.initialBackoffMillis <=
           config.enrichment.loop.maximumBackoffMillis &&
+        config.searchIndex.loop.initialBackoffMillis <=
+          config.searchIndex.loop.maximumBackoffMillis &&
         config.archive.cleanup.retentionMillis > config.archive.timeoutMillis &&
         !(
           config.appEnvironment === "production" &&
@@ -226,6 +247,7 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
   readonly store: ArchiveStore
   readonly articles: ArticleCatalog
   readonly library: ArticleLibraryRepository
+  readonly searchIndex: ArticleSearchIndexRepository
   readonly subscriptions: SubscriptionRepository
   readonly feedSyncQueue: FeedSyncQueueRepository
   readonly taxonomy: ReturnType<typeof createContentTaxonomy>
@@ -259,6 +281,7 @@ export type NodeServiceDependencies = Readonly<{
   readonly runPoller: typeof runContentFeedPoller
   readonly enrichmentProvider?: EnrichmentProvider
   readonly runEnrichment: typeof runEnrichmentWorkerLoop
+  readonly runSearchIndex: typeof runArticleSearchIndexLoop
   readonly runArchiveCleanup: typeof runArchiveCleanupLoop
   readonly observability?: Observability
   readonly onReady?: () => void
@@ -306,6 +329,9 @@ export const startNodeRuntime = (
               Effect.all([
                 createArticleCatalog(handle.database),
                 createArticleLibrary(handle.database),
+                Effect.succeed(
+                  createArticleSearchIndexRepository(handle.database)
+                ),
                 createSubscriptionRepository(handle.database),
                 createContentTaxonomyRepository(handle.database),
                 createEnrichmentQueue(handle.database),
@@ -320,6 +346,7 @@ export const startNodeRuntime = (
                   ([
                     articles,
                     library,
+                    searchIndex,
                     subscriptions,
                     taxonomyRepository,
                     enrichmentQueue,
@@ -355,6 +382,7 @@ export const startNodeRuntime = (
                       store,
                       articles,
                       library,
+                      searchIndex,
                       subscriptions,
                       feedSyncQueue,
                       taxonomy,
@@ -382,6 +410,7 @@ export const defaultNodeServiceDependencies: NodeServiceDependencies =
     runRpc: runNatsContentKnowledgeRpc,
     runPoller: runContentFeedPoller,
     runEnrichment: runEnrichmentWorkerLoop,
+    runSearchIndex: runArticleSearchIndexLoop,
     runArchiveCleanup: runArchiveCleanupLoop,
     observability: noopObservability,
   })
@@ -528,6 +557,19 @@ export const runNodeService = (
                         dependencies.runEnrichment(
                           config.enrichment.loop,
                           enrichment.runCycle
+                        ),
+                        dependencies.runSearchIndex(
+                          config.searchIndex.loop,
+                          () =>
+                            runArticleSearchIndexCycle(
+                              {
+                                repository: runtime.searchIndex,
+                                objects: markdown.reader,
+                                observer:
+                                  makeArticleSearchIndexObserver(observability),
+                              },
+                              config.searchIndex.batchSize
+                            )
                         ),
                         dependencies.runArchiveCleanup(
                           config.archive.cleanup,
