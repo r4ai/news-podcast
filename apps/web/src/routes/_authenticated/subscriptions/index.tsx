@@ -7,10 +7,12 @@ import {
 } from "@/features/subscriptions"
 import { Panel } from "@/shared/components/panel"
 import { PageHeader } from "@/shared/layouts/page-header"
+import { pageTitle } from "@/shared/lib/page-title"
 import { AddFeedCard } from "./-components/add-feed-card"
 import { SubscriptionList } from "./-components/subscription-list"
 
 export const Route = createFileRoute("/_authenticated/subscriptions/")({
+  head: () => ({ meta: [{ title: pageTitle("購読フィード") }] }),
   loader: ({ context }) => {
     void context.queryClient.ensureQueryData(subscriptionsQueryOptions)
     void context.queryClient.ensureQueryData(feedsQueryOptions)

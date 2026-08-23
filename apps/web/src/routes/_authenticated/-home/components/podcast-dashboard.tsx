@@ -6,6 +6,7 @@ import {
   RotateCcw,
   Square,
 } from "lucide-react"
+import { Link } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 
 import {
@@ -385,12 +386,17 @@ function LatestEpisode({
         </CardTitle>
         <CardDescription>完成した音声と出典を確認できます。</CardDescription>
         <CardAction>
-          <a
+          {/*
+            素の`<a>`だと押すたびにアプリごと読み込み直しになる。
+            鳴っている音は`<audio>`ごと捨てられ、cacheも位置も失われる。
+          */}
+          <Link
             className={buttonVariants({ size: "sm", variant: "ghost" })}
-            href="/library"
+            search={{ episode: undefined }}
+            to="/library"
           >
             すべて見る
-          </a>
+          </Link>
         </CardAction>
       </CardHeader>
       <CardContent>

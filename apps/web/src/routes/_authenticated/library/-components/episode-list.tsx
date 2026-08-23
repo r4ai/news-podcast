@@ -1,6 +1,8 @@
 import { Library } from "lucide-react"
 import { useEffect, useEffectEvent, useRef } from "react"
 
+import { useGlobalKeydown } from "@/shared/lib/use-global-keydown"
+
 import { Button } from "@workspace/ui/components/button"
 import {
   Empty,
@@ -114,27 +116,10 @@ function useEpisodeShortcuts(handlers: {
   readonly onNext: () => void
   readonly onPrev: () => void
 }) {
-  const onKey = useEffectEvent((key: string) => {
-    if (key === "j") handlers.onNext()
-    if (key === "k") handlers.onPrev()
+  useGlobalKeydown((event) => {
+    if (event.key === "j") handlers.onNext()
+    if (event.key === "k") handlers.onPrev()
   })
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.metaKey || event.ctrlKey || event.altKey) return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
-      ) {
-        return
-      }
-      onKey(event.key)
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [])
 }
 
 const SKELETON_TITLE_WIDTHS = [

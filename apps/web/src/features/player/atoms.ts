@@ -162,8 +162,38 @@ export type PlaybackStatus = "idle" | "playing" | "paused" | "error"
 
 export const playbackStatusAtom = atom<PlaybackStatus>("idle")
 
+/**
+ * 音が届くのを待っている最中かどうか。
+ *
+ * 番組の音声はGateway経由でS3からstreamされるので、押してから鳴り始めるまでに
+ * 間がある。その間`playbackStatusAtom`は既に`playing`なので、ボタンだけが
+ * 一時停止の形へ変わって何も聞こえない。「押せていないのか、遅いだけなのか」を
+ * 区別できるよう、待っている事実を別に持つ。
+ *
+ * 再生中かどうかとは独立した軸なので、`playbackStatusAtom`へ状態を足さない。
+ * 足すと`isPlayingAtom`の意味 (鳴らす意思があるか) が揺らぐ。
+ */
+const bufferingAtom = atom(false)
+
+export const isBufferingAtom = atom((get) => get(bufferingAtom))
+
+/** 音が出せなかった。原因は伝えられないので、やり直す道だけを示す。 */
+export const hasPlaybackErrorAtom = atom(
+  (get) => get(playbackStatusAtom) === "error"
+)
+
 /** 現在位置。`timeupdate`で毎秒数回動くので、購読はバーの目盛りだけに閉じる。 */
 export const playbackPositionAtom = atom(0)
+
+/**
+ * 明示の位置移動が起きた回数。
+ *
+ * ロック画面の目盛りは、こちらが最後に報告した位置から実時間で外挿される。
+ * 飛ばした直後に報告し直さないと、OS側は前の位置から数え続ける。位置そのものは
+ * 毎秒数回動くので購読できないが、「飛ばした」はまばらな出来事なので、
+ * 回数として取り出せば購読できる。
+ */
+export const seekGenerationAtom = atom(0)
 
 /** 総時間。契約には無く、`loadedmetadata`が届くまで判らない。 */
 export const playbackDurationAtom = atom<number | undefined>(undefined)
@@ -294,6 +324,8 @@ export const playEpisodeAtom = atom(null, (get, set, track: PlayerTrack) => {
   set(playbackPositionAtom, from)
   set(pendingSeekAtom, from)
   set(playbackStatusAtom, "playing")
+  // 別の番組は必ず取りに行く。`waiting`が届くのを待たずに待ち状態にする。
+  set(bufferingAtom, true)
   element.src = episodeAudioUrl(track.episodeId)
   element.playbackRate = get(playbackRateAtom)
   void element.play()
@@ -323,6 +355,7 @@ export const pausePlaybackAtom = atom(null, (get, set) => {
   if (element.paused) return
   element.pause()
   set(playbackStatusAtom, "paused")
+  set(bufferingAtom, false)
   set(saveProgressAtom)
 })
 
@@ -333,12 +366,37 @@ export const togglePlaybackAtom = atom(null, (get, set) => {
   set(element.paused ? resumePlaybackAtom : pausePlaybackAtom)
 })
 
+/**
+ * 失敗した番組をもう一度取りに行く。
+ *
+ * 同じURLを代入し直しても要素は取りに行かないので、`load()`で明示する。
+ * 戻る位置は端末の記録から取る。失敗した時点の`currentTime`は0へ落ちている
+ * ことがあり、そこから鳴らすと聴いた分をやり直すことになる。
+ */
+export const retryPlaybackAtom = atom(null, (get, set) => {
+  const element = get(audioElementAtom)
+  const track = get(currentTrackAtom)
+  if (element === null || track === null) return
+
+  const from = resumePosition(get(progressMapAtom)[track.episodeId])
+  set(playbackDurationAtom, undefined)
+  set(playbackPositionAtom, from)
+  set(pendingSeekAtom, from)
+  set(playbackStatusAtom, "playing")
+  set(bufferingAtom, true)
+  element.src = episodeAudioUrl(track.episodeId)
+  element.load()
+  element.playbackRate = get(playbackRateAtom)
+  void element.play()
+})
+
 export const seekToAtom = atom(null, (get, set, seconds: number) => {
   const element = get(audioElementAtom)
   if (element === null) return
   const next = clampTime(seconds, get(playbackDurationAtom))
   element.currentTime = next
   set(playbackPositionAtom, next)
+  set(seekGenerationAtom, get(seekGenerationAtom) + 1)
 })
 
 export const skipByAtom = atom(null, (get, set, offset: number) => {
@@ -347,6 +405,7 @@ export const skipByAtom = atom(null, (get, set, offset: number) => {
   const next = seekBy(element.currentTime, offset, get(playbackDurationAtom))
   element.currentTime = next
   set(playbackPositionAtom, next)
+  set(seekGenerationAtom, get(seekGenerationAtom) + 1)
 })
 
 export const setPlaybackRateAtom = atom(
@@ -392,6 +451,7 @@ export const closePlayerAtom = atom(null, (get, set) => {
   set(saveProgressAtom)
   set(currentTrackAtom, null)
   set(playbackStatusAtom, "idle")
+  set(bufferingAtom, false)
   set(playbackPositionAtom, 0)
   set(playbackDurationAtom, undefined)
   if (element !== null) unloadAudio(element)
@@ -446,7 +506,18 @@ export const handlePlayAtom = atom(null, (_get, set) => {
 
 export const handlePauseAtom = atom(null, (_get, set) => {
   set(playbackStatusAtom, "paused")
+  set(bufferingAtom, false)
   set(saveProgressAtom)
+})
+
+/** 要素が次のデータを待ち始めた (読み込み・回線の詰まり・seek直後)。 */
+export const handleWaitingAtom = atom(null, (_get, set) => {
+  set(bufferingAtom, true)
+})
+
+/** 実際に音が出始めた。待ち状態を畳む唯一の合図。 */
+export const handlePlayingAtom = atom(null, (_get, set) => {
+  set(bufferingAtom, false)
 })
 
 export const handleEndedAtom = atom(null, (get, set) => {
@@ -463,5 +534,8 @@ export const handleEndedAtom = atom(null, (get, set) => {
 
 export const handleErrorAtom = atom(null, (_get, set) => {
   set(playbackStatusAtom, "error")
+  // 待ち続けているように見せない。もう届かないと決まった状態なので、
+  // 回るものは畳んでやり直す道だけを残す。
+  set(bufferingAtom, false)
   recordBrowserEvent("audio.error")
 })

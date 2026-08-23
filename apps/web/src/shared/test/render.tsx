@@ -1,10 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { renderHook, type RenderHookResult } from "@testing-library/react"
+import { RouterProvider } from "@tanstack/react-router"
+import {
+  render,
+  renderHook,
+  type RenderHookResult,
+} from "@testing-library/react"
 import { Provider as JotaiProvider } from "jotai"
-import { Suspense, useState, type PropsWithChildren } from "react"
+import {
+  Suspense,
+  useState,
+  type PropsWithChildren,
+  type ReactNode,
+} from "react"
 import { vi } from "vitest"
 
 import { createAppStore, type AppStore } from "@/shared/state/store"
+import { createStubRouter } from "./stub-router"
 
 /**
  * テストごとに独立したjotai store。atomの値がテストを跨いで残らない。
@@ -44,6 +55,15 @@ export function TestProviders({
       </QueryClientProvider>
     </JotaiProvider>
   )
+}
+
+/**
+ * routerの外で組み立てたUIを、`<Link>`が実際に働く状態でrenderする。
+ * 遷移したかどうかは`router.state.location.pathname`で確かめる。
+ */
+export function renderWithStubRouter(subject: ReactNode) {
+  const router = createStubRouter(subject)
+  return { ...render(<RouterProvider router={router} />), router }
 }
 
 /** Suspense queryを使うhookを、providerごとrenderする。 */

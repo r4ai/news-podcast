@@ -89,7 +89,7 @@ export function EmptySelection() {
         </EmptyMedia>
         <EmptyTitle>記事を選ぶと、ここに本文が表示されます</EmptyTitle>
         <EmptyDescription>
-          j / k で記事を送り、o で元記事を開けます。
+          j / k で記事を送り、o で元記事を開けます。? で操作の一覧を出せます。
         </EmptyDescription>
       </EmptyHeader>
     </Empty>

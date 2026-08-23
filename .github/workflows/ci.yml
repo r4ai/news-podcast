@@ -311,6 +311,13 @@ jobs:
           pnpm observability:infra:up
           PROVIDER_MODE=fake docker compose -f compose.yaml -f compose.observability.yaml up -d --build --wait --wait-timeout 180
 
+          # JetStream durable consumers outlive a service container. Recreate the
+          # production restart path so a stale "consumer already exists" failure
+          # cannot pass CI merely because its NATS volume starts empty.
+          docker compose -f compose.yaml -f compose.observability.yaml restart episode-library
+          docker compose -f compose.yaml -f compose.observability.yaml up -d --wait --wait-timeout 60
+          curl --connect-timeout 3 --max-time 5 --fail --silent http://127.0.0.1:4105/health/ready >/dev/null
+
           for attempt in $(seq 1 30); do
             if curl --connect-timeout 3 --max-time 5 --fail --silent http://127.0.0.1:4101/health/ready >/dev/null; then
               break

@@ -47,13 +47,16 @@ describe("unsafe JetStream EpisodeCompleted boundary", () => {
     const consume = vi.fn(async () => messages)
     const get = vi.fn(async () => ({ consume }))
     const add = vi.fn(async () => undefined)
+    const info = vi.fn(async () => {
+      throw new Error("consumer not found")
+    })
     const drain = vi.fn(async () => undefined)
     sdk.connect.mockResolvedValue({
       close: vi.fn(async () => undefined),
       drain,
     })
     sdk.jetstream.mockReturnValue({
-      jetstreamManager: async () => ({ consumers: { add } }),
+      jetstreamManager: async () => ({ consumers: { add, info } }),
       consumers: { get },
     })
 
@@ -86,6 +89,34 @@ describe("unsafe JetStream EpisodeCompleted boundary", () => {
     await consumer.drain()
     expect(closeMessages).toHaveBeenCalledOnce()
     expect(drain).toHaveBeenCalledOnce()
+  })
+
+  it("reuses an existing durable pull consumer after a service restart", async () => {
+    const messages = {
+      [Symbol.asyncIterator]: () => ({
+        next: vi.fn(async () => ({ done: true })),
+      }),
+      close: vi.fn(async () => undefined),
+    }
+    const consume = vi.fn(async () => messages)
+    const get = vi.fn(async () => ({ consume }))
+    const add = vi.fn(async () => undefined)
+    const info = vi.fn(async () => ({ name: config.durableName }))
+    sdk.connect.mockResolvedValue({
+      close: vi.fn(async () => undefined),
+      drain: vi.fn(async () => undefined),
+    })
+    sdk.jetstream.mockReturnValue({
+      jetstreamManager: async () => ({ consumers: { add, info } }),
+      consumers: { get },
+    })
+
+    const consumer = await connectEpisodeCompletedConsumerUnsafe(config)
+
+    expect(info).toHaveBeenCalledWith(config.stream, config.durableName)
+    expect(add).not.toHaveBeenCalled()
+    expect(get).toHaveBeenCalledWith(config.stream, config.durableName)
+    await consumer.drain()
   })
 
   it("closes an acquired connection when JetStream setup fails", async () => {

@@ -13,10 +13,12 @@ import { authStateQueryOptions, safeRedirect } from "@/features/auth"
 import { clearPersistedPlayback } from "@/features/player"
 import { ThemeToggle } from "@/features/theme"
 import { AppLoading } from "@/shared/components/app-loading"
+import { pageTitle } from "@/shared/lib/page-title"
 import { LoginMethods } from "./-components/login-methods"
 import { useLogin } from "./-hooks/use-login"
 
 export const Route = createFileRoute("/login/")({
+  head: () => ({ meta: [{ title: pageTitle("ログイン") }] }),
   validateSearch: (search: Record<string, unknown>) => ({
     redirect: safeRedirect(search.redirect),
   }),

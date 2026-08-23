@@ -1,10 +1,15 @@
-import { useAtomValue, useSetAtom } from "jotai"
+import { useAtomValue, useSetAtom, useStore } from "jotai"
 import { useEffect } from "react"
 
 import {
   currentTrackAtom,
+  isPlayingAtom,
   pausePlaybackAtom,
+  playbackDurationAtom,
+  playbackPositionAtom,
+  playbackRateAtom,
   resumePlaybackAtom,
+  seekGenerationAtom,
   seekToAtom,
   skipByAtom,
 } from "../atoms"
@@ -72,4 +77,67 @@ export function useMediaSession() {
       session.metadata = null
     }
   }, [track, resume, pause, skip, seekTo])
+
+  usePlaybackPositionState(track !== null)
+}
+
+/**
+ * ロック画面の目盛りへ「長さ・位置・速度」を渡す。
+ *
+ * これを渡さないと、OS側の目盛りは長さを持たないまま止まって見え、
+ * 掴んで飛ばす操作も出ない。
+ *
+ * 報告は**まばらな出来事のときだけ**行う。OSは最後に報告した位置を実時間で
+ * 外挿するので、毎秒数回叩く必要はない。逆に位置(`playbackPositionAtom`)を
+ * 購読すると、鳴っている間ずっとこのhookを抱える`PlayerHost`が描き直され、
+ * `<audio>`と再生バー全体が巻き込まれる (docs/design.md §7.2)。
+ *
+ * 外挿が狂うのは「飛ばした」「速度を変えた」ときだけなので、その2つを
+ * それぞれまばらな値として購読し、位置は報告する瞬間に非購読で読む。
+ */
+function usePlaybackPositionState(hasTrack: boolean) {
+  const store = useStore()
+  const duration = useAtomValue(playbackDurationAtom)
+  const rate = useAtomValue(playbackRateAtom)
+  const playing = useAtomValue(isPlayingAtom)
+  const seekGeneration = useAtomValue(seekGenerationAtom)
+
+  useEffect(() => {
+    const session = navigator.mediaSession as MediaSession | undefined
+    if (session === undefined) return
+
+    // 何も載っていない状態は「止めている」ではない。`paused`にすると、
+    // OS側に押せる再生ボタンが出てしまう。
+    session.playbackState = !hasTrack ? "none" : playing ? "playing" : "paused"
+
+    // 総時間が判るまでは渡さない。長さの無い目盛りは掴めず、値によっては
+    // 例外になる。
+    if (duration === undefined || !Number.isFinite(duration) || duration <= 0) {
+      return
+    }
+    try {
+      session.setPositionState?.({
+        duration,
+        playbackRate: rate,
+        // 位置は報告する瞬間の値でよい。購読すると毎秒数回ここが動く。
+        position: Math.min(store.get(playbackPositionAtom), duration),
+      })
+    } catch {
+      // 端末が対応しない、または値を受け付けない場合は何もしない。
+    }
+  }, [store, duration, rate, playing, seekGeneration, hasTrack])
+
+  // バーを畳んだら目盛りも消す。前の番組の長さが残ったままにしない。
+  useEffect(() => {
+    return () => {
+      const session = navigator.mediaSession as MediaSession | undefined
+      if (session === undefined) return
+      session.playbackState = "none"
+      try {
+        session.setPositionState?.()
+      } catch {
+        // 未対応の端末では何もしない。
+      }
+    }
+  }, [])
 }

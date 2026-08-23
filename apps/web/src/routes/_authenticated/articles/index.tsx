@@ -6,6 +6,8 @@ import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { Panel } from "@/shared/components/panel"
+import { usePaneScrollReset } from "@/shared/lib/use-pane-scroll-reset"
+import { pageTitle } from "@/shared/lib/page-title"
 import {
   articleFacetsQueryOptions,
   articlesInfiniteQueryOptions,
@@ -20,6 +22,7 @@ import { ConnectedEnrichQueueDialog } from "./-components/enrich-queue-dialog"
 import { validateArticlesSearch } from "./-model"
 
 export const Route = createFileRoute("/_authenticated/articles/")({
+  head: () => ({ meta: [{ title: pageTitle("記事") }] }),
   validateSearch: validateArticlesSearch,
   // 選択中の記事はloaderの依存に入れない。記事を切り替えるたびに一覧の
   // loaderが走ると、ページングで積んだページが捨てられる。
@@ -77,6 +80,9 @@ function ArticlesRoute() {
 
   const hasSelection = search.article !== undefined
   const listScroll = useSingleColumnScrollSwap(search.article)
+  // 2カラムでは本文だけが独立したスクロール領域になる。1カラムのページ全体の
+  // 動きは`useSingleColumnScrollSwap`が別に見る。
+  const readerPaneRef = usePaneScrollReset(search.article)
 
   function selectArticle(id: string | undefined) {
     // 一覧を離れる瞬間の位置を控える。戻った時にここへ返す。記事から記事へ
@@ -131,6 +137,10 @@ function ArticlesRoute() {
           "flex flex-1 flex-col p-4 sm:p-6 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:p-8",
           !hasSelection && "hidden lg:flex"
         )}
+        // 位置が戻ることをe2eで確かめるための目印。スクロールしているのは
+        // 本文ではなくこの枠なので、検査もここへ当てる。
+        data-reader-pane=""
+        ref={readerPaneRef}
       >
         {/*
           一覧へ戻る導線は取得を待たない。表示境界の外に置くことで、記事を

@@ -13,6 +13,9 @@ import { Link, useLocation, useMatchRoute } from "@tanstack/react-router"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+import { KeyboardShortcutsHelp } from "@/shared/components/keyboard-shortcuts-help"
+import { OfflineNotice } from "@/shared/components/offline-notice"
+
 const links = [
   { to: "/", label: "今日", icon: House },
   { to: "/articles", label: "記事", icon: Newspaper },
@@ -110,7 +113,15 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6 md:pb-[calc(var(--player-h)+1rem)]">
         <Brand />
         <Navigation />
-        <div className="mt-auto flex justify-end">{actions}</div>
+        {/*
+          キー操作の目録は`actions`ではなくここが持つ。routeから配ると、
+          ページごとに渡し忘れる余地ができる。開閉の状態はこのcomponentの
+          中に閉じているので、開いてもページは描き直されない。
+        */}
+        <div className="mt-auto flex items-center justify-end gap-1">
+          <KeyboardShortcutsHelp />
+          {actions}
+        </div>
       </aside>
 
       <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background/95 px-4 py-2 backdrop-blur md:hidden">
@@ -137,6 +148,15 @@ export function AppShell({ actions, children, player }: AppShellProps) {
           {children}
         </div>
       </main>
+
+      {/*
+        回線切れの案内。下端に居座るものの**すぐ上**へ重ねる。
+        本文の流れに入れると、記事・ライブラリが吸着の基準にしている
+        `--app-bar-h`が実際の高さとずれて、日付見出しがヘッダーへ潜る。
+      */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--app-nav-h)+var(--player-h))] z-40 md:bottom-[var(--player-h)]">
+        <OfflineNotice />
+      </div>
 
       {player}
 

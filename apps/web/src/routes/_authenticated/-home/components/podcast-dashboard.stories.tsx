@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { expect, fn, userEvent, within } from "storybook/test"
 
+import { StubRouterProvider } from "@/shared/test/stub-router"
 import { GenerationSettingsSummary } from "./generation-settings-summary"
 import { PodcastDashboard } from "./podcast-dashboard"
 
@@ -26,10 +27,13 @@ const meta = {
     layout: "fullscreen",
   },
   decorators: [
+    // カード内の遷移リンクは`<Link>`。routerが無いと組み立てられない。
     (Story) => (
-      <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
-        <Story />
-      </main>
+      <StubRouterProvider>
+        <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+          <Story />
+        </main>
+      </StubRouterProvider>
     ),
   ],
 } satisfies Meta<typeof PodcastDashboard>

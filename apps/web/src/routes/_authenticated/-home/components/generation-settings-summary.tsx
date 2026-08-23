@@ -1,4 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
 import { Clock3, Rss } from "lucide-react"
 
 import { buttonVariants } from "@workspace/ui/components/button"
@@ -54,12 +55,12 @@ export function GenerationSettingsSummary({
             </h2>
           </CardTitle>
           <CardAction>
-            <a
+            <Link
               className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href="/schedule"
+              to="/schedule"
             >
               変更
-            </a>
+            </Link>
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-1">
@@ -86,12 +87,12 @@ export function GenerationSettingsSummary({
             {subscriptionNames.length}件を購読中
           </CardDescription>
           <CardAction>
-            <a
+            <Link
               className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href="/subscriptions"
+              to="/subscriptions"
             >
               管理
-            </a>
+            </Link>
           </CardAction>
         </CardHeader>
         <CardContent>

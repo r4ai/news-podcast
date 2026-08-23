@@ -8,8 +8,13 @@ import {
   currentTrackAtom,
   episodeAudioUrl,
   handleEndedAtom,
+  handleErrorAtom,
   handleLoadedMetadataAtom,
+  handlePlayingAtom,
   handleTimeUpdateAtom,
+  handleWaitingAtom,
+  hasPlaybackErrorAtom,
+  isBufferingAtom,
   isPlayingAtom,
   mutedAtom,
   pausePlaybackAtom,
@@ -21,6 +26,7 @@ import {
   progressMapAtom,
   resetOwnerPlaybackAtom,
   resumePlaybackAtom,
+  retryPlaybackAtom,
   seekToAtom,
   setPlaybackRateAtom,
   setVolumeAtom,
@@ -584,6 +590,84 @@ describe("clearPersistedPlayback", () => {
     const next = createStore()
     expect(next.get(reopened.currentTrackAtom)).toBeNull()
     expect(next.get(reopened.progressMapAtom)).toEqual({})
+  })
+})
+
+describe("読み込み待ち", () => {
+  it("音が届くまでを待ち状態として表す", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+
+    // 押した直後。要素はまだ最初のchunkを持っていない。
+    expect(store.get(isBufferingAtom)).toBe(true)
+
+    store.set(handlePlayingAtom)
+    expect(store.get(isBufferingAtom)).toBe(false)
+
+    // 途中で追いつかれた。
+    store.set(handleWaitingAtom)
+    expect(store.get(isBufferingAtom)).toBe(true)
+    store.set(handlePlayingAtom)
+    expect(store.get(isBufferingAtom)).toBe(false)
+    expect(audio.play).toHaveBeenCalled()
+  })
+
+  it("止めたら待ち状態も畳む。止まっているのに回り続けない", () => {
+    const { store } = setup()
+    store.set(playEpisodeAtom, track)
+    store.set(pausePlaybackAtom)
+
+    expect(store.get(isBufferingAtom)).toBe(false)
+  })
+
+  it("同じ番組の再開では読み込み直さないので、待ち状態にしない", () => {
+    const { store } = setup()
+    store.set(playEpisodeAtom, track)
+    store.set(handlePlayingAtom)
+    store.set(pausePlaybackAtom)
+
+    store.set(resumePlaybackAtom)
+    expect(store.get(isBufferingAtom)).toBe(false)
+  })
+})
+
+describe("再生の失敗", () => {
+  it("失敗を伝え、待ち状態は畳む", () => {
+    const { store } = setup()
+    store.set(playEpisodeAtom, track)
+    store.set(handleErrorAtom)
+
+    expect(store.get(hasPlaybackErrorAtom)).toBe(true)
+    expect(store.get(isBufferingAtom)).toBe(false)
+    expect(store.get(isPlayingAtom)).toBe(false)
+  })
+
+  it("再試行は同じ番組を読み直し、聴いていた位置から鳴らす", () => {
+    const { store, audio } = setup()
+    store.set(playEpisodeAtom, track)
+    loaded(store, audio, 600)
+    audio.currentTime = 120
+    store.set(handleTimeUpdateAtom)
+    store.set(handleErrorAtom)
+
+    store.set(retryPlaybackAtom)
+
+    expect(audio.load).toHaveBeenCalled()
+    expect(audio.src).toBe(episodeAudioUrl(track.episodeId))
+    expect(store.get(hasPlaybackErrorAtom)).toBe(false)
+    expect(store.get(isBufferingAtom)).toBe(true)
+
+    // 総時間が届いた時点で、記録してあった位置へ戻る。
+    loaded(store, audio, 600)
+    expect(audio.currentTime).toBe(120)
+  })
+
+  it("番組が載っていなければ再試行は何も起こさない", () => {
+    const { store, audio } = setup()
+    store.set(retryPlaybackAtom)
+
+    expect(audio.load).not.toHaveBeenCalled()
+    expect(audio.play).not.toHaveBeenCalled()
   })
 })
 
