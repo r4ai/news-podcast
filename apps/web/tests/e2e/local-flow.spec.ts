@@ -403,10 +403,14 @@ test("shows RSS sync progress and refreshes the article list after completion", 
   await expect(page.getByText(/RSSを同期中です/)).toHaveCount(0)
 })
 
-test("RSS reader reports unavailable raw archives and persists saved state", async ({
+test("RSS reader replays stored HTML, CSS, and images after the source disappears", async ({
   page,
 }) => {
   const stylesheetHash = "a".repeat(64)
+  const imageHash = "b".repeat(64)
+  const snapshotId = "00000000-0000-4000-8000-000000000021"
+  const replayBaseUrl = `/v1/me/article-snapshots/${snapshotId}`
+  const replayUrl = `${replayBaseUrl}/replay/index.html`
   const article = {
     id: "00000000-0000-4000-8000-000000000020",
     feedId: "00000000-0000-4000-8000-000000000001",
@@ -416,12 +420,11 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
     publishedAt: "2026-08-10T00:00:00.000Z",
     discoveredAt: "2026-08-10T00:01:00.000Z",
     archiveStatus: "succeeded",
-    snapshotId: "00000000-0000-4000-8000-000000000021",
+    snapshotId,
     read: false,
     saved: false,
     readLater: false,
     hidden: false,
-    archiveUrl: "/v1/me/articles/00000000-0000-4000-8000-000000000020/archive",
     markdownUrl:
       "/v1/me/articles/00000000-0000-4000-8000-000000000020/markdown",
   }
@@ -429,20 +432,46 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
   page.on("console", (message) => {
     if (message.type() === "error") archiveErrors.push(message.text())
   })
-  await page.context().route(`**${article.archiveUrl}`, (route) =>
+  await page.context().route(`**${replayBaseUrl}/replay`, (route) =>
     route.fulfill({
-      body: `<!doctype html><html><head><title>保存された記事</title><link rel="stylesheet" href="assets/${stylesheetHash}"></head><body><main><h1>保存された記事</h1><p>保存時点の本文です。</p></main></body></html>`,
+      body: JSON.stringify({ url: replayUrl }),
+      contentType: "application/json",
+    })
+  )
+  await page.context().route(`**${replayUrl}`, (route) =>
+    route.fulfill({
+      body: `<!doctype html><html><head><title>保存された記事</title><link rel="stylesheet" href="../assets/${stylesheetHash}.css"></head><body><main><h1>保存された記事</h1><img alt="保存画像" src="../assets/${imageHash}.png"><p>保存時点の本文です。</p></main></body></html>`,
       contentType: "text/html; charset=utf-8",
       headers: {
         "Content-Security-Policy":
-          "sandbox allow-same-origin; default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'self'; frame-ancestors 'self'",
+          "sandbox; default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self'; style-src 'self'; frame-ancestors 'self'",
       },
     })
   )
-  await page.context().route(`**/assets/${stylesheetHash}`, (route) =>
+  await page
+    .context()
+    .route(`**${replayBaseUrl}/assets/${stylesheetHash}.css`, (route) =>
+      route.fulfill({
+        body: "body { background: rgb(240, 244, 248); } h1 { color: rgb(17, 24, 39); font-size: 32px; }",
+        contentType: "text/css",
+      })
+    )
+  await page
+    .context()
+    .route(`**${replayBaseUrl}/assets/${imageHash}.png`, (route) =>
+      route.fulfill({
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64"
+        ),
+        contentType: "image/png",
+      })
+    )
+  await page.context().route(article.url, (route) => route.abort())
+  await page.context().route("https://example.com/**", (route) =>
     route.fulfill({
-      body: "body { background: rgb(240, 244, 248); } h1 { color: rgb(17, 24, 39); font-size: 32px; }",
-      contentType: "text/css",
+      status: 503,
+      body: "source unavailable",
     })
   )
   await page.route(
@@ -494,10 +523,15 @@ test("RSS reader reports unavailable raw archives and persists saved state", asy
   await expect(
     page.getByRole("heading", { name: "保存された記事" })
   ).toBeVisible()
+  const archiveFrame = page.locator(`iframe[title="${article.title}"]`)
+  await expect(archiveFrame).toBeVisible()
+  await expect(archiveFrame).toHaveAttribute("sandbox", "")
+  const replay = page.frameLocator(`iframe[title="${article.title}"]`)
+  await expect(replay.getByText("保存時点の本文です。")).toBeVisible()
+  await expect(replay.getByAltText("保存画像")).toBeVisible()
   await expect(
-    page.getByText("本文もアーカイブも利用できません。")
-  ).toBeVisible()
-  await expect(page.locator(`iframe[title="${article.title}"]`)).toHaveCount(0)
+    replay.getByRole("heading", { name: "保存された記事" })
+  ).toHaveCSS("color", "rgb(17, 24, 39)")
   expect(archiveErrors).toEqual([])
 
   // 狭い幅でも操作列は題名の直下に居る。以前は画面下端へ固定していたが、

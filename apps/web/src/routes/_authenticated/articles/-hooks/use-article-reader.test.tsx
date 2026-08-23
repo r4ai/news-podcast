@@ -85,16 +85,26 @@ describe("useArticleReader", () => {
     expect(state.current?.didAutoFallback).toBe(false)
   })
 
-  it("marks raw archive content unavailable when markdown is too short", async () => {
+  it("loads the replay URL when markdown is too short", async () => {
+    const snapshotId = "00000000-0000-4000-8000-000000000021"
     const { state } = renderReader([
-      { path: "/v1/me/articles/a", body: makeArticle({ read: true }) },
+      {
+        path: "/v1/me/articles/a",
+        body: makeArticle({ read: true, snapshotId }),
+      },
       { path: "/v1/me/articles/a/markdown", body: { markdown: shortMarkdown } },
+      {
+        path: `/v1/me/article-snapshots/${snapshotId}/replay`,
+        body: {
+          url: `/v1/me/article-snapshots/${snapshotId}/replay/index.html`,
+        },
+      },
     ])
 
     await waitFor(() => expect(state.current?.source).toBe("archive"))
     expect(state.current?.didAutoFallback).toBe(true)
-    expect(state.current?.archiveHtml).toBeUndefined()
-    expect(state.current?.archiveUnavailable).toBe(true)
+    await waitFor(() => expect(state.current?.archiveUrl).toContain(snapshotId))
+    expect(state.current?.archiveUnavailable).toBe(false)
   })
 
   it("keeps the reader usable when the body fails to load", async () => {

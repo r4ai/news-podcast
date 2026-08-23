@@ -262,6 +262,23 @@ export type GatewayPorts = Readonly<{
     | TypeOf<typeof NotFoundProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
+  createArticleReplayAccess: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly snapshotId: string
+    readonly object:
+      | { readonly kind: "Replay" }
+      | { readonly kind: "Asset"; readonly assetName: string }
+  }) => Effect.Effect<
+    Readonly<{
+      url: string
+      mediaType: string
+      byteLength: number
+      sha256: string
+    }>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
   patchArticle: (input: {
     readonly headers: TypeOf<typeof SessionHeadersSchema>
     readonly articleId: TypeOf<typeof ArticleIdSchema>

@@ -17,6 +17,7 @@ import { usePreloadMarkdownProcessor } from "@/shared/markdown"
 import {
   ARTICLE_STATE_MUTATION_SCOPE,
   articleMarkdownQueryOptions,
+  articleReplayQueryOptions,
   articleQueryOptions,
   refetchArticleCollections,
   writeArticleToCaches,
@@ -83,6 +84,11 @@ export function useArticleReader({
   const source: ArticleSource =
     userSource ?? (autoFallback ? "archive" : "markdown")
   const didAutoFallback = userSource === undefined && autoFallback
+  const snapshotId = serverArticle.snapshotId
+  const replayQuery = useQuery({
+    ...articleReplayQueryOptions(snapshotId ?? "missing"),
+    enabled: source === "archive" && snapshotId !== undefined,
+  })
 
   const [article, addDraft] = useOptimistic(serverArticle, applyPatch)
 
@@ -187,11 +193,14 @@ export function useArticleReader({
     didAutoFallback,
     markdown: markdownQuery.data,
     isMarkdownLoading: markdownQuery.isLoading,
-    // The functional Gateway exposes manual archival as POST, but deliberately
-    // does not expose stored raw HTML. Keep the external-source fallback honest.
-    archiveHtml: undefined as string | undefined,
-    isArchiveLoading: false,
-    archiveUnavailable: source === "archive",
+    archiveUrl: replayQuery.data,
+    isArchiveLoading:
+      source === "archive" && snapshotId !== undefined && replayQuery.isPending,
+    archiveUnavailable:
+      source === "archive" && (snapshotId === undefined || replayQuery.isError),
+    retryArchive: async () => {
+      await replayQuery.refetch()
+    },
     toggleSaved: () =>
       update({ saved: !article.saved }, "保存状態を更新できませんでした"),
     toggleReadLater: () =>

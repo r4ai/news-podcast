@@ -107,9 +107,10 @@ function readerArgs(
     didAutoFallback: false,
     markdown: LONG_MARKDOWN,
     isMarkdownLoading: false,
-    archiveHtml: undefined,
+    archiveUrl: undefined,
     isArchiveLoading: false,
     archiveUnavailable: false,
+    retryArchive: fn(),
     toggleSaved: fn(),
     toggleReadLater: fn(),
     toggleHidden: fn(),
@@ -141,7 +142,7 @@ export const AutoFallbackToArchive: Story = {
     source: "archive",
     didAutoFallback: true,
     markdown: SHORT_MARKDOWN,
-    archiveHtml: "<html><body><p>アーカイブ本文</p></body></html>",
+    archiveUrl: "/v1/me/article-snapshots/snapshot/replay/index.html",
   }),
 }
 
@@ -150,7 +151,7 @@ export const NoContentAvailable: Story = {
     source: "archive",
     didAutoFallback: true,
     markdown: "",
-    archiveHtml: undefined,
+    archiveUrl: undefined,
     archiveUnavailable: true,
   }),
 }

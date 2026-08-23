@@ -62,7 +62,7 @@ flowchart LR
 - 台本が返す出典URLは、ownerが選択しContentが版固定した入力記事だけを許可する。
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
 - 任意登録feedはprivateとし、媒体カタログはowner自身の購読または明示的なpublic listingだけを返す。
-- 署名付き音声URLは永続化・公開せず、Gatewayがアクセス要求ごとに内部発行してRange streamする。
+- 署名付きprivate artifact URLは永続化・公開せず、Gatewayがowner認可後に内部発行してstreamする。記事replayはsnapshot metadataとも完全一致させる。
 
 ## 3. レイヤー構成と依存方向
 
@@ -288,7 +288,25 @@ stateDiagram-v2
 
 RSS parserはitemを無言で破棄せず、valid itemとsanitized validation failureに分ける。不正itemも同期jobの`discovered`/`failed`へ反映し、定数reasonだけを既存`error`へ保存する。mixed feedはvalid itemを処理し、全件不正はdegradedな`Succeeded`として運用警告とAPI/UIに現れる（[ADR-0068](adr/0068-isolate-feed-item-sync-failures.md)）。
 
-### 4.5 記事archive objectの回収
+### 4.5 owner限定の静的replay配信
+
+```mermaid
+sequenceDiagram
+  participant W as Web iframe
+  participant G as Gateway
+  participant C as Content Knowledge
+  participant S as Private S3
+  W->>G: snapshot replay / hashed asset
+  G->>C: owner-scoped ReplayAccess
+  C->>C: article_owner_access + snapshot metadata
+  C-->>G: 1分署名URL + type/size/hash
+  G->>S: signed GET
+  G-->>W: CSP/sandbox + verified bounded body
+```
+
+resolve、HTML、assetの3 routeはすべてowner認可付きである。Gatewayは署名URLとobject keyを公開せず、上限内でbodyを読み切り、保存metadataのbyte lengthとSHA-256が一致するobjectだけをsame-originで返す。購読解除後も`article_owner_access`を削除しないため、本人の過去snapshotは引き続き読める（[ADR-0079](adr/0079-deliver-owned-private-artifacts-through-gateway.md)）。
+
+### 4.6 記事archive objectの回収
 
 ```mermaid
 flowchart LR
@@ -451,6 +469,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0011: SeaweedFSとS3互換ObjectStore](adr/0011-s3-compatible-object-storage.md)
 - [ADR-0075: 4 SQLiteとObjectStoreをcommit marker付き同一世代で保護する](adr/0075-coordinate-durable-state-backup-generations.md)
 - [ADR-0078: coordinated backupをSQLite write barrierと横断不変条件で固定する](adr/0078-bound-coordinated-backup-with-write-barrier.md)
+- [ADR-0079: owner限定private artifactをGateway経由で配信する](adr/0079-deliver-owned-private-artifacts-through-gateway.md)
 - [ADR-0012: RSS Readerと安全なWebアーカイブ](adr/0012-rss-reader-web-archive.md)
 - [ADR-0013: Agent主導のPodcast生成](adr/0013-agent-directed-episode-production.md)
 - [ADR-0015: Firecracker隔離型Agent Harness](adr/0015-firecracker-agent-harness.md)

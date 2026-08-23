@@ -38,6 +38,7 @@ import {
   type HttpS3ArticleCaptureResource,
 } from "../infrastructure/unsafe/http-s3-article-capture.js"
 import { openS3MarkdownObjectReaderUnsafe } from "../infrastructure/unsafe/s3-markdown-object-reader.js"
+import { makeS3ReplayAccessSignerUnsafe } from "../infrastructure/unsafe/s3-replay-access-signer.js"
 import type { CapturedAt } from "../domain/article.js"
 import {
   currentCapturedAtUnsafe,
@@ -496,6 +497,9 @@ export const runNodeService = (
                           makeArticleLibraryHandler({
                             articles: runtime.library,
                             objects: markdown.reader,
+                            replaySigner: makeS3ReplayAccessSignerUnsafe(
+                              config.archive
+                            ),
                             now: currentCapturedAtUnsafe,
                             deriveArchiveRequestId:
                               deriveManualArchiveRequestIdUnsafe,

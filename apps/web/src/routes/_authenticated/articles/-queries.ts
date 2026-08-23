@@ -107,6 +107,26 @@ export function articleMarkdownQueryOptions(articleId: string) {
   })
 }
 
+export function articleReplayQueryOptions(snapshotId: string) {
+  return queryOptions({
+    queryKey: ["article-replay", snapshotId] as const,
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `/v1/me/article-snapshots/${snapshotId}/replay`,
+        { signal }
+      )
+      if (!response.ok) throw new Error("article replay unavailable")
+      const body = (await response.json()) as { readonly url?: unknown }
+      if (typeof body.url !== "string" || !body.url.startsWith("/v1/me/")) {
+        throw new Error("invalid article replay response")
+      }
+      return body.url
+    },
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
+}
+
 /**
  * 記事状態の更新を投入順へ直列化するmutation scope。
  *

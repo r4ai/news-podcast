@@ -46,6 +46,26 @@ export const articlesGroup = (handlers: GatewayHandlers) =>
           articleId: params.articleId,
         })
       )
+      .handle("getArticleReplay", ({ headers, params }) =>
+        handlers.getArticleReplay({
+          headers,
+          snapshotId: params.snapshotId,
+        })
+      )
+      .handle("streamArticleReplay", ({ headers, params }) =>
+        handlers.streamArticleReplayObject({
+          headers,
+          snapshotId: params.snapshotId,
+          object: { kind: "Replay" },
+        })
+      )
+      .handle("streamArticleReplayAsset", ({ headers, params }) =>
+        handlers.streamArticleReplayObject({
+          headers,
+          snapshotId: params.snapshotId,
+          object: { kind: "Asset", assetName: params.assetName },
+        })
+      )
       .handle("patchArticle", ({ headers, params, payload }) =>
         handlers.patchArticle({
           headers,

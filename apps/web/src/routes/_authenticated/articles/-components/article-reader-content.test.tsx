@@ -1,5 +1,5 @@
-import { render, waitFor } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { fireEvent, render, waitFor } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
 
 import { useCompiledMarkdown } from "@/shared/markdown"
 import { articleBaseUrl, articleMarkdownOptions, type Article } from "../-model"
@@ -48,13 +48,15 @@ describe("ArticleReaderContent", () => {
     const article = makeArticle({})
     const { container } = render(
       <CompiledContent
-        archiveHtml={undefined}
+        archiveUrl={undefined}
         archiveUnavailable={false}
         article={article}
         isArchiveLoading={false}
         isMarkdownLoading={false}
         markdown="![説明](assets/hash123.png)"
+        retryArchive={() => {}}
         source="markdown"
+        useMarkdown={() => {}}
       />
     )
 
@@ -69,41 +71,71 @@ describe("ArticleReaderContent", () => {
     )
   })
 
-  it("renders the archive HTML inside a sandboxed iframe when the archive source is selected", () => {
+  it("renders the replay URL inside a sandboxed iframe when the archive source is selected", () => {
     const article = makeArticle({})
     const { container } = render(
       <CompiledContent
-        archiveHtml="<html><body>archive</body></html>"
+        archiveUrl="/v1/me/article-snapshots/snapshot/replay/index.html"
         archiveUnavailable={false}
         article={article}
         isArchiveLoading={false}
         isMarkdownLoading={false}
         markdown={undefined}
+        retryArchive={() => {}}
         source="archive"
+        useMarkdown={() => {}}
       />
     )
 
     const iframe = container.querySelector("iframe")
     expect(iframe?.getAttribute("sandbox")).toBe("")
-    expect(iframe?.getAttribute("srcdoc")).toBe(
-      "<html><body>archive</body></html>"
+    expect(iframe?.getAttribute("src")).toBe(
+      "/v1/me/article-snapshots/snapshot/replay/index.html"
     )
+  })
+
+  it("offers retry and Markdown recovery when the replay iframe fails after resolution", () => {
+    const retryArchive = vi.fn()
+    const useMarkdown = vi.fn()
+    const article = makeArticle({})
+    const { container, getByText } = render(
+      <CompiledContent
+        archiveUrl="/v1/me/article-snapshots/snapshot/replay/index.html"
+        archiveUnavailable={false}
+        article={article}
+        isArchiveLoading={false}
+        isMarkdownLoading={false}
+        markdown="# 保存済み本文"
+        retryArchive={retryArchive}
+        source="archive"
+        useMarkdown={useMarkdown}
+      />
+    )
+
+    fireEvent.error(container.querySelector("iframe")!)
+    expect(getByText("保存版を読み込めませんでした。")).toBeTruthy()
+    fireEvent.click(getByText("再試行"))
+    expect(retryArchive).toHaveBeenCalledOnce()
+    expect(container.querySelector("iframe")).not.toBeNull()
   })
 
   it("guides to the original article when neither markdown nor archive is available", () => {
     const article = makeArticle({})
     const { getByText } = render(
       <CompiledContent
-        archiveHtml={undefined}
+        archiveUrl={undefined}
         archiveUnavailable={true}
         article={article}
         isArchiveLoading={false}
         isMarkdownLoading={false}
         markdown={undefined}
+        retryArchive={() => {}}
         source="archive"
+        useMarkdown={() => {}}
       />
     )
 
+    expect(getByText("再試行")).toBeTruthy()
     expect(getByText("元記事を新しいタブで開く")).toBeTruthy()
   })
 })

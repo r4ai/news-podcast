@@ -1,6 +1,7 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
+import { decodePersistedJson } from "@news-podcast/persistence"
 import { and, asc, desc, eq } from "drizzle-orm"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 import {
   articleOwnerAccess,
@@ -15,12 +16,16 @@ import type {
   ArticleListQuery,
   ArticleLookup,
   ArticleObjectLookup,
+  ReplayObjectLookup,
 } from "../../../application/article-library.js"
 import {
   articleSortKey,
   encodeArticleCursor,
 } from "../../../domain/article-library.js"
-import { ObjectKeySchema } from "../../../domain/article.js"
+import {
+  ArticleSnapshotSchema,
+  ObjectKeySchema,
+} from "../../../domain/article.js"
 import type { ContentKnowledgeDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
 import { keysetFilters, queryFilters } from "./filters.js"
 import {
@@ -37,7 +42,12 @@ import {
 /**
  * 記事の読み出し：keysetページングによる一覧と、1件の参照・本文キー解決。
  */
-type Reading = Pick<ArticleLibraryRepository, "list" | "find" | "findMarkdown">
+type Reading = Pick<
+  ArticleLibraryRepository,
+  "list" | "find" | "findMarkdown" | "findReplayObject"
+>
+
+const SnapshotJsonRowSchema = Schema.Struct({ snapshotJson: Schema.String })
 
 export const makeReading = (database: ContentKnowledgeDatabase): Reading => {
   const listPage = (
@@ -158,6 +168,74 @@ export const makeReading = (database: ContentKnowledgeDatabase): Reading => {
                   )
                 )
               )
+            )
+          }
+        )
+      ),
+    findReplayObject: (ownerId, snapshotId, object) =>
+      Effect.try({
+        try: () =>
+          database
+            .select({ snapshotJson: articleSnapshots.snapshotJson })
+            .from(articleSnapshots)
+            .innerJoin(
+              articleOwnerAccess,
+              eq(articleOwnerAccess.articleId, articleSnapshots.articleId)
+            )
+            .where(
+              and(
+                eq(articleOwnerAccess.ownerId, ownerId),
+                eq(articleSnapshots.snapshotId, snapshotId)
+              )
+            )
+            .limit(1)
+            .get(),
+        catch: () => failure("ReplayAccess"),
+      }).pipe(
+        Effect.flatMap(
+          (row): Effect.Effect<ReplayObjectLookup, ArticleLibraryError> => {
+            if (row === undefined) {
+              return Effect.succeed(deepFreeze({ _tag: "NotFound" }))
+            }
+            return parse(SnapshotJsonRowSchema)(row).pipe(
+              Effect.mapError(() => failure("ReplayAccess", "CorruptRecord")),
+              Effect.flatMap(({ snapshotJson }) =>
+                decodePersistedJson(
+                  "article_snapshots.snapshot_json",
+                  ArticleSnapshotSchema,
+                  snapshotJson
+                ).pipe(
+                  Effect.mapError(() =>
+                    failure("ReplayAccess", "CorruptRecord")
+                  )
+                )
+              ),
+              Effect.flatMap((snapshot) => {
+                const expectedKey =
+                  object.kind === "Replay"
+                    ? `articles/${snapshotId}/replay/index.html`
+                    : `articles/${snapshotId}/assets/${object.assetName}`
+                const candidate =
+                  object.kind === "Replay"
+                    ? snapshot.capture.replay
+                    : snapshot.capture.assets.find(
+                        (asset) => asset.key === expectedKey
+                      )
+                if (candidate === undefined) {
+                  return Effect.succeed<ReplayObjectLookup>(
+                    deepFreeze({ _tag: "NotFound" })
+                  )
+                }
+                if (
+                  snapshot.snapshotId !== snapshotId ||
+                  candidate.key !== expectedKey
+                ) {
+                  return Effect.fail(failure("ReplayAccess", "CorruptRecord"))
+                }
+                return Effect.succeed<ReplayObjectLookup>(
+                  deepFreeze({ _tag: "Found", object: candidate })
+                )
+              })
             )
           }
         )

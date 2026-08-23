@@ -5,6 +5,41 @@ import { HttpServerResponse } from "effect/unstable/http"
 import { EpisodeJobAgUiEventSchema } from "../../contract.js"
 import type { GatewayPorts } from "../ports.js"
 
+const REPLAY_HTML_MAX_BYTES = 5 * 1_024 * 1_024
+const REPLAY_ASSET_MAX_BYTES = 20 * 1_024 * 1_024
+const REPLAY_CSP =
+  "sandbox; default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+const REPLAY_ASSET_CSP =
+  "sandbox; default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+const toSha256 = async (body: ArrayBuffer) => {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", body)
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("")
+}
+
+const readExactBody = async (response: Response, expectedBytes: number) => {
+  if (response.body === null) throw new Error("replay upstream body missing")
+  const reader = response.body.getReader()
+  const body = new Uint8Array(expectedBytes)
+  let offset = 0
+  while (true) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    if (offset + chunk.value.byteLength > expectedBytes) {
+      await reader.cancel()
+      throw new Error("replay upstream body exceeds metadata")
+    }
+    body.set(chunk.value, offset)
+    offset += chunk.value.byteLength
+  }
+  if (offset !== expectedBytes) {
+    throw new Error("replay upstream body shorter than metadata")
+  }
+  return body.buffer
+}
+
 const freezeSuccess = <Success, Error, Requirements>(
   effect: Effect.Effect<Success, Error, Requirements>
 ) => effect.pipe(Effect.map(deepFreeze))
@@ -296,6 +331,113 @@ export const makeGatewayHandlers = (
     getArticleMarkdown: (
       input: Parameters<GatewayPorts["getArticleMarkdown"]>[0]
     ) => freezeSuccess(ports.getArticleMarkdown(deepFreeze(input))),
+    getArticleReplay: (input: {
+      readonly headers: Parameters<
+        GatewayPorts["createArticleReplayAccess"]
+      >[0]["headers"]
+      readonly snapshotId: string
+    }) =>
+      ports
+        .createArticleReplayAccess({
+          headers: input.headers,
+          snapshotId: input.snapshotId,
+          object: { kind: "Replay" },
+        })
+        .pipe(
+          Effect.as({
+            url: `/v1/me/article-snapshots/${input.snapshotId}/replay/index.html`,
+          })
+        ),
+    streamArticleReplayObject: (input: {
+      readonly headers: Parameters<
+        GatewayPorts["createArticleReplayAccess"]
+      >[0]["headers"]
+      readonly snapshotId: string
+      readonly object:
+        | { readonly kind: "Replay" }
+        | { readonly kind: "Asset"; readonly assetName: string }
+    }) => {
+      const startedAt = Date.now()
+      const maximumBytes =
+        input.object.kind === "Replay"
+          ? REPLAY_HTML_MAX_BYTES
+          : REPLAY_ASSET_MAX_BYTES
+      return ports.createArticleReplayAccess(deepFreeze(input)).pipe(
+        Effect.flatMap((access) =>
+          access.byteLength > maximumBytes
+            ? Effect.fail({
+                type: "about:blank" as const,
+                title: "Upstream unavailable" as const,
+                status: 503 as const,
+                code: "upstream_unavailable" as const,
+              })
+            : Effect.tryPromise({
+                try: async () => {
+                  const upstream = await (options.fetcher ?? globalThis.fetch)(
+                    access.url
+                  )
+                  const contentLength = Number(
+                    upstream.headers.get("content-length")
+                  )
+                  if (
+                    upstream.status !== 200 ||
+                    !Number.isSafeInteger(contentLength) ||
+                    contentLength !== access.byteLength
+                  ) {
+                    await upstream.body?.cancel()
+                    throw new Error("replay upstream metadata mismatch")
+                  }
+                  const body = await readExactBody(upstream, access.byteLength)
+                  if (
+                    body.byteLength !== access.byteLength ||
+                    (await toSha256(body)) !== access.sha256
+                  ) {
+                    throw new Error("replay upstream digest mismatch")
+                  }
+                  const headers = new Headers({
+                    "cache-control": "private, no-store",
+                    "content-security-policy": REPLAY_ASSET_CSP,
+                    "content-length": String(access.byteLength),
+                    "content-type": access.mediaType,
+                    "cross-origin-resource-policy": "same-origin",
+                    "x-content-type-options": "nosniff",
+                  })
+                  if (input.object.kind === "Replay") {
+                    headers.set("content-security-policy", REPLAY_CSP)
+                  }
+                  return HttpServerResponse.fromWeb(
+                    new Response(body, {
+                      status: 200,
+                      headers,
+                    })
+                  )
+                },
+                catch: () => ({
+                  type: "about:blank" as const,
+                  title: "Upstream unavailable" as const,
+                  status: 503 as const,
+                  code: "upstream_unavailable" as const,
+                }),
+              })
+        ),
+        Effect.tap(() =>
+          Effect.logInfo("article replay object proxied", {
+            event_name: "article.replay_proxy",
+            object_kind: input.object.kind.toLowerCase(),
+            outcome: "success",
+            duration_ms: Date.now() - startedAt,
+          })
+        ),
+        Effect.tapError(() =>
+          Effect.logWarning("article replay object unavailable", {
+            event_name: "article.replay_proxy",
+            object_kind: input.object.kind.toLowerCase(),
+            outcome: "failure",
+            duration_ms: Date.now() - startedAt,
+          })
+        )
+      )
+    },
     patchArticle: (input: Parameters<GatewayPorts["patchArticle"]>[0]) =>
       freezeSuccess(ports.patchArticle(deepFreeze(input))),
     bulkPatchArticles: (
