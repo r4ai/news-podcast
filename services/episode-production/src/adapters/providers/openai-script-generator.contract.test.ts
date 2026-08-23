@@ -88,7 +88,7 @@ describe.runIf(live)("OpenAI script generator live contract", () => {
       )
       expect(output.title.length).toBeGreaterThan(0)
       expect(output.script.length).toBeGreaterThan(0)
-      expect(output.sourceUrls).toEqual([sourceUrl])
+      expect(output.sourceIndexes).toEqual([0])
     }
 
     expect(observations).toHaveLength(samples * 2)

@@ -215,13 +215,14 @@ describe("SQLite execution repository", () => {
     const script = {
       title: "Daily",
       script: "Hello",
-      sourceUrls: ["https://example.com/article"],
+      sourceIndexes: [0],
     }
     const sources = [
       {
+        sourceIndex: 0,
         articleId,
         snapshotId: "snapshot-1",
-        url: script.sourceUrls[0]!,
+        url: "https://example.com/article",
         title: "Article",
       },
     ] as const
@@ -351,7 +352,7 @@ describe("SQLite execution repository", () => {
               {
                 articleId: "article-1",
                 snapshotId: "snapshot-1",
-                url: script.sourceUrls[0]!,
+                url: "https://example.com/article",
                 title: "Article",
               },
             ],

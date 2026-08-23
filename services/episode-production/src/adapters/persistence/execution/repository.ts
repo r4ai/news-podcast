@@ -50,9 +50,10 @@ const encodeTimestamp = Schema.encodeSync(UtcTimestampSchema)
 const ScriptSchema = Schema.Struct({
   title: Schema.String,
   script: Schema.String,
-  sourceUrls: Schema.Array(Schema.String),
+  sourceIndexes: Schema.Array(Schema.Int),
 })
 const ScriptSourceProvenanceSchema = Schema.Struct({
+  sourceIndex: Schema.Int,
   articleId: Schema.String,
   snapshotId: Schema.String,
   title: Schema.String,

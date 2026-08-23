@@ -81,7 +81,7 @@ const makePorts = (overrides: Partial<EpisodeExecutionPorts> = {}) => {
         Effect.succeed({
           title: "Daily news",
           script: "Script",
-          sourceUrls: [article.url],
+          sourceIndexes: [0],
         })
       ),
     },
@@ -312,6 +312,43 @@ describe("executeEpisodeJob", () => {
     expect(resumed.script.generate).not.toHaveBeenCalled()
   })
 
+  it("fails a mismatched source-index checkpoint before downstream providers", async () => {
+    const base = makePorts()
+    const ports = makePorts({
+      persistence: {
+        ...base.persistence,
+        loadCheckpoint: () =>
+          Effect.succeed({
+            script: {
+              title: "Mismatched",
+              script: "Script",
+              sourceIndexes: [1],
+            },
+            sources: [
+              {
+                sourceIndex: 0,
+                articleId: article.articleId,
+                snapshotId: article.snapshotId,
+                title: article.title,
+                url: article.url,
+              },
+            ],
+          } as never),
+      },
+    })
+
+    expect(
+      await Effect.runPromise(executeEpisodeJob(ports)({ job: running }))
+    ).toEqual({
+      _tag: "Failed",
+      failureCode: "invalid_script_sources",
+    })
+    expect(ports.script.generate).not.toHaveBeenCalled()
+    expect(ports.dictionary.prepare).not.toHaveBeenCalled()
+    expect(ports.speech.synthesize).not.toHaveBeenCalled()
+    expect(ports.audio.put).not.toHaveBeenCalled()
+  })
+
   it("keeps completion provenance on the snapshot used by a checkpointed script", async () => {
     const first = makePorts()
     vi.mocked(first.speech.synthesize).mockReturnValueOnce(
@@ -351,6 +388,73 @@ describe("executeEpisodeJob", () => {
       })
     )
     expect(resumed.articles.materialize).not.toHaveBeenCalled()
+  })
+
+  it("binds source-2 to the second snapshot when materialized URLs are equal", async () => {
+    const second = {
+      ...article,
+      articleId: "04b51d15-f488-4076-b99a-3c98f1feab05",
+      snapshotId: "f932fa8e-84ad-4a77-896f-129498e7460f",
+      title: "News 2",
+      markdown: "Second body",
+    } as const
+    const ports = makePorts({
+      articles: {
+        materialize: vi.fn(() => Effect.succeed([article, second] as const)),
+      },
+      script: {
+        generate: () =>
+          Effect.succeed({
+            title: "Second source",
+            script: "Script",
+            sourceIndexes: [1],
+          } as never),
+      },
+    })
+    vi.mocked(ports.speech.synthesize).mockReturnValueOnce(
+      Effect.fail({ _tag: "TransportFailure" })
+    )
+
+    expect(
+      (await Effect.runPromise(executeEpisodeJob(ports)({ job: running })))._tag
+    ).toBe("Retrying")
+    expect(ports.persistence.saveScriptCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sources: [
+          expect.objectContaining({
+            sourceIndex: 1,
+            articleId: second.articleId,
+            snapshotId: second.snapshotId,
+          }),
+        ],
+      })
+    )
+
+    const resumed = makePorts({
+      persistence: {
+        ...ports.persistence,
+        completeWithOutbox: vi.fn(() => Effect.succeed("Applied" as const)),
+      },
+    })
+    expect(
+      (await Effect.runPromise(executeEpisodeJob(resumed)({ job: running })))
+        ._tag
+    ).toBe("Succeeded")
+    expect(resumed.script.generate).not.toHaveBeenCalled()
+    expect(resumed.articles.materialize).not.toHaveBeenCalled()
+    expect(resumed.persistence.completeWithOutbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completion: expect.objectContaining({
+          sources: [
+            expect.objectContaining({
+              articleId: second.articleId,
+              snapshotId: second.snapshotId,
+              title: second.title,
+            }),
+          ],
+        }),
+      })
+    )
   })
 
   it("propagates cancellation and never starts provider work", async () => {
@@ -454,29 +558,39 @@ describe("executeEpisodeJob", () => {
     expect(persisted).not.toHaveBeenCalled()
   })
 
-  it("rejects invalid script sources before synthesizing or uploading audio", async () => {
-    const ports = makePorts({
-      script: {
-        generate: () =>
-          Effect.succeed({
-            title: "Invalid",
-            script: "Script",
-            sourceUrls: ["https://example.com/not-materialized"],
-          }),
-      },
-    })
+  it.each([
+    { sourceIndexes: [] },
+    { sourceIndexes: [-1] },
+    { sourceIndexes: [0.5] },
+    { sourceIndexes: [1] },
+    { sourceIndexes: [0, 0] },
+  ])(
+    "rejects invalid source positions $sourceIndexes before checkpointing or synthesis",
+    async ({ sourceIndexes }) => {
+      const ports = makePorts({
+        script: {
+          generate: () =>
+            Effect.succeed({
+              title: "Invalid",
+              script: "Script",
+              sourceIndexes,
+            } as never),
+        },
+      })
 
-    const outcome = await Effect.runPromise(
-      executeEpisodeJob(ports)({ job: running })
-    )
+      const outcome = await Effect.runPromise(
+        executeEpisodeJob(ports)({ job: running })
+      )
 
-    expect(outcome).toEqual({
-      _tag: "Failed",
-      failureCode: "invalid_script_sources",
-    })
-    expect(ports.speech.synthesize).not.toHaveBeenCalled()
-    expect(ports.audio.put).not.toHaveBeenCalled()
-  })
+      expect(outcome).toEqual({
+        _tag: "Failed",
+        failureCode: "invalid_script_sources",
+      })
+      expect(ports.persistence.saveScriptCheckpoint).not.toHaveBeenCalled()
+      expect(ports.speech.synthesize).not.toHaveBeenCalled()
+      expect(ports.audio.put).not.toHaveBeenCalled()
+    }
+  )
 
   it("fails a quality-rejected script before checkpoint, speech, audio, or publication", async () => {
     const ports = makePorts({
