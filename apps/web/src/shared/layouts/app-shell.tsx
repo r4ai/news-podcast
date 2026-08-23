@@ -107,7 +107,7 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       >
         本文へスキップ
       </a>
-      <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6">
+      <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6 md:pb-[calc(var(--player-h)+1rem)]">
         <Brand />
         <Navigation />
         <div className="mt-auto flex justify-end">{actions}</div>

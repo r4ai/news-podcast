@@ -1,10 +1,23 @@
-export type AuthState = {
-  readonly authenticated: boolean
-  readonly loginMethods: {
-    readonly development: boolean
-    readonly google: boolean
-  }
+export type LoginMethods = {
+  readonly development: boolean
+  readonly google: boolean
 }
+
+export type AuthState =
+  | {
+      readonly authenticated: false
+      readonly loginMethods: LoginMethods
+    }
+  | {
+      readonly authenticated: true
+      readonly userId: string
+      readonly loginMethods: LoginMethods
+    }
+
+export type AuthenticatedAuthState = Extract<
+  AuthState,
+  { readonly authenticated: true }
+>
 
 export class AuthStateError extends Error {
   readonly status: number

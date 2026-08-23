@@ -59,6 +59,7 @@ function fakeAudio() {
     pause: vi.fn(function (this: { paused: boolean }) {
       this.paused = true
     }),
+    load: vi.fn(),
     removeAttribute: vi.fn(),
   }
 }

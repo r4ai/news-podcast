@@ -128,12 +128,15 @@ function successMediaTypes(template: string, method: string) {
 
 const articleId = "00000000-0000-4000-8000-000000000010"
 
-async function login(api: ReturnType<typeof createFakeApi>): Promise<string> {
+async function login(
+  api: ReturnType<typeof createFakeApi>,
+  password = "e2e-password"
+): Promise<string> {
   const response = await api.fetch(
     new Request("http://127.0.0.1:4000/api/dev/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password: "e2e-password" }),
+      body: JSON.stringify({ password }),
     })
   )
 
@@ -262,6 +265,39 @@ describe("fake gateway authentication sessions", () => {
 
     await expect(response.json()).resolves.toMatchObject({
       authenticated: false,
+    })
+  })
+
+  it("revokes the current session without affecting another owner", async () => {
+    const api = createFakeApi()
+    const firstSession = await login(api)
+    const secondSession = await login(api, "e2e-password-b")
+
+    const logout = await api.fetch(
+      new Request("http://127.0.0.1:4000/api/dev/logout", {
+        method: "POST",
+        headers: { cookie: firstSession },
+      })
+    )
+    expect(logout.status).toBe(204)
+    expect(logout.headers.get("set-cookie")).toContain("Max-Age=0")
+
+    const firstState = await api.fetch(
+      new Request("http://127.0.0.1:4000/api/auth/state", {
+        headers: { cookie: firstSession },
+      })
+    )
+    const secondArticles = await api.fetch(
+      new Request("http://127.0.0.1:4000/v1/me/articles", {
+        headers: { cookie: secondSession },
+      })
+    )
+
+    await expect(firstState.json()).resolves.toMatchObject({
+      authenticated: false,
+    })
+    await expect(secondArticles.json()).resolves.toMatchObject({
+      items: [{ title: "Owner B 専用ニュース" }],
     })
   })
 })

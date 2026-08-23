@@ -106,6 +106,56 @@ test("login accepts Enter submission but rejects an external return URL", async 
   ).toBeVisible()
 })
 
+test("logout clears owner A state before owner B logs in", async ({ page }) => {
+  await page.goto("/articles")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(
+    page
+      .getByRole("button", {
+        name: /Durable Objectsが東京リージョンに対応/,
+      })
+      .first()
+  ).toBeVisible()
+
+  await page.goto("/library")
+  await page
+    .getByRole("button", { name: /今日の開発ニュース.*を再生/ })
+    .first()
+    .click()
+  await expect(page.locator("audio")).toHaveJSProperty("paused", false)
+
+  await page.getByRole("button", { name: "ログアウト" }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible()
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        track: localStorage.getItem("player.track"),
+        progress: localStorage.getItem("player.progress"),
+      }))
+    )
+    .toEqual({ track: null, progress: null })
+
+  await page.goBack()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  await page.reload()
+  await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible()
+
+  await page.getByLabel("開発パスワード").fill("e2e-password-b")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await page.goto("/articles")
+
+  await expect(
+    page.getByRole("button", { name: /Owner B 専用ニュース/ }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", {
+      name: /Durable Objectsが東京リージョンに対応/,
+    })
+  ).toHaveCount(0)
+})
+
 test("a protected API 401 clears the visible app and preserves the return path", async ({
   page,
 }) => {
