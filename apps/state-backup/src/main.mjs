@@ -27,6 +27,12 @@ const positiveInteger = (environment, name, fallback) => {
   return value
 }
 
+const boundedPositiveInteger = (environment, name, fallback, maximum) => {
+  const value = positiveInteger(environment, name, fallback)
+  if (value > maximum) throw new Error(`${name} must be at most ${maximum}`)
+  return value
+}
+
 const normalizedEndpoint = (value) => new URL(value).href.replace(/\/$/, "")
 
 const assertHttpEndpoint = (value, name) => {
@@ -110,6 +116,12 @@ export const loadConfiguration = (environment) => {
       "BACKUP_DRILL_INTERVAL_MS",
       604_800_000
     ),
+    barrierTimeoutMillis: boundedPositiveInteger(
+      environment,
+      "BACKUP_BARRIER_TIMEOUT_MS",
+      30_000,
+      120_000
+    ),
     policy: {
       rpoHours: positiveInteger(environment, "BACKUP_RPO_HOURS", 24),
       rtoHours: positiveInteger(environment, "BACKUP_RTO_HOURS", 4),
@@ -176,6 +188,7 @@ const main = async () => {
         ...common,
         databaseSources: configuration.databaseSources,
         sourceObjects,
+        barrierTimeoutMillis: configuration.barrierTimeoutMillis,
         policy: { ...defaultPolicy, ...configuration.policy },
       }),
     runRestoreDrill: () => runRestoreDrill(common),

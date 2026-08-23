@@ -24,11 +24,21 @@ import {
   backupDatabase,
   serviceProfiles,
 } from "../../../scripts/sqlite-state.mjs"
+import {
+  assertCrossServiceState,
+  databaseProfiles as profiles,
+  rejectGeneration,
+  withSqliteWriteBarrier,
+} from "./consistency.mjs"
+
+export {
+  assertCrossServiceState,
+  withSqliteWriteBarrier,
+} from "./consistency.mjs"
 
 const encryptionMagic = Buffer.from("NPBK1")
 const nonceBytes = 12
 const tagBytes = 16
-const profiles = Object.freeze(["identity", "content", "production", "library"])
 
 export const defaultPolicy = Object.freeze({
   rpoHours: 24,
@@ -234,6 +244,45 @@ const uploadEncrypted = async ({
   })
 }
 
+const normalizeObjectListing = (objects) => {
+  const listedObjects = [...objects].toSorted((a, b) =>
+    String(a.key).localeCompare(String(b.key))
+  )
+  const seenKeys = new Set()
+  for (const object of listedObjects) {
+    if (
+      typeof object.key !== "string" ||
+      object.key.length === 0 ||
+      object.key.startsWith("/") ||
+      object.key.split("/").some((part) => part === "..") ||
+      typeof object.etag !== "string" ||
+      object.etag.length === 0 ||
+      !Number.isSafeInteger(object.size) ||
+      object.size < 0
+    ) {
+      rejectGeneration(
+        "object_inventory_invalid",
+        "source object listing contains an invalid entry"
+      )
+    }
+    if (seenKeys.has(object.key)) {
+      rejectGeneration(
+        "object_inventory_invalid",
+        `duplicate source object: ${object.key}`
+      )
+    }
+    seenKeys.add(object.key)
+  }
+  return listedObjects
+}
+
+const objectInventoryFingerprint = (objects) =>
+  sha256(
+    objects
+      .map(({ key, etag, size }) => `${key}\0${etag ?? ""}\0${size ?? ""}`)
+      .join("\n")
+  )
+
 export const createGeneration = async ({
   databaseSources,
   sourceObjects,
@@ -243,6 +292,10 @@ export const createGeneration = async ({
   createdAt = new Date(),
   generationId = `${createdAt.toISOString().replaceAll(/[-:.]/g, "")}-${randomUUID()}`,
   policy = defaultPolicy,
+  barrierTimeoutMillis = 30_000,
+  writeBarrier = withSqliteWriteBarrier,
+  snapshotDatabase = backupDatabase,
+  validateCrossServiceState = assertCrossServiceState,
 }) => {
   assertEncryptionKey(encryptionKey)
   assertGenerationId(generationId)
@@ -260,42 +313,62 @@ export const createGeneration = async ({
   await mkdir(encryptedDirectory, { recursive: true })
 
   try {
-    const databaseEntries = []
-    const databaseBackups = {}
-    for (const profile of profiles) {
-      const source = databaseSources?.[profile]
-      if (typeof source !== "string") fail(`missing ${profile} database source`)
-      const destination = join(databaseDirectory, `${profile}.sqlite`)
-      await backupDatabase(profile, source, destination)
-      databaseBackups[profile] = destination
-      const archiveKey = `${prefix}/databases/${profile}.sqlite.enc`
-      databaseEntries.push({
-        profile,
-        archiveKey,
-        sha256: await sha256File(destination),
-        size: await fileSize(destination),
-        schemaUserVersion: databaseSchemaVersion(destination),
-        requiredTables: serviceProfiles[profile],
-      })
-    }
+    const boundary = await writeBarrier({
+      databaseSources,
+      timeoutMillis: barrierTimeoutMillis,
+      operation: async () => {
+        const databaseEntries = []
+        const databaseBackups = {}
+        for (const profile of profiles) {
+          const source = databaseSources?.[profile]
+          if (typeof source !== "string") {
+            fail(`missing ${profile} database source`)
+          }
+          const destination = join(databaseDirectory, `${profile}.sqlite`)
+          await snapshotDatabase(profile, source, destination)
+          databaseBackups[profile] = destination
+          const archiveKey = `${prefix}/databases/${profile}.sqlite.enc`
+          databaseEntries.push({
+            profile,
+            archiveKey,
+            sha256: await sha256File(destination),
+            size: await fileSize(destination),
+            schemaUserVersion: databaseSchemaVersion(destination),
+            requiredTables: serviceProfiles[profile],
+          })
+        }
 
-    const listedObjects = (await sourceObjects.listObjects()).toSorted((a, b) =>
-      a.key.localeCompare(b.key)
-    )
-    const seenKeys = new Set()
+        const firstListing = normalizeObjectListing(
+          await sourceObjects.listObjects()
+        )
+        const secondListing = normalizeObjectListing(
+          await sourceObjects.listObjects()
+        )
+        const sourceGeneration = objectInventoryFingerprint(firstListing)
+        if (sourceGeneration !== objectInventoryFingerprint(secondListing)) {
+          rejectGeneration(
+            "object_inventory_changed",
+            "source object inventory changed inside the backup barrier"
+          )
+        }
+        validateCrossServiceState(databaseBackups)
+        return {
+          databaseEntries,
+          databaseBackups,
+          listedObjects: firstListing,
+          sourceGeneration,
+        }
+      },
+    })
+    const {
+      databaseEntries,
+      databaseBackups,
+      listedObjects,
+      sourceGeneration,
+    } = boundary.value
+
     const objectEntries = []
     for (const object of listedObjects) {
-      if (
-        typeof object.key !== "string" ||
-        object.key.length === 0 ||
-        object.key.startsWith("/") ||
-        object.key.split("/").some((part) => part === "..")
-      ) {
-        fail("source object listing contains an unsafe key")
-      }
-      if (seenKeys.has(object.key))
-        fail(`duplicate source object: ${object.key}`)
-      seenKeys.add(object.key)
       const identity = sha256(object.key)
       const path = join(objectDirectory, identity)
       const downloaded = await sourceObjects.downloadObject(object.key, path)
@@ -308,7 +381,10 @@ export const createGeneration = async ({
         (Number.isSafeInteger(downloaded?.size) &&
           downloaded.size !== actualSize)
       ) {
-        fail(`source object changed while backing up: ${object.key}`)
+        rejectGeneration(
+          "object_changed_after_barrier",
+          `source object changed while backing up: ${object.key}`
+        )
       }
       objectEntries.push({
         key: object.key,
@@ -328,12 +404,6 @@ export const createGeneration = async ({
     const episodeAudioObjects = references.filter(
       ({ kind }) => kind === "episode"
     ).length
-    const sourceGeneration = sha256(
-      listedObjects
-        .map(({ key, etag, size }) => `${key}\0${etag ?? ""}\0${size ?? ""}`)
-        .join("\n")
-    )
-
     for (const entry of databaseEntries) {
       await uploadEncrypted({
         archive,
@@ -356,11 +426,17 @@ export const createGeneration = async ({
     }
 
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generationId,
       createdAt: createdAt.toISOString(),
       policy: effectivePolicy,
       encryption: { algorithm: "AES-256-GCM", format: "NPBK1" },
+      consistency: {
+        strategy: "sqlite-write-barrier",
+        barrierDurationMillis: boundary.durationMillis,
+        objectInventory: "double-listed-inside-barrier",
+        crossServiceInvariant: "production-completion-v1",
+      },
       databases: databaseEntries,
       objects: {
         sourceGeneration,
@@ -382,7 +458,7 @@ export const createGeneration = async ({
     })
 
     const commit = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generationId,
       createdAt: createdAt.toISOString(),
       state: "committed",
@@ -452,6 +528,7 @@ export const runRestoreDrill = async ({
       assertHealthyDatabase(restored, entry.profile)
       restoredDatabases[entry.profile] = restored
     }
+    assertCrossServiceState(restoredDatabases)
 
     const restoredObjects = []
     for (const entry of manifest.objects.entries) {

@@ -353,6 +353,7 @@ services:
       BACKUP_PORT: "4198"
       BACKUP_INTERVAL_MS: ${BACKUP_INTERVAL_MS:-86400000}
       BACKUP_DRILL_INTERVAL_MS: ${BACKUP_DRILL_INTERVAL_MS:-604800000}
+      BACKUP_BARRIER_TIMEOUT_MS: ${BACKUP_BARRIER_TIMEOUT_MS:-30000}
       BACKUP_RPO_HOURS: ${BACKUP_RPO_HOURS:-24}
       BACKUP_RTO_HOURS: ${BACKUP_RTO_HOURS:-4}
       BACKUP_RETAINED_GENERATIONS: ${BACKUP_RETAINED_GENERATIONS:-30}
@@ -360,10 +361,12 @@ services:
     ports:
       - "127.0.0.1:4198:4198"
     volumes:
-      - identity-data:/source/identity:ro
-      - content-data:/source/content:ro
-      - production-data:/source/production:ro
-      - library-data:/source/library:ro
+      # The coordinator only opens BEGIN IMMEDIATE/ROLLBACK transactions, but
+      # SQLite requires write-capable mounts to hold the cross-service barrier.
+      - identity-data:/source/identity
+      - content-data:/source/content
+      - production-data:/source/production
+      - library-data:/source/library
       - backup-data:/var/lib/news-podcast-backup
     secrets:
       - backup-encryption-key
