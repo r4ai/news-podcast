@@ -267,7 +267,8 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
     )
 
     expect(await replay.json()).toEqual(await first.json())
-    expect((await listed.json()).items).toHaveLength(1)
+    const listedBody = (await listed.json()) as { readonly items: unknown[] }
+    expect(listedBody.items).toHaveLength(1)
   })
 })
 
