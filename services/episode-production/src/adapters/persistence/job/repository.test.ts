@@ -87,6 +87,35 @@ describe("SQLite job repository", () => {
     ])
   })
 
+  it("reports a running job as ready at lease expiry, not start time", async () => {
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const database = openProductionDatabaseUnsafe(":memory:").database
+          const repository = yield* jobRepository(database)
+          const execution = yield* executionRepository(database)
+          yield* repository.saveIdempotently(
+            job("10e2d4e1-c127-479f-a124-2ea037bd9319")
+          )
+          yield* execution.leaseNext({
+            now: at,
+            leasedUntil: later,
+            leaseToken: Schema.decodeUnknownSync(LeaseTokenSchema)("lease-1"),
+          })
+          return yield* repository.statusSnapshot()
+        })
+      )
+    )
+
+    expect(result).toEqual([
+      {
+        status: "running",
+        count: 1,
+        oldestActiveAt: "2026-08-12T01:00:00.000Z",
+      },
+    ])
+  })
+
   it("returns the original immutable job for an idempotent replay", async () => {
     const original = job("10e2d4e1-c127-479f-a124-2ea037bd9319")
     const replay = job("6518412b-ce2f-4641-9f2c-a02dd515bc31")
