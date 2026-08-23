@@ -57,6 +57,7 @@ export interface Observability {
 export const telemetryEventNames = [
   "api.request",
   "episode.requested",
+  "episode.idempotency",
   "episode.started",
   "episode.stage.completed",
   "episode.retrying",

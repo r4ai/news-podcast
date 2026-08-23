@@ -119,7 +119,7 @@ export interface paths {
         put?: never;
         /**
          * Retry a failed episode job
-         * @description Creates a new owned job from a failed job. An explicit Idempotency-Key makes retries replay-safe; when omitted, the Gateway generates a fresh key.
+         * @description Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409.
          */
         post: operations["retryEpisodeJob"];
         delete?: never;
@@ -1615,10 +1615,10 @@ export interface operations {
     retryEpisodeJob: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 authorization?: components["schemas"]["Union_"];
                 cookie?: components["schemas"]["Union_"];
-                "idempotency-key"?: (string & (unknown & unknown & unknown)) | null;
+                "idempotency-key": string & (unknown & unknown & unknown);
                 traceparent?: components["schemas"]["Union_1"];
             };
             path: {

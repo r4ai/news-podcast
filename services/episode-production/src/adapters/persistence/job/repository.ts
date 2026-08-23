@@ -30,6 +30,18 @@ export type IdempotencyConflict = Readonly<{
   readonly idempotencyKey: string
 }>
 
+export type IdempotencyObservation = Readonly<{
+  readonly operation: "create" | "retry"
+  readonly outcome: "accepted" | "replay" | "conflict"
+}>
+
+const observeIdempotency = (observation: IdempotencyObservation) =>
+  Effect.logInfo("episode job idempotency resolved", {
+    event_name: "episode.idempotency",
+    idempotency_operation: observation.operation,
+    idempotency_outcome: observation.outcome,
+  })
+
 const persistenceError = (operation: string, cause: unknown) =>
   deepFreeze({
     _tag: "PersistenceError" as const,
@@ -42,7 +54,12 @@ const decodeDocument = (document: string) =>
     Effect.mapError((cause) => persistenceError("decode-job-json", cause))
   )
 
-const repositoryFromHandle = (handle: SqliteJobHandle) => {
+const repositoryFromHandle = (
+  handle: SqliteJobHandle,
+  observe: (
+    observation: IdempotencyObservation
+  ) => Effect.Effect<void> = observeIdempotency
+) => {
   const save = (
     job: QueuedJob,
     scheduledFirstWriteWins: boolean,
@@ -50,6 +67,9 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
   ) => {
     const encoded = encodeJob(job)
     const requestFingerprint = JSON.stringify(encoded.request)
+    const operation = idempotencyScope.startsWith("retry:")
+      ? ("retry" as const)
+      : ("create" as const)
 
     return Effect.try({
       try: () =>
@@ -64,7 +84,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
       catch: (cause) => persistenceError("save-job", cause),
     }).pipe(
       Effect.flatMap((result) => {
-        if (result._tag === "Inserted") return Effect.succeed(job)
+        if (result._tag === "Inserted")
+          return observe({ operation, outcome: "accepted" }).pipe(
+            Effect.as(job)
+          )
         return decodeDocument(result.row.document).pipe(
           Effect.flatMap((existing) => {
             if (
@@ -88,7 +111,10 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
                   jobId: existing.jobId,
                   document: JSON.stringify(encodeJob(requeued)),
                 })
-              ).pipe(Effect.as(requeued))
+              ).pipe(
+                Effect.andThen(observe({ operation, outcome: "replay" })),
+                Effect.as(requeued)
+              )
             }
             if (
               result.row.requestFingerprint === requestFingerprint ||
@@ -96,14 +122,20 @@ const repositoryFromHandle = (handle: SqliteJobHandle) => {
                 encoded.request.trigger === "scheduled" &&
                 existing.request.trigger === "scheduled")
             ) {
-              return Effect.succeed(existing)
+              return observe({ operation, outcome: "replay" }).pipe(
+                Effect.as(existing)
+              )
             }
-            return Effect.fail(
-              deepFreeze({
-                _tag: "IdempotencyConflict" as const,
-                ownerId: encoded.request.ownerId,
-                idempotencyKey: encoded.request.idempotencyKey,
-              })
+            return observe({ operation, outcome: "conflict" }).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  deepFreeze({
+                    _tag: "IdempotencyConflict" as const,
+                    ownerId: encoded.request.ownerId,
+                    idempotencyKey: encoded.request.idempotencyKey,
+                  })
+                )
+              )
             )
           })
         )
@@ -250,9 +282,10 @@ export type SqliteJobRepository = ReturnType<typeof repositoryFromHandle>
 
 /** 接続はサービスプロセスが1本だけ所有し、リポジトリはそれを借りる。 */
 export const jobRepository = (
-  database: ProductionDatabase
+  database: ProductionDatabase,
+  observe?: (observation: IdempotencyObservation) => Effect.Effect<void>
 ): Effect.Effect<SqliteJobRepository, unknown> =>
   Effect.try({
-    try: () => repositoryFromHandle(makeJobHandle(database)),
+    try: () => repositoryFromHandle(makeJobHandle(database), observe),
     catch: (cause) => persistenceError("open-database", cause),
   })

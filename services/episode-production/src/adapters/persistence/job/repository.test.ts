@@ -55,6 +55,63 @@ const job = (
   })
 
 describe("SQLite job repository", () => {
+  it("observes accepted, replay, and conflict without exposing the key", async () => {
+    const observations: unknown[] = []
+    const first = job("10e2d4e1-c127-479f-a124-2ea037bd9319")
+    const replay = job("6518412b-ce2f-4641-9f2c-a02dd515bc31")
+    const conflict = job("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80", "scheduled")
+    const retrySourceId = first.jobId
+    const firstRetry = job(
+      "a7ad9b42-2aa7-48d6-b3fe-f0035e4ff879",
+      "manual",
+      undefined,
+      "retry-key"
+    )
+    const retryReplay = job(
+      "b3a605e7-eb36-4994-81c1-a5ac6de414f3",
+      "manual",
+      undefined,
+      "retry-key"
+    )
+    const retryConflict = job(
+      "fe6a7e1d-fd67-4e94-84e8-36f566df972d",
+      "scheduled",
+      undefined,
+      "retry-key"
+    )
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* jobRepository(
+            openProductionDatabaseUnsafe(":memory:").database,
+            (observation) =>
+              Effect.sync(() => void observations.push(observation))
+          )
+          yield* repository.saveIdempotently(first)
+          yield* repository.saveIdempotently(replay)
+          yield* repository.saveIdempotently(conflict).pipe(Effect.ignore)
+          yield* repository.saveRetryIdempotently(retrySourceId, firstRetry)
+          yield* repository.saveRetryIdempotently(retrySourceId, retryReplay)
+          yield* repository
+            .saveRetryIdempotently(retrySourceId, retryConflict)
+            .pipe(Effect.ignore)
+        })
+      )
+    )
+
+    expect(observations).toEqual([
+      { operation: "create", outcome: "accepted" },
+      { operation: "create", outcome: "replay" },
+      { operation: "create", outcome: "conflict" },
+      { operation: "retry", outcome: "accepted" },
+      { operation: "retry", outcome: "replay" },
+      { operation: "retry", outcome: "conflict" },
+    ])
+    expect(JSON.stringify(observations)).not.toContain(command.idempotencyKey)
+    expect(JSON.stringify(observations)).not.toContain("retry-key")
+  })
+
   it("reports job-state counts and the oldest active timestamp", async () => {
     const result = await Effect.runPromise(
       Effect.scoped(

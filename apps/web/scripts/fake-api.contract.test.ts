@@ -223,7 +223,7 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
     const created = await api.fetch(
       new Request("http://127.0.0.1:4000/v1/episode-jobs", {
         method: "POST",
-        headers,
+        headers: { ...headers, "idempotency-key": "fake-create-1" },
         body: JSON.stringify({ trigger: "manual", articleIds: [articleId] }),
       })
     )
@@ -242,6 +242,33 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
       media["application/json"]!.schema!,
       "/v1/episodes/{episodeId}"
     )
+  })
+
+  it("converges an idempotent create replay to one job", async () => {
+    const api = createFakeApi()
+    const cookie = await login(api)
+    const request = () =>
+      new Request("http://127.0.0.1:4000/v1/episode-jobs", {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          "idempotency-key": "response-loss-1",
+        },
+        body: JSON.stringify({ trigger: "manual", articleIds: [articleId] }),
+      })
+
+    const first = await api.fetch(request())
+    const replay = await api.fetch(request())
+    const listed = await api.fetch(
+      new Request("http://127.0.0.1:4000/v1/episode-jobs", {
+        headers: { cookie },
+      })
+    )
+
+    expect(await replay.json()).toEqual(await first.json())
+    const listedBody = (await listed.json()) as { readonly items: unknown[] }
+    expect(listedBody.items).toHaveLength(1)
   })
 })
 

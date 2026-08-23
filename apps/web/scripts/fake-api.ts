@@ -318,6 +318,10 @@ export function createFakeApi(): FakeApi {
       },
     },
     jobs: [] as Job[],
+    createRequests: new Map<
+      string,
+      { readonly fingerprint: string; readonly job: Job }
+    >(),
     syncJob: undefined as FeedSyncJob | undefined,
     episodes: seedEpisodes(),
     tags: seedTags(),
@@ -578,6 +582,26 @@ export function createFakeApi(): FakeApi {
     }
     if (path === "/v1/episode-jobs" && request.method === "POST") {
       const body = (await request.json()) as { articleIds: string[] }
+      const idempotencyKey = request.headers.get("idempotency-key")
+      if (!idempotencyKey) {
+        return json({ code: "invalid_request", message: "missing key" }, 400)
+      }
+      const scope = `${authenticatedOwner}:${idempotencyKey}`
+      const fingerprint = JSON.stringify([...body.articleIds].sort())
+      const existing = state.createRequests.get(scope)
+      if (existing !== undefined) {
+        return existing.fingerprint === fingerprint
+          ? json(existing.job, 202)
+          : json(
+              {
+                type: "about:blank",
+                title: "Idempotency conflict",
+                status: 409,
+                code: "idempotency_conflict",
+              },
+              409
+            )
+      }
       const episodeId = randomUUID()
       const job: Job = {
         id: randomUUID(),
@@ -589,6 +613,7 @@ export function createFakeApi(): FakeApi {
         episodeId,
       }
       state.jobs.unshift(job)
+      state.createRequests.set(scope, { fingerprint, job })
       state.episodes.unshift({
         id: episodeId,
         title: "今日の開発ニュース",
