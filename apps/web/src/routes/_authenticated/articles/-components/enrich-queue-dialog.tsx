@@ -141,12 +141,12 @@ function DailyBudget({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>本日の処理上限</span>
+        <span>本日のAI試行上限</span>
         <span className="tabular-nums">
-          {daily.used} / {daily.limit}件
+          {daily.used} / {daily.limit}回
         </span>
       </div>
-      <Progress aria-label="本日の処理上限の使用率" value={percent} />
+      <Progress aria-label="本日のAI試行上限の使用率" value={percent} />
       {daily.used >= daily.limit ? (
         <p className="text-xs text-destructive">
           本日の上限に達しています。明日のバッチで再開されます。

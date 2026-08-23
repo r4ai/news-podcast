@@ -366,6 +366,8 @@ flowchart LR
 
 secretをGitへ追加しない。`DEV_AUTH_ENABLED=true`と`APP_ENV=production`の組み合わせは起動時に拒否する。日次補完枠のresetは既定で無効であり、非productionで`CONTENT_ENRICH_RESET_ENABLED=true`を明示した場合だけowner自身の枠に許可する。productionとの組み合わせは設定事故として起動時に拒否する。
 
+`CONTENT_ENRICH_DAILY_LIMIT`は成功記事数ではなく、owner別・UTC日付別のprovider送信試行上限である。429、timeout、schema不正を含む送信済み試行は消費し、本文取得・入力検証・lease失効など送信前の失敗は消費しない。`article.enrich.attempt{outcome=reserved|budget_exhausted}`で予約判断を監視し、owner IDをmetric属性へ入れない（[ADR-0084](adr/0084-reserve-paid-enrichment-attempts.md)）。
+
 ## トラブルシューティング
 
 ```bash

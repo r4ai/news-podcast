@@ -418,13 +418,15 @@ export const contentEnrichmentDailyProgress = sqliteTable(
   {
     ownerId: text("owner_id").notNull(),
     localDate: text("local_date").notNull(),
-    processedCount: integer("processed_count").notNull().default(0),
+    // Physical name is retained for migration compatibility; this counts paid
+    // provider attempts, not successful completions.
+    attemptedCount: integer("processed_count").notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.ownerId, table.localDate] }),
     check(
       "content_enrichment_daily_progress_count_check",
-      sql`${table.processedCount} >= 0`
+      sql`${table.attemptedCount} >= 0`
     ),
   ]
 )

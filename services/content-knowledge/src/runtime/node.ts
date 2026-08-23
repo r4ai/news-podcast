@@ -256,6 +256,7 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
     readonly source: EnrichmentSource
     readonly provider: EnrichmentProvider
     readonly dailyLimit: number
+    readonly observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
   }) => ReturnType<typeof createEnrichmentOperations>
   readonly close: () => Effect.Effect<void, NodeRuntimeError>
 }>
@@ -365,6 +366,9 @@ export const startNodeRuntime = (
                       readonly source: EnrichmentSource
                       readonly provider: EnrichmentProvider
                       readonly dailyLimit: number
+                      readonly observeAttempt?: (
+                        outcome: "Reserved" | "BudgetExhausted"
+                      ) => void
                     }) =>
                       createEnrichmentOperations({
                         queue: enrichmentQueue,
@@ -375,6 +379,7 @@ export const startNodeRuntime = (
                         dailyLimit: input.dailyLimit,
                         now: dependencies.now,
                         newLeaseToken: dependencies.newEnrichmentLeaseToken,
+                        observeAttempt: input.observeAttempt,
                       })
                     const close = () => closeDatabase(handle)
 
@@ -482,6 +487,13 @@ export const runNodeService = (
                               ),
                             })),
                       dailyLimit: config.enrichment.dailyLimit,
+                      observeAttempt: (outcome) =>
+                        observability.count("article.enrich.attempt", 1, {
+                          outcome:
+                            outcome === "Reserved"
+                              ? "reserved"
+                              : "budget_exhausted",
+                        }),
                     })
                     const generationPlanning = createGenerationPlanning({
                       catalog: runtime.articles,

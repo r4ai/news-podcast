@@ -1918,7 +1918,7 @@ const operationDocumentation = {
   getEnrichQueue: {
     summary: "Get enrichment queue and budget",
     description:
-      "Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily used and limit counters.",
+      "Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily paid provider-attempt usage and limit counters. Failed provider calls consume this budget; pre-provider validation and expired leases do not.",
   },
   enrichReprocess: {
     summary: "Requeue failed enrichment",

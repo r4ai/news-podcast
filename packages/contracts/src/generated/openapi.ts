@@ -753,7 +753,7 @@ export interface paths {
         };
         /**
          * Get enrichment queue and budget
-         * @description Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily used and limit counters.
+         * @description Returns the authenticated owner's queued, running, failed, and recent enrichment work plus daily paid provider-attempt usage and limit counters. Failed provider calls consume this budget; pre-provider validation and expired leases do not.
          */
         get: operations["personalization.getEnrichQueue"];
         put?: never;
