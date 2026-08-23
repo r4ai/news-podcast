@@ -42,11 +42,12 @@ const token = (value: string) =>
 const queued = (
   key = "daily",
   id = jobId,
-  enqueuedAt = "2026-08-13T00:00:00.000Z"
+  enqueuedAt = "2026-08-13T00:00:00.000Z",
+  owner = ownerId
 ) =>
   newQueuedJob({
     jobId: id,
-    ownerId,
+    ownerId: owner,
     idempotencyKey: Schema.decodeUnknownSync(IdempotencyKeySchema)(key),
     trigger: "manual",
     enqueuedAt: timestamp(enqueuedAt),
@@ -75,7 +76,12 @@ describe("SQLite execution repository", () => {
             queued("older", olderId, "2026-08-12T00:00:00.000Z")
           )
           yield* commands.saveIdempotently(
-            queued("newer", newerId, "2026-08-12T00:01:00.000Z")
+            queued(
+              "newer",
+              newerId,
+              "2026-08-12T00:01:00.000Z",
+              Schema.decodeUnknownSync(OwnerIdSchema)("owner-2")
+            )
           )
           return yield* execution.leaseNext({
             now: timestamp("2026-08-12T00:01:00.000Z"),
@@ -111,7 +117,12 @@ describe("SQLite execution repository", () => {
               `00000000-0000-4000-8000-00000000000${minute}`
             )
             yield* commands.saveIdempotently(
-              queued(`newer-${minute}`, id, `2026-08-12T00:0${minute}:00.000Z`)
+              queued(
+                `newer-${minute}`,
+                id,
+                `2026-08-12T00:0${minute}:00.000Z`,
+                Schema.decodeUnknownSync(OwnerIdSchema)(`owner-${minute + 1}`)
+              )
             )
             const leased = yield* execution.leaseNext({
               now: timestamp(`2026-08-12T00:0${minute}:00.000Z`),
@@ -162,7 +173,12 @@ describe("SQLite execution repository", () => {
           })
 
           yield* commands.saveIdempotently(
-            queued("retry", retryId, "2026-08-12T00:01:00.000Z")
+            queued(
+              "retry",
+              retryId,
+              "2026-08-12T00:01:00.000Z",
+              Schema.decodeUnknownSync(OwnerIdSchema)("owner-2")
+            )
           )
           const retryRunning = (yield* execution.leaseNext({
             now: timestamp("2026-08-12T00:02:00.000Z"),
@@ -182,7 +198,12 @@ describe("SQLite execution repository", () => {
           })
 
           yield* commands.saveIdempotently(
-            queued("queued", queuedId, "2026-08-12T00:03:00.000Z")
+            queued(
+              "queued",
+              queuedId,
+              "2026-08-12T00:03:00.000Z",
+              Schema.decodeUnknownSync(OwnerIdSchema)("owner-3")
+            )
           )
           const input = (leaseToken: string) => ({
             now: timestamp("2026-08-12T00:05:00.000Z"),
@@ -601,7 +622,14 @@ describe("SQLite execution repository", () => {
           const commands = yield* jobRepository(database)
           const execution = yield* executionRepository(database)
           yield* commands.saveIdempotently(queued("first"))
-          yield* commands.saveIdempotently(queued("second", secondJobId))
+          yield* commands.saveIdempotently(
+            queued(
+              "second",
+              secondJobId,
+              "2026-08-13T00:00:00.000Z",
+              Schema.decodeUnknownSync(OwnerIdSchema)("owner-2")
+            )
+          )
           const first = (yield* execution.leaseNext({
             now: timestamp("2026-08-13T00:01:00.000Z"),
             leasedUntil: timestamp("2026-08-13T00:06:00.000Z"),

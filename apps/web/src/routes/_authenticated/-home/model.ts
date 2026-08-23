@@ -168,6 +168,13 @@ export function hasActiveJob(
   return jobs.some((job) => activeStatuses.has(job.status))
 }
 
+/** Prefer actionable work over a newer terminal history entry. */
+export function selectTrackedJob<Job extends { readonly status: JobStatus }>(
+  jobs: readonly Job[]
+): Job | undefined {
+  return jobs.find((job) => activeStatuses.has(job.status)) ?? jobs[0]
+}
+
 const stageProgress = {
   selecting_articles: 10,
   materializing_articles: 25,

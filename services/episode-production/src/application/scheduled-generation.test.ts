@@ -23,7 +23,7 @@ const job = (
       : {}),
   }) as EpisodeJob
 
-const run = async (created: Effect.Effect<EpisodeJob, string>) => {
+const run = async (created: Effect.Effect<EpisodeJob, unknown>) => {
   const complete = vi.fn(() => Effect.void)
   const observe = vi.fn(() => Effect.void)
   const result = await Effect.runPromise(
@@ -38,6 +38,25 @@ const run = async (created: Effect.Effect<EpisodeJob, string>) => {
 }
 
 describe("scheduled generation tick", () => {
+  it("keeps a scheduled intent due when a manual job owns the active slot", async () => {
+    const { complete, observe, result } = await run(
+      Effect.fail({
+        _tag: "OwnerActiveJobConflict" as const,
+        activeJob: job("Running"),
+      })
+    )
+
+    expect(complete).not.toHaveBeenCalled()
+    expect(observe).toHaveBeenCalledWith({ _tag: "Retrying", ...schedule })
+    expect(result).toEqual({
+      discovered: 1,
+      succeeded: 0,
+      retrying: 1,
+      missed: 0,
+      failed: 0,
+    })
+  })
+
   it("keeps an accepted or running job due until the episode succeeds", async () => {
     for (const state of ["Queued", "Running", "Retrying"] as const) {
       const { complete, observe, result } = await run(

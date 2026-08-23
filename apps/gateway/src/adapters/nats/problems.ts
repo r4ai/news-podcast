@@ -2,7 +2,11 @@ import { deepFreeze } from "@news-podcast/kernel"
 import type { EpisodeJobControlReply } from "@news-podcast/protocols"
 import { Schema } from "effect"
 
-import { HttpProblemSchema, type HttpProblem } from "../../contract.js"
+import {
+  HttpProblemSchema,
+  JobIdSchema,
+  type HttpProblem,
+} from "../../contract.js"
 
 /**
  * 上流のRPC応答をHTTPの問題詳細へ落とし込むための語彙。
@@ -38,6 +42,10 @@ const problemSpecs = {
     title: "Episode job not found",
   },
   idempotency_conflict: { status: 409, title: "Idempotency conflict" },
+  owner_active_job_exists: {
+    status: 409,
+    title: "Owner already has an active episode job",
+  },
   resource_conflict: { status: 409, title: "Resource conflict" },
   feed_subscription_exists: {
     status: 409,
@@ -63,6 +71,16 @@ export const unavailable = () => problem("upstream_unavailable")
 export const unauthorized = () => problem("authentication_required")
 export const forbidden = () => problem("operation_forbidden")
 export const conflict = () => problem("idempotency_conflict")
+export const activeJobConflict = (
+  activeJobId: string
+): ProblemFor<"owner_active_job_exists"> =>
+  deepFreeze({
+    ...problem("owner_active_job_exists"),
+    activeJob: {
+      id: Schema.decodeUnknownSync(JobIdSchema)(activeJobId),
+      href: `/v1/episode-jobs/${activeJobId}`,
+    },
+  })
 export const notFound = () => problem("episode_not_found")
 export const badRequest = () => problem("invalid_subscription_request")
 export const unprocessable = () => problem("feed_subscription_rejected")

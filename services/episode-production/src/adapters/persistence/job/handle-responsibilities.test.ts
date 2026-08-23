@@ -13,6 +13,7 @@ const expectedMethods = {
     "findOwned",
     "listOwned",
     "listOwnedAgUiEvents",
+    "ownerActiveSnapshot",
     "statusSnapshot",
   ],
   progress: [

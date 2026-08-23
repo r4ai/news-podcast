@@ -31,6 +31,7 @@ import {
   UtcTimestampSchema,
   type EpisodeJob,
   type IdempotencyKey,
+  isOwnerActiveJobConflict,
   type JobId,
   type OwnerId,
   type UtcTimestamp,
@@ -387,6 +388,16 @@ export const handleRetryJobRpc =
                 case "NotFailed":
                   return { _tag: "Conflict", code: "JOB_NOT_FAILED" }
               }
-            })
+            }),
+            Effect.catch((failure) =>
+              isOwnerActiveJobConflict(failure)
+                ? Effect.succeed(
+                    Schema.decodeUnknownSync(EpisodeJobControlReplySchema)({
+                      _tag: "ActiveJobConflict",
+                      activeJobId: failure.activeJob.jobId,
+                    })
+                  )
+                : Effect.fail(failure)
+            )
           ),
     })

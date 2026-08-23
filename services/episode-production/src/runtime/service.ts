@@ -52,6 +52,7 @@ import {
 } from "./loops/worker.js"
 import {
   recordCancellationPropagation,
+  recordEpisodeJobSnapshots,
   recordEpisodeWorkerEvent,
   recordScriptQualityObservation,
 } from "./worker-observability.js"
@@ -327,25 +328,18 @@ export const runNodeEpisodeProductionService = (
                   onSuccess: (value) => Effect.succeed(value),
                 })
               )
+              const ownerSnapshot = yield* jobs.ownerActiveSnapshot().pipe(
+                Effect.matchEffect({
+                  onFailure: () => Effect.succeed([] as const),
+                  onSuccess: (value) => Effect.succeed(value),
+                })
+              )
               yield* Effect.sync(() => {
-                for (const state of snapshot)
-                  observability.gauge("episode.jobs", state.count, {
-                    "job.status": state.status,
-                  })
-                const oldest = snapshot
-                  .map((state) => state.oldestActiveAt)
-                  .filter((value): value is string => value !== undefined)
-                  .sort()[0]
-                observability.gauge(
-                  "episode.queue.oldest.age",
-                  oldest === undefined
-                    ? 0
-                    : Math.max(
-                        0,
-                        Date.parse(DateTime.formatIso(now())) -
-                          Date.parse(oldest)
-                      )
-                )
+                recordEpisodeJobSnapshots(observability, {
+                  now: DateTime.formatIso(now()),
+                  statuses: snapshot,
+                  owners: ownerSnapshot,
+                })
               })
               yield* Effect.logInfo("episode worker state", {
                 event_name: event._tag,

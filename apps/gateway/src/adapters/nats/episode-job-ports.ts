@@ -13,6 +13,7 @@ import {
 } from "../../contract.js"
 import type { GatewayPorts } from "../../application/ports.js"
 import {
+  activeJobConflict,
   conflict,
   jobConflict,
   jobNotFound,
@@ -138,10 +139,13 @@ const requireMutatedJob = (
   | ReturnType<typeof unavailable>
   | ReturnType<typeof jobNotFound>
   | ReturnType<typeof jobConflict>
+  | ReturnType<typeof activeJobConflict>
 > => {
   if (reply._tag === tag) return toEpisodeJob(reply.job)
   if (reply._tag === "NotFound") return Effect.fail(jobNotFound())
   if (reply._tag === "Conflict") return Effect.fail(jobConflict(reply.code))
+  if (reply._tag === "ActiveJobConflict")
+    return Effect.fail(activeJobConflict(reply.activeJobId))
   return Effect.fail(unavailable())
 }
 
@@ -201,6 +205,8 @@ export const makeEpisodeJobPorts = (transport: Transport): EpisodeJobPorts => {
             reply.code === "IDEMPOTENCY_CONFLICT" ? conflict() : unavailable()
           )
         }
+        if (reply._tag === "ActiveJobConflict")
+          return yield* Effect.fail(activeJobConflict(reply.activeJobId))
         const getLineage = transport.childLineage(
           parent,
           transport.nextMessageId()

@@ -886,6 +886,19 @@ export interface components {
             /** @enum {string} */
             type: "about:blank";
             /** @enum {string} */
+            title: "Owner already has an active episode job";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "owner_active_job_exists";
+            activeJob: {
+                id: string & unknown;
+                href: string & unknown;
+            };
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
             title: "Resource conflict";
             /** @enum {number} */
             status: 409;

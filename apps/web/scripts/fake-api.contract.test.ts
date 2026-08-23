@@ -270,6 +270,42 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
     const listedBody = (await listed.json()) as { readonly items: unknown[] }
     expect(listedBody.items).toHaveLength(1)
   })
+
+  it("admits only one active job across two tabs and manual/scheduled triggers", async () => {
+    const api = createFakeApi()
+    const cookie = await login(api)
+    const first = await api.fetch(
+      new Request("http://127.0.0.1:4000/v1/episode-jobs", {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          "idempotency-key": "tab-manual",
+          "x-fake-job-state": "queued",
+        },
+        body: JSON.stringify({ trigger: "manual", articleIds: [articleId] }),
+      })
+    )
+    const active = (await first.json()) as { readonly id: string }
+    const second = await api.fetch(
+      new Request("http://127.0.0.1:4000/v1/episode-jobs", {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          "idempotency-key": "tab-scheduled",
+        },
+        body: JSON.stringify({ trigger: "scheduled", articleIds: [articleId] }),
+      })
+    )
+
+    expect(first.status).toBe(202)
+    expect(second.status).toBe(409)
+    expect(await second.json()).toMatchObject({
+      code: "owner_active_job_exists",
+      activeJob: { id: active.id, href: `/v1/episode-jobs/${active.id}` },
+    })
+  })
 })
 
 describe("fake gateway authentication sessions", () => {

@@ -148,6 +148,21 @@ export const EpisodeJobSchema = Schema.Union([
 ])
 export type EpisodeJob = Schema.Schema.Type<typeof EpisodeJobSchema>
 
+/** Admission fails closed while one owner-scoped job can still execute. */
+export type OwnerActiveJobConflict = Readonly<{
+  readonly _tag: "OwnerActiveJobConflict"
+  readonly activeJob: EpisodeJob
+}>
+
+export const isOwnerActiveJobConflict = (
+  value: unknown
+): value is OwnerActiveJobConflict =>
+  typeof value === "object" &&
+  value !== null &&
+  "_tag" in value &&
+  value._tag === "OwnerActiveJobConflict" &&
+  "activeJob" in value
+
 export const newQueuedJob = (input: {
   readonly jobId: JobId
   readonly ownerId: OwnerId

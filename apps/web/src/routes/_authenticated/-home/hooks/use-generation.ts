@@ -24,6 +24,7 @@ import {
   failureRecovery,
   hasActiveJob,
   resolvedJobStatus,
+  selectTrackedJob,
   stageLabel,
   stagePercent,
   type JobStatus,
@@ -80,8 +81,9 @@ export function useGeneration() {
     refetchInterval: (query) => {
       const items = query.state.data?.items
       if (!items) return false
+      const tracked = selectTrackedJob(items)
       const streamIsCurrent =
-        items[0] !== undefined && streamJobId === items[0].id
+        tracked !== undefined && streamJobId === tracked.id
       return !(streamIsCurrent && streamConnected) && hasActiveJob(items)
         ? 1_000
         : false
@@ -92,12 +94,12 @@ export function useGeneration() {
   const cancelJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/cancel")
   const retryJob = api.useMutation("post", "/v1/episode-jobs/{jobId}/retry")
 
-  const latestJob = jobs.data.items[0]
+  const trackedJob = selectTrackedJob(jobs.data.items)
 
   // 進行中かどうかで絞らず、常に最新ジョブを購読する。終端済みのジョブでも
   // サーバは履歴を全部リプレイして閉じるので、完成後も生成処理が何を
   // したかが残る。進行中だけを購読すると、完了と同時に作業ログが消える。
-  useGenerationStream(latestJob?.id)
+  useGenerationStream(trackedJob?.id)
 
   // ストリームが終端に達したら、ジョブとエピソードの両方を取り直す。
   // ポーリング中は latestJob.status の変化が同じ役割を果たす。
@@ -119,19 +121,20 @@ export function useGeneration() {
   // SSEが繋がっている間はそちらが最新。切れていればポーリング結果を使う。
   // ただし今のジョブのストリームである時だけ。購読の張り替えはEffectなので、
   // ジョブが変わった直後の1描画では前のジョブの値がまだatomに残っている。
-  const liveForThisJob = latestJob !== undefined && streamJobId === latestJob.id
+  const liveForThisJob =
+    trackedJob !== undefined && streamJobId === trackedJob.id
   const live = liveForThisJob && (streamConnected || streamFinished)
   const state = resolvedJobStatus(
     live ? (liveStatus as JobStatus | undefined) : undefined,
-    latestJob?.status
+    trackedJob?.status
   )
-  const stage = (live ? liveStage : undefined) ?? latestJob?.stage
-  const stageProgress = latestJob?.stageProgress
+  const stage = (live ? liveStage : undefined) ?? trackedJob?.stage
+  const stageProgress = trackedJob?.stageProgress
   const failure =
-    (live ? liveFailure : undefined) ?? latestJob?.failure ?? undefined
+    (live ? liveFailure : undefined) ?? trackedJob?.failure ?? undefined
   const recovery = failureRecovery(failure?.code)
   const failureCode = failure?.code
-  const failureJobId = latestJob?.id
+  const failureJobId = trackedJob?.id
   useEffect(() => {
     if (failureCode === undefined || failureJobId === undefined) return
     recordBrowserEvent("episode.failure_presented", {
@@ -144,7 +147,7 @@ export function useGeneration() {
   const projectionEpisodeId =
     state === "succeeded"
       ? ((live ? liveEpisodeId : undefined) ??
-        latestJob?.episodeId ??
+        trackedJob?.episodeId ??
         undefined)
       : undefined
   const projection = useQuery({
@@ -154,7 +157,7 @@ export function useGeneration() {
     retryDelay: PROJECTION_RETRY_DELAY_MS,
   })
   const presentationState =
-    latestJob?.scheduleStatus === "retrying"
+    trackedJob?.scheduleStatus === "retrying"
       ? "retrying"
       : projectionEpisodeId === undefined
         ? state
@@ -216,13 +219,13 @@ export function useGeneration() {
   }
 
   return {
-    attempt: latestJob?.attempt,
-    maxAttempts: latestJob?.maxAttempts,
-    deadlineAt: latestJob?.deadlineAt ?? undefined,
-    lastProgressAt: latestJob?.lastProgressAt ?? undefined,
-    retryAt: latestJob?.nextAttemptAt ?? undefined,
+    attempt: trackedJob?.attempt,
+    maxAttempts: trackedJob?.maxAttempts,
+    deadlineAt: trackedJob?.deadlineAt ?? undefined,
+    lastProgressAt: trackedJob?.lastProgressAt ?? undefined,
+    retryAt: trackedJob?.nextAttemptAt ?? undefined,
     stageProgress: stageProgress ?? undefined,
-    failure: failureMessage(failure, latestJob?.id),
+    failure: failureMessage(failure, trackedJob?.id),
     retryLabel:
       recovery === "reselect"
         ? "記事を選び直して再生成"
@@ -234,7 +237,7 @@ export function useGeneration() {
     progress: state === "running" && stage ? stagePercent(stage) : undefined,
     stage: state === "running" && stage ? stageLabel(stage) : undefined,
     state: presentationState,
-    scheduleStatus: latestJob?.scheduleStatus ?? undefined,
+    scheduleStatus: trackedJob?.scheduleStatus ?? undefined,
     streaming: liveForThisJob && streamConnected,
     episode: latestEpisode
       ? {
@@ -261,11 +264,11 @@ export function useGeneration() {
     },
     onConfirmGenerate: generate,
     onCancel: () =>
-      latestJob &&
+      trackedJob &&
       runJobAction(
         () =>
           cancelJob.mutateAsync({
-            params: { path: { jobId: latestJob.id } },
+            params: { path: { jobId: trackedJob.id } },
           }),
         "生成をキャンセルできませんでした。状態を更新してからもう一度お試しください。"
       ),
@@ -273,17 +276,17 @@ export function useGeneration() {
       setSubmitError(undefined)
       if (recovery === "reselect") {
         createOperationKey.current.reset()
-        setPickerInitialArticleIds(latestJob?.articleIds ?? [])
+        setPickerInitialArticleIds(trackedJob?.articleIds ?? [])
         setPickerOpen(true)
         return
       }
-      if (recovery === "retry" && latestJob) {
-        const idempotencyKey = retryOperationKey.current.acquire(latestJob.id)
+      if (recovery === "retry" && trackedJob) {
+        const idempotencyKey = retryOperationKey.current.acquire(trackedJob.id)
         runJobAction(
           () =>
             retryJob.mutateAsync({
               params: {
-                path: { jobId: latestJob.id },
+                path: { jobId: trackedJob.id },
                 header: { "idempotency-key": idempotencyKey },
               },
             }),

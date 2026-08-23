@@ -9,6 +9,7 @@ describe("observability contract", () => {
     expect(new Set(metricNames).size).toBe(metricNames.length)
     expect(telemetryEventNames).toContain("episode.failed")
     expect(telemetryEventNames).toContain("episode.idempotency")
+    expect(telemetryEventNames).toContain("episode.admission")
     expect(telemetryEventNames).toContain("article.enrich.summary.degraded")
     expect(telemetryEventNames).toContain("rss.sync.degraded")
     expect(telemetryEventNames).toContain(
@@ -23,6 +24,8 @@ describe("observability contract", () => {
     expect(metricNames).toContain("http.server.error")
     expect(metricNames).toContain("process.error")
     expect(metricNames).toContain("episode.cancellation.propagation.duration")
+    expect(metricNames).toContain("episode.owner.active_jobs")
+    expect(metricNames).toContain("episode.owner.queue.oldest.age")
     expect(metricNames).toContain("article.enrich.attempt")
     expect(Object.keys(metricUnits).sort()).toEqual([...metricNames].sort())
   })

@@ -221,6 +221,7 @@
             }
           }
         },
+        "description": "Requires an authenticated owner and Idempotency-Key. Accepts 1 to 20 owned article IDs; replaying the same key and payload returns the same logical job, while a mismatched payload returns 409.",
         "summary": "Create an idempotent episode job",
         "requestBody": {
           "content": {
@@ -231,8 +232,7 @@
             }
           },
           "required": true
-        },
-        "description": "Requires an authenticated owner and Idempotency-Key. Accepts 1 to 20 owned article IDs; replaying the same key and payload returns the same logical job, while a mismatched payload returns 409."
+        }
       },
       "get": {
         "tags": [
@@ -631,8 +631,8 @@
             }
           }
         },
-        "summary": "Retry a failed episode job",
-        "description": "Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409."
+        "description": "Requires Idempotency-Key and creates a new owned job from a failed job. Replaying the same key for the same source job returns the same retry job; a mismatched request returns 409.",
+        "summary": "Retry a failed episode job"
       }
     },
     "/v1/episode-jobs/{jobId}/events": {
@@ -5296,6 +5296,70 @@
               "title",
               "status",
               "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Owner already has an active episode job"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "owner_active_job_exists"
+                ]
+              },
+              "activeJob": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                        "format": "uuid"
+                      }
+                    ]
+                  },
+                  "href": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^\\/v1\\/episode-jobs\\/[0-9a-f-]{36}$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "href"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code",
+              "activeJob"
             ],
             "additionalProperties": false
           },

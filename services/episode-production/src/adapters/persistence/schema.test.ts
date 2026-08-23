@@ -139,6 +139,57 @@ describe("episode-production migrated schema", () => {
     )
   })
 
+  it("atomically rejects a second active job for the same owner", () => {
+    const handle = open()
+    try {
+      const insert = handle.client.prepare(
+        `INSERT INTO episode_jobs(
+           job_id, owner_id, idempotency_key, request_fingerprint, trigger,
+           status, attempt, created_at, enqueued_at
+         ) VALUES (?, 'owner-1', ?, ?, 'manual', 'Queued', 0, ?, ?)`
+      )
+      insert.run("job-a", "key-a", "fingerprint-a", "t1", "t1")
+
+      expect(() =>
+        insert.run("job-b", "key-b", "fingerprint-b", "t2", "t2")
+      ).toThrow(/owner_active_job_exists/)
+      expect(() =>
+        handle.client
+          .prepare(
+            `INSERT INTO episode_jobs(
+               job_id, owner_id, idempotency_key, request_fingerprint, trigger,
+               status, attempt, created_at, enqueued_at
+             ) VALUES ('job-c', 'owner-2', 'key-c', 'fingerprint-c', 'scheduled',
+                       'Queued', 0, 't2', 't2')`
+          )
+          .run()
+      ).not.toThrow()
+
+      handle.client
+        .prepare(
+          `INSERT INTO episode_jobs(
+             job_id, owner_id, idempotency_key, request_fingerprint, trigger,
+             status, attempt, created_at, failed_at, failure_code, failure_retryable
+           ) VALUES ('job-terminal', 'owner-1', 'key-terminal', 'fingerprint-terminal',
+                     'scheduled', 'Failed', 1, 't0', 't1',
+                     'no_generation_candidates', 0)`
+        )
+        .run()
+      expect(() =>
+        handle.client
+          .prepare(
+            `UPDATE episode_jobs
+             SET status = 'Queued', attempt = 0, enqueued_at = 't3',
+                 failed_at = NULL, failure_code = NULL, failure_retryable = NULL
+             WHERE job_id = 'job-terminal'`
+          )
+          .run()
+      ).toThrow(/owner_active_job_exists/)
+    } finally {
+      handle.close()
+    }
+  })
+
   it("rejects a running job that has no lease", () => {
     const handle = open()
     try {

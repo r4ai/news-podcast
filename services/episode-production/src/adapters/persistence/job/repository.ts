@@ -13,6 +13,7 @@ import {
   type EpisodeJob,
   type JobId,
   type OwnerId,
+  type OwnerActiveJobConflict,
   type QueuedJob,
   type UtcTimestamp,
 } from "../../../domain/episode-job.js"
@@ -60,16 +61,44 @@ const repositoryFromHandle = (
     observation: IdempotencyObservation
   ) => Effect.Effect<void> = observeIdempotency
 ) => {
+  type SaveError =
+    | IdempotencyConflict
+    | OwnerActiveJobConflict
+    | ReturnType<typeof persistenceError>
+
   const save = (
     job: QueuedJob,
     scheduledFirstWriteWins: boolean,
     idempotencyScope: string
-  ) => {
+  ): Effect.Effect<EpisodeJob, SaveError> => {
     const encoded = encodeJob(job)
     const requestFingerprint = JSON.stringify(encoded.request)
     const operation = idempotencyScope.startsWith("retry:")
       ? ("retry" as const)
       : ("create" as const)
+    const rejectOwnerActive = (document: string) =>
+      decodeDocument(document).pipe(
+        Effect.flatMap((activeJob) =>
+          Effect.logWarning("episode job admission rejected", {
+            event_name: "episode.admission",
+            admission_outcome: "rejected",
+            admission_operation: operation,
+            owner_id: encoded.request.ownerId,
+            active_job_id: activeJob.jobId,
+            active_job_status: activeJob._tag.toLowerCase(),
+            active_job_created_at: encodeTimestamp(activeJob.createdAt),
+          }).pipe(
+            Effect.andThen(
+              Effect.fail<OwnerActiveJobConflict>(
+                deepFreeze<OwnerActiveJobConflict>({
+                  _tag: "OwnerActiveJobConflict" as const,
+                  activeJob,
+                })
+              )
+            )
+          )
+        )
+      )
 
     return Effect.try({
       try: () =>
@@ -83,13 +112,15 @@ const repositoryFromHandle = (
         }),
       catch: (cause) => persistenceError("save-job", cause),
     }).pipe(
-      Effect.flatMap((result) => {
+      Effect.flatMap((result): Effect.Effect<EpisodeJob, SaveError> => {
         if (result._tag === "Inserted")
           return observe({ operation, outcome: "accepted" }).pipe(
             Effect.as(job)
           )
+        if (result._tag === "OwnerActive")
+          return rejectOwnerActive(result.row.document)
         return decodeDocument(result.row.document).pipe(
-          Effect.flatMap((existing) => {
+          Effect.flatMap((existing): Effect.Effect<EpisodeJob, SaveError> => {
             if (
               scheduledFirstWriteWins &&
               existing.request.trigger === "scheduled" &&
@@ -112,8 +143,13 @@ const repositoryFromHandle = (
                   document: JSON.stringify(encodeJob(requeued)),
                 })
               ).pipe(
-                Effect.andThen(observe({ operation, outcome: "replay" })),
-                Effect.as(requeued)
+                Effect.flatMap((requeue) =>
+                  requeue._tag === "OwnerActive"
+                    ? rejectOwnerActive(requeue.row.document)
+                    : observe({ operation, outcome: "replay" }).pipe(
+                        Effect.as(requeued)
+                      )
+                )
               )
             }
             if (
@@ -206,6 +242,11 @@ const repositoryFromHandle = (
       Effect.try({
         try: () => handle.statusSnapshot(),
         catch: (cause) => persistenceError("status-snapshot", cause),
+      }),
+    ownerActiveSnapshot: () =>
+      Effect.try({
+        try: () => handle.ownerActiveSnapshot(),
+        catch: (cause) => persistenceError("owner-active-snapshot", cause),
       }),
     listOwnedAgUiEvents: (input: {
       readonly ownerId: OwnerId

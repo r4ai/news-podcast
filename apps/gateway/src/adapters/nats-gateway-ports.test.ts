@@ -43,6 +43,61 @@ import { toEpisodeJob } from "./nats/episode-job-ports.js"
 const episodeId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
 
 describe("NATS GatewayPorts adapter", () => {
+  it("maps create and retry admission rejection to the existing active job reference", async () => {
+    const client = fakeClient(async (request) => {
+      if (request.subject === subjects.identity.resolveSession)
+        return userSessionReply(request)
+      if (request.subject === subjects.production.createJob)
+        return encodedReply(
+          request.envelope,
+          "episode-production",
+          CreateEpisodeJobReplySchema,
+          { _tag: "ActiveJobConflict", activeJobId: ids[0] }
+        )
+      return encodedReply(
+        request.envelope,
+        "episode-production",
+        EpisodeJobControlReplySchema,
+        { _tag: "ActiveJobConflict", activeJobId: ids[0] }
+      )
+    })
+    const ports = makeNatsGatewayPorts(client, dependencies())
+    const headers = Schema.decodeUnknownSync(CreateEpisodeJobHeadersSchema)({
+      ...sessionHeaders,
+      "idempotency-key": "tab-b",
+    })
+    const payload = Schema.decodeUnknownSync(CreateEpisodeJobRequestSchema)({
+      trigger: "manual",
+      articleIds: [ids[3]],
+    })
+    const jobId = Schema.decodeUnknownSync(JobIdSchema)(ids[1])
+
+    const createProblem = await Effect.runPromise(
+      ports.createEpisodeJob({ headers, payload }).pipe(Effect.flip)
+    )
+    const retryProblem = await Effect.runPromise(
+      ports
+        .retryEpisodeJob({
+          headers,
+          jobId,
+          idempotencyKey: "retry-tab-b",
+        })
+        .pipe(Effect.flip)
+    )
+
+    for (const problem of [createProblem, retryProblem])
+      expect(problem).toEqual({
+        type: "about:blank",
+        title: "Owner already has an active episode job",
+        status: 409,
+        code: "owner_active_job_exists",
+        activeJob: {
+          id: ids[0],
+          href: `/v1/episode-jobs/${ids[0]}`,
+        },
+      })
+  })
+
   it.each([
     ["queued", "retrying"],
     ["succeeded", "succeeded"],

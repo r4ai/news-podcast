@@ -7,8 +7,11 @@ import { emptyGenerationStream, type GenerationStream } from "../model"
 
 // 実際の購読はしない。ストリームの状態はatomへ直接置いて動かす
 // (`useGeneration`はそのatomしか見ない)。
+const { streamedJobIds } = vi.hoisted(() => ({
+  streamedJobIds: [] as unknown[],
+}))
 vi.mock("./use-generation-stream", () => ({
-  useGenerationStream: () => {},
+  useGenerationStream: (jobId: unknown) => void streamedJobIds.push(jobId),
 }))
 vi.mock("@/shared/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -148,7 +151,10 @@ function stubProjection(
 }
 
 describe("useGeneration", () => {
-  beforeEach(() => vi.useFakeTimers())
+  beforeEach(() => {
+    vi.useFakeTimers()
+    streamedJobIds.length = 0
+  })
   afterEach(() => vi.useRealTimers())
 
   it("polls the job while the stream is down", async () => {
@@ -162,6 +168,43 @@ describe("useGeneration", () => {
 
     // 1秒間隔なので、2.5秒でも複数回追いかけている。
     expect(jobPolls(calls)).toBeGreaterThan(before)
+  })
+
+  it("tracks and controls an older active job when the newest job is terminal", async () => {
+    const terminalJob = {
+      ...runningJob,
+      id: "job-new-terminal",
+      status: "canceled",
+      stage: null,
+    }
+    const olderActive = { ...runningJob, id: "job-old-active" }
+    const { calls } = stubFetch([
+      {
+        path: "/v1/episode-jobs",
+        body: { items: [terminalJob, olderActive] },
+      },
+      ...routes().slice(1),
+      {
+        method: "POST",
+        path: `/v1/episode-jobs/${olderActive.id}/cancel`,
+        body: { ...olderActive, status: "canceled" },
+      },
+    ])
+    const { result } = renderHookWithProviders(() => useGeneration())
+
+    await vi.waitFor(() => expect(result.current?.state).toBe("running"))
+    expect(streamedJobIds.at(-1)).toBe(olderActive.id)
+
+    act(() => result.current?.onCancel())
+    await vi.waitFor(() =>
+      expect(
+        calls.some(
+          ({ method, url }) =>
+            method === "POST" &&
+            url === `/v1/episode-jobs/${olderActive.id}/cancel`
+        )
+      ).toBe(true)
+    )
   })
 
   it("stops polling as soon as the stream is connected", async () => {

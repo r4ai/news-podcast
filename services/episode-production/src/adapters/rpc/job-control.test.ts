@@ -223,6 +223,26 @@ describe("episode job-control NATS RPC", () => {
     })
   })
 
+  it("returns the existing active job reference when retry admission rejects", async () => {
+    const replies: string[] = []
+
+    await Effect.runPromise(
+      handleRetryJobRpc({
+        retry: () =>
+          Effect.fail({
+            _tag: "OwnerActiveJobConflict" as const,
+            activeJob: queued,
+          }),
+        replyDependencies,
+      })(delivery(envelope({ jobId, idempotencyKey: "retry-1" }), replies))
+    )
+
+    expect(replyPayload(replies[0]!)).toEqual({
+      _tag: "ActiveJobConflict",
+      activeJobId: jobId,
+    })
+  })
+
   it("replays the persisted terminal retry result for an explicit key", async () => {
     const replies: string[] = []
     const retried = newQueuedJob({

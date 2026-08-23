@@ -13,6 +13,7 @@ import {
   resolvedJobStatus,
   sameAdoptedArticles,
   sameJobFailure,
+  selectTrackedJob,
   selectionLabel,
   type GenerationStream,
 } from "./model"
@@ -128,6 +129,30 @@ describe("reduceGenerationStream", () => {
 })
 
 describe("view model helpers", () => {
+  it.each(["queued", "running", "retrying"] as const)(
+    "tracks an older %s job ahead of newer terminal history",
+    (status) => {
+      const jobs = [
+        { id: "new-terminal", status: "succeeded" as const },
+        { id: "old-active", status },
+      ]
+
+      expect(selectTrackedJob(jobs)?.id).toBe("old-active")
+    }
+  )
+
+  it.each(["succeeded", "failed", "canceled"] as const)(
+    "falls back to the newest %s terminal job when no active job exists",
+    (status) => {
+      const jobs = [
+        { id: "new-terminal", status },
+        { id: "old-terminal", status: "failed" as const },
+      ]
+
+      expect(selectTrackedJob(jobs)?.id).toBe("new-terminal")
+    }
+  )
+
   it.each([
     ["content_materialization_invalid", "reselect"],
     ["script_unavailable", "retry"],

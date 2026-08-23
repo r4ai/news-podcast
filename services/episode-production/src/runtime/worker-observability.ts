@@ -10,6 +10,52 @@ import type { CancellationPropagation } from "./loops/worker.js"
 type WorkerTelemetry = Pick<Observability, "count" | "log"> &
   Partial<Pick<Observability, "measure">>
 
+type JobSnapshot = {
+  readonly status: string
+  readonly count: number
+  readonly oldestActiveAt?: string
+}
+
+type OwnerActiveSnapshot = {
+  readonly ownerId: string
+  readonly count: number
+  readonly oldestActiveAt: string
+}
+
+export const recordEpisodeJobSnapshots = (
+  observability: Pick<Observability, "gauge">,
+  input: {
+    readonly now: string
+    readonly statuses: readonly JobSnapshot[]
+    readonly owners: readonly OwnerActiveSnapshot[]
+  }
+): void => {
+  const age = (createdAt: string): number =>
+    Math.max(0, Date.parse(input.now) - Date.parse(createdAt))
+
+  for (const state of input.statuses)
+    observability.gauge("episode.jobs", state.count, {
+      "job.status": state.status,
+    })
+  const oldest = input.statuses
+    .map((state) => state.oldestActiveAt)
+    .filter((value): value is string => value !== undefined)
+    .sort()[0]
+  observability.gauge(
+    "episode.queue.oldest.age",
+    oldest === undefined ? 0 : age(oldest)
+  )
+  for (const owner of input.owners) {
+    const attributes = { "owner.id": owner.ownerId }
+    observability.gauge("episode.owner.active_jobs", owner.count, attributes)
+    observability.gauge(
+      "episode.owner.queue.oldest.age",
+      age(owner.oldestActiveAt),
+      attributes
+    )
+  }
+}
+
 export const recordScriptQualityObservation = (
   observability: WorkerTelemetry,
   observation: ScriptQualityObservation

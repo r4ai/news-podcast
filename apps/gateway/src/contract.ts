@@ -817,6 +817,18 @@ const idempotencyConflictProblem = problemVariant(
   "Idempotency conflict",
   "idempotency_conflict"
 )
+const ownerActiveJobProblem = Schema.Struct({
+  type: Schema.Literal("about:blank"),
+  title: Schema.Literal("Owner already has an active episode job"),
+  status: Schema.Literal(409),
+  code: Schema.Literal("owner_active_job_exists"),
+  activeJob: Schema.Struct({
+    id: JobIdSchema,
+    href: Schema.String.check(
+      Schema.isPattern(/^\/v1\/episode-jobs\/[0-9a-f-]{36}$/)
+    ),
+  }),
+})
 const resourceConflictProblem = problemVariant(
   409,
   "Resource conflict",
@@ -859,6 +871,7 @@ export const ForbiddenProblemSchema = forbiddenProblem
   .pipe(HttpApiSchema.status(403))
 export const ConflictProblemSchema = Schema.Union([
   idempotencyConflictProblem,
+  ownerActiveJobProblem,
   resourceConflictProblem,
   feedSubscriptionExistsProblem,
   jobTerminalProblem,
@@ -936,6 +949,8 @@ export const createEpisodeJobEndpoint = HttpApiEndpoint.post(
   OpenApi.annotations({
     identifier: "createEpisodeJob",
     summary: "Create an idempotent episode job",
+    description:
+      "Replays the same Idempotency-Key scope. A different logical request is rejected while the owner has a queued, running, or retrying job; the 409 response references that active job.",
   })
 )
 
@@ -1030,6 +1045,8 @@ export const retryEpisodeJobEndpoint = HttpApiEndpoint.post(
   OpenApi.annotations({
     identifier: "retryEpisodeJob",
     summary: "Retry an episode job",
+    description:
+      "Creates an idempotent retry job only when the owner has no queued, running, or retrying job. An admission conflict returns 409 with the active job reference.",
   })
 )
 
