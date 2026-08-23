@@ -2,7 +2,7 @@ import { EventSchemas } from "@ag-ui/core"
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { EpisodeJobAgUiEventSchema } from "./contract.js"
+import { EpisodeJobAgUiEventSchema, EpisodeJobSchema } from "./contract.js"
 
 const jobId = "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80"
 const runId = `${jobId}:attempt:1`
@@ -58,5 +58,23 @@ describe("episode job AG-UI contract", () => {
         stepName: "researching_sources",
       })
     ).toThrow()
+  })
+
+  it("relays an unknown future failure code during rolling deployments", () => {
+    const decoded = Schema.decodeUnknownSync(EpisodeJobSchema)({
+      id: jobId,
+      status: "failed",
+      trigger: "manual",
+      createdAt: "2026-08-23T00:00:00.000Z",
+      attempt: 4,
+      maxAttempts: 4,
+      failure: {
+        code: "future_provider_failure",
+        message: "Internal detail",
+        retryable: false,
+      },
+    })
+
+    expect(decoded.failure?.code).toBe("future_provider_failure")
   })
 })

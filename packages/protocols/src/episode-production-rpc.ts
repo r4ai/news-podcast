@@ -42,6 +42,10 @@ const EpisodeJobStageSchema = Schema.Literals([
   "synthesizing_audio",
   "storing_episode",
 ])
+const ForwardCompatibleEpisodeFailureCodeSchema = Schema.Union([
+  Schema.Literals(episodeFailureCodes),
+  boundedText(200),
+])
 
 export const CreateEpisodeJobReplySchema = Schema.Union([
   Schema.TaggedStruct("Accepted", {
@@ -90,7 +94,7 @@ export const ProductionEpisodeJobSchema = Schema.Union([
     attempt: Schema.Literals([1, 2, 3]),
     retryAt: UtcInstantSchema,
     failure: Schema.Struct({
-      code: Schema.Literals(episodeFailureCodes),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       retryable: Schema.Literal(true),
     }),
   }),
@@ -107,7 +111,7 @@ export const ProductionEpisodeJobSchema = Schema.Union([
     attempt: Schema.Literals([1, 2, 3, 4]),
     failedAt: UtcInstantSchema,
     failure: Schema.Struct({
-      code: Schema.Literals(episodeFailureCodes),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       retryable: Schema.Literal(false),
     }),
   }),

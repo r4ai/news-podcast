@@ -128,7 +128,7 @@ export function useGeneration() {
   useEffect(() => {
     if (failureCode === undefined || failureJobId === undefined) return
     recordBrowserEvent("episode.failure_presented", {
-      "episode.job.id": failureJobId,
+      "job.id": failureJobId,
       "failure.code": isEpisodeFailureCode(failureCode)
         ? failureCode
         : "unknown",

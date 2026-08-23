@@ -151,7 +151,7 @@ pnpm test:e2e:live
 
 進捗wire契約、`Last-Event-ID`、標準eventとtransport拡張の境界は[Episode Job進捗プロトコル](protocols/episode-job-ag-ui.md)を正本とする。
 
-Episode生成の失敗コードを追加する場合は`packages/contracts/src/episode-failure.ts`へcodeとfamilyを同時に追加し、Production、RPC、OpenAPI生成物、Webのcomponent testを更新する。`failure.message`は利用者向け文言ではなく、Webへ直接表示しない。未知コードはjob ID付きの安全な汎用文言へ縮退する（[ADR-0083](adr/0083-share-episode-failure-code-contract.md)）。
+Episode生成の失敗コードを追加する場合は`packages/contracts/src/episode-failure.ts`へcodeとfamilyを同時に追加し、Production、RPC、OpenAPI生成物、Webのcomponent testを更新する。Productionはこのclosed集合だけを生成し、RPC/Gatewayはrolling deployment中のboundedな未知値も中継する。`failure.message`は利用者向け文言ではなく、Webへ直接表示しない。未知コードはjob ID付きの安全な汎用文言へ縮退する（[ADR-0083](adr/0083-share-episode-failure-code-contract.md)）。
 
 ## OpenAPI契約
 

@@ -1,5 +1,5 @@
-import { deepFreeze } from "@news-podcast/kernel"
 import { episodeFailureCodes } from "@news-podcast/contracts/episode-failure"
+import { deepFreeze } from "@news-podcast/kernel"
 import { TraceparentSchema } from "@news-podcast/protocols"
 import { Schema } from "effect"
 import {
@@ -96,6 +96,13 @@ const ReplayAssetNameSchema = Schema.String.check(
   Schema.isMaxLength(81)
 )
 const UserIdSchema = boundedText(255).pipe(Schema.brand("PublicUserId"))
+const ForwardCompatibleEpisodeFailureCodeSchema = Schema.Union([
+  Schema.Literals(episodeFailureCodes),
+  boundedText(200),
+]).annotate({
+  description:
+    "Machine-readable Episode generation failure code. The enum lists known values; clients must safely handle bounded future values during rolling deployments.",
+})
 
 export const HealthResponseSchema = Schema.Struct({
   status: Schema.Literal("ok"),
@@ -209,10 +216,7 @@ const jobFields = {
   episodeId: Schema.optional(EpisodeIdSchema),
   failure: Schema.optional(
     Schema.Struct({
-      code: Schema.Literals(episodeFailureCodes).annotate({
-        description:
-          "Stable machine-readable Episode generation failure code. Preserve it in logs and traces; clients must use safe copy for unknown future values.",
-      }),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       message: boundedText(500),
       retryable: Schema.Boolean,
     })
@@ -275,7 +279,7 @@ const EpisodeJobStateSchema = Schema.Struct({
   currentStage: Schema.optional(JobStageSchema),
   failure: Schema.optional(
     Schema.Struct({
-      code: Schema.Literals(episodeFailureCodes),
+      code: ForwardCompatibleEpisodeFailureCodeSchema,
       message: boundedText(500),
       retryable: Schema.Boolean,
     })
