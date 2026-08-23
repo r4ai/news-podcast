@@ -55,90 +55,100 @@ export const withSqliteWriteBarrier = async ({
     }
     return releaseError
   }
+  let result
+  let barrierError
   try {
-    for (const profile of databaseProfiles) {
-      const source = databaseSources?.[profile]
-      if (typeof source !== "string") fail(`missing ${profile} database source`)
-      await access(source)
-      const remaining = Math.floor(timeoutMillis - (monotonicNow() - startedAt))
-      if (remaining <= 0) {
-        rejectGeneration(
-          "barrier_timeout",
-          `backup write barrier timed out before ${profile}`,
-          { barrierDurationMillis: monotonicNow() - startedAt }
+    result = await (async () => {
+      for (const profile of databaseProfiles) {
+        const source = databaseSources?.[profile]
+        if (typeof source !== "string")
+          fail(`missing ${profile} database source`)
+        await access(source)
+        const remaining = Math.floor(
+          timeoutMillis - (monotonicNow() - startedAt)
         )
+        if (remaining <= 0) {
+          rejectGeneration(
+            "barrier_timeout",
+            `backup write barrier timed out before ${profile}`,
+            { barrierDurationMillis: monotonicNow() - startedAt }
+          )
+        }
+        const database = new DatabaseSync(source, { timeout: remaining })
+        try {
+          database.exec(`PRAGMA busy_timeout = ${remaining}; BEGIN IMMEDIATE`)
+        } catch (error) {
+          database.close()
+          const reason =
+            error?.code === "SQLITE_BUSY" || error?.code === "SQLITE_LOCKED"
+              ? "barrier_timeout"
+              : "barrier_acquisition"
+          rejectGeneration(
+            reason,
+            `backup write barrier rejected at ${profile}: ${error instanceof Error ? error.message : String(error)}`,
+            { barrierDurationMillis: monotonicNow() - startedAt }
+          )
+        }
+        databases.push(database)
       }
-      const database = new DatabaseSync(source, { timeout: remaining })
-      try {
-        database.exec(`PRAGMA busy_timeout = ${remaining}; BEGIN IMMEDIATE`)
-      } catch (error) {
-        database.close()
-        const reason =
-          error?.code === "SQLITE_BUSY" || error?.code === "SQLITE_LOCKED"
-            ? "barrier_timeout"
-            : "barrier_acquisition"
-        rejectGeneration(
-          reason,
-          `backup write barrier rejected at ${profile}: ${error instanceof Error ? error.message : String(error)}`,
-          { barrierDurationMillis: monotonicNow() - startedAt }
-        )
-      }
-      databases.push(database)
-    }
 
-    const controller = new AbortController()
-    const deadlineError = new Error(
-      "backup write barrier exceeded its bounded duration"
-    )
-    deadlineError.code = "barrier_duration_exceeded"
-    const remainingDuration = Math.max(
-      1,
-      timeoutMillis - (monotonicNow() - startedAt)
-    )
-    let deadlineTimer
-    const deadline = new Promise((_, reject) => {
-      deadlineTimer = setTimeout(() => {
-        deadlineExpired = true
-        deadlineError.barrierDurationMillis = monotonicNow() - startedAt
-        controller.abort(deadlineError)
-        release()
-        reject(deadlineError)
-      }, remainingDuration)
-    })
-    const pendingOperation = Promise.resolve().then(() =>
-      operation({ signal: controller.signal })
-    )
-    let value
-    try {
-      value = await Promise.race([pendingOperation, deadline])
-    } catch (error) {
-      if (deadlineExpired) {
-        await pendingOperation.catch(() => undefined)
-        throw deadlineError
-      }
-      if (
-        error instanceof Error &&
-        !Number.isFinite(error.barrierDurationMillis)
-      ) {
-        error.barrierDurationMillis = monotonicNow() - startedAt
-      }
-      throw error
-    } finally {
-      clearTimeout(deadlineTimer)
-    }
-    const durationMillis = Math.max(0, monotonicNow() - startedAt)
-    if (durationMillis > timeoutMillis) {
-      rejectGeneration(
-        "barrier_duration_exceeded",
-        "backup write barrier exceeded its bounded duration",
-        { barrierDurationMillis: durationMillis }
+      const controller = new AbortController()
+      const deadlineError = new Error(
+        "backup write barrier exceeded its bounded duration"
       )
-    }
-    return { value, durationMillis: Math.round(durationMillis) }
-  } finally {
-    const error = release()
-    if (error && !deadlineExpired) throw error
+      deadlineError.code = "barrier_duration_exceeded"
+      const remainingDuration = Math.max(
+        1,
+        timeoutMillis - (monotonicNow() - startedAt)
+      )
+      let deadlineTimer
+      const deadline = new Promise((_, reject) => {
+        deadlineTimer = setTimeout(() => {
+          deadlineExpired = true
+          deadlineError.barrierDurationMillis = monotonicNow() - startedAt
+          controller.abort(deadlineError)
+          release()
+          reject(deadlineError)
+        }, remainingDuration)
+      })
+      const pendingOperation = Promise.resolve().then(() =>
+        operation({ signal: controller.signal })
+      )
+      let value
+      try {
+        value = await Promise.race([pendingOperation, deadline])
+      } catch (error) {
+        if (deadlineExpired) {
+          await pendingOperation.catch(() => undefined)
+          throw deadlineError
+        }
+        if (
+          error instanceof Error &&
+          !Number.isFinite(error.barrierDurationMillis)
+        ) {
+          error.barrierDurationMillis = monotonicNow() - startedAt
+        }
+        throw error
+      } finally {
+        clearTimeout(deadlineTimer)
+      }
+      const durationMillis = Math.max(0, monotonicNow() - startedAt)
+      if (durationMillis > timeoutMillis) {
+        rejectGeneration(
+          "barrier_duration_exceeded",
+          "backup write barrier exceeded its bounded duration",
+          { barrierDurationMillis: durationMillis }
+        )
+      }
+      return { value, durationMillis: Math.round(durationMillis) }
+    })()
+  } catch (error) {
+    barrierError = error
   }
+  const cleanupError = release()
+  if (barrierError) throw barrierError
+  if (cleanupError) throw cleanupError
+  return result
 }
 
 const sha256 = (input) => createHash("sha256").update(input).digest("hex")
