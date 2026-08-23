@@ -24,6 +24,9 @@ describe("EnrichQueueDialogHost", () => {
 
     act(() => store.set(enrichQueueOpenAtom, true))
 
+    expect(screen.getByRole("status").textContent).toBe(
+      "AI処理キューを読み込み中…"
+    )
     expect(
       await screen.findByRole("dialog", { name: "AI処理キュー" })
     ).toBeDefined()

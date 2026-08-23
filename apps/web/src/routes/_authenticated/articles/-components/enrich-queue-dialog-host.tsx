@@ -34,10 +34,21 @@ export function EnrichQueueDialogHost() {
         })
       }
     >
-      <Suspense fallback={null}>
+      <Suspense fallback={<DialogLoadingStatus />}>
         <ConnectedEnrichQueueDialog />
       </Suspense>
     </CatchBoundary>
+  )
+}
+
+function DialogLoadingStatus() {
+  return (
+    <p
+      className="pointer-events-none fixed right-4 bottom-[calc(var(--app-nav-h)+var(--player-h)+1rem)] z-50 rounded-lg border bg-background px-3 py-2 text-sm shadow-lg md:bottom-[calc(var(--player-h)+1rem)]"
+      role="status"
+    >
+      AI処理キューを読み込み中…
+    </p>
   )
 }
 
