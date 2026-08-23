@@ -280,6 +280,39 @@ describe("Gateway HTTP runtime", () => {
     }
   })
 
+  it.each([
+    ["https://example.com", "https://example.com/"],
+    ["https://EXAMPLE.com/feed", "https://example.com/feed"],
+    ["https://example.com:443/feed", "https://example.com/feed"],
+    [
+      "https://example.com/a b?q=hello world&next=%2f",
+      "https://example.com/a%20b?q=hello%20world&next=%2f",
+    ],
+  ])("passes a canonical feed URL through HTTP", async (input, expected) => {
+    const subscription = Schema.decodeUnknownSync(FeedSubscriptionSchema)({
+      id: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      feedId: "0c6bd9aa-f349-4c16-af84-acb845aa9d47",
+      enabled: true,
+      createdAt: "2026-08-12T00:00:00.000Z",
+    })
+    const addFeedSubscription = vi.fn(() => Effect.succeed(subscription))
+    const runtime = makeGatewayWebHandler({ ...ports, addFeedSubscription })
+
+    const response = await runtime.handler(
+      new Request("http://gateway.test/v1/me/feed-subscriptions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ feedUrl: input }),
+      })
+    )
+
+    expect(response.status).toBe(201)
+    expect(addFeedSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { feedUrl: expected } })
+    )
+    await runtime.dispose()
+  })
+
   it("serves job control, episode detail, and terminal replay routes", async () => {
     const job = Schema.decodeUnknownSync(EpisodeJobSchema)({
       id: "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",

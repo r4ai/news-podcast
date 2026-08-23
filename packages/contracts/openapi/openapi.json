@@ -1231,6 +1231,16 @@
               }
             }
           },
+          "409": {
+            "description": "ConflictProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictProblem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "UnprocessableProblem",
             "content": {
@@ -1263,7 +1273,7 @@
           },
           "required": true
         },
-        "description": "Creates an authenticated owner subscription for a canonical credential-free HTTP(S) feed URL and queues synchronization."
+        "description": "Canonicalizes a credential-free, fragment-free HTTP(S) RSS/Atom URL, creates the authenticated owner's subscription, and queues synchronization; an existing canonical subscription returns 409."
       },
       "get": {
         "tags": [
@@ -1858,6 +1868,16 @@
               }
             }
           },
+          "409": {
+            "description": "ConflictProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictProblem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "UnprocessableProblem",
             "content": {
@@ -1890,7 +1910,7 @@
           "required": true
         },
         "summary": "Register a feed and subscribe",
-        "description": "Registers a canonical credential-free RSS URL and creates the authenticated owner's subscription in one request."
+        "description": "Canonicalizes and registers a credential-free, fragment-free HTTP(S) RSS/Atom URL for the authenticated owner; an existing canonical subscription returns 409."
       }
     },
     "/v1/me/articles": {
@@ -5334,6 +5354,42 @@
               "title": {
                 "type": "string",
                 "enum": [
+                  "Feed subscription already exists"
+                ]
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "feed_subscription_exists"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "about:blank"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
                   "Episode job state conflict"
                 ]
               },
@@ -6183,11 +6239,7 @@
         "properties": {
           "feedUrl": {
             "type": "string",
-            "allOf": [
-              {
-                "maxLength": 2048
-              }
-            ]
+            "description": "Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; the canonical result must be at most 2,048 characters, and credentials and fragments are forbidden."
           }
         },
         "required": [

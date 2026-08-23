@@ -31,6 +31,7 @@ import {
   badRequest,
   normalizeProblem,
   subscriptionNotFound,
+  subscriptionExists,
   unauthorized,
   unavailable,
   unprocessable,
@@ -50,6 +51,7 @@ type FeedSyncJobPage = TypeOf<typeof FeedSyncJobPageSchema>
 
 type AddSubscriptionFailure =
   | ReturnType<typeof unauthorized>
+  | ReturnType<typeof subscriptionExists>
   | ReturnType<typeof unprocessable>
   | ReturnType<typeof unavailable>
 type ListSubscriptionsFailure =
@@ -73,6 +75,7 @@ const toAddedSubscription = (
       enabled: reply.subscription.enabled,
       createdAt: reply.subscription.createdAt,
     }).pipe(Effect.mapError(unavailable))
+  if (reply._tag === "Existing") return Effect.fail(subscriptionExists())
   if (reply.code === "INVALID_REQUEST") return Effect.fail(unprocessable())
   if (reply.code === "UNAUTHENTICATED") return Effect.fail(unauthorized())
   return Effect.fail(unavailable())
@@ -284,6 +287,7 @@ export const makeFeedPorts = (transport: Transport): FeedPorts => {
           ): Effect.Effect<
             TypeOf<typeof RegisteredFeedSchema>,
             | ReturnType<typeof unauthorized>
+            | ReturnType<typeof subscriptionExists>
             | ReturnType<typeof unprocessable>
             | ReturnType<typeof unavailable>
           > =>
@@ -302,11 +306,13 @@ export const makeFeedPorts = (transport: Transport): FeedPorts => {
                     createdAt: reply.subscription.createdAt,
                   },
                 }).pipe(Effect.mapError(unavailable))
-              : reply.code === "UNAUTHENTICATED"
-                ? Effect.fail(unauthorized())
-                : reply.code === "INVALID_REQUEST"
-                  ? Effect.fail(unprocessable())
-                  : Effect.fail(unavailable())
+              : reply._tag === "Existing"
+                ? Effect.fail(subscriptionExists())
+                : reply.code === "UNAUTHENTICATED"
+                  ? Effect.fail(unauthorized())
+                  : reply.code === "INVALID_REQUEST"
+                    ? Effect.fail(unprocessable())
+                    : Effect.fail(unavailable())
         ),
         Effect.mapError(normalizeProblem)
       ),

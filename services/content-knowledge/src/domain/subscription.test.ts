@@ -26,6 +26,7 @@ describe("feed subscription domain", () => {
     [FeedUrlSchema, "file:///etc/passwd"],
     [FeedUrlSchema, "https://user:secret@example.com/feed"],
     [FeedUrlSchema, "https://example.com/feed#fragment"],
+    [FeedUrlSchema, "https://example.com/feed#"],
     [FeedUrlSchema, "https://EXAMPLE.com/feed"],
   ])("rejects a non-canonical or unsafe value", (schema, input) => {
     expect(() => Schema.decodeUnknownSync(schema)(input)).toThrow()

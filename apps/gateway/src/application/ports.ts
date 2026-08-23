@@ -165,6 +165,7 @@ export type GatewayPorts = Readonly<{
     TypeOf<typeof FeedSubscriptionSchema>,
     | TypeOf<typeof BadRequestProblemSchema>
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
     | TypeOf<typeof UnprocessableProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
@@ -226,6 +227,7 @@ export type GatewayPorts = Readonly<{
   }) => Effect.Effect<
     TypeOf<typeof RegisteredFeedSchema>,
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
     | TypeOf<typeof UnprocessableProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
