@@ -147,7 +147,7 @@ describe("Effect AI ScriptGenerator", () => {
     expect(draft).toEqual({
       title: success.title,
       script: success.script,
-      sourceUrls: [source.url],
+      sourceIndexes: [0],
     })
     expect(Object.isFrozen(draft)).toBe(true)
     expect(prompt).toContain("interest_profile")
@@ -169,7 +169,7 @@ describe("Effect AI ScriptGenerator", () => {
     ).resolves.toEqual({ _tag: "MalformedResponse" })
   })
 
-  it("maps opaque source ids back to the persisted URL spelling", async () => {
+  it("maps opaque source ids to stable materialized positions", async () => {
     const unicodeSource = {
       ...source,
       url: "https://example.test/日本語/記事",
@@ -187,7 +187,29 @@ describe("Effect AI ScriptGenerator", () => {
       generator.generate({ sources: [unicodeSource] })
     )
 
-    expect(generated.sourceUrls).toEqual([unicodeSource.url])
+    expect(generated.sourceIndexes).toEqual([0])
+  })
+
+  it("preserves the selected source position when two articles share a URL", async () => {
+    const generator = makeOpenAiScriptGenerator(config, {
+      languageModelLayer: makeScriptLanguageModelLayer(() =>
+        Effect.succeed({
+          ...success,
+          source_ids: ["source-2"],
+        })
+      ),
+    })
+
+    const generated = await Effect.runPromise(
+      generator.generate({
+        sources: [
+          { ...source, title: "Article A" },
+          { ...source, title: "Article B" },
+        ],
+      })
+    )
+
+    expect(generated.sourceIndexes).toEqual([1])
   })
 
   it("feeds Effect AI rate limits into the existing Retry-After policy", async () => {

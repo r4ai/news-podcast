@@ -4,7 +4,7 @@
 - Date: 2026-08-19
 - Decision owners: Episode Production / Architecture
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0090
 - Related: Issue #37、ADR-0007、ADR-0016、ADR-0038、ADR-0059、ADR-0062
 
 ## コンテキストと変更契機

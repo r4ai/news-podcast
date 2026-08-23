@@ -17,7 +17,7 @@ export const makeFakeScriptGenerator = (): ScriptGenerator =>
         deepFreeze({
           title: TITLE,
           script: `これはローカル検証用のfake providerが生成した台本です。${firstTitle.slice(0, 100)}を確認しました。`,
-          sourceUrls: sources.map(({ url }) => url),
+          sourceIndexes: sources.map((_, index) => index),
         })
       )
     },

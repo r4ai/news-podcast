@@ -31,7 +31,7 @@ export type MaterializedArticle = DeepReadonly<{
 }>
 
 export type ScriptSourceProvenance = DeepReadonly<
-  Omit<MaterializedArticle, "markdown">
+  Omit<MaterializedArticle, "markdown"> & { readonly sourceIndex: number }
 >
 
 export type ArticleSelection =

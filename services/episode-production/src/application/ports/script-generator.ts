@@ -22,7 +22,7 @@ export type ScriptGenerationRequest = DeepReadonly<{
 export type GeneratedScript = DeepReadonly<{
   readonly title: string
   readonly script: string
-  readonly sourceUrls: readonly string[]
+  readonly sourceIndexes: readonly number[]
 }>
 
 export type ScriptGenerationFailure =

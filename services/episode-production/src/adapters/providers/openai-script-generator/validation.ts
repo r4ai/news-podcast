@@ -13,7 +13,7 @@ export const validateGeneratedScript = (
   request: ScriptGenerationRequest
 ): Effect.Effect<GeneratedScript, ProviderFailure> => {
   const allowed = new Map(
-    request.sources.map((source, index) => [`source-${index + 1}`, source.url])
+    request.sources.map((_, index) => [`source-${index + 1}`, index])
   )
   const uniqueSources = new Set(payload.source_ids)
   if (
@@ -26,7 +26,7 @@ export const validateGeneratedScript = (
     deepFreeze({
       title: payload.title,
       script: payload.script,
-      sourceUrls: payload.source_ids.map((id) => allowed.get(id)!),
+      sourceIndexes: payload.source_ids.map((id) => allowed.get(id)!),
     })
   )
 }

@@ -74,9 +74,11 @@ const jobDeadlineExceeded = (): PipelineFailure =>
   })
 
 const sourceProvenanceOf = (
-  source: MaterializedArticle
+  source: MaterializedArticle,
+  sourceIndex: number
 ): ScriptSourceProvenance =>
   deepFreeze({
+    sourceIndex,
     articleId: source.articleId,
     snapshotId: source.snapshotId,
     title: source.title,
@@ -85,6 +87,19 @@ const sourceProvenanceOf = (
       ? {}
       : { publishedAt: source.publishedAt }),
   })
+
+const hasValidSourceIndexes = (
+  sourceIndexes: readonly number[],
+  upperBound?: number
+) =>
+  sourceIndexes.length > 0 &&
+  new Set(sourceIndexes).size === sourceIndexes.length &&
+  sourceIndexes.every(
+    (sourceIndex) =>
+      Number.isSafeInteger(sourceIndex) &&
+      sourceIndex >= 0 &&
+      (upperBound === undefined || sourceIndex < upperBound)
+  )
 
 const failWhenCanceled = (
   signal: AbortSignal | undefined
@@ -389,15 +404,7 @@ export const executeEpisodeJob =
           })
           .pipe(Effect.mapError(withProviderStage("script")))
         yield* assertLease()
-        const generatedSources = script.sourceUrls.map((url) =>
-          articles.find((candidate) => candidate.url === url)
-        )
-        const firstSource = generatedSources[0]
-        if (
-          firstSource === undefined ||
-          generatedSources.some((source) => source === undefined) ||
-          generatedSources.length === 0
-        ) {
+        if (!hasValidSourceIndexes(script.sourceIndexes, articles.length)) {
           return yield* Effect.fail<PipelineFailure>(
             deepFreeze({
               _tag: "PipelineFailure",
@@ -406,14 +413,18 @@ export const executeEpisodeJob =
             })
           )
         }
+        const generatedSources = script.sourceIndexes.map((sourceIndex) => ({
+          sourceIndex,
+          source: articles[sourceIndex]!,
+        }))
+        const firstSource = generatedSources[0]
         const generatedProvenance = [
-          sourceProvenanceOf(firstSource),
+          sourceProvenanceOf(firstSource!.source, firstSource!.sourceIndex),
           ...generatedSources
             .slice(1)
-            .filter(
-              (source): source is MaterializedArticle => source !== undefined
-            )
-            .map(sourceProvenanceOf),
+            .map(({ source, sourceIndex }) =>
+              sourceProvenanceOf(source, sourceIndex)
+            ),
         ] as const
         sourceProvenance = generatedProvenance
         yield* ports.persistence.saveScriptCheckpoint({
@@ -423,6 +434,36 @@ export const executeEpisodeJob =
           sources: generatedProvenance,
         })
         yield* markStep("generating_script", "finished")
+      }
+
+      if (
+        !hasValidSourceIndexes(script.sourceIndexes) ||
+        sourceProvenance === undefined ||
+        sourceProvenance.length !== script.sourceIndexes.length ||
+        new Set(sourceProvenance.map(({ sourceIndex }) => sourceIndex)).size !==
+          sourceProvenance.length
+      ) {
+        return yield* Effect.fail<PipelineFailure>(
+          deepFreeze({
+            _tag: "PipelineFailure",
+            code: "invalid_script_sources",
+            retryable: false,
+          })
+        )
+      }
+      const used = script.sourceIndexes.map((sourceIndex) =>
+        sourceProvenance.find(
+          (candidate) => candidate.sourceIndex === sourceIndex
+        )
+      )
+      if (used.some((source) => source === undefined)) {
+        return yield* Effect.fail<PipelineFailure>(
+          deepFreeze({
+            _tag: "PipelineFailure",
+            code: "invalid_script_sources",
+            retryable: false,
+          })
+        )
       }
 
       if (dictionarySnapshot === undefined) {
@@ -450,19 +491,6 @@ export const executeEpisodeJob =
         })
         dictionarySnapshot = dictionary
         yield* markStep("preparing_pronunciation", "finished")
-      }
-
-      const used = script.sourceUrls.map((url) =>
-        sourceProvenance?.find((candidate) => candidate.url === url)
-      )
-      if (used.some((source) => source === undefined) || used.length === 0) {
-        return yield* Effect.fail<PipelineFailure>(
-          deepFreeze({
-            _tag: "PipelineFailure",
-            code: "invalid_script_sources",
-            retryable: false,
-          })
-        )
       }
 
       let audio = checkpoint?.audio

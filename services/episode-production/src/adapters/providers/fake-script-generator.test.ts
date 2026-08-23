@@ -21,7 +21,7 @@ describe("fake script generator", () => {
       title: "ローカル検証ニュース",
       script:
         "これはローカル検証用のfake providerが生成した台本です。SQLiteの運用を確認しました。",
-      sourceUrls: ["https://example.com/sqlite"],
+      sourceIndexes: [0],
     })
   })
 })

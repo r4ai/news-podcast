@@ -327,7 +327,7 @@ AG-UI timelineは標準`RUN_ERROR`と`RUN_FINISHED`で未完了stepを閉じる�
 
 ### 8.4 GenerationPlanとdurable進捗
 
-自動生成はContent Knowledgeが所有する最新InterestProfileと、有効な購読に属し成功済み自動Planで未使用の記事metadataから選定し、本文取得前にGenerationPlanを固定する。候補取得・手動選択・初回の本文materializeは、`captured_at DESC, snapshot_id DESC`で決める記事ごとの最新snapshotだけを共通述語で参照し、再archive後も同じ`articleId`を重複候補へ出さない。手動生成は使用済みかどうかに関係なく指定記事を全件維持し、profileは台本の重点にだけ利用する。台本checkpointは採用sourceの`articleId`・`snapshotId`・URL・titleを同時に固定し、retryでは本文を再materializeしない。完成eventの各sourceはそのcheckpoint provenanceを使い、Libraryが外部URL失効後も台本生成時の保存記事まで追跡できるようにする。詳細は[ADR-0067](adr/0067-bind-script-checkpoints-to-source-snapshots.md)を正本とする。
+自動生成はContent Knowledgeが所有する最新InterestProfileと、有効な購読に属し成功済み自動Planで未使用の記事metadataから選定し、本文取得前にGenerationPlanを固定する。候補取得・手動選択・初回の本文materializeは、`captured_at DESC, snapshot_id DESC`で決める記事ごとの最新snapshotだけを共通述語で参照し、再archive後も同じ`articleId`を重複候補へ出さない。手動生成は使用済みかどうかに関係なく指定記事を全件維持し、profileは台本の重点にだけ利用する。検証済みLLM `source_ids`はmaterialized配列の位置へ変換し、URLが同じ記事同士でも選択位置を保持する。台本checkpointは`sourceIndex`と採用sourceの`articleId`・`snapshotId`・URL・titleを同時に固定し、retryでは本文を再materializeしない。完成eventの各sourceはそのcheckpoint provenanceを使い、Libraryが外部URL失効後も台本生成時の保存記事まで追跡できるようにする。詳細は[ADR-0090](adr/0090-bind-generated-source-identity-by-position.md)を正本とする。
 
 ```mermaid
 flowchart LR
@@ -412,6 +412,7 @@ flowchart TD
 - [ADR-0064 再生をrouteの外へ出し、ライブラリを一覧と原稿の2ペインにする](adr/0064-persistent-playback-outside-the-router-outlet.md)
 - [ADR-0065 手動記事archiveをend-to-end RPC deadlineで拘束する](adr/0065-bound-manual-archive-rpc-deadline.md)
 - [ADR-0067 台本checkpointを生成元snapshotへ固定する](adr/0067-bind-script-checkpoints-to-source-snapshots.md)
+- [ADR-0090 LLMのsource identityを位置でsnapshotへ固定する](adr/0090-bind-generated-source-identity-by-position.md)
 - [ADR-0068 個別記事の同期失敗をfeed継続性から分離する](adr/0068-isolate-feed-item-sync-failures.md)
 - [ADR-0069 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070 Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
