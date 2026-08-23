@@ -18,7 +18,7 @@ import {
   EmptySelection,
   ReaderSkeleton,
 } from "./-components/article-reader"
-import { ConnectedEnrichQueueDialog } from "./-components/enrich-queue-dialog"
+import { EnrichQueueDialogHost } from "./-components/enrich-queue-dialog-host"
 import { validateArticlesSearch } from "./-model"
 
 export const Route = createFileRoute("/_authenticated/articles/")({
@@ -173,7 +173,7 @@ function ArticlesRoute() {
         </Panel>
       </div>
 
-      <ConnectedEnrichQueueDialog />
+      <EnrichQueueDialogHost />
     </div>
   )
 }
