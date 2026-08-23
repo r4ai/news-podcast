@@ -182,7 +182,7 @@ const SKELETON_TITLE_WIDTHS = [
 ] as const
 
 /**
- * 行の`Panel`のfallback。`ArticleRow`と同じ骨格(未読の点・題名・出典と時刻)を
+ * 行の`Panel`のfallback。`ArticleRow`と同じ骨格(既読ラベル・題名・出典と時刻)を
  * 同じ余白で置き、行が届いた瞬間に一覧の高さが飛ばないようにする。
  * ヘッダーは境界の外なので、ここには含めない。
  */
@@ -202,7 +202,7 @@ export function ArticleListSkeleton() {
           className="flex items-start gap-2 border-b border-border/60 pr-1.5 pl-2.5 last:border-b-0"
           key={width + String(index)}
         >
-          <Skeleton className="mt-3.5 size-1.5 shrink-0 rounded-full" />
+          <Skeleton className="mt-2.5 h-5 w-8 shrink-0 rounded-sm" />
           <div className="flex min-h-11 flex-1 flex-col justify-center gap-1.5 py-2">
             <Skeleton className={`h-4 ${width}`} />
             <Skeleton className="h-3 w-1/3" />

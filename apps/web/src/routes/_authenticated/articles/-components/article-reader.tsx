@@ -131,6 +131,7 @@ export function ArticleReaderView({
   toggleSaved,
   toggleReadLater,
   toggleHidden,
+  markUnread,
   recalculateAi,
   isRecalculating,
 }: ArticleReaderViewProps) {
@@ -172,6 +173,7 @@ export function ArticleReaderView({
           <ArticleSourceTabs onSourceChange={setSource} source={source} />
           <ArticleActions
             article={article}
+            onMarkUnread={markUnread}
             onToggleHidden={toggleHidden}
             onToggleReadLater={toggleReadLater}
             onToggleSaved={toggleSaved}

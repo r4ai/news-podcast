@@ -5,6 +5,7 @@ import {
   ClockAlert,
   ExternalLink,
   EyeOff,
+  Mail,
 } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
@@ -17,19 +18,27 @@ export type ArticleActionsProps = {
   readonly onToggleSaved: () => void
   readonly onToggleReadLater: () => void
   readonly onToggleHidden: () => void
+  readonly onMarkUnread: () => void
   readonly className?: string
 }
 
-/** 保存/あとで/非表示/元記事の操作列。トグルはaria-pressedで状態を示す (docs要求)。 */
+/** 記事状態と元記事への操作列。トグルはaria-pressedで状態を示す (docs要求)。 */
 export function ArticleActions({
   article,
   onToggleSaved,
   onToggleReadLater,
   onToggleHidden,
+  onMarkUnread,
   className,
 }: ArticleActionsProps) {
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      {article.read ? (
+        <Button onClick={onMarkUnread} size="sm" variant="outline">
+          <Mail data-icon="inline-start" />
+          未読に戻す
+        </Button>
+      ) : null}
       <Button
         aria-pressed={article.saved}
         onClick={onToggleSaved}
