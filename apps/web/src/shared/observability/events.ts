@@ -8,6 +8,7 @@ export type BrowserEventName =
   | "episode.stream_fallback"
   | "interest_profile.changed"
   | "login.result"
+  | "logout.result"
   | "panel.error"
   | "route.error"
   | "schedule.changed"

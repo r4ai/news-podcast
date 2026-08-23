@@ -1,7 +1,7 @@
 # RSSニュース・ポッドキャスト 設計書
 
 - 状態: 関数型マイクロサービス移行・旧実装削除完了
-- 更新日: 2026-08-16
+- 更新日: 2026-08-23
 - 契約の正本: `apps/gateway` のEffect HttpApi
 - Context間契約: `packages/protocols` のEffect Schemaとversion付きNATS subject
 - RPC返信: 共有payload schemaの`messageEnvelope`。producer/actor/correlation/causationを共通policyで照合
@@ -19,6 +19,7 @@ RSSからニュース項目を取得し、ownerが選択した版固定済み記
 - Web: Vite / React / TypeScript / Tailwind CSS / shadcn/ui neutral / Base UI。
 - API: Effect HttpApi、code-first OpenAPI。
 - 認証: Better Authのアプリセッション。初期ログインはGoogle OIDCで、将来ほかのOIDCを追加可能にする。
+- session終了: serverの終了成功後だけ、再生・owner依存Jotai/localStorage・Query cacheを破棄してlogin documentへ置き換える。失敗時は認証済みstateを保持して再試行する（[ADR-0078](adr/0078-terminate-session-before-clearing-owner-state.md)）。
 - ニュース源: RSSのみ。初期カタログはZenn、azukiazusaさんの技術ブログ、Hacker News。媒体カタログとユーザー購読は分離する。
 - AI: Effect AI + `@effect/ai-openai`のstrict structured outputを正本とする。OpenAI `gpt-5.6-luna` が既定で、base URLとモデルIDは環境変数で差し替える。キーなしでビルド・テストできる。
 - TTS: 外部VOICEVOX Engine。既定キャラクター名は「ずんだもん」。数値style IDは起動中Engineの `/speakers` から解決し、固定しない。
@@ -153,7 +154,7 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
 - Web(a11y): axe検査は視覚回帰から切り離し、`tests/e2e/accessibility.spec.ts`が全ページ（ログイン、今日、記事、記事表示中、購読、生成時刻、ライブラリ、設定）を検査する。スキップリンクと非同期状態のlive regionも同じところで確認する。
 - Web(性能): 本番ビルドに対する実測を常設する。Web Vitals（FCP/LCP/CLS/INP）は`pnpm --filter web perf:vitals`としてCIで非ブロッキング、初期ロードと6主要routeのgzipサイズは`perf:bundle`としてrequiredな`static` jobでblocking検査する。route payloadはVite manifestの静的依存から初期資産との重複を除いて測る。描画回数はVitestで予算化する（`shared/test/render-count`）。予算変更はbaseline、計測差、理由を同じdiffへ残す（[ADR-0060](adr/0060-atom-scoped-rendering-and-measured-frontend-budgets.md)）。
-- E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生を重要導線として確認するが、確認ゲート後に実装する。
+- E2E: ログイン後の購読管理、生成ジョブ作成、状態追跡、再生に加え、owner Aのlogoutからowner Bへの切替でprivate client stateが残らないことを重要導線として確認する。
 
 ### 7.1 UI設計原則
 
@@ -197,7 +198,7 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 - 速度は巡回ボタンではなく選択にする。巡回だと狙った速度へ着くまで候補の数だけ押すことになり、今どこに居るかも押してみるまで判らない。音量は押して開くpopoverにせず常設する。鳴らしながら合わせるものなので、開く操作を挟むと合わせている間ずっと本文が覆われる。消音は音量とは別に持つ（0へ絞って消すと、戻したときの音量が判らなくなる）。
 - `timeupdate`は毎秒数回届く。購読するのは目盛りと時刻表示だけに閉じ、操作ボタンは「鳴っているか」、一覧の行は「その番組が鳴っているか」と「その番組の再生記録」だけを購読する。一覧全体で`isPlayingAtom`を購読すると、1回の再生/停止で全行が描き直される。予算は`player-bar.render-count.test.tsx`が固定していて、ナビゲーションと操作列は位置が動いても0回。
 - 鳴っている間に動く面の周りへ`backdrop-filter`を置かない。透過とぼかしを持つ面は背後が変わるたびに焼き直しになるので、目盛りが動くだけで再生バーと下部ナビまで描き直される。下端に居座る帯は不透明にし、進んだ量は背景のグラデーションではなく`transform: scaleX()`で示す（帯そのものを描き直さずに済む）。
-- 端末に残す再生の記録は、ログイン画面へ着いた時点で捨てる。保存領域はorigin単位なので、同じブラウザで別の利用者がログインすると前の利用者の番組名と続きが復元される。別タブの書き込みを取り込むのは単独で意味を持つ値、つまり再生記録だけ。載っている番組・速度・音量・消音はいずれもそのタブの`<audio>`と対で初めて意味を持つので取り込まない。取り込むと、要素へ届けないまま写しだけが動き、目盛りと消音の印が耳に届く音と食い違う。
+- 端末に残す再生の記録は、明示logoutではserver session終了成功後、失効sessionでlogin画面へ到達した場合はその時点で捨てる。保存領域はorigin単位なので、同じブラウザで別の利用者がログインすると前の利用者の番組名と続きが復元される。明示logoutでは鳴っているaudioも停止・unloadしてからdocumentを置き換える。別タブの書き込みを取り込むのは単独で意味を持つ値、つまり再生記録だけ。載っている番組・速度・音量・消音はいずれもそのタブの`<audio>`と対で初めて意味を持つので取り込まない。詳細は[ADR-0078](adr/0078-terminate-session-before-clearing-owner-state.md)。
 - OSのロック画面やメディアキーから届くのは命令であって切り替えではない。再生と停止は別々に持ち、同じ命令が二度届いても状態が反転しないようにする。切り替えるのは画面のボタンだけ。
 - 再生位置は番組ごとに端末へ残し、続きから再開する。末尾の15秒以内まで達していれば再生済みとして次は先頭から鳴らす(末尾から再開しても何も鳴らない)。リロード後はバーに前回の番組が戻るが、音は自動では鳴らさない。
 - ライブラリは記事ページと同じ2ペインにする。左が番組一覧(日付で括った行だけ)、右が詳細で、原稿を主・出典を右レールに置く。台本は最大20,000字あり、カードへ積むと一覧性と可読性のどちらも成り立たない。選択は`?episode=`でURLが正本。
