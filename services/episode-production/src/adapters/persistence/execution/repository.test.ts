@@ -372,7 +372,7 @@ describe("SQLite execution repository", () => {
             leaseToken: token("lease-1"),
           }))!.job as RunningJob & { readonly attempt: 1 }
           const failure = Schema.decodeUnknownSync(RetryableFailureSchema)({
-            code: "provider_busy",
+            code: "script_unavailable",
             retryable: true,
           })
           yield* execution.transition({

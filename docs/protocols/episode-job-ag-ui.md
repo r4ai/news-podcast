@@ -90,12 +90,18 @@ type EpisodeJobState = {
     sourceName?: string  // materialize後に存在
   }>
   currentStage?: EpisodeJobStep
-  failure?: { code: string; message: string; retryable: boolean }
+  failure?: {
+    code: EpisodeFailureCode // @news-podcast/contracts/episode-failure
+    message: string          // UIへ直接表示しない
+    retryable: boolean
+  }
   episodeId?: string
 }
 ```
 
 記事本文、prompt、台本、完全URL、API keyはstateとeventへ含めない。
+
+`EpisodeFailureCode`はRESTと同じ共有enumである。Webは既知コードを説明と推奨アクションへ変換し、未知のforward codeを受けた場合は`message`やcodeを表示せず、安全な汎用文言と`jobId`を問い合わせIDとして示す。Productionのlog/traceは内部相関のため元の`failure.code`を保持する（[ADR-0083](../adr/0083-share-episode-failure-code-contract.md)）。
 
 ## 4. Transport拡張
 

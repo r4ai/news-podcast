@@ -13,7 +13,7 @@ const job = (
     | "Succeeded"
     | "Failed"
     | "Canceled",
-  failureCode = "provider_refusal"
+  failureCode = "script_refusal"
 ): EpisodeJob =>
   ({
     _tag: state,

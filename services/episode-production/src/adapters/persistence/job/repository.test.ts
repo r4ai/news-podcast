@@ -166,7 +166,7 @@ describe("SQLite job repository", () => {
             state: failRunningJob(leased.job, {
               failedAt: at,
               failure: {
-                code: "provider-timeout" as never,
+                code: "script_timeout",
                 retryable: false,
               },
             }),
@@ -179,7 +179,7 @@ describe("SQLite job repository", () => {
     expect(repeated).toMatchObject({
       _tag: "Failed",
       jobId: firstRetry.jobId,
-      failure: { code: "provider-timeout" },
+      failure: { code: "script_timeout" },
     })
   })
 

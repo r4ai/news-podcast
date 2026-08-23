@@ -58,7 +58,7 @@ const running = leaseQueuedJob(queued, {
 
 const retrying = retryRunningJob(running as RetryableRunningJob, {
   retryAt: at("2026-08-13T00:02:00.000Z"),
-  failure: { code: "provider_timeout" as never, retryable: true },
+  failure: { code: "script_timeout", retryable: true },
 })
 
 const relearned = leaseRetryingJob(retrying, {
@@ -74,7 +74,7 @@ const succeeded = completeRunningJob(running, {
 
 const failed = failRunningJob(running, {
   failedAt: at("2026-08-13T00:11:00.000Z"),
-  failure: { code: "provider_rejected" as never, retryable: false },
+  failure: { code: "script_refusal", retryable: false },
 })
 
 const canceled = cancelJob(queued, {

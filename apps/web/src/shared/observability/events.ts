@@ -4,6 +4,7 @@ export type BrowserEventName =
   | "audio.started"
   | "enrich.reprocess_requested"
   | "episode.requested"
+  | "episode.failure_presented"
   | "episode.stream_connected"
   | "episode.stream_fallback"
   | "interest_profile.changed"

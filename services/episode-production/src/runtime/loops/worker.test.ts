@@ -127,7 +127,7 @@ describe("episode worker loop", () => {
     const events: EpisodeWorkerEvent[] = []
     const failure = {
       _tag: "PipelineFailure" as const,
-      code: "sqlite_transition",
+      code: "sqlite_transition" as const,
       retryable: true,
     }
     const ports: EpisodeWorkerPorts = {
@@ -163,7 +163,7 @@ describe("episode worker loop", () => {
     let executions = 0
     const failure = {
       _tag: "PipelineFailure" as const,
-      code: "sqlite_lease_next",
+      code: "sqlite_lease_next" as const,
       retryable: true,
     }
     const ports: EpisodeWorkerPorts = {

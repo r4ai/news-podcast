@@ -1,3 +1,7 @@
+import {
+  episodeFailureCodes,
+  type EpisodeFailureCode,
+} from "@news-podcast/contracts/episode-failure"
 import { deepFreeze } from "@news-podcast/kernel"
 import { Schema } from "effect"
 
@@ -85,10 +89,13 @@ export type RunningJob = Schema.Schema.Type<typeof RunningJobSchema>
 export type RetryableRunningJob = RunningJob & { readonly attempt: 1 | 2 | 3 }
 
 export const RetryableFailureSchema = Schema.Struct({
-  code: Schema.NonEmptyString.pipe(Schema.brand("FailureCode")),
+  code: Schema.Literals(episodeFailureCodes),
   retryable: Schema.Literal(true),
 })
-export type RetryableFailure = Schema.Schema.Type<typeof RetryableFailureSchema>
+export type RetryableFailure = Omit<
+  Schema.Schema.Type<typeof RetryableFailureSchema>,
+  "code"
+> & { readonly code: EpisodeFailureCode }
 
 export const RetryingJobSchema = Schema.TaggedStruct("Retrying", {
   ...baseFields,
@@ -99,10 +106,13 @@ export const RetryingJobSchema = Schema.TaggedStruct("Retrying", {
 export type RetryingJob = Schema.Schema.Type<typeof RetryingJobSchema>
 
 export const TerminalFailureSchema = Schema.Struct({
-  code: Schema.NonEmptyString.pipe(Schema.brand("FailureCode")),
+  code: Schema.Literals(episodeFailureCodes),
   retryable: Schema.Literal(false),
 })
-export type TerminalFailure = Schema.Schema.Type<typeof TerminalFailureSchema>
+export type TerminalFailure = Omit<
+  Schema.Schema.Type<typeof TerminalFailureSchema>,
+  "code"
+> & { readonly code: EpisodeFailureCode }
 
 export const FailedJobSchema = Schema.TaggedStruct("Failed", {
   ...baseFields,

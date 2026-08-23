@@ -81,7 +81,7 @@ describe("episode job control", () => {
       }),
       {
         failedAt: now,
-        failure: { code: "provider-timeout" as never, retryable: false },
+        failure: { code: "script_timeout", retryable: false },
       }
     )
     const saveRetryIdempotently = vi.fn((_sourceJobId, job) =>

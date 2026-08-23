@@ -7,6 +7,7 @@ import { useAtomValue } from "jotai"
 import { useEffect, useState, useTransition } from "react"
 
 import { episodeQueryOptions, episodesQueryOptions } from "@/features/episodes"
+import { isEpisodeFailureCode } from "@news-podcast/contracts/episode-failure"
 import { api } from "@/shared/api"
 import { recordBrowserEvent } from "@/shared/observability/events"
 import {
@@ -122,6 +123,17 @@ export function useGeneration() {
   const failure =
     (live ? liveFailure : undefined) ?? latestJob?.failure ?? undefined
   const recovery = failureRecovery(failure?.code)
+  const failureCode = failure?.code
+  const failureJobId = latestJob?.id
+  useEffect(() => {
+    if (failureCode === undefined || failureJobId === undefined) return
+    recordBrowserEvent("episode.failure_presented", {
+      "job.id": failureJobId,
+      "failure.code": isEpisodeFailureCode(failureCode)
+        ? failureCode
+        : "unknown",
+    })
+  }, [failureCode, failureJobId])
   const projectionEpisodeId =
     state === "succeeded"
       ? ((live ? liveEpisodeId : undefined) ??
@@ -197,7 +209,7 @@ export function useGeneration() {
     lastProgressAt: latestJob?.lastProgressAt ?? undefined,
     retryAt: latestJob?.nextAttemptAt ?? undefined,
     stageProgress: stageProgress ?? undefined,
-    failure: failureMessage(failure),
+    failure: failureMessage(failure, latestJob?.id),
     retryLabel:
       recovery === "reselect"
         ? "記事を選び直して再生成"

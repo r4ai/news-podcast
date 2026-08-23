@@ -1,3 +1,4 @@
+import type { EpisodeFailureCode } from "@news-podcast/contracts/episode-failure"
 import type { DeepReadonly } from "@news-podcast/kernel"
 import type { Effect } from "effect"
 
@@ -39,7 +40,7 @@ export type ArticleSelection =
 
 export type PipelineFailure = DeepReadonly<{
   _tag: "PipelineFailure"
-  code: string
+  code: EpisodeFailureCode
   retryable: boolean
 }>
 export type LeaseFailure = DeepReadonly<

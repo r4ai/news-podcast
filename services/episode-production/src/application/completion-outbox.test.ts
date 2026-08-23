@@ -83,7 +83,7 @@ describe("completion outbox relay", () => {
     vi.mocked(dependencies.publish).mockReturnValue(
       Effect.fail({
         _tag: "PipelineFailure",
-        code: "nats_unavailable",
+        code: "nats_completion_publish",
         retryable: true,
       })
     )

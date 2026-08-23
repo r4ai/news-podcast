@@ -105,7 +105,10 @@ export function start(preInit?: PreInitLogs): void {
 
   installBrowserEventRecorder((name, attributes) => {
     const safe = sanitizeEventAttributes(attributes)
-    eventCounter.add(1, { "event.name": name, ...safe })
+    eventCounter.add(1, {
+      "event.name": name,
+      ...sanitizeMetricEventAttributes(safe),
+    })
     logger.emit({
       severityNumber: SeverityNumber.INFO,
       severityText: "info",
@@ -203,15 +206,25 @@ const allowedEventAttributes = new Set([
   "result",
   "status",
   "error.type",
+  "failure.code",
+  "job.id",
 ])
 
-function sanitizeEventAttributes(
+export function sanitizeEventAttributes(
   attributes: BrowserEventAttributes
 ): BrowserEventAttributes {
   return Object.fromEntries(
     Object.entries(attributes).filter(([name]) =>
       allowedEventAttributes.has(name)
     )
+  )
+}
+
+export function sanitizeMetricEventAttributes(
+  attributes: BrowserEventAttributes
+): BrowserEventAttributes {
+  return Object.fromEntries(
+    Object.entries(attributes).filter(([name]) => name !== "job.id")
   )
 }
 

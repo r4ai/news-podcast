@@ -1,3 +1,7 @@
+import type {
+  EpisodeFailureCode,
+  SqliteFailureOperation,
+} from "@news-podcast/contracts/episode-failure"
 import { deepFreeze } from "@news-podcast/kernel"
 import {
   decodePersistedJsonSync,
@@ -88,8 +92,10 @@ const CompletionSchema = Schema.Struct({
   ),
 })
 
-const pipelineFailure = (code: string, retryable = true): PipelineFailure =>
-  deepFreeze({ _tag: "PipelineFailure", code, retryable })
+const pipelineFailure = (
+  code: EpisodeFailureCode,
+  retryable = true
+): PipelineFailure => deepFreeze({ _tag: "PipelineFailure", code, retryable })
 const staleLease = () => deepFreeze({ _tag: "StaleLease" as const })
 
 const stringify = (value: unknown) => JSON.stringify(value)
@@ -100,7 +106,10 @@ const decodeJson = <S extends Schema.ConstraintDecoder<unknown>>(
   value: string
 ) => decodePersistedJsonSync(operation, schema, value)
 
-const tryPersistence = <Value>(operation: string, run: () => Value) =>
+const tryPersistence = <Value>(
+  operation: SqliteFailureOperation,
+  run: () => Value
+) =>
   Effect.try({
     try: run,
     catch: (cause) =>

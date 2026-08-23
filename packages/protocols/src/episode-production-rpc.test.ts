@@ -87,6 +87,32 @@ describe("episode-production RPC contracts", () => {
     expect(Object.isFrozen(canceled)).toBe(true)
   })
 
+  it("decodes an unknown future failure code during rolling deployments", async () => {
+    const reply = await Effect.runPromise(
+      parseEpisodeJobControlReply({
+        _tag: "Found",
+        job: {
+          jobId,
+          status: "failed",
+          trigger: "manual",
+          attempt: 4,
+          maxAttempts: 4,
+          createdAt: "2026-08-13T00:00:00.000Z",
+          failedAt: "2026-08-13T00:01:00.000Z",
+          failure: {
+            code: "future_provider_failure",
+            retryable: false,
+          },
+        },
+      })
+    )
+
+    expect(reply).toMatchObject({
+      _tag: "Found",
+      job: { failure: { code: "future_provider_failure" } },
+    })
+  })
+
   it.each([
     [
       "forged owner",
