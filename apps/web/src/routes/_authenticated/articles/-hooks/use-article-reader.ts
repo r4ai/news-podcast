@@ -41,6 +41,7 @@ function applyPatch(article: Article, patch: ArticlePatch): Article {
 
 export type UseArticleReaderParams = {
   readonly articleId: string
+  readonly snapshotId?: string
   /** 一覧の`includeHidden`。非表示にした記事を一覧から外すかの判断に使う。 */
   readonly includeHidden?: boolean
 }
@@ -55,6 +56,7 @@ export type UseArticleReaderParams = {
  */
 export function useArticleReader({
   articleId,
+  snapshotId: requestedSnapshotId,
   includeHidden = false,
 }: UseArticleReaderParams) {
   const queryClient = useQueryClient()
@@ -65,11 +67,13 @@ export function useArticleReader({
   usePreloadMarkdownProcessor()
 
   const { data: serverArticle } = useSuspenseQuery(
-    articleQueryOptions(articleId)
+    articleQueryOptions(articleId, requestedSnapshotId)
   )
   // 本文はSuspenseに載せない。取得失敗は「アーカイブ表示へ落とす」という
   // 正常な分岐であって、リーダーごと落とすべき欠陥ではない。
-  const markdownQuery = useQuery(articleMarkdownQueryOptions(articleId))
+  const markdownQuery = useQuery(
+    articleMarkdownQueryOptions(articleId, requestedSnapshotId)
+  )
 
   const [userSource, setUserSource] = useState<ArticleSource | undefined>(
     undefined

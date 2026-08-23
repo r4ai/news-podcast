@@ -6,6 +6,7 @@ import {
   parseArticleStatePatch,
   createOwnerReplayAccess,
   readOwnerArticleMarkdown,
+  readOwnerSnapshotMarkdown,
   triggerOwnerArticleArchive,
   type ArticleLibraryRepository,
 } from "../../application/article-library.js"
@@ -31,6 +32,11 @@ import type {
 const ArticleIdentitySchema = Schema.Struct({
   ownerId: OwnerIdSchema,
   articleId: ArticleIdSchema,
+})
+const SnapshotIdentitySchema = Schema.Struct({
+  ownerId: OwnerIdSchema,
+  articleId: ArticleIdSchema,
+  snapshotId: SnapshotIdSchema,
 })
 const ListInputSchema = Schema.Struct({
   ownerId: OwnerIdSchema,
@@ -111,6 +117,10 @@ export const makeArticleLibraryHandler = (
     articles: dependencies.articles,
     objects: dependencies.objects,
   })
+  const snapshotMarkdown = readOwnerSnapshotMarkdown({
+    articles: dependencies.articles,
+    objects: dependencies.objects,
+  })
   const triggerArchive = triggerOwnerArticleArchive({
     articles: dependencies.articles,
     deriveArchiveRequestId: dependencies.deriveArchiveRequestId,
@@ -142,9 +152,21 @@ export const makeArticleLibraryHandler = (
           dependencies.articles.find(ownerId, articleId)
         )
       ),
+    findSnapshot: (input: unknown) =>
+      strict(SnapshotIdentitySchema)(input).pipe(
+        Effect.flatMap(({ ownerId, articleId, snapshotId }) =>
+          dependencies.articles.findSnapshot(ownerId, articleId, snapshotId)
+        )
+      ),
     markdown: (input: unknown) =>
       strict(ArticleIdentitySchema)(input).pipe(
         Effect.flatMap(({ ownerId, articleId }) => markdown(ownerId, articleId))
+      ),
+    snapshotMarkdown: (input: unknown) =>
+      strict(SnapshotIdentitySchema)(input).pipe(
+        Effect.flatMap(({ ownerId, articleId, snapshotId }) =>
+          snapshotMarkdown(ownerId, articleId, snapshotId)
+        )
       ),
     replayAccess: (input: unknown) =>
       strict(

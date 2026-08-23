@@ -36,12 +36,14 @@ export type ArticleReaderViewProps = ReturnType<typeof useArticleReader>
  */
 export function ArticleReader({
   articleId,
+  snapshotId,
   includeHidden,
 }: {
   readonly articleId: string
+  readonly snapshotId?: string
   readonly includeHidden: boolean
 }) {
-  const reader = useArticleReader({ articleId, includeHidden })
+  const reader = useArticleReader({ articleId, includeHidden, snapshotId })
 
   // 記事を開いている時だけ有効なショートカット。リーダーと寿命を揃える。
   useArticleKeyboardShortcuts({

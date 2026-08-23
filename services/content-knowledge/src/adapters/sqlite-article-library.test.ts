@@ -5,6 +5,7 @@ import {
   parseArticleListQuery,
   parseArticleStatePatch,
   readOwnerArticleMarkdown,
+  readOwnerSnapshotMarkdown,
   type ArticleListPage,
 } from "../application/article-library.js"
 import {
@@ -420,6 +421,84 @@ describe("SQLite article library", () => {
       articles.list(ids.ownerA, await query({ q: "Updated feed title" }))
     )
     expect(byMutableFeedTitle.items).toEqual([])
+  })
+
+  it("reads v1 metadata and Markdown after v2 becomes latest, bound to owner and article", async () => {
+    const { articles, archiveStore, snapshot: v1 } = await setup()
+    const v2Id = decode(
+      SnapshotIdSchema,
+      "56c2eef5-a205-4526-8640-dc3ea84d88b4"
+    )
+    const v2 = createArticleSnapshot({
+      command: decode(ArchiveCommandSchema, {
+        archiveRequestId: "27b7d763-e0f9-42c5-9cc7-8cdacc8d5b93",
+        articleId: ids.articleA,
+        sourceUrl: "https://news.example.com/a-v2",
+        title: "Owner A article v2",
+      }),
+      snapshotId: v2Id,
+      capturedAt: decode(CapturedAtSchema, "2026-08-13T02:03:00.000Z"),
+      capture: decode(ArchiveCaptureSchema, {
+        rawResponse: {
+          _tag: "RawResponse",
+          key: `articles/${v2Id}/raw/response.html`,
+          sha256: "5".repeat(64),
+          mediaType: "text/html",
+          byteLength: 20,
+        },
+        replay: {
+          _tag: "Replay",
+          key: `articles/${v2Id}/replay/index.html`,
+          sha256: "6".repeat(64),
+          mediaType: "text/html",
+          byteLength: 20,
+        },
+        markdown: {
+          _tag: "Markdown",
+          key: `articles/${v2Id}/markdown/article.md`,
+          sha256: "7".repeat(64),
+          mediaType: "text/markdown",
+          byteLength: 20,
+        },
+        assets: [],
+      }),
+    })
+    await Effect.runPromise(archiveStore.commit({ snapshot: v2 }))
+
+    await expect(
+      Effect.runPromise(
+        articles.findSnapshot(ids.ownerA, ids.articleA, v1.snapshotId)
+      )
+    ).resolves.toMatchObject({
+      _tag: "Found",
+      article: {
+        title: "Owner A article",
+        sourceUrl: "https://news.example.com/a",
+        snapshotId: v1.snapshotId,
+      },
+    })
+    await expect(
+      Effect.runPromise(
+        articles.findSnapshot(ids.ownerB, ids.articleA, v1.snapshotId)
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+    await expect(
+      Effect.runPromise(
+        articles.findSnapshot(ids.ownerA, ids.articleB, v1.snapshotId)
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+
+    const read = vi.fn((key: string) => Effect.succeed(`# ${key}`))
+    await expect(
+      Effect.runPromise(
+        readOwnerSnapshotMarkdown({ articles, objects: { read } })(
+          ids.ownerA,
+          ids.articleA,
+          v1.snapshotId
+        )
+      )
+    ).resolves.toEqual({ _tag: "Found", markdown: "# articles/a/article.md" })
+    expect(read).toHaveBeenCalledWith("articles/a/article.md")
   })
 
   it("finds an article by an owner-scoped tag name", async () => {

@@ -1073,6 +1073,140 @@ test("switching episodes shows the next script from its beginning", async ({
   expect(top).toBe(0)
 })
 
+test("episode provenance opens v1 after the same article synchronizes v2", async ({
+  page,
+}) => {
+  const episodeId = "00000000-0000-4000-8000-000000000075"
+  const articleId = "00000000-0000-4000-8000-0000000000a1"
+  const v1SnapshotId = "00000000-0000-4000-8000-0000000000b1"
+  const v2SnapshotId = "00000000-0000-4000-8000-0000000000b2"
+  const v1Article = {
+    id: articleId,
+    feedId: "00000000-0000-4000-8000-0000000000f1",
+    sourceName: "example.com",
+    title: "生成時のv1タイトル",
+    url: "https://example.com/article-v1",
+    discoveredAt: "2026-08-23T00:00:00.000Z",
+    publishedAt: "2026-08-23T00:00:00.000Z",
+    archiveStatus: "succeeded",
+    snapshotId: v1SnapshotId,
+    read: true,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  }
+  const episode = {
+    id: episodeId,
+    title: "v1から生成した番組",
+    script: "この台本はv1から生成しました。",
+    sources: [
+      {
+        articleId,
+        snapshotId: v1SnapshotId,
+        sourceKind: "rss",
+        title: "生成時のv1タイトル",
+        url: "https://example.com/article-v1",
+      },
+    ],
+    createdAt: "2026-08-23T01:00:00.000Z",
+  }
+  const requested: string[] = []
+
+  await page.route("**/v1/episodes**", async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname === `/v1/episodes/${episodeId}`) {
+      await route.fulfill({ json: episode })
+      return
+    }
+    await route.fulfill({
+      json: { items: [episode], page: { hasMore: false } },
+    })
+  })
+  await page.route("**/v1/me/articles**", async (route) => {
+    const url = new URL(route.request().url())
+    requested.push(url.pathname)
+    if (
+      url.pathname === `/v1/me/articles/${articleId}/snapshots/${v1SnapshotId}`
+    ) {
+      await route.fulfill({ json: v1Article })
+      return
+    }
+    if (
+      url.pathname ===
+      `/v1/me/articles/${articleId}/snapshots/${v1SnapshotId}/markdown`
+    ) {
+      await route.fulfill({
+        json: {
+          markdown: `# 生成時のv1本文\n\n${"v1の固定本文です。".repeat(20)}`,
+        },
+      })
+      return
+    }
+    if (url.pathname === `/v1/me/articles/${articleId}`) {
+      await route.fulfill({
+        json: {
+          ...v1Article,
+          title: "同期後のv2タイトル",
+          snapshotId: v2SnapshotId,
+        },
+      })
+      return
+    }
+    if (url.pathname.endsWith("/facets")) {
+      await route.fulfill({
+        json: {
+          states: { all: 1, unread: 0, saved: 0, later: 0 },
+          feeds: [],
+          aiPending: 0,
+        },
+      })
+      return
+    }
+    await route.fulfill({
+      json: { items: [v1Article], page: { hasMore: false } },
+    })
+  })
+  await page.route("**/v1/me/article-snapshots/**", async (route) => {
+    const url = new URL(route.request().url())
+    requested.push(url.pathname)
+    if (url.pathname.endsWith("/replay")) {
+      await route.fulfill({
+        json: {
+          url: `/v1/me/article-snapshots/${v1SnapshotId}/replay/index.html`,
+        },
+      })
+      return
+    }
+    await route.fulfill({
+      body: "<!doctype html><title>v1 replay</title><p>生成時のv1 replay</p>",
+      contentType: "text/html",
+    })
+  })
+
+  await page.goto("/library")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(page.getByRole("heading", { name: "ライブラリ" })).toBeVisible()
+  await page.getByRole("button", { name: /v1から生成した番組 2026/ }).click()
+  await page.getByRole("link", { name: "生成時の保存版を開く" }).click()
+
+  await expect(
+    page.getByRole("heading", { name: "生成時のv1タイトル" })
+  ).toBeVisible()
+  await expect(page.getByText("生成時のv1本文")).toBeVisible()
+  expect(requested).not.toContain(`/v1/me/articles/${articleId}`)
+
+  await page.getByRole("button", { name: "アーカイブ" }).click()
+  await expect(page.locator("iframe")).toHaveAttribute(
+    "src",
+    `/v1/me/article-snapshots/${v1SnapshotId}/replay/index.html`
+  )
+  expect(requested).toContain(`/v1/me/article-snapshots/${v1SnapshotId}/replay`)
+  await expect
+    .poll(() => requested)
+    .toContain(`/v1/me/article-snapshots/${v1SnapshotId}/replay/index.html`)
+})
+
 test("switching between the list and the reader on one column keeps the page still", async ({
   page,
 }) => {

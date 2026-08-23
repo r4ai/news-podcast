@@ -49,6 +49,7 @@ import {
   NotFoundProblemSchema,
   SessionHeadersSchema,
   SessionResponseSchema,
+  SnapshotIdSchema,
   SubscriptionIdSchema,
   UnauthorizedProblemSchema,
   UnavailableProblemSchema,
@@ -253,9 +254,29 @@ export type GatewayPorts = Readonly<{
     | TypeOf<typeof NotFoundProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
+  getArticleSnapshot: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+    readonly snapshotId: TypeOf<typeof SnapshotIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
   getArticleMarkdown: (input: {
     readonly headers: TypeOf<typeof SessionHeadersSchema>
     readonly articleId: TypeOf<typeof ArticleIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleMarkdownSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
+  getArticleSnapshotMarkdown: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+    readonly snapshotId: TypeOf<typeof SnapshotIdSchema>
   }) => Effect.Effect<
     TypeOf<typeof ArticleMarkdownSchema>,
     | TypeOf<typeof UnauthorizedProblemSchema>

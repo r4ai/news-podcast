@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 import { makeArticleLibraryRpcHandler } from "./article-library.js"
 
 const articleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
+const snapshotId = "651b86e0-481a-42e2-aef4-7b6419d7447a"
 const ownerId = "owner-1"
 const request = (
   payload: unknown,
@@ -89,6 +90,42 @@ describe("article library RPC handler", () => {
       articles: [],
       nextCursor,
     })
+  })
+
+  it("routes exact snapshot metadata and Markdown reads with both identities", async () => {
+    const findSnapshot = vi.fn(() =>
+      Effect.succeed(deepFreeze({ _tag: "NotFound" as const }))
+    )
+    const snapshotMarkdown = vi.fn(() =>
+      Effect.succeed(deepFreeze({ _tag: "NotFound" as const }))
+    )
+    const reply = vi.fn((_payload: string) => Effect.void)
+    const handler = makeArticleLibraryRpcHandler(
+      { findSnapshot, snapshotMarkdown } as never,
+      dependencies
+    )
+
+    for (const operation of ["FindSnapshot", "SnapshotMarkdown"] as const) {
+      await Effect.runPromise(
+        handler({
+          subject: subjects.content.articleLibrary,
+          payload: request({ operation, articleId, snapshotId }),
+          reply,
+        })
+      )
+    }
+
+    expect(findSnapshot).toHaveBeenCalledWith({
+      ownerId,
+      articleId,
+      snapshotId,
+    })
+    expect(snapshotMarkdown).toHaveBeenCalledWith({
+      ownerId,
+      articleId,
+      snapshotId,
+    })
+    expect(reply).toHaveBeenCalledTimes(2)
   })
 
   it("rejects service actors without invoking the library", async () => {

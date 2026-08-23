@@ -1,4 +1,4 @@
-# ADR-0080: 最新記事Markdownを永続索引で検索する
+# ADR-0082: 最新記事Markdownを永続索引で検索する
 
 - Status: Accepted
 - Date: 2026-08-23

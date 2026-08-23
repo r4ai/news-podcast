@@ -87,7 +87,7 @@ Content KnowledgeとEpisode Productionのprovider modeは共有runtime parserで
 - 401はセッション欠落/失効、403は認証済みだが許可されない操作。エラーはRFC 9457 Problem Details。
 - 一覧はopaque cursor、`limit` 1..100、安定順序、filterに束縛する。`totalCount`は初期契約に入れない。
   - 記事一覧`GET /v1/me/articles`は`cursor`クエリと`page.hasMore` / `page.nextCursor`で継続する。cursorは`(公開日時 ?? 発見日時, articleId)`のkeyset位置をbase64urlへ畳んだ不透明tokenで、Content Knowledgeだけが解釈する。OFFSETと違い、ページを跨いで記事が増減しても重複・欠落しない。復号できないcursorは不正要求として閉じる。
-  - `q`はownerの記事全体をタイトル・出典URL・ownerタグ名と、決定的に選んだ最新snapshotの保存済みMarkdown本文でliteral部分一致する。本文はquery時にobjectを走査せず、durable queueが更新するFTS5 trigram（3文字以上）/short gram索引（1〜2文字）を使う。手動番組の記事選択は読み込み済みの先頭ページをクライアントで再検索せず、入力をdeferして同じAPIの先頭から再取得する。取得中は直前の候補を保持し、空結果と失敗は別状態として表示する。詳細は[ADR-0080](adr/0080-index-latest-article-markdown-for-search.md)を正本とする。
+  - `q`はownerの記事全体をタイトル・出典URL・ownerタグ名と、決定的に選んだ最新snapshotの保存済みMarkdown本文でliteral部分一致する。本文はquery時にobjectを走査せず、durable queueが更新するFTS5 trigram（3文字以上）/short gram索引（1〜2文字）を使う。手動番組の記事選択は読み込み済みの先頭ページをクライアントで再検索せず、入力をdeferして同じAPIの先頭から再取得する。取得中は直前の候補を保持し、空結果と失敗は別状態として表示する。詳細は[ADR-0082](adr/0082-index-latest-article-markdown-for-search.md)を正本とする。
 - 手動archive `POST /v1/me/articles/{articleId}/archive` は同期結果を返す。GatewayはContent captureと同じ30秒のend-to-end deadlineを送り、archive RPCだけ5秒の返信余裕を加えて待つ。Contentは期限切れ処理を中断してcommitしないため、Gatewayの失敗後にarchiveだけ成功する状態を作らない。詳細は[ADR-0065](adr/0065-bound-manual-archive-rpc-deadline.md)を正本とする。
   - S3の一部Put失敗は全Putのsettle後に成功キーをbest-effort削除する。process停止・DB commit失敗・Delete失敗は、SQLiteの`article_snapshots.snapshot_id`を参照正本とする定期照合で回収する。未参照でも24時間以内のobjectは in-flight capture 保護のため残す。詳細は[ADR-0066](adr/0066-reconcile-orphan-article-archive-objects.md)を正本とする。
 - 保存replayは`GET /v1/me/article-snapshots/{snapshotId}/replay`でowner権限と存在を先に確認し、返されたsame-origin URLを`sandbox=""` iframeで開く。HTMLとassetの各readでも`article_owner_access`とsnapshot metadataを再照合し、Contentが発行した1分の内部署名URLをGatewayだけが使用する。HTMLは5 MiB、assetは20 MiB、保存時`Content-Length`完全一致を要求し、CSP `sandbox`/`default-src 'none'`、`nosniff`、`private, no-store`を付ける。取得失敗時は再試行とMarkdown fallbackを残す（[ADR-0079](adr/0079-deliver-owned-private-artifacts-through-gateway.md)）。
@@ -292,6 +292,8 @@ episodes/{sha256(owner-id)}/{job-id}/{episode-id}.wav
 
 bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去し、認可済みの専用routeからCSP付きで返す。記事更新時は上書きせずsnapshotを追加する。
 
+Episode出典から保存版を開く場合は、出典が保持する`articleId + snapshotId`をURL stateへ渡し、metadataとMarkdownをowner/article/snapshot複合認可、replayをowner認可済みsnapshot routeで読む。これにより同じ記事の新snapshot追加後も生成時のtitle・本文・保存ページを表示する。snapshot IDがないlegacy sourceだけarticle単位latestへfallbackし、UIでは「外部サイト」「生成時の保存版」「最新の保存版」を区別する（[ADR-0081](adr/0081-bind-episode-reader-to-source-snapshot.md)）。
+
 初期HTMLで参照される静的resourceは、linked stylesheetを起点にCSSの`@import`と`url()`を再帰取得し、inline style、画像、`srcset`、font、audio/videoも同一snapshotへ保存する。content hashが同じresourceは上限へ重複計上しない。既定上限はHTML 5 MiB、単一asset 20 MiB、snapshotあたりasset 512件かつ合計100 MiBとし、環境変数で変更できる。主要stylesheetが取得失敗または上限超過した場合は、壊れた元レイアウトではなく保存本文をreader viewで返す。JavaScript実行後にだけ生成されるDOMは対象外とする。
 
 ### 8.3 構造化生成の裁量と制約
@@ -409,3 +411,4 @@ flowchart TD
 - [ADR-0073 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
 - [ADR-0074 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)
 - [ADR-0080 未信頼記事から生成した台本を独立quality gateで公開前に拒否する](adr/0080-gate-untrusted-article-scripts-before-publication.md)
+- [ADR-0081 Episode readerを生成元snapshotへ固定する](adr/0081-bind-episode-reader-to-source-snapshot.md)

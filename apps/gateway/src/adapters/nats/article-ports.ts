@@ -90,7 +90,9 @@ type ArticlePorts = Pick<
   GatewayPorts,
   | "listArticles"
   | "getArticle"
+  | "getArticleSnapshot"
   | "getArticleMarkdown"
+  | "getArticleSnapshotMarkdown"
   | "createArticleReplayAccess"
   | "patchArticle"
   | "bulkPatchArticles"
@@ -172,8 +174,36 @@ export const makeArticlePorts = (
         ),
         Effect.mapError(normalizeProblem)
       ),
+    getArticleSnapshot: ({ headers, articleId, snapshotId }) =>
+      libraryRpc(headers, {
+        operation: "FindSnapshot",
+        articleId,
+        snapshotId,
+      }).pipe(
+        Effect.flatMap((reply) =>
+          reply._tag === "Found"
+            ? toPublicArticle(reply.article)
+            : Effect.fail(articleReplyFailure(reply))
+        ),
+        Effect.mapError(normalizeProblem)
+      ),
     getArticleMarkdown: ({ headers, articleId }) =>
       libraryRpc(headers, { operation: "Markdown", articleId }).pipe(
+        Effect.flatMap((reply) =>
+          reply._tag === "Markdown"
+            ? parse(ArticleMarkdownSchema)({ markdown: reply.markdown }).pipe(
+                Effect.mapError(unavailable)
+              )
+            : Effect.fail(articleReplyFailure(reply))
+        ),
+        Effect.mapError(normalizeProblem)
+      ),
+    getArticleSnapshotMarkdown: ({ headers, articleId, snapshotId }) =>
+      libraryRpc(headers, {
+        operation: "SnapshotMarkdown",
+        articleId,
+        snapshotId,
+      }).pipe(
         Effect.flatMap((reply) =>
           reply._tag === "Markdown"
             ? parse(ArticleMarkdownSchema)({ markdown: reply.markdown }).pipe(

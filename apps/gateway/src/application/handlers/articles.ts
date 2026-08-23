@@ -46,6 +46,20 @@ export const articlesGroup = (handlers: GatewayHandlers) =>
           articleId: params.articleId,
         })
       )
+      .handle("getArticleSnapshot", ({ headers, params }) =>
+        handlers.getArticleSnapshot({
+          headers,
+          articleId: params.articleId,
+          snapshotId: params.snapshotId,
+        })
+      )
+      .handle("getArticleSnapshotMarkdown", ({ headers, params }) =>
+        handlers.getArticleSnapshotMarkdown({
+          headers,
+          articleId: params.articleId,
+          snapshotId: params.snapshotId,
+        })
+      )
       .handle("getArticleReplay", ({ headers, params }) =>
         handlers.getArticleReplay({
           headers,

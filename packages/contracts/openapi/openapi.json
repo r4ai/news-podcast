@@ -2491,21 +2491,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "markdown": {
-                      "type": "string",
-                      "allOf": [
-                        {
-                          "maxLength": 1048576
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "markdown"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/components/schemas/Objects_"
                 }
               }
             }
@@ -2543,6 +2529,220 @@
         },
         "summary": "Get archived article Markdown",
         "description": "Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials."
+      }
+    },
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.getArticleSnapshot",
+        "parameters": [
+          {
+            "name": "articleId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Article",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get an exact owned article snapshot",
+        "description": "Returns immutable snapshot metadata only when the snapshot belongs to both the supplied article and authenticated owner."
+      }
+    },
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}/markdown": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.getArticleSnapshotMarkdown",
+        "parameters": [
+          {
+            "name": "articleId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Objects_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get exact owned article snapshot Markdown",
+        "description": "Returns immutable snapshot Markdown only when the snapshot belongs to both the supplied article and authenticated owner."
       }
     },
     "/v1/me/article-snapshots/{snapshotId}/replay": {
@@ -3166,7 +3366,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_"
+                  "$ref": "#/components/schemas/Objects_1"
                 }
               }
             }
@@ -3257,7 +3457,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_"
+                  "$ref": "#/components/schemas/Objects_1"
                 }
               }
             }
@@ -3393,7 +3593,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_1"
+                  "$ref": "#/components/schemas/Objects_2"
                 }
               }
             }
@@ -3735,7 +3935,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_2"
+                "$ref": "#/components/schemas/Objects_3"
               }
             }
           },
@@ -3979,7 +4179,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_2"
+                "$ref": "#/components/schemas/Objects_3"
               }
             }
           },
@@ -4610,7 +4810,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_1"
+                  "$ref": "#/components/schemas/Objects_2"
                 }
               }
             }
@@ -6826,6 +7026,23 @@
         ],
         "additionalProperties": false
       },
+      "Objects_": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "allOf": [
+              {
+                "maxLength": 1048576
+              }
+            ]
+          }
+        },
+        "required": [
+          "markdown"
+        ],
+        "additionalProperties": false
+      },
       "ArticleReplayLocation": {
         "type": "object",
         "properties": {
@@ -6853,7 +7070,7 @@
           }
         ]
       },
-      "Objects_": {
+      "Objects_1": {
         "type": "object",
         "properties": {
           "items": {
@@ -6950,7 +7167,7 @@
         ],
         "additionalProperties": false
       },
-      "Objects_1": {
+      "Objects_2": {
         "type": "object",
         "properties": {
           "enqueued": {
@@ -7161,7 +7378,7 @@
         ],
         "additionalProperties": false
       },
-      "Objects_2": {
+      "Objects_3": {
         "type": "object",
         "properties": {
           "name": {

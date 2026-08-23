@@ -79,9 +79,23 @@ export function articleFacetsQueryOptions(search: ArticlesSearch) {
   })
 }
 
-export function articleQueryOptions(articleId: string) {
-  return api.queryOptions("get", "/v1/me/articles/{articleId}", {
-    params: { path: { articleId } },
+export function articleQueryOptions(articleId: string, snapshotId?: string) {
+  return queryOptions({
+    queryKey: ["article", articleId, snapshotId ?? "latest"] as const,
+    queryFn: async ({ signal }): Promise<Article> => {
+      const response =
+        snapshotId === undefined
+          ? await fetchClient.GET("/v1/me/articles/{articleId}", {
+              signal,
+              params: { path: { articleId } },
+            })
+          : await fetchClient.GET(
+              "/v1/me/articles/{articleId}/snapshots/{snapshotId}",
+              { signal, params: { path: { articleId, snapshotId } } }
+            )
+      if (response.error) throw response.error
+      return response.data as Article
+    },
   })
 }
 
@@ -92,14 +106,23 @@ export function articleQueryOptions(articleId: string) {
  * `parseAs: "text"`にすると本文の代わりにJSONのソース文字列を受け取り、
  * それがそのままMarkdownとして描画されてしまう。
  */
-export function articleMarkdownQueryOptions(articleId: string) {
+export function articleMarkdownQueryOptions(
+  articleId: string,
+  snapshotId?: string
+) {
   return queryOptions({
-    queryKey: ["article-markdown", articleId] as const,
+    queryKey: ["article-markdown", articleId, snapshotId ?? "latest"] as const,
     queryFn: async ({ signal }) => {
-      const { data, error } = await fetchClient.GET(
-        "/v1/me/articles/{articleId}/markdown",
-        { signal, params: { path: { articleId } } }
-      )
+      const { data, error } =
+        snapshotId === undefined
+          ? await fetchClient.GET("/v1/me/articles/{articleId}/markdown", {
+              signal,
+              params: { path: { articleId } },
+            })
+          : await fetchClient.GET(
+              "/v1/me/articles/{articleId}/snapshots/{snapshotId}/markdown",
+              { signal, params: { path: { articleId, snapshotId } } }
+            )
       if (error) throw error
       return data?.markdown ?? ""
     },
@@ -158,6 +181,22 @@ export function writeArticleToCaches(
   const drop = article.hidden && !includeHidden
 
   queryClient.setQueryData(articleQueryOptions(article.id).queryKey, article)
+  // 記事状態はsnapshot間で共有する。固定版のmetadataは不変のまま、同じ記事の
+  // detail cacheすべてへ現在の状態だけを反映し、mutation完了後の巻き戻りを防ぐ。
+  queryClient.setQueriesData<Article>(
+    { queryKey: ["article", article.id] },
+    (cached) =>
+      cached === undefined
+        ? cached
+        : {
+            ...cached,
+            read: article.read,
+            saved: article.saved,
+            readLater: article.readLater,
+            hidden: article.hidden,
+            hiddenAt: article.hiddenAt,
+          }
+  )
 
   queryClient.setQueriesData<{
     pages: readonly ArticlePage[]
