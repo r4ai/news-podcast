@@ -39,7 +39,17 @@ pnpm dev:up
 | Web Vitals fake API | 4100 | `PERF_API_PORT` |
 | Web Vitals preview | 4473 | `PERF_WEB_PORT` |
 
-開発ログインは`.env`の`DEV_AUTH_PASSWORD`を使う。`APP_ENV=production`では開発ログインとfake providerを有効にできない。
+開発ログインは`.env`の`DEV_AUTH_PASSWORD`を使う。`APP_ENV=production`では開発ログインとfake providerを有効にできない。Content KnowledgeとEpisode Productionは同じprovider mode parserを使い、次の状態遷移をReady前に検証する。
+
+| `APP_ENV` | `PROVIDER_MODE` | 必須設定 | 起動結果 |
+| --- | --- | --- | --- |
+| `development` / `test` | `fake`（未指定時の既定） | 各serviceのlocal依存 | 起動 |
+| `development` / `test` | `live` | OpenAI key/modelと各service依存 | 起動 |
+| `production` | `live` | OpenAI key/modelと各service依存 | 起動 |
+| `production` | 未指定 / `fake` / 未知値 / 大文字違い | — | 起動拒否 |
+| 未知の`APP_ENV` | 任意 | — | 起動拒否 |
+
+成功した構成は`provider.configuration` log/metricへ`app.env`と`provider.mode`だけを記録し、secretは属性に含めない。詳細は[ADR-0077](adr/0077-fail-closed-production-provider-mode.md)を参照する。
 
 終了時はvolumeを残して停止する。
 
@@ -103,7 +113,7 @@ Webの`/api`と`/v1`はGatewayだけへproxyする。認証routeもGatewayが固
 
 ### 外部APIなしで検証する
 
-`.env`の既定値は`PROVIDER_MODE=fake`である。固定providerを使って認証、購読、記事、非同期job、Library、音声accessを確認できる。
+`.env`の既定値は`APP_ENV=development`かつ`PROVIDER_MODE=fake`である。固定providerを使って認証、購読、記事、非同期job、Library、音声accessを確認できる。未知値はfakeへ読み替えず設定エラーになる。
 
 ```bash
 pnpm test:e2e:functional
@@ -115,8 +125,10 @@ functional E2Eは実NATS/JetStreamを使うbackend縦断、Web E2Eは分離し�
 ### OpenAIとVOICEVOXを使う
 
 ```dotenv
+APP_ENV=development
 PROVIDER_MODE=live
 OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=gpt-5.6-luna
 ```
 
 ```bash

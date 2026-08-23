@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { readContentKnowledgeConfig } from "./env.js"
+import { parseNodeServiceConfig } from "./node.js"
 
 const validEnvironment = {
   APP_ENV: "development",
@@ -27,6 +28,71 @@ const validEnvironment = {
 }
 
 describe("content-knowledge environment boundary", () => {
+  it.each([undefined, "fake", "typo", "Live"] as const)(
+    "rejects production provider mode %s",
+    async (providerMode) => {
+      const exit = await Effect.runPromiseExit(
+        readContentKnowledgeConfig({
+          ...validEnvironment,
+          APP_ENV: "production",
+          PROVIDER_MODE: providerMode,
+          OPENAI_API_KEY: "test-key",
+          CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+        })
+      )
+
+      expect(exit._tag).toBe("Failure")
+    }
+  )
+
+  it.each([
+    ["missing API key", { OPENAI_API_KEY: undefined }],
+    ["missing model", { CONTENT_ENRICH_OPENAI_MODEL: undefined }],
+  ])("rejects production live mode with %s", async (_name, override) => {
+    const exit = await Effect.runPromiseExit(
+      readContentKnowledgeConfig({
+        ...validEnvironment,
+        APP_ENV: "production",
+        PROVIDER_MODE: "live",
+        OPENAI_API_KEY: "test-key",
+        CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+        ...override,
+      })
+    )
+
+    expect(exit._tag).toBe("Failure")
+  })
+
+  it("accepts production only with exact live mode and credentials", async () => {
+    const config = await Effect.runPromise(
+      readContentKnowledgeConfig({
+        ...validEnvironment,
+        APP_ENV: "production",
+        PROVIDER_MODE: "live",
+        OPENAI_API_KEY: "test-key",
+        CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+      })
+    )
+
+    expect(config.appEnvironment).toBe("production")
+    expect(config.enrichment.provider).toMatchObject({ model: "gpt-test" })
+  })
+
+  it("rejects a direct production service config that bypasses the env reader with fake mode", async () => {
+    const fake = await Effect.runPromise(
+      readContentKnowledgeConfig(validEnvironment)
+    )
+
+    const exit = await Effect.runPromiseExit(
+      parseNodeServiceConfig({
+        ...fake,
+        appEnvironment: "production",
+      })
+    )
+
+    expect(exit._tag).toBe("Failure")
+  })
+
   it("projects, parses, and freezes only service-owned configuration", async () => {
     const config = await Effect.runPromise(
       readContentKnowledgeConfig({ ...validEnvironment, UNRELATED: "ignored" })
@@ -160,6 +226,13 @@ describe("content-knowledge environment boundary", () => {
           ...validEnvironment,
           APP_ENV: appEnvironment,
           CONTENT_ENRICH_RESET_ENABLED: flag,
+          ...(appEnvironment === "production"
+            ? {
+                PROVIDER_MODE: "live",
+                OPENAI_API_KEY: "test-key",
+                CONTENT_ENRICH_OPENAI_MODEL: "gpt-test",
+              }
+            : {}),
         })
       )
 

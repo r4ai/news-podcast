@@ -5,11 +5,89 @@ import {
   readEpisodeProductionConfig,
   readEpisodeProductionServiceConfig,
 } from "./env.js"
+import { parseNodeEpisodeProductionServiceConfig } from "./service.js"
+
+const liveEnvironment = {
+  APP_ENV: "production",
+  PROVIDER_MODE: "live",
+  EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
+  NATS_SERVERS: "nats://nats:4222",
+  EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
+  OPENAI_API_KEY: "test-openai-key",
+  OPENAI_MODEL: "gpt-test",
+  VOICEVOX_BASE_URL: "http://voicevox:50021",
+  VOICEVOX_CHARACTER_NAME: "ずんだもん",
+  S3_ENDPOINT: "http://seaweedfs:8333",
+  S3_REGION: "us-east-1",
+  S3_BUCKET: "news-podcast",
+  S3_ACCESS_KEY_ID: "access",
+  S3_SECRET_ACCESS_KEY: "secret",
+}
 
 describe("Episode Production environment configuration", () => {
+  it.each([undefined, "fake", "typo", "Live"] as const)(
+    "rejects production provider mode %s",
+    async (providerMode) => {
+      const exit = await Effect.runPromiseExit(
+        readEpisodeProductionServiceConfig({
+          ...liveEnvironment,
+          PROVIDER_MODE: providerMode,
+        })
+      )
+
+      expect(exit._tag).toBe("Failure")
+    }
+  )
+
+  it.each([
+    ["missing API key", { OPENAI_API_KEY: undefined }],
+    ["blank API key", { OPENAI_API_KEY: "   " }],
+    ["missing model", { OPENAI_MODEL: undefined }],
+    ["blank model", { OPENAI_MODEL: "   " }],
+  ])("rejects production live mode with %s", async (_name, override) => {
+    const exit = await Effect.runPromiseExit(
+      readEpisodeProductionServiceConfig({
+        ...liveEnvironment,
+        ...override,
+      })
+    )
+
+    expect(exit._tag).toBe("Failure")
+  })
+
+  it("accepts production only with exact live mode and credentials", async () => {
+    const config = await Effect.runPromise(
+      readEpisodeProductionServiceConfig(liveEnvironment)
+    )
+
+    expect(config.appEnvironment).toBe("production")
+    expect(config.providerMode).toBe("live")
+  })
+
+  it("rejects a direct production service config that bypasses the env reader with fake mode", async () => {
+    const fake = await Effect.runPromise(
+      readEpisodeProductionServiceConfig({
+        ...liveEnvironment,
+        APP_ENV: "development",
+        PROVIDER_MODE: "fake",
+        OPENAI_API_KEY: undefined,
+      })
+    )
+
+    const exit = await Effect.runPromiseExit(
+      parseNodeEpisodeProductionServiceConfig({
+        ...fake,
+        appEnvironment: "production",
+      })
+    )
+
+    expect(exit._tag).toBe("Failure")
+  })
+
   it("parses every provider and worker boundary for the executable service", async () => {
     const config = await Effect.runPromise(
       readEpisodeProductionServiceConfig({
+        APP_ENV: "development",
         EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
         NATS_SERVERS: "nats://nats:4222",
         EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
@@ -52,6 +130,7 @@ describe("Episode Production environment configuration", () => {
   it("accepts fake mode without an OpenAI credential", async () => {
     const config = await Effect.runPromise(
       readEpisodeProductionServiceConfig({
+        APP_ENV: "development",
         EPISODE_PRODUCTION_DATABASE_PATH: "/data/production.sqlite",
         NATS_SERVERS: "nats://nats:4222",
         EPISODE_PRODUCTION_QUEUE_GROUP: "episode-production",
