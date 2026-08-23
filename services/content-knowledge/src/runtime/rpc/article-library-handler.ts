@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect"
 import {
   ArticleListQuerySchema,
   parseArticleStatePatch,
+  createOwnerReplayAccess,
   readOwnerArticleMarkdown,
   triggerOwnerArticleArchive,
   type ArticleLibraryRepository,
@@ -11,6 +12,7 @@ import {
 import type { MarkdownObjectReader } from "../../application/ports/article-catalog.js"
 import {
   ArticleIdSchema,
+  SnapshotIdSchema,
   type ArchiveRequestId,
   type CapturedAt,
 } from "../../domain/article.js"
@@ -89,7 +91,9 @@ const strict =
 export type ArticleLibraryHandlerDependencies = Readonly<{
   readonly articles: ArticleLibraryRepository
   readonly objects: MarkdownObjectReader
+  readonly replaySigner?: import("../../application/article-library.js").ReplayAccessSigner
   readonly now: () => CapturedAt
+  readonly nowEpochMillis?: () => number
   readonly deriveArchiveRequestId: (input: {
     readonly articleId: Schema.Schema.Type<typeof ArticleIdSchema>
     readonly messageId: ArchiveMessageContext["messageId"]
@@ -112,6 +116,18 @@ export const makeArticleLibraryHandler = (
     deriveArchiveRequestId: dependencies.deriveArchiveRequestId,
     archive: dependencies.archive,
   })
+  const replayAccess = createOwnerReplayAccess({
+    articles: dependencies.articles,
+    signer:
+      dependencies.replaySigner ??
+      deepFreeze({
+        issue: () =>
+          Effect.fail(
+            deepFreeze({ _tag: "ReplayAccessSigningFailure" as const })
+          ),
+      }),
+    nowEpochMillis: dependencies.nowEpochMillis ?? Date.now,
+  })
 
   return deepFreeze({
     list: (input: unknown) =>
@@ -129,6 +145,27 @@ export const makeArticleLibraryHandler = (
     markdown: (input: unknown) =>
       strict(ArticleIdentitySchema)(input).pipe(
         Effect.flatMap(({ ownerId, articleId }) => markdown(ownerId, articleId))
+      ),
+    replayAccess: (input: unknown) =>
+      strict(
+        Schema.Struct({
+          ownerId: OwnerIdSchema,
+          snapshotId: SnapshotIdSchema,
+          object: Schema.Union([
+            Schema.Struct({ kind: Schema.Literal("Replay") }),
+            Schema.Struct({
+              kind: Schema.Literal("Asset"),
+              assetName: Schema.String.check(
+                Schema.isPattern(/^[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
+                Schema.isMaxLength(81)
+              ),
+            }),
+          ]),
+        })
+      )(input).pipe(
+        Effect.flatMap(({ ownerId, snapshotId, object }) =>
+          replayAccess(ownerId, snapshotId, object)
+        )
       ),
     patch: (input: unknown) =>
       strict(PatchInputSchema)(input).pipe(

@@ -404,6 +404,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/article-snapshots/{snapshotId}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve an owned article replay
+         * @description Authorizes an immutable snapshot and returns its same-origin replay URL.
+         */
+        get: operations["articles.getArticleReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/article-snapshots/{snapshotId}/replay/index.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream an owned article replay
+         * @description Proxies sandboxed archived HTML with a restrictive CSP and finite size budget.
+         */
+        get: operations["articles.streamArticleReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/article-snapshots/{snapshotId}/assets/{assetName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream an owned article replay asset
+         * @description Proxies one exact captured asset with its stored media type and finite size budget.
+         */
+        get: operations["articles.streamArticleReplayAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/articles/bulk-state": {
         parameters: {
             query?: never;
@@ -1057,6 +1117,9 @@ export interface components {
                 count: number & unknown;
             }[];
             aiPending: number & unknown;
+        };
+        ArticleReplayLocation: {
+            url: string & unknown;
         };
         Union_5: boolean | null;
         Objects_: {
@@ -2442,6 +2505,166 @@ export interface operations {
                     "application/json": {
                         markdown: string & unknown;
                     };
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleReplay": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ArticleReplayLocation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleReplayLocation"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.streamArticleReplay": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.streamArticleReplayAsset": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                snapshotId: string & unknown;
+                assetName: string & (unknown & unknown);
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
                 };
             };
             /** @description UnauthorizedProblem */

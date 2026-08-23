@@ -91,6 +91,7 @@ type ArticlePorts = Pick<
   | "listArticles"
   | "getArticle"
   | "getArticleMarkdown"
+  | "createArticleReplayAccess"
   | "patchArticle"
   | "bulkPatchArticles"
   | "getArticleFacets"
@@ -177,6 +178,26 @@ export const makeArticlePorts = (
           reply._tag === "Markdown"
             ? parse(ArticleMarkdownSchema)({ markdown: reply.markdown }).pipe(
                 Effect.mapError(unavailable)
+              )
+            : Effect.fail(articleReplyFailure(reply))
+        ),
+        Effect.mapError(normalizeProblem)
+      ),
+    createArticleReplayAccess: ({ headers, snapshotId, object }) =>
+      libraryRpc(headers, {
+        operation: "ReplayAccess",
+        snapshotId,
+        object,
+      }).pipe(
+        Effect.flatMap((reply) =>
+          reply._tag === "ReplayAccess"
+            ? Effect.succeed(
+                Object.freeze({
+                  url: reply.url,
+                  mediaType: reply.mediaType,
+                  byteLength: reply.byteLength,
+                  sha256: reply.sha256,
+                })
               )
             : Effect.fail(articleReplyFailure(reply))
         ),

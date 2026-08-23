@@ -90,6 +90,10 @@ const FeedIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
 const SnapshotIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("SnapshotId")
 )
+const ReplayAssetNameSchema = Schema.String.check(
+  Schema.isPattern(/^[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
+  Schema.isMaxLength(81)
+)
 const UserIdSchema = boundedText(255).pipe(Schema.brand("PublicUserId"))
 
 export const HealthResponseSchema = Schema.Struct({
@@ -1220,6 +1224,60 @@ export const getArticleMarkdownEndpoint = HttpApiEndpoint.get(
     ],
   }
 )
+export const ArticleReplayLocationSchema = Schema.Struct({
+  url: Schema.String.check(
+    Schema.isPattern(
+      /^\/v1\/me\/article-snapshots\/[0-9a-f-]{36}\/replay\/index\.html$/
+    )
+  ),
+}).annotate({ identifier: "ArticleReplayLocation" })
+export const getArticleReplayEndpoint = HttpApiEndpoint.get(
+  "getArticleReplay",
+  "/v1/me/article-snapshots/:snapshotId/replay",
+  {
+    headers: SessionHeadersSchema,
+    params: { snapshotId: SnapshotIdSchema },
+    success: ArticleReplayLocationSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const streamArticleReplayEndpoint = HttpApiEndpoint.get(
+  "streamArticleReplay",
+  "/v1/me/article-snapshots/:snapshotId/replay/index.html",
+  {
+    headers: SessionHeadersSchema,
+    params: { snapshotId: SnapshotIdSchema },
+    success: HttpApiSchema.StreamUint8Array({ contentType: "text/html" }),
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const streamArticleReplayAssetEndpoint = HttpApiEndpoint.get(
+  "streamArticleReplayAsset",
+  "/v1/me/article-snapshots/:snapshotId/assets/:assetName",
+  {
+    headers: SessionHeadersSchema,
+    params: {
+      snapshotId: SnapshotIdSchema,
+      assetName: ReplayAssetNameSchema,
+    },
+    success: HttpApiSchema.StreamUint8Array({
+      contentType: "application/octet-stream",
+    }),
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
 export const patchArticleEndpoint = HttpApiEndpoint.patch(
   "patchArticle",
   "/v1/me/articles/:articleId",
@@ -1506,6 +1564,9 @@ const articlesGroup = HttpApiGroup.make("articles")
     getArticleFacetsEndpoint,
     getArticleEndpoint,
     getArticleMarkdownEndpoint,
+    getArticleReplayEndpoint,
+    streamArticleReplayEndpoint,
+    streamArticleReplayAssetEndpoint,
     patchArticleEndpoint,
     bulkPatchArticlesEndpoint,
     archiveArticleEndpoint,
@@ -1653,6 +1714,21 @@ const operationDocumentation = {
     summary: "Get archived article Markdown",
     description:
       "Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials.",
+  },
+  getArticleReplay: {
+    summary: "Resolve an owned article replay",
+    description:
+      "Authorizes an immutable snapshot and returns its same-origin replay URL.",
+  },
+  streamArticleReplay: {
+    summary: "Stream an owned article replay",
+    description:
+      "Proxies sandboxed archived HTML with a restrictive CSP and finite size budget.",
+  },
+  streamArticleReplayAsset: {
+    summary: "Stream an owned article replay asset",
+    description:
+      "Proxies one exact captured asset with its stored media type and finite size budget.",
   },
   bulkPatchArticles: {
     summary: "Bulk update owned article state",

@@ -122,9 +122,10 @@ export function ArticleReaderView({
   didAutoFallback,
   markdown,
   isMarkdownLoading,
-  archiveHtml,
+  archiveUrl,
   isArchiveLoading,
   archiveUnavailable,
+  retryArchive,
   toggleSaved,
   toggleReadLater,
   toggleHidden,
@@ -202,14 +203,16 @@ export function ArticleReaderView({
         ) : null}
 
         <ArticleReaderContent
-          archiveHtml={archiveHtml}
+          archiveUrl={archiveUrl}
           archiveUnavailable={archiveUnavailable}
           article={article}
           compiled={compiled}
           isArchiveLoading={isArchiveLoading}
           isMarkdownLoading={isMarkdownLoading}
           markdown={markdown}
+          retryArchive={retryArchive}
           source={source}
+          useMarkdown={() => setSource("markdown")}
         />
       </article>
 

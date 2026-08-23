@@ -48,13 +48,15 @@ describe("ArticleReaderContent", () => {
     const article = makeArticle({})
     const { container } = render(
       <CompiledContent
-        archiveHtml={undefined}
+        archiveUrl={undefined}
         archiveUnavailable={false}
         article={article}
         isArchiveLoading={false}
         isMarkdownLoading={false}
         markdown="![説明](assets/hash123.png)"
+        retryArchive={() => {}}
         source="markdown"
+        useMarkdown={() => {}}
       />
     )
 
@@ -69,24 +71,26 @@ describe("ArticleReaderContent", () => {
     )
   })
 
-  it("renders the archive HTML inside a sandboxed iframe when the archive source is selected", () => {
+  it("renders the replay URL inside a sandboxed iframe when the archive source is selected", () => {
     const article = makeArticle({})
     const { container } = render(
       <CompiledContent
-        archiveHtml="<html><body>archive</body></html>"
+        archiveUrl="/v1/me/article-snapshots/snapshot/replay/index.html"
         archiveUnavailable={false}
         article={article}
         isArchiveLoading={false}
         isMarkdownLoading={false}
         markdown={undefined}
+        retryArchive={() => {}}
         source="archive"
+        useMarkdown={() => {}}
       />
     )
 
     const iframe = container.querySelector("iframe")
     expect(iframe?.getAttribute("sandbox")).toBe("")
-    expect(iframe?.getAttribute("srcdoc")).toBe(
-      "<html><body>archive</body></html>"
+    expect(iframe?.getAttribute("src")).toBe(
+      "/v1/me/article-snapshots/snapshot/replay/index.html"
     )
   })
 
@@ -94,16 +98,19 @@ describe("ArticleReaderContent", () => {
     const article = makeArticle({})
     const { getByText } = render(
       <CompiledContent
-        archiveHtml={undefined}
+        archiveUrl={undefined}
         archiveUnavailable={true}
         article={article}
         isArchiveLoading={false}
         isMarkdownLoading={false}
         markdown={undefined}
+        retryArchive={() => {}}
         source="archive"
+        useMarkdown={() => {}}
       />
     )
 
+    expect(getByText("再試行")).toBeTruthy()
     expect(getByText("元記事を新しいタブで開く")).toBeTruthy()
   })
 })

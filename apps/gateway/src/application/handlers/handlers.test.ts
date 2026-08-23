@@ -104,6 +104,7 @@ const makePorts = (): GatewayPorts => ({
   listArticles: () => Effect.succeed({ items: [], page: { hasMore: false } }),
   getArticle: () => Effect.fail(unavailable),
   getArticleMarkdown: () => Effect.fail(unavailable),
+  createArticleReplayAccess: () => Effect.fail(unavailable),
   patchArticle: () => Effect.fail(unavailable),
   bulkPatchArticles: () => Effect.succeed({ updated: 0 }),
   getArticleFacets: () =>

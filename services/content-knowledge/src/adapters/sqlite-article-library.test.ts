@@ -130,7 +130,7 @@ const setup = async () => {
       },
       replay: {
         _tag: "Replay",
-        key: "articles/a/replay.html",
+        key: "articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/replay/index.html",
         sha256: "2".repeat(64),
         mediaType: "text/html",
         byteLength: 10,
@@ -142,7 +142,15 @@ const setup = async () => {
         mediaType: "text/markdown",
         byteLength: 10,
       },
-      assets: [],
+      assets: [
+        {
+          _tag: "Asset",
+          key: `articles/46c2eef5-a205-4526-8640-dc3ea84d88b4/assets/${"a".repeat(64)}.css`,
+          sha256: "4".repeat(64),
+          mediaType: "text/css",
+          byteLength: 12,
+        },
+      ],
     }),
   })
   await Effect.runPromise(
@@ -168,6 +176,53 @@ const query = (overrides: Record<string, unknown> = {}) =>
 const capturedAt = (value: string) => decode(CapturedAtSchema, value)
 
 describe("SQLite article library", () => {
+  it("authorizes exact replay objects by durable owner access after unsubscribe", async () => {
+    const { articles, snapshot, subscriptions } = await setup()
+    await Effect.runPromise(
+      subscriptions.remove(
+        ids.ownerA,
+        decode(SubscriptionIdSchema, "9aa2225d-07e7-4af4-a8e6-e4788f801a91")
+      )
+    )
+
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerA, snapshot.snapshotId, {
+          kind: "Replay",
+        })
+      )
+    ).resolves.toMatchObject({
+      _tag: "Found",
+      object: { mediaType: "text/html", byteLength: 10 },
+    })
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerA, snapshot.snapshotId, {
+          kind: "Asset",
+          assetName: `${"a".repeat(64)}.css`,
+        })
+      )
+    ).resolves.toMatchObject({
+      _tag: "Found",
+      object: { mediaType: "text/css", byteLength: 12 },
+    })
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerB, snapshot.snapshotId, {
+          kind: "Replay",
+        })
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+    await expect(
+      Effect.runPromise(
+        articles.findReplayObject(ids.ownerA, snapshot.snapshotId, {
+          kind: "Asset",
+          assetName: `${"b".repeat(64)}.png`,
+        })
+      )
+    ).resolves.toEqual({ _tag: "NotFound" })
+  })
+
   it("grants shared-feed items while a subscriber pauses and resumes", async () => {
     const { articles, catalog, database, subscriptions } = await setup()
     await Effect.runPromise(

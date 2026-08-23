@@ -1,4 +1,5 @@
 import { MarkdownBody, type MarkdownCompileState } from "@/shared/markdown"
+import { Button } from "@workspace/ui/components/button"
 import type { Article, ArticleSource } from "../-model"
 
 export type ArticleReaderContentProps = {
@@ -8,15 +9,53 @@ export type ArticleReaderContentProps = {
   readonly isMarkdownLoading: boolean
   /** リーダー側で1度だけコンパイルした本文。目次と同じ結果を共有する。 */
   readonly compiled: MarkdownCompileState
-  readonly archiveHtml: string | undefined
+  readonly archiveUrl: string | undefined
   readonly isArchiveLoading: boolean
   readonly archiveUnavailable: boolean
+  readonly retryArchive: () => void
+  readonly useMarkdown: () => void
 }
 
 function NoContentNotice({ article }: { readonly article: Article }) {
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
       <p>本文もアーカイブも利用できません。</p>
+      <a
+        className="text-primary underline underline-offset-4"
+        href={article.url}
+        rel="noreferrer"
+        target="_blank"
+      >
+        元記事を新しいタブで開く
+      </a>
+    </div>
+  )
+}
+
+function ArchiveUnavailableNotice({
+  article,
+  canUseMarkdown,
+  retryArchive,
+  useMarkdown,
+}: {
+  readonly article: Article
+  readonly canUseMarkdown: boolean
+  readonly retryArchive: () => void
+  readonly useMarkdown: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+      <p>保存版を読み込めませんでした。</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button onClick={retryArchive} size="sm" variant="outline">
+          再試行
+        </Button>
+        {canUseMarkdown ? (
+          <Button onClick={useMarkdown} size="sm" variant="ghost">
+            本文表示に戻る
+          </Button>
+        ) : null}
+      </div>
       <a
         className="text-primary underline underline-offset-4"
         href={article.url}
@@ -36,9 +75,11 @@ export function ArticleReaderContent({
   markdown,
   isMarkdownLoading,
   compiled,
-  archiveHtml,
+  archiveUrl,
   isArchiveLoading,
   archiveUnavailable,
+  retryArchive,
+  useMarkdown,
 }: ArticleReaderContentProps) {
   if (source === "archive") {
     if (isArchiveLoading) {
@@ -50,14 +91,21 @@ export function ArticleReaderContent({
         />
       )
     }
-    if (archiveUnavailable || !archiveHtml) {
-      return <NoContentNotice article={article} />
+    if (archiveUnavailable || !archiveUrl) {
+      return (
+        <ArchiveUnavailableNotice
+          article={article}
+          canUseMarkdown={Boolean(markdown)}
+          retryArchive={retryArchive}
+          useMarkdown={useMarkdown}
+        />
+      )
     }
     return (
       <iframe
         className="h-[70vh] w-full rounded-lg border"
         sandbox=""
-        srcDoc={archiveHtml}
+        src={archiveUrl}
         title={article.title}
       />
     )

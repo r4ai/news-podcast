@@ -7,7 +7,10 @@ import {
   type ArchiveRequestId,
   type ArticleId,
   type CapturedAt,
+  type MediaType,
   type ObjectKey,
+  type Sha256,
+  type SnapshotId,
 } from "../domain/article.js"
 import {
   ArticleCursorSchema,
@@ -89,7 +92,13 @@ export type ArticleFacets = DeepReadonly<{
 
 export type ArticleLibraryError = DeepReadonly<{
   readonly _tag: "ArticleLibraryFailed"
-  readonly operation: "List" | "Find" | "Patch" | "BulkPatch" | "Facets"
+  readonly operation:
+    | "List"
+    | "Find"
+    | "ReplayAccess"
+    | "Patch"
+    | "BulkPatch"
+    | "Facets"
   readonly reason: "CorruptRecord" | "Unavailable"
 }>
 
@@ -100,6 +109,19 @@ export type ArticleLookup = DeepReadonly<
 
 export type ArticleObjectLookup = DeepReadonly<
   | { readonly _tag: "Found"; readonly key: ObjectKey }
+  | { readonly _tag: "NotFound" }
+>
+
+export type ReplayObjectLookup = DeepReadonly<
+  | {
+      readonly _tag: "Found"
+      readonly object: {
+        readonly key: ObjectKey
+        readonly mediaType: MediaType
+        readonly byteLength: number
+        readonly sha256: Sha256
+      }
+    }
   | { readonly _tag: "NotFound" }
 >
 
@@ -116,6 +138,14 @@ export type ArticleLibraryRepository = DeepReadonly<{
     ownerId: OwnerId,
     articleId: ArticleId
   ) => Effect.Effect<ArticleObjectLookup, ArticleLibraryError>
+  readonly findReplayObject: (
+    ownerId: OwnerId,
+    snapshotId: SnapshotId,
+    object: Readonly<
+      | { readonly kind: "Replay" }
+      | { readonly kind: "Asset"; readonly assetName: string }
+    >
+  ) => Effect.Effect<ReplayObjectLookup, ArticleLibraryError>
   readonly patch: (
     ownerId: OwnerId,
     articleId: ArticleId,
@@ -138,6 +168,71 @@ export type OwnerArticleMarkdownResult = DeepReadonly<
   | { readonly _tag: "Found"; readonly markdown: string }
   | { readonly _tag: "NotFound" }
 >
+
+export type ReplayAccessSigningFailure = DeepReadonly<{
+  readonly _tag: "ReplayAccessSigningFailure"
+}>
+
+export type ReplayAccessSigner = DeepReadonly<{
+  readonly issue: (input: {
+    readonly objectKey: ObjectKey
+    readonly mediaType: MediaType
+    readonly expiresAtEpochMillis: number
+  }) => Effect.Effect<string, ReplayAccessSigningFailure>
+}>
+
+export type OwnerReplayAccessResult = DeepReadonly<
+  | {
+      readonly _tag: "Found"
+      readonly url: string
+      readonly mediaType: MediaType
+      readonly byteLength: number
+      readonly sha256: Sha256
+    }
+  | { readonly _tag: "NotFound" }
+>
+
+/** Authorization and exact immutable metadata lookup always precede signing. */
+export const createOwnerReplayAccess =
+  (ports: {
+    readonly articles: Pick<ArticleLibraryRepository, "findReplayObject">
+    readonly signer: ReplayAccessSigner
+    readonly nowEpochMillis: () => number
+  }) =>
+  (
+    ownerId: OwnerId,
+    snapshotId: SnapshotId,
+    object: Readonly<
+      | { readonly kind: "Replay" }
+      | { readonly kind: "Asset"; readonly assetName: string }
+    >
+  ) =>
+    ports.articles.findReplayObject(ownerId, snapshotId, object).pipe(
+      Effect.flatMap((lookup) => {
+        if (lookup._tag === "NotFound") {
+          return Effect.succeed<OwnerReplayAccessResult>(
+            deepFreeze({ _tag: "NotFound" })
+          )
+        }
+        return ports.signer
+          .issue({
+            objectKey: lookup.object.key,
+            mediaType: lookup.object.mediaType,
+            expiresAtEpochMillis: ports.nowEpochMillis() + 60_000,
+          })
+          .pipe(
+            Effect.map((url): OwnerReplayAccessResult =>
+              deepFreeze({
+                _tag: "Found",
+                url,
+                mediaType: lookup.object.mediaType,
+                byteLength: lookup.object.byteLength,
+                sha256: lookup.object.sha256,
+              })
+            )
+          )
+      })
+    )
 
 export const readOwnerArticleMarkdown =
   (ports: {

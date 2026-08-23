@@ -2545,6 +2545,309 @@
         "description": "Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials."
       }
     },
+    "/v1/me/article-snapshots/{snapshotId}/replay": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.getArticleReplay",
+        "parameters": [
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ArticleReplayLocation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleReplayLocation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resolve an owned article replay",
+        "description": "Authorizes an immutable snapshot and returns its same-origin replay URL."
+      }
+    },
+    "/v1/me/article-snapshots/{snapshotId}/replay/index.html": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.streamArticleReplay",
+        "parameters": [
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "x-effect-stream": {
+                  "encoding": "uint8array"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream an owned article replay",
+        "description": "Proxies sandboxed archived HTML with a restrictive CSP and finite size budget."
+      }
+    },
+    "/v1/me/article-snapshots/{snapshotId}/assets/{assetName}": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.streamArticleReplayAsset",
+        "parameters": [
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "assetName",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}\\.[a-z0-9]{1,16}$"
+                },
+                {
+                  "maxLength": 81
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "x-effect-stream": {
+                  "encoding": "uint8array"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream an owned article replay asset",
+        "description": "Proxies one exact captured asset with its stored media type and finite size budget."
+      }
+    },
     "/v1/me/articles/bulk-state": {
       "post": {
         "tags": [
@@ -6407,6 +6710,23 @@
           "states",
           "feeds",
           "aiPending"
+        ],
+        "additionalProperties": false
+      },
+      "ArticleReplayLocation": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^\\/v1\\/me\\/article-snapshots\\/[0-9a-f-]{36}\\/replay\\/index\\.html$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "url"
         ],
         "additionalProperties": false
       },
