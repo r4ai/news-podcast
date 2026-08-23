@@ -1,5 +1,5 @@
 import { Bookmark, BookmarkCheck } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { useEffect, useId, useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -15,7 +15,7 @@ export type ArticleRowProps = {
 }
 
 /**
- * 1件48〜72pxのコンパクト行。未読/既読を色と太さだけで表す (docs/design.md §7.1)。
+ * 1件48〜72pxのコンパクト行。未読/既読は小さな文字ラベルでも表す。
  *
  * 行は保存ボタンを内包するので`listbox/option`にはできない (optionは操作可能な
  * 子孫を持てない)。素の`ul/li`で組み、選択は本文ボタンの`aria-current`で表す。
@@ -29,6 +29,8 @@ export function ArticleRow({
 }: ArticleRowProps) {
   const meta = archiveMetaLabel(article.archiveStatus)
   const snippet = articleSnippet(article)
+  const readState = article.read ? "既読" : "未読"
+  const readStateId = useId()
   const ref = useRef<HTMLLIElement>(null)
 
   useEffect(() => {
@@ -54,11 +56,20 @@ export function ArticleRow({
       <span
         aria-hidden="true"
         className={cn(
-          "mt-3.5 size-1.5 shrink-0 rounded-full",
-          article.read ? "bg-transparent" : "bg-primary"
+          "mt-2.5 flex h-5 min-w-8 shrink-0 items-center justify-center rounded-sm border px-1 text-[0.625rem] leading-none font-medium",
+          article.read
+            ? "border-border text-foreground/70"
+            : "border-primary/50 bg-primary/10 text-foreground"
         )}
-      />
+        data-slot="article-read-state"
+      >
+        {readState}
+      </span>
+      <span className="sr-only" id={readStateId}>
+        {readState}
+      </span>
       <button
+        aria-describedby={readStateId}
         aria-current={isSelected ? "true" : undefined}
         className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-md py-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() => onSelect(article)}

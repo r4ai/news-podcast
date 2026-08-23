@@ -560,6 +560,109 @@ test("RSS reader replays stored HTML, CSS, and images after the source disappear
   await expect(saveButton).toHaveAttribute("aria-pressed", "true")
 })
 
+test("mobile pointer users can mark a read article unread and hear its state", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const articleId = "00000000-0000-4000-8000-000000000089"
+  let article = {
+    id: articleId,
+    feedId: "00000000-0000-4000-8000-000000000001",
+    sourceName: "Example Feed",
+    title: "モバイルで未読に戻す記事",
+    url: "https://example.com/mobile-unread",
+    discoveredAt: "2026-08-23T00:00:00.000Z",
+    publishedAt: "2026-08-23T00:00:00.000Z",
+    archiveStatus: "succeeded",
+    read: true,
+    saved: false,
+    readLater: false,
+    hidden: false,
+  }
+  const patches: unknown[] = []
+
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles/facets",
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({
+          states: { all: 1, unread: article.read ? 0 : 1, saved: 0, later: 0 },
+          feeds: [
+            { feedId: article.feedId, name: article.sourceName, count: 1 },
+          ],
+          aiPending: 0,
+        }),
+        contentType: "application/json",
+      })
+  )
+  await page.route(
+    (url) => url.pathname === "/v1/me/articles",
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({ items: [article], page: { hasMore: false } }),
+        contentType: "application/json",
+      })
+  )
+  await page.route(
+    (url) => url.pathname === `/v1/me/articles/${articleId}/markdown`,
+    (route) =>
+      route.fulfill({
+        body: JSON.stringify({ markdown: "本文です。" }),
+        contentType: "application/json",
+      })
+  )
+  await page.route(
+    (url) => url.pathname === `/v1/me/articles/${articleId}`,
+    async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          body: JSON.stringify(article),
+          contentType: "application/json",
+        })
+        return
+      }
+      const patch = route.request().postDataJSON() as { read?: boolean }
+      patches.push(patch)
+      article = { ...article, ...patch }
+      await route.fulfill({
+        body: JSON.stringify(article),
+        contentType: "application/json",
+      })
+    }
+  )
+
+  await page.goto("/articles?state=all")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+
+  const readRow = page.getByRole("button", {
+    name: /^モバイルで未読に戻す記事/,
+  })
+  await expect(readRow).toBeVisible()
+  await expect(readRow).toHaveAccessibleDescription("既読")
+  await readRow.click()
+
+  const markUnread = page.getByRole("button", {
+    name: "未読に戻す",
+    exact: true,
+  })
+  await expect(markUnread).toBeVisible()
+  await markUnread.click()
+
+  await expect(markUnread).toHaveCount(0)
+  await expect.poll(() => patches).toEqual([{ read: false }])
+
+  await page.getByRole("button", { name: "一覧へ戻る" }).click()
+  const unreadRow = page.getByRole("button", {
+    name: /^モバイルで未読に戻す記事/,
+  })
+  await expect(unreadRow).toBeVisible()
+  await expect(unreadRow).toHaveAccessibleDescription("未読")
+  await expect(
+    unreadRow.locator("xpath=..").locator('[data-slot="article-read-state"]')
+  ).toHaveText("未読")
+})
+
 test("the article list walks the server cursor and toggles save without refetching", async ({
   page,
 }) => {
