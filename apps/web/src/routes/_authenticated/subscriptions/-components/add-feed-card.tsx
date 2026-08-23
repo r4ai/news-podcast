@@ -85,7 +85,7 @@ function FeedUrlInput({ disabled }: { readonly disabled: boolean }) {
       id="feed-url"
       inputMode="url"
       onChange={(event) => setValue(event.target.value)}
-      placeholder="https://example.com/feed.xml"
+      placeholder="https://example.com/rss"
       required
       type="url"
       value={value}
@@ -180,7 +180,8 @@ export function AddFeedCardView({
                 <RegisterFeedButton pending={registration.pending} />
               </div>
               <FieldDescription>
-                登録後、新着記事は自動的にオフライン保存されます。
+                HTTP(S)のRSS/Atom
+                URLを入力してください。表記は登録時に正規化されます。
               </FieldDescription>
             </Field>
           </form>

@@ -63,6 +63,12 @@ function statusText(subscription: Subscription, job: FeedSyncJob | undefined) {
 }
 
 const sanitizedFailureReasons: Readonly<Record<string, string>> = {
+  Canceled: "取得先へ接続できません",
+  HttpStatus: "取得先へ接続できません",
+  MalformedResponse: "RSS/Atom形式ではありません",
+  ResourceLimit: "応答サイズが上限を超えています",
+  Timeout: "取得先へ接続できません",
+  Unavailable: "取得先へ接続できません",
   InvalidItem: "項目形式不正",
   InvalidUrl: "URL不正",
   MissingLink: "リンク欠落",

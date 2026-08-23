@@ -88,6 +88,50 @@ describe("SQLite subscription repository", () => {
     }
   })
 
+  it("lets an owner subscribe again after deleting the canonical subscription", async () => {
+    const database = openTestDatabase()
+    try {
+      const repository = await Effect.runPromise(
+        createSubscriptionRepository(database.db)
+      )
+      const first = await Effect.runPromise(
+        repository.add({
+          subscriptionId: decode(
+            SubscriptionIdSchema,
+            "9aa2225d-07e7-4af4-a8e6-e4788f801a91"
+          ),
+          feedId: decode(FeedIdSchema, "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd"),
+          ownerId: ownerA,
+          feedUrl,
+          createdAt,
+        })
+      )
+      await Effect.runPromise(
+        repository.remove(ownerA, first.subscription.subscriptionId)
+      )
+
+      const second = await Effect.runPromise(
+        repository.add({
+          subscriptionId: decode(
+            SubscriptionIdSchema,
+            "12953489-2b83-4d01-a737-25ea7b9f952a"
+          ),
+          feedId: decode(FeedIdSchema, "dfe96b69-11c9-4c11-93da-aca33ab74457"),
+          ownerId: ownerA,
+          feedUrl,
+          createdAt: decode(CreatedAtSchema, "2026-08-13T02:00:00.000Z"),
+        })
+      )
+
+      expect(second).toMatchObject({
+        _tag: "Added",
+        subscription: { feedId: first.subscription.feedId, feedUrl },
+      })
+    } finally {
+      database.close()
+    }
+  })
+
   it("cannot delete another owner's subscription", async () => {
     const database = openTestDatabase()
     try {

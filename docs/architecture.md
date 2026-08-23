@@ -372,7 +372,7 @@ erDiagram
 
 | データ | 設計上の意味 |
 | --- | --- |
-| `feed_catalog` / `feed_subscriptions` / `public_feed_listings` | 内部canonical feed、ownerのprivate購読、明示公開listingを分離 |
+| `feed_catalog` / `feed_subscriptions` / `public_feed_listings` | HTTP境界でcanonicalizeしたfeed URL identity、ownerごとの購読状態、明示公開listingを分離。既登録は409、削除後は同じfeedへ再購読する（ADR-0087） |
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。parser validationを含む個別記事失敗は件数とsanitized reasonをdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_search_index_queue` / `article_search_fts` / `article_search_short_grams` | snapshot commit後に再試行可能に更新するMarkdown本文索引。記事一覧検索はowner access内の最新snapshotだけを参照 |
@@ -510,6 +510,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0069: 購読と過去記事への恒久アクセス権を分離する](adr/0069-separate-subscription-from-article-access.md)
 - [ADR-0070: Episode完了配送の監視閾値と復旧上限を分離する](adr/0070-recover-episode-completion-after-redelivery-threshold.md)
 - [ADR-0071: ユーザー登録RSS URLをprivate-by-defaultにする](adr/0071-keep-user-registered-feed-urls-private.md)
+- [ADR-0087: RSS URLをHTTP境界でcanonicalizeしてfeed identityへ変換する](adr/0087-canonicalize-feed-url-at-http-boundary.md)
 - [ADR-0072: Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
 - [ADR-0073: 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
 - [ADR-0074: 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)

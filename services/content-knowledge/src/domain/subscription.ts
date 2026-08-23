@@ -24,7 +24,8 @@ const canonicalHttpUrl = Schema.makeFilter<string>((input) => {
     if (url.username !== "" || url.password !== "") {
       return "feed URL must not contain credentials"
     }
-    if (url.hash !== "") return "feed URL must not contain a fragment"
+    if (url.hash !== "" || input.includes("#"))
+      return "feed URL must not contain a fragment"
     return url.href === input || "feed URL must be canonical"
   } catch {
     return "feed URL must be absolute"

@@ -109,6 +109,27 @@ describe("SubscriptionItem", () => {
     expect(screen.getByText("前回の同期に失敗しました")).toBeTruthy()
   })
 
+  it.each([
+    ["Unavailable", "取得先へ接続できません"],
+    ["Timeout", "取得先へ接続できません"],
+    ["HttpStatus", "取得先へ接続できません"],
+    ["MalformedResponse", "RSS/Atom形式ではありません"],
+  ])("explains a %s synchronization failure", (error, message) => {
+    render(
+      <SubscriptionItem
+        disabled={false}
+        feedName="Zenn"
+        job={{ ...job("failed"), error }}
+        onRemove={vi.fn()}
+        onSync={vi.fn()}
+        onToggle={vi.fn()}
+        subscription={subscription}
+      />
+    )
+
+    expect(screen.getByText(new RegExp(message))).toBeTruthy()
+  })
+
   it("shows the isolated item failure count after a degraded success", () => {
     render(
       <SubscriptionItem

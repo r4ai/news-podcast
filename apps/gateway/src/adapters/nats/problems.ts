@@ -39,6 +39,10 @@ const problemSpecs = {
   },
   idempotency_conflict: { status: 409, title: "Idempotency conflict" },
   resource_conflict: { status: 409, title: "Resource conflict" },
+  feed_subscription_exists: {
+    status: 409,
+    title: "Feed subscription already exists",
+  },
   job_terminal: { status: 409, title: "Episode job state conflict" },
   job_not_failed: { status: 409, title: "Episode job state conflict" },
   feed_subscription_rejected: {
@@ -65,6 +69,7 @@ export const unprocessable = () => problem("feed_subscription_rejected")
 export const subscriptionNotFound = () => problem("feed_subscription_not_found")
 export const resourceNotFound = () => problem("resource_not_found")
 export const resourceConflict = () => problem("resource_conflict")
+export const subscriptionExists = () => problem("feed_subscription_exists")
 export const articleNotFound = () => problem("article_not_found")
 export const jobNotFound = () => problem("episode_job_not_found")
 

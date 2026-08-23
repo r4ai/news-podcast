@@ -1,7 +1,7 @@
 import { episodeFailureCodes } from "@news-podcast/contracts/episode-failure"
 import { deepFreeze } from "@news-podcast/kernel"
 import { TraceparentSchema } from "@news-podcast/protocols"
-import { Schema } from "effect"
+import { Schema, SchemaGetter } from "effect"
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -56,6 +56,7 @@ const CanonicalFeedUrlSchema = Schema.String.check(
           url.username === "" &&
           url.password === "" &&
           url.hash === "" &&
+          !value.includes("#") &&
           url.href === value
           ? undefined
           : "Expected a canonical credential-free HTTP(S) feed URL"
@@ -69,6 +70,51 @@ const CanonicalFeedUrlSchema = Schema.String.check(
     }
   )
 ).pipe(Schema.brand("CanonicalFeedUrl"))
+
+const feedUrlInputDescription =
+  "Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; credentials and fragments are forbidden."
+
+const FeedUrlInputSchema = Schema.String.annotate({
+  description: feedUrlInputDescription,
+})
+  .check(
+    Schema.isMaxLength(2_048),
+    Schema.makeFilter<string>((value) => {
+      try {
+        new URL(value)
+        return undefined
+      } catch {
+        return "Expected an absolute HTTP(S) feed URL"
+      }
+    })
+  )
+  .pipe(
+    Schema.decode({
+      decode: SchemaGetter.transform((value) => new URL(value).href),
+      encode: SchemaGetter.transform((value) => new URL(value).href),
+    })
+  )
+  .check(
+    Schema.isMaxLength(2_048),
+    Schema.makeFilter<string>(
+      (value) => {
+        const url = new URL(value)
+        return (url.protocol === "http:" || url.protocol === "https:") &&
+          url.username === "" &&
+          url.password === "" &&
+          url.hash === "" &&
+          !value.includes("#")
+          ? undefined
+          : "Expected a credential-free, fragment-free HTTP(S) feed URL"
+      },
+      {
+        format: "uri",
+        expected: "a credential-free, fragment-free HTTP(S) feed URL",
+      }
+    )
+  )
+  .pipe(Schema.brand("CanonicalFeedUrl"))
+  .annotate({ description: feedUrlInputDescription })
 
 export const ArticleIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("ArticleId")
@@ -361,7 +407,7 @@ export const AudioAccessSchema = Schema.Struct({
 }).annotate({ identifier: "AudioAccess" })
 
 export const AddFeedSubscriptionRequestSchema = Schema.Struct({
-  feedUrl: CanonicalFeedUrlSchema,
+  feedUrl: FeedUrlInputSchema,
 }).annotate({ identifier: "AddFeedSubscriptionRequest" })
 
 const feedSubscriptionFields = {
@@ -777,6 +823,11 @@ const resourceConflictProblem = problemVariant(
   "Resource conflict",
   "resource_conflict"
 )
+const feedSubscriptionExistsProblem = problemVariant(
+  409,
+  "Feed subscription already exists",
+  "feed_subscription_exists"
+)
 const jobTerminalProblem = problemVariant(
   409,
   "Episode job state conflict",
@@ -810,6 +861,7 @@ export const ForbiddenProblemSchema = forbiddenProblem
 export const ConflictProblemSchema = Schema.Union([
   idempotencyConflictProblem,
   resourceConflictProblem,
+  feedSubscriptionExistsProblem,
   jobTerminalProblem,
   jobNotFailedProblem,
 ])
@@ -1053,6 +1105,7 @@ export const addFeedSubscriptionEndpoint = HttpApiEndpoint.post(
     error: [
       BadRequestProblemSchema,
       UnauthorizedProblemSchema,
+      ConflictProblemSchema,
       UnprocessableProblemSchema,
       UnavailableProblemSchema,
     ],
@@ -1166,6 +1219,7 @@ export const registerFeedEndpoint = HttpApiEndpoint.post(
     success: RegisteredFeedSchema,
     error: [
       UnauthorizedProblemSchema,
+      ConflictProblemSchema,
       UnprocessableProblemSchema,
       UnavailableProblemSchema,
     ],
@@ -1696,7 +1750,7 @@ const operationDocumentation = {
   addFeedSubscription: {
     summary: "Subscribe to an RSS feed",
     description:
-      "Creates an authenticated owner subscription for a canonical credential-free HTTP(S) feed URL and queues synchronization.",
+      "Canonicalizes a credential-free, fragment-free HTTP(S) RSS/Atom URL, creates the authenticated owner's subscription, and queues synchronization; an existing canonical subscription returns 409.",
   },
   listFeedSubscriptions: {
     summary: "List owned feed subscriptions",
@@ -1731,7 +1785,7 @@ const operationDocumentation = {
   registerFeed: {
     summary: "Register a feed and subscribe",
     description:
-      "Registers a canonical credential-free RSS URL and creates the authenticated owner's subscription in one request.",
+      "Canonicalizes and registers a credential-free, fragment-free HTTP(S) RSS/Atom URL for the authenticated owner; an existing canonical subscription returns 409.",
   },
   listArticles: {
     summary: "List owned articles",

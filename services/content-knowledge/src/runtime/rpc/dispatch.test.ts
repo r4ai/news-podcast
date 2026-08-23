@@ -137,6 +137,28 @@ describe("Content Knowledge RPC handler", () => {
       false
     )
     expect(repository.listCatalog).toHaveBeenCalledWith("owner-a", "news")
+
+    repository.add.mockReturnValueOnce(
+      Effect.succeed({ _tag: "Existing", subscription } as never)
+    )
+    let existingOutput = ""
+    await Effect.runPromise(
+      handler({
+        subject: subjects.content.addSubscription,
+        payload: envelope({ feedUrl: subscription.feedUrl }),
+        reply: (payload) =>
+          Effect.sync(() => {
+            existingOutput = payload
+          }),
+      })
+    )
+
+    expect((await decodeReply(existingOutput)).payload).toMatchObject({
+      _tag: "Existing",
+      subscription: { feedId: subscription.feedId },
+    })
+    expect(enqueue).toHaveBeenCalledOnce()
+    expect(onSubscriptionAdded).toHaveBeenCalledOnce()
   })
 
   it("materializes for the actor owner and rejects anonymous or wrong producers", async () => {

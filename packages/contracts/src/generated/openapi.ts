@@ -223,7 +223,7 @@ export interface paths {
         put?: never;
         /**
          * Subscribe to an RSS feed
-         * @description Creates an authenticated owner subscription for a canonical credential-free HTTP(S) feed URL and queues synchronization.
+         * @description Canonicalizes a credential-free, fragment-free HTTP(S) RSS/Atom URL, creates the authenticated owner's subscription, and queues synchronization; an existing canonical subscription returns 409.
          */
         post: operations["addFeedSubscription"];
         delete?: never;
@@ -311,7 +311,7 @@ export interface paths {
         put?: never;
         /**
          * Register a feed and subscribe
-         * @description Registers a canonical credential-free RSS URL and creates the authenticated owner's subscription in one request.
+         * @description Canonicalizes and registers a credential-free, fragment-free HTTP(S) RSS/Atom URL for the authenticated owner; an existing canonical subscription returns 409.
          */
         post: operations["feeds.registerFeed"];
         delete?: never;
@@ -895,6 +895,15 @@ export interface components {
             /** @enum {string} */
             type: "about:blank";
             /** @enum {string} */
+            title: "Feed subscription already exists";
+            /** @enum {number} */
+            status: 409;
+            /** @enum {string} */
+            code: "feed_subscription_exists";
+        } | {
+            /** @enum {string} */
+            type: "about:blank";
+            /** @enum {string} */
             title: "Episode job state conflict";
             /** @enum {number} */
             status: 409;
@@ -1029,6 +1038,7 @@ export interface components {
             };
         };
         AddFeedSubscriptionRequest: {
+            /** @description Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; credentials and fragments are forbidden. */
             feedUrl: string & unknown;
         };
         CreatedFeedSubscription: {
@@ -1963,6 +1973,15 @@ export interface operations {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
             /** @description UnprocessableProblem */
             422: {
                 headers: {
@@ -2283,6 +2302,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
                 };
             };
             /** @description UnprocessableProblem */

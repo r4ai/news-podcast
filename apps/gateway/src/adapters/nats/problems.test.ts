@@ -20,6 +20,7 @@ import {
   resourceConflict,
   resourceNotFound,
   subscriptionNotFound,
+  subscriptionExists,
   unauthorized,
   unavailable,
   unprocessable,
@@ -88,6 +89,13 @@ describe("Gateway HTTP Problem contract", () => {
       resourceConflict(),
       409,
       "resource_conflict",
+      ConflictProblemSchema,
+    ],
+    [
+      "existing feed subscription",
+      subscriptionExists(),
+      409,
+      "feed_subscription_exists",
       ConflictProblemSchema,
     ],
     [

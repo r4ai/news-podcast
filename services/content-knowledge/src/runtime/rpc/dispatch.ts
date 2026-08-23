@@ -226,6 +226,7 @@ export const makeContentKnowledgeRpcHandler =
                         })
                       ),
                       Effect.flatMap((result) =>
+                        result._tag === "Existing" ||
                         feedSyncQueue === undefined
                           ? Effect.succeed(result)
                           : feedSyncQueue
@@ -240,12 +241,16 @@ export const makeContentKnowledgeRpcHandler =
                               )
                               .pipe(Effect.as(result))
                       ),
-                      Effect.tap(() =>
-                        Effect.sync(() => dependencies.onSubscriptionAdded?.())
+                      Effect.tap((result) =>
+                        result._tag === "Added"
+                          ? Effect.sync(() =>
+                              dependencies.onSubscriptionAdded?.()
+                            )
+                          : Effect.void
                       ),
                       Effect.map((result) =>
                         deepFreeze({
-                          _tag: "Added" as const,
+                          _tag: result._tag,
                           subscription: wireSubscription(result.subscription),
                         })
                       )

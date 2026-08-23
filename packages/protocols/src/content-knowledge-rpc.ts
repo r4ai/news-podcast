@@ -26,6 +26,7 @@ const HttpUrlSchema = Schema.String.check(
         url.username === "" &&
         url.password === "" &&
         url.hash === "" &&
+        !value.includes("#") &&
         url.href === value
         ? true
         : "expected a canonical credential-free HTTP(S) URL"
@@ -118,6 +119,9 @@ export type ContentKnowledgeRejection = Schema.Schema.Type<
 
 export const AddFeedSubscriptionReplySchema = Schema.Union([
   Schema.TaggedStruct("Added", { subscription: ContentFeedSubscriptionSchema }),
+  Schema.TaggedStruct("Existing", {
+    subscription: ContentFeedSubscriptionSchema,
+  }),
   ContentKnowledgeRejectionSchema,
 ])
 export type AddFeedSubscriptionReply = Schema.Schema.Type<

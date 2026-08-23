@@ -131,19 +131,34 @@ describe("gateway HttpApi contract", () => {
       }
   })
 
-  it("accepts only canonical credential-free feed URLs", async () => {
-    const valid = await Effect.runPromise(
-      Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
-        feedUrl: "https://feeds.example.com/news.xml",
-      })
-    )
+  it.each([
+    ["https://example.com", "https://example.com/"],
+    ["https://EXAMPLE.com/feed", "https://example.com/feed"],
+    ["https://example.com:443/feed", "https://example.com/feed"],
+    [
+      "https://example.com/a b?q=hello world&next=%2f",
+      "https://example.com/a%20b?q=hello%20world&next=%2f",
+    ],
+  ])(
+    "canonicalizes a valid HTTP feed URL at the boundary",
+    async (input, expected) => {
+      const valid = await Effect.runPromise(
+        Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
+          feedUrl: input,
+        })
+      )
 
-    expect(valid.feedUrl).toBe("https://feeds.example.com/news.xml")
+      expect(valid.feedUrl).toBe(expected)
+    }
+  )
+
+  it("rejects unsafe feed URLs after canonicalization", async () => {
     for (const feedUrl of [
       "javascript:alert(1)",
       "https://user:secret@feeds.example.com/news.xml",
       "https://feeds.example.com/news.xml#section",
-      "https://feeds.example.com/has space",
+      "https://feeds.example.com/news.xml#",
+      `https://feeds.example.com/${"x".repeat(2_049)}`,
     ]) {
       const exit = await Effect.runPromiseExit(
         Schema.decodeUnknownEffect(AddFeedSubscriptionRequestSchema)({
@@ -171,6 +186,7 @@ describe("gateway HttpApi contract", () => {
 
     for (const code of [
       "invalid_subscription_request",
+      "feed_subscription_exists",
       "authentication_required",
       "episode_not_found",
       "feed_subscription_not_found",

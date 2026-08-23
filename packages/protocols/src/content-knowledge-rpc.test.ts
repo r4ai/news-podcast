@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
+  parseAddFeedSubscriptionReply,
   parseAddFeedSubscriptionRequest,
   parseDeleteFeedSubscriptionRequest,
   parseMaterializeArticlesRequest,
@@ -26,6 +27,22 @@ describe("content knowledge RPC contracts", () => {
         })
       )
     ).toMatchObject({ subscriptionId: expect.any(String) })
+  })
+
+  it("preserves an existing owner subscription as a distinct reply", async () => {
+    const subscription = {
+      subscriptionId: "9aa2225d-07e7-4af4-a8e6-e4788f801a91",
+      feedId: "8d90a18a-7eb5-47bb-b6c1-1c9709b80cdd",
+      feedUrl: "https://feeds.example.com/news.xml",
+      enabled: true,
+      createdAt: "2026-08-13T01:00:00.000Z",
+    }
+
+    expect(
+      await Effect.runPromise(
+        parseAddFeedSubscriptionReply({ _tag: "Existing", subscription })
+      )
+    ).toEqual({ _tag: "Existing", subscription })
   })
 
   it("supports automatic and bounded selected materialization", async () => {
