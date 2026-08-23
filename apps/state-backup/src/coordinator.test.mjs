@@ -17,47 +17,44 @@ import { backupDatabase } from "../../../scripts/sqlite-state.mjs"
 const encryptionKey = Buffer.alloc(32, 7)
 const createdAt = new Date("2026-08-20T00:00:00.000Z")
 
-const completion = (jobId, episodeId) => ({
-  messageId: jobId,
-  correlationId: jobId,
-  causationId: jobId,
-  occurredAt: "2026-08-20T00:00:00.000Z",
-  producer: "episode-production",
-  actor: { _tag: "Service", service: "episode-production" },
-  payload: {
+const completion = (_jobId, episodeId) => ({
+  episodeId,
+  ownerId: "owner-a",
+  title: `Episode ${episodeId}`,
+  script: `Script ${episodeId}`,
+  audio: {
     episodeId,
-    ownerId: "owner-a",
-    title: `Episode ${episodeId}`,
-    script: `Script ${episodeId}`,
-    audio: {
-      objectKey: "episodes/a/audio.mp3",
-      byteLength: 5,
-      contentType: "audio/mpeg",
-    },
-    sources: [
-      {
-        sourceKind: "rss",
-        articleId: "article-a",
-        snapshotId: "snapshot-a",
-        url: "https://example.com/article-a",
-        title: "Article A",
-        publishedAt: "2026-08-19T00:00:00.000Z",
-      },
-    ],
-    completedAt: "2026-08-20T00:00:00.000Z",
+    objectKey: "episodes/a/audio.mp3",
+    byteLength: 5,
+    contentType: "audio/mpeg",
   },
+  sources: [
+    {
+      articleId: "article-a",
+      snapshotId: "snapshot-a",
+      url: "https://example.com/article-a",
+      title: "Article A",
+      publishedAt: "2026-08-19T00:00:00.000Z",
+    },
+  ],
+  completedAt: "2026-08-20T00:00:00.000Z",
+  traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 })
 
-const completionHash = (envelope) =>
+const completionHash = (intent) =>
   createHash("sha256")
     .update(
       JSON.stringify({
-        id: envelope.payload.episodeId,
-        ownerId: envelope.payload.ownerId,
-        title: envelope.payload.title,
-        script: envelope.payload.script,
-        audio: envelope.payload.audio,
-        sources: envelope.payload.sources.map((source) => ({
+        id: intent.episodeId,
+        ownerId: intent.ownerId,
+        title: intent.title,
+        script: intent.script,
+        audio: {
+          objectKey: intent.audio.objectKey,
+          byteLength: intent.audio.byteLength,
+          contentType: intent.audio.contentType,
+        },
+        sources: intent.sources.map((source) => ({
           _tag: "RssSource",
           ...(source.articleId === undefined
             ? {}
@@ -69,7 +66,7 @@ const completionHash = (envelope) =>
             : { publishedAt: source.publishedAt }),
           snapshotId: source.snapshotId,
         })),
-        createdAt: envelope.payload.completedAt,
+        createdAt: intent.completedAt,
       })
     )
     .digest("hex")
@@ -111,12 +108,12 @@ const createDatabase = (path, profile) => {
         published_at TEXT
       );
     `)
-    const envelope = completion("job-a", "episode-a")
+    const intent = completion("job-a", "episode-a")
     database
       .prepare(
         "INSERT INTO episode_jobs(job_id, status, episode_id, completed_at) VALUES (?, 'Succeeded', ?, ?)"
       )
-      .run("job-a", "episode-a", envelope.payload.completedAt)
+      .run("job-a", "episode-a", intent.completedAt)
     database
       .prepare(
         "INSERT INTO episode_completion_outbox(job_id, episode_id, payload, published_at) VALUES (?, ?, ?, ?)"
@@ -124,7 +121,7 @@ const createDatabase = (path, profile) => {
       .run(
         "job-a",
         "episode-a",
-        JSON.stringify(envelope),
+        JSON.stringify(intent),
         createdAt.toISOString()
       )
   } else {
@@ -157,26 +154,26 @@ const createDatabase = (path, profile) => {
         PRIMARY KEY (episode_id, position)
       );
     `)
-    const envelope = completion("job-a", "episode-a")
+    const intent = completion("job-a", "episode-a")
     database
       .prepare("INSERT INTO episodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .run(
-        envelope.payload.episodeId,
-        envelope.payload.ownerId,
-        envelope.payload.title,
-        envelope.payload.script,
-        envelope.payload.audio.objectKey,
-        envelope.payload.audio.byteLength,
-        envelope.payload.audio.contentType,
-        envelope.payload.completedAt
+        intent.episodeId,
+        intent.ownerId,
+        intent.title,
+        intent.script,
+        intent.audio.objectKey,
+        intent.audio.byteLength,
+        intent.audio.contentType,
+        intent.completedAt
       )
-    for (const [position, source] of envelope.payload.sources.entries()) {
+    for (const [position, source] of intent.sources.entries()) {
       database
         .prepare(
           "INSERT INTO episode_sources VALUES (?, ?, 'rss', ?, ?, ?, ?, ?)"
         )
         .run(
-          envelope.payload.episodeId,
+          intent.episodeId,
           position,
           source.articleId ?? null,
           source.url,
@@ -188,9 +185,9 @@ const createDatabase = (path, profile) => {
     database
       .prepare("INSERT INTO episode_completion_inbox VALUES (?, ?, ?, ?)")
       .run(
-        envelope.messageId,
-        envelope.payload.episodeId,
-        completionHash(envelope),
+        "job-a",
+        intent.episodeId,
+        completionHash(intent),
         createdAt.toISOString()
       )
   }
@@ -203,25 +200,21 @@ const noWriteBarrier = async ({ operation }) => ({
 })
 
 const insertCompletedRace = (databaseSources) => {
-  const envelope = completion("job-race", "episode-race")
+  const intent = completion("job-race", "episode-race")
   const production = new DatabaseSync(databaseSources.production)
   production
     .prepare(
       "UPDATE episode_jobs SET status = 'Succeeded', episode_id = ?, completed_at = ? WHERE job_id = ?"
     )
-    .run(
-      envelope.payload.episodeId,
-      envelope.payload.completedAt,
-      envelope.messageId
-    )
+    .run(intent.episodeId, intent.completedAt, "job-race")
   production
     .prepare(
       "INSERT INTO episode_completion_outbox(job_id, episode_id, payload, published_at) VALUES (?, ?, ?, ?)"
     )
     .run(
-      envelope.messageId,
-      envelope.payload.episodeId,
-      JSON.stringify(envelope),
+      "job-race",
+      intent.episodeId,
+      JSON.stringify(intent),
       createdAt.toISOString()
     )
   production.close()
@@ -230,22 +223,22 @@ const insertCompletedRace = (databaseSources) => {
   library
     .prepare("INSERT INTO episodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .run(
-      envelope.payload.episodeId,
-      envelope.payload.ownerId,
-      envelope.payload.title,
-      envelope.payload.script,
-      envelope.payload.audio.objectKey,
-      envelope.payload.audio.byteLength,
-      envelope.payload.audio.contentType,
-      envelope.payload.completedAt
+      intent.episodeId,
+      intent.ownerId,
+      intent.title,
+      intent.script,
+      intent.audio.objectKey,
+      intent.audio.byteLength,
+      intent.audio.contentType,
+      intent.completedAt
     )
-  for (const [position, source] of envelope.payload.sources.entries()) {
+  for (const [position, source] of intent.sources.entries()) {
     library
       .prepare(
         "INSERT INTO episode_sources VALUES (?, ?, 'rss', ?, ?, ?, ?, ?)"
       )
       .run(
-        envelope.payload.episodeId,
+        intent.episodeId,
         position,
         source.articleId ?? null,
         source.url,
@@ -257,9 +250,9 @@ const insertCompletedRace = (databaseSources) => {
   library
     .prepare("INSERT INTO episode_completion_inbox VALUES (?, ?, ?, ?)")
     .run(
-      envelope.messageId,
-      envelope.payload.episodeId,
-      completionHash(envelope),
+      "job-race",
+      intent.episodeId,
+      completionHash(intent),
       createdAt.toISOString()
     )
   library.close()
@@ -294,6 +287,47 @@ test("holds a write barrier across all four SQLite databases", async () => {
 
     assert.equal(result.value, "consistent-cut")
     assert.equal(result.durationMillis >= 0, true)
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true })
+  }
+})
+
+test("releases every SQLite writer lock when the barrier deadline expires", async () => {
+  const fixture = await setup()
+  const delay = (milliseconds) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds))
+  try {
+    const barrier = withSqliteWriteBarrier({
+      databaseSources: fixture.databaseSources,
+      timeoutMillis: 30,
+      operation: ({ signal } = {}) =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(resolve, 150)
+          signal?.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer)
+              reject(new Error("barrier operation aborted at deadline"))
+            },
+            { once: true }
+          )
+        }),
+    })
+    const observed = barrier.then(
+      () => undefined,
+      (error) => error
+    )
+
+    await delay(75)
+    const writer = new DatabaseSync(fixture.databaseSources.production)
+    writer.exec(
+      "INSERT INTO episode_jobs(job_id, status) VALUES ('after-deadline', 'Queued')"
+    )
+    writer.close()
+
+    const error = await observed
+    assert.match(error.message, /deadline|duration/i)
+    assert.equal(error.code, "barrier_duration_exceeded")
   } finally {
     await rm(fixture.directory, { recursive: true, force: true })
   }

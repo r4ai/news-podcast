@@ -316,7 +316,8 @@ export const createGeneration = async ({
     const boundary = await writeBarrier({
       databaseSources,
       timeoutMillis: barrierTimeoutMillis,
-      operation: async () => {
+      operation: async ({ signal } = {}) => {
+        signal?.throwIfAborted()
         const databaseEntries = []
         const databaseBackups = {}
         for (const profile of profiles) {
@@ -325,7 +326,8 @@ export const createGeneration = async ({
             fail(`missing ${profile} database source`)
           }
           const destination = join(databaseDirectory, `${profile}.sqlite`)
-          await snapshotDatabase(profile, source, destination)
+          await snapshotDatabase(profile, source, destination, { signal })
+          signal?.throwIfAborted()
           databaseBackups[profile] = destination
           const archiveKey = `${prefix}/databases/${profile}.sqlite.enc`
           databaseEntries.push({
@@ -339,11 +341,13 @@ export const createGeneration = async ({
         }
 
         const firstListing = normalizeObjectListing(
-          await sourceObjects.listObjects()
+          await sourceObjects.listObjects({ signal })
         )
+        signal?.throwIfAborted()
         const secondListing = normalizeObjectListing(
-          await sourceObjects.listObjects()
+          await sourceObjects.listObjects({ signal })
         )
+        signal?.throwIfAborted()
         const sourceGeneration = objectInventoryFingerprint(firstListing)
         if (sourceGeneration !== objectInventoryFingerprint(secondListing)) {
           rejectGeneration(

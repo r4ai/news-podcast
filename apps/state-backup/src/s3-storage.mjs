@@ -32,7 +32,7 @@ const download = async (client, bucket, key, destination) => {
   }
 }
 
-const listAll = async (client, input) => {
+const listAll = async (client, input, { signal } = {}) => {
   const contents = []
   let continuationToken
   do {
@@ -40,7 +40,8 @@ const listAll = async (client, input) => {
       new ListObjectsV2Command({
         ...input,
         ContinuationToken: continuationToken,
-      })
+      }),
+      { abortSignal: signal }
     )
     contents.push(...(page.Contents ?? []))
     continuationToken = page.IsTruncated
@@ -54,8 +55,8 @@ const listAll = async (client, input) => {
 }
 
 export const createSourceObjectStore = ({ client, bucket }) => ({
-  async listObjects() {
-    const objects = await listAll(client, { Bucket: bucket })
+  async listObjects(options) {
+    const objects = await listAll(client, { Bucket: bucket }, options)
     return objects.map((object) => {
       if (typeof object.Key !== "string") fail("S3 listing contains no key")
       return {

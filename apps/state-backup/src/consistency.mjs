@@ -34,6 +34,27 @@ export const withSqliteWriteBarrier = async ({
     fail("backup barrier operation is required")
   const startedAt = monotonicNow()
   const databases = []
+  let released = false
+  let releaseError
+  let deadlineExpired = false
+  const release = () => {
+    if (released) return releaseError
+    released = true
+    for (const database of databases.toReversed()) {
+      try {
+        database.exec("ROLLBACK")
+      } catch (error) {
+        releaseError ??= error
+      } finally {
+        try {
+          database.close()
+        } catch (error) {
+          releaseError ??= error
+        }
+      }
+    }
+    return releaseError
+  }
   try {
     for (const profile of databaseProfiles) {
       const source = databaseSources?.[profile]
@@ -65,10 +86,36 @@ export const withSqliteWriteBarrier = async ({
       databases.push(database)
     }
 
+    const controller = new AbortController()
+    const deadlineError = new Error(
+      "backup write barrier exceeded its bounded duration"
+    )
+    deadlineError.code = "barrier_duration_exceeded"
+    const remainingDuration = Math.max(
+      1,
+      timeoutMillis - (monotonicNow() - startedAt)
+    )
+    let deadlineTimer
+    const deadline = new Promise((_, reject) => {
+      deadlineTimer = setTimeout(() => {
+        deadlineExpired = true
+        deadlineError.barrierDurationMillis = monotonicNow() - startedAt
+        controller.abort(deadlineError)
+        release()
+        reject(deadlineError)
+      }, remainingDuration)
+    })
+    const pendingOperation = Promise.resolve().then(() =>
+      operation({ signal: controller.signal })
+    )
     let value
     try {
-      value = await operation()
+      value = await Promise.race([pendingOperation, deadline])
     } catch (error) {
+      if (deadlineExpired) {
+        await pendingOperation.catch(() => undefined)
+        throw deadlineError
+      }
       if (
         error instanceof Error &&
         !Number.isFinite(error.barrierDurationMillis)
@@ -76,6 +123,8 @@ export const withSqliteWriteBarrier = async ({
         error.barrierDurationMillis = monotonicNow() - startedAt
       }
       throw error
+    } finally {
+      clearTimeout(deadlineTimer)
     }
     const durationMillis = Math.max(0, monotonicNow() - startedAt)
     if (durationMillis > timeoutMillis) {
@@ -87,38 +136,31 @@ export const withSqliteWriteBarrier = async ({
     }
     return { value, durationMillis: Math.round(durationMillis) }
   } finally {
-    for (const database of databases.toReversed()) {
-      try {
-        database.exec("ROLLBACK")
-      } finally {
-        database.close()
-      }
-    }
+    const error = release()
+    if (error && !deadlineExpired) throw error
   }
 }
 
 const sha256 = (input) => createHash("sha256").update(input).digest("hex")
 
-const completionPayloadFingerprint = (envelope) => {
-  const payload = envelope?.payload
+const completionIntentFingerprint = (intent) => {
   if (
-    envelope?.messageId === undefined ||
-    typeof payload?.episodeId !== "string" ||
-    typeof payload?.ownerId !== "string" ||
-    typeof payload?.title !== "string" ||
-    typeof payload?.script !== "string" ||
-    typeof payload?.completedAt !== "string" ||
-    typeof payload?.audio?.objectKey !== "string" ||
-    !Number.isSafeInteger(payload?.audio?.byteLength) ||
-    typeof payload?.audio?.contentType !== "string" ||
-    !Array.isArray(payload?.sources)
+    typeof intent?.episodeId !== "string" ||
+    typeof intent?.ownerId !== "string" ||
+    typeof intent?.title !== "string" ||
+    typeof intent?.script !== "string" ||
+    typeof intent?.completedAt !== "string" ||
+    typeof intent?.audio?.objectKey !== "string" ||
+    !Number.isSafeInteger(intent?.audio?.byteLength) ||
+    typeof intent?.audio?.contentType !== "string" ||
+    !Array.isArray(intent?.sources)
   ) {
     rejectGeneration(
       "cross_service_invariant",
       "cross-service invariant rejected an invalid completion outbox payload"
     )
   }
-  const sources = payload.sources.map((source) => ({
+  const sources = intent.sources.map((source) => ({
     _tag: "RssSource",
     ...(source.articleId === undefined ? {} : { articleId: source.articleId }),
     url: source.url,
@@ -130,13 +172,17 @@ const completionPayloadFingerprint = (envelope) => {
   }))
   return sha256(
     JSON.stringify({
-      id: payload.episodeId,
-      ownerId: payload.ownerId,
-      title: payload.title,
-      script: payload.script,
-      audio: payload.audio,
+      id: intent.episodeId,
+      ownerId: intent.ownerId,
+      title: intent.title,
+      script: intent.script,
+      audio: {
+        objectKey: intent.audio.objectKey,
+        byteLength: intent.audio.byteLength,
+        contentType: intent.audio.contentType,
+      },
       sources,
-      createdAt: payload.completedAt,
+      createdAt: intent.completedAt,
     })
   )
 }
@@ -251,17 +297,17 @@ export const assertCrossServiceState = (databasePaths) => {
           "outbox has no matching succeeded job"
         )
       }
-      let envelope
+      let intent
       try {
-        envelope = JSON.parse(outbox.payload)
+        intent = JSON.parse(outbox.payload)
       } catch {
         crossServiceFailure(outbox.job_id, "outbox payload is invalid JSON")
       }
       if (
-        envelope.messageId !== outbox.job_id ||
-        envelope.payload?.episodeId !== outbox.episode_id
+        intent.episodeId !== outbox.episode_id ||
+        intent.completedAt !== job.completed_at
       ) {
-        crossServiceFailure(outbox.job_id, "outbox envelope identity differs")
+        crossServiceFailure(outbox.job_id, "outbox completion intent differs")
       }
       const inbox = inboxes.get(outbox.job_id)
       if (outbox.published_at !== null && !inbox) {
@@ -273,7 +319,7 @@ export const assertCrossServiceState = (databasePaths) => {
       if (
         inbox &&
         (inbox.episode_id !== outbox.episode_id ||
-          inbox.payload_hash !== completionPayloadFingerprint(envelope))
+          inbox.payload_hash !== completionIntentFingerprint(intent))
       ) {
         crossServiceFailure(outbox.job_id, "Library inbox payload differs")
       }

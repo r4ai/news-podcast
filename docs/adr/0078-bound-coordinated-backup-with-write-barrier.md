@@ -36,7 +36,7 @@ flowchart LR
 | Library Episode | 対応するInboxが存在する |
 | payload | Outbox envelopeから再計算したfingerprintがInbox `payload_hash`と一致する |
 
-barrierは既定30秒、最大120秒である。取得失敗、時間超過、inventory変化、object変化、横断不変条件違反は低cardinalityな`reason`で拒否し、commit markerを作らない。
+barrierは既定30秒、最大120秒である。期限到達時は進行中のI/Oへ`AbortSignal`を伝播し、全SQLite transactionを直ちに`ROLLBACK`してwriter lockを解放する。取得失敗、時間超過、inventory変化、object変化、横断不変条件違反は低cardinalityな`reason`で拒否し、commit markerを作らない。
 
 ## 判断要因
 
