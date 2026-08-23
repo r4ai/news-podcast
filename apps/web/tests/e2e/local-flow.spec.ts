@@ -261,7 +261,7 @@ test("subscription changes confirm destructive actions and roll back failed opti
   })
 
   const zenn = page.getByRole("switch", {
-    name: "Zennを生成対象にする",
+    name: "Zennの同期・生成を有効にする",
   })
   await expect(zenn).toBeChecked()
   await zenn.click()
@@ -304,7 +304,9 @@ test("refreshes RSS sync status after a subscription is deleted", async ({
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
 
-  await expect(page.getByText("生成対象", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("同期・生成・AI処理の対象", { exact: true })
+  ).toBeVisible()
   await page.getByRole("button", { name: "Zennの操作", exact: true }).click()
   await page.getByRole("menuitem", { name: "削除", exact: true }).click()
   await page.getByRole("button", { name: "削除する" }).click()

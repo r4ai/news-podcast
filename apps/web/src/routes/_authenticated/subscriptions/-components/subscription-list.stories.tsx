@@ -42,7 +42,7 @@ export const WithSubscriptions: Story = {
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement)
     await userEvent.click(
-      canvas.getByRole("switch", { name: "Zennを生成対象にする" })
+      canvas.getByRole("switch", { name: "Zennの同期・生成を有効にする" })
     )
     await expect(args.onToggle).toHaveBeenCalledOnce()
   },

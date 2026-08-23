@@ -71,7 +71,7 @@ RSS購読登録も非同期境界を持つ。Content Knowledgeは`feed_sync_jobs
 
 RSS記事の`articleId`は`feedId + GUID`で安定させ、capture intentだけをcanonical URL・title・published/updated時刻・本文系field（XHTMLのelement・属性を含む）のSHA-256 fingerprintでversion化する。同じ配送retryは既存snapshotへ収束し、同じGUIDの実更新はimmutable snapshotを追加してlatest参照を更新する。fingerprint列追加前の既存記事はlatest URL・title一致時に再取得せずbaseline化し、archive成功後だけfingerprintを進める。手動archiveはRPC message IDごとに明示refreshし、同じdelivery retryだけを冪等にする。詳細は[ADR-0073](adr/0073-version-article-capture-intents.md)を正本とする。
 
-購読は将来の同期・自動生成対象、`article_owner_access`はownerが一度取り込んだ記事への恒久的な参照権として分離する。RSS itemのcatalog登録時に現在の購読ownerへaccessを付与し、既存feedへの購読時は保存済みitemをbackfillする。購読解除ではaccess、記事状態、snapshotを削除しないため、一覧・詳細・Markdown・手動生成の保存版出典は引き続き参照できる。一方、自動生成候補は有効な購読とのjoinを維持する。詳細は[ADR-0069](adr/0069-separate-subscription-from-article-access.md)を正本とする。
+購読は将来の同期・自動生成・AI enrichment対象、`article_owner_access`はownerが一度取り込んだ記事への恒久的な参照権として分離する。RSS itemのcatalog登録時は有効な購読ownerだけへaccessを付与し、一時停止中のownerへ共有同期由来の新着を配布しない。再開時は停止中に保存されたitemを明示的にbackfillする。購読解除・一時停止では既存access、記事状態、snapshotを削除しないため、一覧・詳細・Markdown・手動生成の保存版出典は引き続き参照できる。一方、自動生成候補とAI queueは有効な購読とのjoinを維持する。詳細は[ADR-0069](adr/0069-separate-subscription-from-article-access.md)を正本とする。
 
 任意登録feedはprivate-by-defaultとし、`/v1/feeds`はrequest owner自身が購読するfeedと`public_feed_listings`へ明示掲載したfeedだけを返す。query/path tokenを文字列判定やredactionで加工せず、DB可視性条件で別ownerから閉じる。既存feedはmigrationで公開推測せず全件privateにする。将来の公開化は、認証なしの取得可能性・credential非包含・owner同意を検証するworkflowができるまで提供しない（[ADR-0071](adr/0071-keep-user-registered-feed-urls-private.md)）。
 

@@ -5,7 +5,7 @@
 - Decision owners: Content Knowledge / Architecture
 - Supersedes: N/A
 - Superseded by: N/A
-- Related: Issue #39、ADR-0007、ADR-0012、ADR-0062、ADR-0067
+- Related: Issue #39、Issue #88、ADR-0007、ADR-0012、ADR-0062、ADR-0067
 
 ## コンテキストと変更契機
 
@@ -21,14 +21,19 @@
 stateDiagram-v2
   [*] --> Subscribed: feedを購読
   Subscribed --> Acquired: itemを同期 / 既存itemを付与
+  Subscribed --> Paused: 一時停止
+  Paused --> Subscribed: 再開 / 未付与itemをbackfill
+  Paused --> Acquired: 停止前のaccessだけ保持
   Acquired --> Unsubscribed: 購読を削除
   Unsubscribed --> Acquired: 一覧・詳細・Markdown・手動出典
   Unsubscribed --> Subscribed: 同じfeedを再購読
 ```
 
 - Content Knowledgeへ`article_owner_access(owner_id, article_id, acquired_at)`を追加する。
-- RSS itemのcatalog upsert時に、そのfeedを現在購読するowner全員へaccessを冪等付与する。
+- RSS itemのcatalog upsert時に、そのfeedを現在有効に購読するowner全員へaccessを冪等付与する。一時停止中のownerには、別ownerの共有同期から新規accessを付与しない。
 - 既存feedを購読した時は、そのfeedに保存済みの全itemへaccessを冪等付与する。
+- 一時停止は停止前のaccess、owner state、snapshot、過去Episode provenanceを保持する一方、新着access、自動生成、AI enrichment、手動同期を停止する。
+- 一時停止から再開する`false → true`遷移では、停止中に保存されたitemへのaccessを同じtransactionで明示的かつ冪等にbackfillする。AI enrichmentは有効な購読だけを対象とする次回reconcileで補充する。
 - 購読解除は`feed_subscriptions`だけを削除し、access、owner state、snapshot、tag、enrichment結果を保持する。
 - 記事一覧・facets・詳細・Markdown・状態変更・tag・明示的enrichment・手動生成の指定記事はaccessで認可する。
 - 自動生成候補と将来の同期は、有効な購読を引き続き要求する。
@@ -72,12 +77,12 @@ stateDiagram-v2
 | 設計書 | 購読とaccessの責務を分離 | Done | `docs/design.md`、`docs/architecture.md` |
 | ドメイン/ユースケース | N/A — 公開domain shapeは不変 | Done | 既存Article view |
 | OpenAPI/外部契約 | N/A — endpointとresponseは不変 | Done | generated OpenAPI差分なし |
-| コード/ポート | owner-scoped queryをaccessへ切替 | Done | article library/catalog/taxonomy/enrichment repositories |
+| コード/ポート | owner-scoped queryをaccessへ切替。有効な購読だけへ新規access/AI queueを配布 | Done | article library/catalog/taxonomy/enrichment repositories |
 | データ/ストレージ | access tableとbackfill migration | Done | Content Knowledge migration |
 | 実行/配備 | 起動時migrationで適用 | Done | 共通Drizzle migrator |
 | 認証/セキュリティ | `(owner_id, article_id)`でowner分離 | Done | unsubscribe/owner isolation tests |
-| フロント/品質保証 | 解除後に残るデータを確認文へ明記 | Done | SubscriptionItem test |
-| テスト/運用 | 解除→参照→自動候補除外→再購読を検証 | Done | SQLite article library integration test |
+| フロント/品質保証 | 解除後に残るデータと、一時停止中の新着取得・AI処理除外を明記 | Done | SubscriptionItem test |
+| テスト/運用 | 停止前保持→共有同期のowner分離→再開backfillを検証 | Done | SQLite article library / enrichment queue integration tests |
 
 ## 再検討条件
 
@@ -93,6 +98,6 @@ stateDiagram-v2
 
 - Red: 購読削除後、保存記事一覧が空になり、詳細・Markdown・手動出典もNotFoundになった。
 - Green: durable accessで解除後も参照でき、自動生成候補だけは空になる。再購読後も記事は1件のまま。
-- Review regression: pause中に別ownerの共有同期で発見した記事もaccessへ付与し、resume後に参照できる。
+- 2026-08-23 clarification (Issue #88): pause中の共有同期では当該ownerへaccess/AI queueを付与せず、resume時にaccessをbackfillしてからAI queueを再調停する。旧Review regressionの「pause中に付与」はtenant境界とUI契約に反するため、この遷移契約で置き換えた。
 - migration backfill、owner isolation、Content Knowledge/Webのunit/integration test。
 - `pnpm lint` / `pnpm architecture:check` / `pnpm format:check` / functional E2E。

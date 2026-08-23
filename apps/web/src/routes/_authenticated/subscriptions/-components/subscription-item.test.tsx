@@ -27,6 +27,26 @@ function job(status: FeedSyncJob["status"]): FeedSyncJob {
 }
 
 describe("SubscriptionItem", () => {
+  it("explains that pausing excludes new sync and AI processing", () => {
+    render(
+      <SubscriptionItem
+        disabled={false}
+        feedName="Zenn"
+        onRemove={vi.fn()}
+        onSync={vi.fn()}
+        onToggle={vi.fn()}
+        subscription={{ ...subscription, enabled: false }}
+      />
+    )
+
+    expect(
+      screen.getByText("一時停止中（新着取得・AI処理の対象外）")
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("switch", { name: "Zennの同期・生成を有効にする" })
+    ).toBeTruthy()
+  })
+
   it("syncs via the overflow menu", async () => {
     const onSync = vi.fn()
     const user = userEvent.setup()

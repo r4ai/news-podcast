@@ -376,7 +376,7 @@ erDiagram
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。parser validationを含む個別記事失敗は件数とsanitized reasonをdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_search_index_queue` / `article_search_fts` / `article_search_short_grams` | snapshot commit後に再試行可能に更新するMarkdown本文索引。記事一覧検索はowner access内の最新snapshotだけを参照 |
-| `article_owner_access` | 購読解除後も残る、ownerが一度取り込んだ記事への恒久アクセス権 |
+| `article_owner_access` | 購読解除・一時停止後も既存分は残り、再開時に未付与分を補うowner単位の恒久アクセス権 |
 | `article_owner_states` | ユーザーごとの既読・保存状態 |
 | `episode_jobs` / `episode_generation_plans` / `episode_job_articles` | 状態、lease、retry、冪等性、初回実行時に固定した嗜好・記事集合 |
 | `episodes` / `episode_sources` | 台本・音声keyと、`articleId`・snapshot・入力RSSへ遡れるprovenance。legacy sourceだけ`articleId`がnullable |
