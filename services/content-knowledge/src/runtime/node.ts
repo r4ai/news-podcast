@@ -1,6 +1,7 @@
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import {
   noopObservability,
+  recordProviderConfiguration,
   type Observability,
 } from "@news-podcast/observability"
 import { Effect, Schema } from "effect"
@@ -204,10 +205,14 @@ export const parseNodeServiceConfig = (input: unknown) =>
           config.appEnvironment === "production" &&
           config.enrichment.resetDailyEnabled
         ) &&
+        !(
+          config.appEnvironment === "production" &&
+          config.enrichment.provider === null
+        ) &&
         (config.enrichment.provider === null ||
           config.enrichment.provider.baseDelayMillis <=
             config.enrichment.provider.maximumDelayMillis),
-      () => deepFreeze({ _tag: "InvalidBackoffRange" as const })
+      () => deepFreeze({ _tag: "InvalidServiceConfig" as const })
     )
   )
 
@@ -387,8 +392,13 @@ export const runNodeService = (
 ): Effect.Effect<void, NodeRuntimeError> =>
   parseNodeServiceConfig(input).pipe(
     Effect.mapError(() => runtimeError("Config")),
-    Effect.flatMap((config) =>
-      Effect.scoped(
+    Effect.flatMap((config) => {
+      const observability = dependencies.observability ?? noopObservability
+      recordProviderConfiguration(observability, {
+        appEnvironment: config.appEnvironment,
+        providerMode: config.enrichment.provider === null ? "fake" : "live",
+      })
+      return Effect.scoped(
         Effect.acquireRelease(
           dependencies.startRuntime({
             sqlitePath: config.sqlitePath,
@@ -478,8 +488,7 @@ export const runNodeService = (
                             appEnvironment: config.appEnvironment,
                             enrichmentResetEnabled:
                               config.enrichment.resetDailyEnabled,
-                            observability:
-                              dependencies.observability ?? noopObservability,
+                            observability,
                           },
                           runtime,
                           markdown.reader,
@@ -535,5 +544,5 @@ export const runNodeService = (
           )
         )
       )
-    )
+    })
   )

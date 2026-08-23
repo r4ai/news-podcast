@@ -76,6 +76,8 @@ AI記事補完のキュー、結果、タグ、日次使用量はすべてowner�
 
 Episode Productionのloopは単一flightで動く。すべての更新とEpisode確定はstatus・token・期限でfenceし、初回込み4回、job 30分、台本6,000文字、chunk 16 MiB、完成音声128 MiBをSQLite制約とruntimeの両方で強制する。OpenAI、VOICEVOX、ObjectStoreへ同じAbortSignalを伝播し、cancel・lease喪失・deadlineで外部処理も停止する。cancelは永続化後の同一process通知で即時abortし、別processはleaseを延長しないread-only checkで既定250ms・最大5秒以内に検知する。commit安全性の正本は引き続きSQLite fencingとする。詳細は[ADR-0016](adr/0016-bounded-observable-episode-execution.md)と[ADR-0072](adr/0072-propagate-episode-cancellation-immediately.md)を正本とする。
 
+Content KnowledgeとEpisode Productionのprovider modeは共有runtime parserで決定する。productionは厳密な`APP_ENV=production`、`PROVIDER_MODE=live`、必須key/modelの組み合わせだけを受理し、未指定・fake・未知値・大文字違いはReady前に拒否する。development/testのfakeは明示的なno-network境界として維持する。成功構成はsecretを含めず`app.env`と`provider.mode`をlog/metricへ記録する。詳細は[ADR-0077](adr/0077-fail-closed-production-provider-mode.md)を正本とする。
+
 ## 5. REST契約方針
 
 - `/v1/feeds` は媒体カタログ、`/v1/me/feed-subscriptions` は現在ユーザーの購読。body/pathにuserIdを置かない。

@@ -1,5 +1,6 @@
 import { deepFreeze } from "@news-podcast/kernel"
 import { Effect } from "effect"
+import { readProviderRuntimeMode } from "@news-podcast/service-runtime"
 
 import {
   parseNodeCreateJobRpcConfig,
@@ -50,19 +51,25 @@ const integer = (value: string | undefined, fallback: number): number =>
 export const readEpisodeProductionServiceConfig = (
   env: Readonly<Record<string, string | undefined>>
 ) =>
-  readEpisodeProductionConfig(env).pipe(
-    Effect.flatMap((rpc) =>
+  Effect.all([
+    readEpisodeProductionConfig(env),
+    readProviderRuntimeMode(env),
+  ]).pipe(
+    Effect.flatMap(([rpc, providerRuntime]) =>
       parseNodeEpisodeProductionServiceConfig({
         rpc,
+        appEnvironment: providerRuntime.appEnvironment,
         contentRequestTimeoutMillis: integer(
           env.CONTENT_REQUEST_TIMEOUT_MS,
           5_000
         ),
-        providerMode: env.PROVIDER_MODE?.trim() === "live" ? "live" : "fake",
+        providerMode: providerRuntime.providerMode,
         openAi: {
           apiUrl: env.OPENAI_API_URL?.trim() || "https://api.openai.com/v1",
-          apiKey: env.OPENAI_API_KEY ?? "",
-          model: env.OPENAI_MODEL?.trim() || "fake",
+          apiKey: env.OPENAI_API_KEY?.trim() ?? "",
+          model:
+            env.OPENAI_MODEL?.trim() ||
+            (providerRuntime.providerMode === "fake" ? "fake" : ""),
           requestTimeoutMillis: integer(env.OPENAI_REQUEST_TIMEOUT_MS, 120_000),
           retryPolicy: {
             maximumAttempts: integer(env.PROVIDER_MAXIMUM_ATTEMPTS, 3),

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import {
   noopObservability,
+  recordProviderConfiguration,
   type Observability,
 } from "@news-podcast/observability"
 import { DateTime, Effect, Schema } from "effect"
@@ -80,6 +81,7 @@ const retryPolicy = Schema.Struct({
 })
 
 export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
+  appEnvironment: Schema.Literals(["development", "test", "production"]),
   rpc: NodeCreateJobRpcConfigSchema,
   contentRequestTimeoutMillis: positive(30_000),
   providerMode: Schema.Union([Schema.Literal("fake"), Schema.Literal("live")]),
@@ -135,9 +137,11 @@ export const NodeEpisodeProductionServiceConfigSchema = Schema.Struct({
   }),
 }).check(
   Schema.makeFilter((config) =>
-    config.providerMode === "fake" || config.openAi.apiKey.length > 0
+    (config.appEnvironment !== "production" ||
+      config.providerMode === "live") &&
+    (config.providerMode === "fake" || config.openAi.apiKey.length > 0)
       ? true
-      : "OPENAI_API_KEY is required in live provider mode"
+      : "production requires live provider mode with OPENAI_API_KEY"
   )
 )
 export type NodeEpisodeProductionServiceConfig = DeepReadonly<
@@ -177,6 +181,7 @@ export const runNodeEpisodeProductionService = (
       Effect.scoped(
         Effect.gen(function* () {
           const observability = dependencies.observability ?? noopObservability
+          recordProviderConfiguration(observability, config)
           // process rootだけがDBを所有し、RPC/worker/relay/schedulerへ共有する。
           const database = yield* Effect.acquireRelease(
             Effect.try({

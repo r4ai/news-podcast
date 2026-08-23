@@ -95,6 +95,7 @@ export const telemetryEventNames = [
   "reading_dictionary.extraction_failed",
   "process.uncaught_exception",
   "process.unhandled_rejection",
+  "provider.configuration",
 ] as const
 
 export type TelemetryEventName = (typeof telemetryEventNames)[number]
@@ -124,6 +125,7 @@ export const metricNames = [
   "object.cleanup",
   "provider.request",
   "provider.request.duration",
+  "provider.configuration",
   "worker.heartbeat",
   "api.heartbeat",
   "otlp.canary",
@@ -165,6 +167,7 @@ export const metricUnits: Readonly<Record<MetricName, string>> = {
   "object.cleanup": "{object}",
   "provider.request": "{request}",
   "provider.request.duration": "ms",
+  "provider.configuration": "1",
   "worker.heartbeat": "1",
   "api.heartbeat": "1",
   "otlp.canary": "{canary}",

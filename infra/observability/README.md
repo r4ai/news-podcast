@@ -35,7 +35,7 @@ pnpm observability:validate
 pnpm observability:smoke
 ```
 
-`compose.observability.yaml`はtelemetry設定だけを追加し、provider modeと資格情報を`.env`から継承する。`PROVIDER_MODE=live`では外部OpenAI API利用料金が発生し、`fake`では外部APIへ接続しない。BrowserのWeb Vitalは初期paintを取りこぼさないよう、SDKをアプリ描画前に開始する。
+`compose.observability.yaml`はtelemetry設定だけを追加し、provider modeと資格情報を`.env`から継承する。`PROVIDER_MODE=live`では外部OpenAI API利用料金が発生し、`fake`では外部APIへ接続しない。`APP_ENV=production`では厳密な`live`と必須key/modelが揃わない構成をReady前に拒否する。BrowserのWeb Vitalは初期paintを取りこぼさないよう、SDKをアプリ描画前に開始する。
 
 Prometheus、Loki、Tempo、Collector、Grafanaは`restart: unless-stopped`、期限付きstop、実endpointのhealthcheckを持つ。shellを含まない公式Loki/Tempo/Collector imageには、`Dockerfile.healthcheck`がdigest固定したstatic BusyBoxだけを追加し、application binaryや設定は変更しない。
 
