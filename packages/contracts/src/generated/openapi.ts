@@ -404,6 +404,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an exact owned article snapshot
+         * @description Returns immutable snapshot metadata only when the snapshot belongs to both the supplied article and authenticated owner.
+         */
+        get: operations["articles.getArticleSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/articles/{articleId}/snapshots/{snapshotId}/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get exact owned article snapshot Markdown
+         * @description Returns immutable snapshot Markdown only when the snapshot belongs to both the supplied article and authenticated owner.
+         */
+        get: operations["articles.getArticleSnapshotMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/article-snapshots/{snapshotId}/replay": {
         parameters: {
             query?: never;
@@ -1118,11 +1158,14 @@ export interface components {
             }[];
             aiPending: number & unknown;
         };
+        Objects_: {
+            markdown: string & unknown;
+        };
         ArticleReplayLocation: {
             url: string & unknown;
         };
         Union_5: boolean | null;
-        Objects_: {
+        Objects_1: {
             items: {
                 articleId: string & unknown;
                 tagId: string & unknown;
@@ -1132,7 +1175,7 @@ export interface components {
                 confidence: ((number & unknown) | ("Infinity" | "-Infinity" | "NaN")) | null;
             }[] & unknown;
         };
-        Objects_1: {
+        Objects_2: {
             enqueued: number & unknown;
         };
         GenerationSchedule: {
@@ -1167,7 +1210,7 @@ export interface components {
                 hasMore: false;
             };
         };
-        Objects_2: {
+        Objects_3: {
             name: string & (unknown & unknown & unknown);
         };
         CreatedTag: {
@@ -2502,9 +2545,115 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        markdown: string & unknown;
-                    };
+                    "application/json": components["schemas"]["Objects_"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleSnapshot": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                articleId: string & unknown;
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Article"];
+                };
+            };
+            /** @description UnauthorizedProblem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthorizedProblem"];
+                };
+            };
+            /** @description NotFoundProblem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description UnavailableProblem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnavailableProblem"];
+                };
+            };
+        };
+    };
+    "articles.getArticleSnapshotMarkdown": {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: components["schemas"]["Union_"];
+                cookie?: components["schemas"]["Union_"];
+                traceparent?: components["schemas"]["Union_1"];
+            };
+            path: {
+                articleId: string & unknown;
+                snapshotId: string & unknown;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Objects_"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -2839,7 +2988,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_"];
+                    "application/json": components["schemas"]["Objects_1"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -2898,7 +3047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_"];
+                    "application/json": components["schemas"]["Objects_1"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -2960,7 +3109,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_1"];
+                    "application/json": components["schemas"]["Objects_2"];
                 };
             };
             /** @description UnauthorizedProblem */
@@ -3153,7 +3302,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Objects_2"];
+                "application/json": components["schemas"]["Objects_3"];
             };
         };
         responses: {
@@ -3292,7 +3441,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Objects_2"];
+                "application/json": components["schemas"]["Objects_3"];
             };
         };
         responses: {
@@ -3625,7 +3774,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Objects_1"];
+                    "application/json": components["schemas"]["Objects_2"];
                 };
             };
             /** @description UnauthorizedProblem */

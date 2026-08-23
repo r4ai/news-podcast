@@ -27,6 +27,8 @@ export type ArticlesSearch = {
   readonly includeHidden: boolean
   /** 選択中の記事ID。URLが唯一の情報源で、リーダーの開閉もこれで表す。 */
   readonly article: string | undefined
+  /** Episode出典から開く場合だけ指定する、生成時の固定snapshot。 */
+  readonly snapshot: string | undefined
 }
 
 export const defaultArticlesSearch: ArticlesSearch = {
@@ -36,6 +38,7 @@ export const defaultArticlesSearch: ArticlesSearch = {
   feedIds: [],
   includeHidden: false,
   article: undefined,
+  snapshot: undefined,
 }
 
 const states: readonly ArticleState[] = ["all", "unread", "saved", "later"]
@@ -66,6 +69,10 @@ function toBoolean(value: unknown, fallback: boolean): boolean {
 export function validateArticlesSearch(
   search: Record<string, unknown>
 ): ArticlesSearch {
+  const article =
+    typeof search.article === "string" && search.article.length > 0
+      ? search.article
+      : undefined
   return {
     state: oneOf(states, search.state, defaultArticlesSearch.state),
     sort: oneOf(sorts, search.sort, defaultArticlesSearch.sort),
@@ -75,9 +82,12 @@ export function validateArticlesSearch(
       search.includeHidden,
       defaultArticlesSearch.includeHidden
     ),
-    article:
-      typeof search.article === "string" && search.article.length > 0
-        ? search.article
+    article,
+    snapshot:
+      article !== undefined &&
+      typeof search.snapshot === "string" &&
+      search.snapshot.length > 0
+        ? search.snapshot
         : undefined,
   }
 }
@@ -281,8 +291,12 @@ export type ArticleSource = "markdown" | "archive"
  */
 export function articleBaseUrl(
   articleId: string,
-  origin: string = window.location.origin
+  origin: string = window.location.origin,
+  snapshotId?: string | null
 ): string {
+  if (snapshotId != null) {
+    return `${origin}/v1/me/article-snapshots/${snapshotId}/`
+  }
   return `${origin}/v1/me/articles/${articleId}/`
 }
 
@@ -296,9 +310,15 @@ export function articleBaseUrl(
  * 見出しは`3`から始める。ページがh1(記事)、リーダーがh2(記事タイトル)を
  * 既に使っている。
  */
-export function articleMarkdownOptions(article: Pick<Article, "id" | "title">) {
+export function articleMarkdownOptions(
+  article: Pick<Article, "id" | "title" | "snapshotId">
+) {
   return {
-    baseUrl: articleBaseUrl(article.id),
+    baseUrl: articleBaseUrl(
+      article.id,
+      window.location.origin,
+      article.snapshotId
+    ),
     headingBaseLevel: 3,
     omitLeadingTitle: article.title,
   } as const

@@ -44,7 +44,12 @@ import {
  */
 type Reading = Pick<
   ArticleLibraryRepository,
-  "list" | "find" | "findMarkdown" | "findReplayObject"
+  | "list"
+  | "find"
+  | "findSnapshot"
+  | "findMarkdown"
+  | "findSnapshotMarkdown"
+  | "findReplayObject"
 >
 
 const SnapshotJsonRowSchema = Schema.Struct({ snapshotJson: Schema.String })
@@ -137,9 +142,53 @@ export const makeReading = (database: ContentKnowledgeDatabase): Reading => {
       )
     )
 
+  const readSnapshot = (
+    ownerId: string,
+    articleId: string,
+    snapshotId: string,
+    operation: "FindSnapshot" | "SnapshotMarkdown"
+  ) =>
+    Effect.try({
+      try: () =>
+        database
+          .select(articleProjection)
+          .from(feedItems)
+          .innerJoin(articleOwnerAccess, accessibleByOwner)
+          .leftJoin(articleOwnerStates, ownerStateOfArticle)
+          .innerJoin(
+            articleSnapshots,
+            and(
+              eq(articleSnapshots.articleId, feedItems.articleId),
+              eq(articleSnapshots.snapshotId, snapshotId)
+            )
+          )
+          .where(
+            and(
+              eq(articleOwnerAccess.ownerId, ownerId),
+              eq(feedItems.articleId, articleId)
+            )
+          )
+          .limit(1)
+          .get(),
+      catch: () => failure(operation),
+    })
+
   return {
     list: (ownerId, query) => listPage(ownerId, query, "List"),
     find,
+    findSnapshot: (ownerId, articleId, snapshotId) =>
+      readSnapshot(ownerId, articleId, snapshotId, "FindSnapshot").pipe(
+        Effect.flatMap(
+          (row): Effect.Effect<ArticleLookup, ArticleLibraryError> =>
+            row === undefined
+              ? Effect.succeed(deepFreeze({ _tag: "NotFound" }))
+              : decodeArticle(row, "FindSnapshot").pipe(
+                  Effect.map((article) =>
+                    deepFreeze({ _tag: "Found" as const, article })
+                  )
+                )
+        )
+      ),
     // 本文が未取得の記事は、記事自体は見えていても本文としては「無い」。
     findMarkdown: (ownerId, articleId) =>
       readOne(ownerId, articleId).pipe(
@@ -160,6 +209,39 @@ export const makeReading = (database: ContentKnowledgeDatabase): Reading => {
                       : parse(ObjectKeySchema)(parsed.markdownKey).pipe(
                           Effect.mapError(() =>
                             failure("Find", "CorruptRecord")
+                          ),
+                          Effect.map((key): ArticleObjectLookup =>
+                            deepFreeze({ _tag: "Found", key })
+                          )
+                        )
+                  )
+                )
+              )
+            )
+          }
+        )
+      ),
+    findSnapshotMarkdown: (ownerId, articleId, snapshotId) =>
+      readSnapshot(ownerId, articleId, snapshotId, "SnapshotMarkdown").pipe(
+        Effect.flatMap(
+          (row): Effect.Effect<ArticleObjectLookup, ArticleLibraryError> => {
+            if (row === undefined) {
+              return Effect.succeed(deepFreeze({ _tag: "NotFound" }))
+            }
+            return decodeArticle(row, "SnapshotMarkdown").pipe(
+              Effect.andThen(
+                parseArticleRow(row).pipe(
+                  Effect.mapError(() =>
+                    failure("SnapshotMarkdown", "CorruptRecord")
+                  ),
+                  Effect.flatMap((parsed) =>
+                    parsed.markdownKey === null
+                      ? Effect.succeed<ArticleObjectLookup>(
+                          deepFreeze({ _tag: "NotFound" })
+                        )
+                      : parse(ObjectKeySchema)(parsed.markdownKey).pipe(
+                          Effect.mapError(() =>
+                            failure("SnapshotMarkdown", "CorruptRecord")
                           ),
                           Effect.map((key): ArticleObjectLookup =>
                             deepFreeze({ _tag: "Found", key })

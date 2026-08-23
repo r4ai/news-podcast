@@ -79,9 +79,23 @@ export function articleFacetsQueryOptions(search: ArticlesSearch) {
   })
 }
 
-export function articleQueryOptions(articleId: string) {
-  return api.queryOptions("get", "/v1/me/articles/{articleId}", {
-    params: { path: { articleId } },
+export function articleQueryOptions(articleId: string, snapshotId?: string) {
+  return queryOptions({
+    queryKey: ["article", articleId, snapshotId ?? "latest"] as const,
+    queryFn: async ({ signal }): Promise<Article> => {
+      const response =
+        snapshotId === undefined
+          ? await fetchClient.GET("/v1/me/articles/{articleId}", {
+              signal,
+              params: { path: { articleId } },
+            })
+          : await fetchClient.GET(
+              "/v1/me/articles/{articleId}/snapshots/{snapshotId}",
+              { signal, params: { path: { articleId, snapshotId } } }
+            )
+      if (response.error) throw response.error
+      return response.data as Article
+    },
   })
 }
 
@@ -92,14 +106,23 @@ export function articleQueryOptions(articleId: string) {
  * `parseAs: "text"`にすると本文の代わりにJSONのソース文字列を受け取り、
  * それがそのままMarkdownとして描画されてしまう。
  */
-export function articleMarkdownQueryOptions(articleId: string) {
+export function articleMarkdownQueryOptions(
+  articleId: string,
+  snapshotId?: string
+) {
   return queryOptions({
-    queryKey: ["article-markdown", articleId] as const,
+    queryKey: ["article-markdown", articleId, snapshotId ?? "latest"] as const,
     queryFn: async ({ signal }) => {
-      const { data, error } = await fetchClient.GET(
-        "/v1/me/articles/{articleId}/markdown",
-        { signal, params: { path: { articleId } } }
-      )
+      const { data, error } =
+        snapshotId === undefined
+          ? await fetchClient.GET("/v1/me/articles/{articleId}/markdown", {
+              signal,
+              params: { path: { articleId } },
+            })
+          : await fetchClient.GET(
+              "/v1/me/articles/{articleId}/snapshots/{snapshotId}/markdown",
+              { signal, params: { path: { articleId, snapshotId } } }
+            )
       if (error) throw error
       return data?.markdown ?? ""
     },

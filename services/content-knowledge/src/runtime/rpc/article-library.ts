@@ -137,9 +137,43 @@ export const makeArticleLibraryRpcHandler =
                             : deepFreeze({ _tag: "NotFound" })
                         )
                       )
+                  case "FindSnapshot":
+                    return library
+                      .findSnapshot({
+                        ownerId,
+                        articleId: command.articleId,
+                        snapshotId: command.snapshotId,
+                      })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "Found",
+                                article: value.article,
+                              })
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
                   case "Markdown":
                     return library
                       .markdown({ ownerId, articleId: command.articleId })
+                      .pipe(
+                        Effect.map((value) =>
+                          value._tag === "Found"
+                            ? deepFreeze({
+                                _tag: "Markdown",
+                                markdown: value.markdown,
+                              })
+                            : deepFreeze({ _tag: "NotFound" })
+                        )
+                      )
+                  case "SnapshotMarkdown":
+                    return library
+                      .snapshotMarkdown({
+                        ownerId,
+                        articleId: command.articleId,
+                        snapshotId: command.snapshotId,
+                      })
                       .pipe(
                         Effect.map((value) =>
                           value._tag === "Found"

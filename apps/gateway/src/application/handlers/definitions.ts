@@ -328,9 +328,15 @@ export const makeGatewayHandlers = (
       freezeSuccess(ports.listArticles(deepFreeze(input))),
     getArticle: (input: Parameters<GatewayPorts["getArticle"]>[0]) =>
       freezeSuccess(ports.getArticle(deepFreeze(input))),
+    getArticleSnapshot: (
+      input: Parameters<GatewayPorts["getArticleSnapshot"]>[0]
+    ) => freezeSuccess(ports.getArticleSnapshot(deepFreeze(input))),
     getArticleMarkdown: (
       input: Parameters<GatewayPorts["getArticleMarkdown"]>[0]
     ) => freezeSuccess(ports.getArticleMarkdown(deepFreeze(input))),
+    getArticleSnapshotMarkdown: (
+      input: Parameters<GatewayPorts["getArticleSnapshotMarkdown"]>[0]
+    ) => freezeSuccess(ports.getArticleSnapshotMarkdown(deepFreeze(input))),
     getArticleReplay: (input: {
       readonly headers: Parameters<
         GatewayPorts["createArticleReplayAccess"]

@@ -146,6 +146,20 @@ describe("article library RPC", () => {
     }
   })
 
+  it("binds snapshot metadata and Markdown reads to both article and snapshot", async () => {
+    for (const operation of ["FindSnapshot", "SnapshotMarkdown"] as const) {
+      await expect(
+        Effect.runPromise(
+          parseArticleLibraryRequest({ operation, articleId, snapshotId })
+        )
+      ).resolves.toMatchObject({ operation, articleId, snapshotId })
+
+      await expect(
+        Effect.runPromise(parseArticleLibraryRequest({ operation, snapshotId }))
+      ).rejects.toBeDefined()
+    }
+  })
+
   it("requires the listed reply to state whether a further page exists", async () => {
     await expect(
       Effect.runPromise(

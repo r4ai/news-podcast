@@ -84,6 +84,18 @@ describe("validateArticlesSearch", () => {
     expect(validateArticlesSearch({ article: "" }).article).toBeUndefined()
     expect(validateArticlesSearch({ article: 123 }).article).toBeUndefined()
   })
+
+  it("keeps an exact snapshot only when an article is selected", () => {
+    expect(
+      validateArticlesSearch({ article: "article-42", snapshot: "snapshot-1" })
+    ).toMatchObject({ article: "article-42", snapshot: "snapshot-1" })
+    expect(
+      validateArticlesSearch({ snapshot: "snapshot-1" }).snapshot
+    ).toBeUndefined()
+    expect(
+      validateArticlesSearch({ article: "article-42", snapshot: "" }).snapshot
+    ).toBeUndefined()
+  })
 })
 
 describe("query builders", () => {
@@ -168,6 +180,12 @@ describe("articleBaseUrl", () => {
     expect(articleBaseUrl("article-1", "https://app.example.com")).toBe(
       "https://app.example.com/v1/me/articles/article-1/"
     )
+  })
+
+  it("binds relative assets to the selected immutable snapshot", () => {
+    expect(
+      articleBaseUrl("article-1", "https://app.example.com", "snapshot-v1")
+    ).toBe("https://app.example.com/v1/me/article-snapshots/snapshot-v1/")
   })
 })
 

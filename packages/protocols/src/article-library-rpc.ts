@@ -97,6 +97,16 @@ export const ArticleLibraryRequestSchema = Schema.Union([
     articleId: ArticleIdSchema,
   }),
   Schema.Struct({
+    operation: Schema.Literal("FindSnapshot"),
+    articleId: ArticleIdSchema,
+    snapshotId: SnapshotIdSchema,
+  }),
+  Schema.Struct({
+    operation: Schema.Literal("SnapshotMarkdown"),
+    articleId: ArticleIdSchema,
+    snapshotId: SnapshotIdSchema,
+  }),
+  Schema.Struct({
     operation: Schema.Literal("ReplayAccess"),
     snapshotId: SnapshotIdSchema,
     object: Schema.Union([

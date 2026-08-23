@@ -72,6 +72,7 @@ export function EpisodeSources({
               key={`${source.url}-${index}`}
             >
               <a
+                aria-label={`外部サイトで開く ${source.title}`}
                 className="rounded-sm text-[0.8125rem] leading-5 font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
                 href={source.url}
                 rel="noreferrer"
@@ -118,10 +119,13 @@ function SourceMeta({ source }: { readonly source: EpisodeSource }) {
             feedIds: [],
             includeHidden: false,
             article: source.articleId,
+            snapshot: source.snapshotId ?? undefined,
           }}
           to="/articles"
         >
-          保存版を開く
+          {source.snapshotId == null
+            ? "最新の保存版を開く"
+            : "生成時の保存版を開く"}
         </Link>
       )}
     </span>

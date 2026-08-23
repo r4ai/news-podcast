@@ -38,13 +38,16 @@ const shortMarkdown = "短い"
  * 本番と同じく`key={articleId}`でマウントする。記事の切り替えは
  * 「別インスタンスへの差し替え」であって、propsの更新ではない。
  */
-function renderReader(routes: Parameters<typeof stubFetch>[0]) {
+function renderReader(
+  routes: Parameters<typeof stubFetch>[0],
+  snapshotId?: string
+) {
   const stub = stubFetch(routes)
   const queryClient = createTestQueryClient()
   const state: { current?: ArticleReaderState } = {}
 
   function Reader({ articleId }: { readonly articleId: string }) {
-    state.current = useArticleReader({ articleId })
+    state.current = useArticleReader({ articleId, snapshotId })
     // commitされたことをDOMで観測できるようにする。render中の代入だけを見ると、
     // Effect (既読フラッシュの登録) が走る前にテストが進んでしまう。
     return <p data-testid="reader">{state.current.article.title}</p>
@@ -105,6 +108,38 @@ describe("useArticleReader", () => {
     expect(state.current?.didAutoFallback).toBe(true)
     await waitFor(() => expect(state.current?.archiveUrl).toContain(snapshotId))
     expect(state.current?.archiveUnavailable).toBe(false)
+  })
+
+  it("loads exact snapshot metadata, Markdown, and replay for an episode source", async () => {
+    const snapshotId = "00000000-0000-4000-8000-000000000021"
+    const fixedArticle = makeArticle({
+      read: true,
+      snapshotId,
+      title: "v1 title",
+    })
+    const { state, calls } = renderReader(
+      [
+        {
+          path: `/v1/me/articles/a/snapshots/${snapshotId}`,
+          body: fixedArticle,
+        },
+        {
+          path: `/v1/me/articles/a/snapshots/${snapshotId}/markdown`,
+          body: { markdown: shortMarkdown },
+        },
+        {
+          path: `/v1/me/article-snapshots/${snapshotId}/replay`,
+          body: {
+            url: `/v1/me/article-snapshots/${snapshotId}/replay/index.html`,
+          },
+        },
+      ],
+      snapshotId
+    )
+
+    await waitFor(() => expect(state.current?.archiveUrl).toContain(snapshotId))
+    expect(state.current?.article.title).toBe("v1 title")
+    expect(calls.map((call) => call.url)).not.toContain("/v1/me/articles/a")
   })
 
   it("keeps the reader usable when the body fails to load", async () => {

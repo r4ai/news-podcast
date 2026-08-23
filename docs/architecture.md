@@ -63,6 +63,7 @@ flowchart LR
 - 番組、ジョブ、購読の検索はDB queryの時点で所有者を絞る。
 - 任意登録feedはprivateとし、媒体カタログはowner自身の購読または明示的なpublic listingだけを返す。
 - 署名付きprivate artifact URLは永続化・公開せず、Gatewayがowner認可後に内部発行してstreamする。記事replayはsnapshot metadataとも完全一致させる。
+- Episode出典のreaderは`articleId + snapshotId`を保持し、owner access・article・snapshotの三者一致後に生成時metadata/Markdown/replayだけを返す。snapshot IDがないlegacy sourceだけlatestへfallbackする。
 
 ## 3. レイヤー構成と依存方向
 
@@ -314,7 +315,20 @@ sequenceDiagram
 
 resolve、HTML、assetの3 routeはすべてowner認可付きである。Gatewayは署名URLとobject keyを公開せず、上限内でbodyを読み切り、保存metadataのbyte lengthとSHA-256が一致するobjectだけをsame-originで返す。購読解除後も`article_owner_access`を削除しないため、本人の過去snapshotは引き続き読める（[ADR-0079](adr/0079-deliver-owned-private-artifacts-through-gateway.md)）。
 
-### 4.6 記事archive objectの回収
+### 4.6 Episode出典の固定snapshot閲覧
+
+```mermaid
+flowchart LR
+  Source["Episode source<br/>articleId + snapshotId"] --> Web["Articles URL state"]
+  Web --> Exact["Gateway exact metadata / Markdown"]
+  Exact --> Join["owner access ∩ article ∩ snapshot"]
+  Join --> Fixed["生成時snapshot"]
+  Source -. "snapshotIdなし" .-> Latest["legacy latest fallback"]
+```
+
+固定出典はmetadata/Markdownをarticle + snapshot複合route、replayをowner認可済みsnapshot routeから読む。外部サイト、生成時の保存版、legacyの最新保存版はUI上の名前を分ける。HTTP route spanとNATS messaging spanでoperation/outcomeを観測し、article/snapshot ID、本文、完全URLはtelemetryへ記録しない（[ADR-0081](adr/0081-bind-episode-reader-to-source-snapshot.md)）。
+
+### 4.7 記事archive objectの回収
 
 ```mermaid
 flowchart LR

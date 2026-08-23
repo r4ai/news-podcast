@@ -51,7 +51,9 @@ const ports: GatewayPorts = {
   registerFeed: () => Effect.fail(unavailable),
   listArticles: () => Effect.fail(unavailable),
   getArticle: () => Effect.fail(unavailable),
+  getArticleSnapshot: () => Effect.fail(unavailable),
   getArticleMarkdown: () => Effect.fail(unavailable),
+  getArticleSnapshotMarkdown: () => Effect.fail(unavailable),
   createArticleReplayAccess: () => Effect.fail(unavailable),
   patchArticle: () => Effect.fail(unavailable),
   bulkPatchArticles: () => Effect.fail(unavailable),
@@ -196,7 +198,10 @@ describe("Gateway HTTP runtime", () => {
       listArticles: () =>
         Effect.succeed({ items: [article], page: { hasMore: false } }),
       getArticle: () => Effect.succeed(article),
+      getArticleSnapshot: () => Effect.succeed(article),
       getArticleMarkdown: () => Effect.succeed({ markdown: "# Article" }),
+      getArticleSnapshotMarkdown: () =>
+        Effect.succeed({ markdown: "# Article snapshot" }),
       patchArticle: () => Effect.succeed({ ...article, saved: true }),
       bulkPatchArticles: () => Effect.succeed({ updated: 1 }),
       getArticleFacets: () =>
@@ -233,6 +238,12 @@ describe("Gateway HTTP runtime", () => {
       new Request("http://gateway.test/v1/me/articles/facets?q=news"),
       new Request(`http://gateway.test/v1/me/articles/${article.id}`),
       new Request(`http://gateway.test/v1/me/articles/${article.id}/markdown`),
+      new Request(
+        `http://gateway.test/v1/me/articles/${article.id}/snapshots/${article.snapshotId}`
+      ),
+      new Request(
+        `http://gateway.test/v1/me/articles/${article.id}/snapshots/${article.snapshotId}/markdown`
+      ),
       new Request(`http://gateway.test/v1/me/articles/${article.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -261,7 +272,8 @@ describe("Gateway HTTP runtime", () => {
         requests.map((request) => runtime.handler(request))
       )
       expect(responses.map(({ status }) => status)).toEqual([
-        200, 201, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200,
+        200, 201, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200,
+        200,
       ])
     } finally {
       await runtime.dispose()

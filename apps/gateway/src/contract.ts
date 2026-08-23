@@ -87,7 +87,7 @@ export const FeedSyncJobIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
 const FeedIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("ContentFeedId")
 )
-const SnapshotIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
+export const SnapshotIdSchema = Schema.String.check(Schema.isUUID(4)).pipe(
   Schema.brand("SnapshotId")
 )
 const ReplayAssetNameSchema = Schema.String.check(
@@ -1229,6 +1229,34 @@ export const getArticleMarkdownEndpoint = HttpApiEndpoint.get(
     ],
   }
 )
+export const getArticleSnapshotEndpoint = HttpApiEndpoint.get(
+  "getArticleSnapshot",
+  "/v1/me/articles/:articleId/snapshots/:snapshotId",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema, snapshotId: SnapshotIdSchema },
+    success: ArticleSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const getArticleSnapshotMarkdownEndpoint = HttpApiEndpoint.get(
+  "getArticleSnapshotMarkdown",
+  "/v1/me/articles/:articleId/snapshots/:snapshotId/markdown",
+  {
+    headers: SessionHeadersSchema,
+    params: { articleId: ArticleIdSchema, snapshotId: SnapshotIdSchema },
+    success: ArticleMarkdownSchema,
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
 export const ArticleReplayLocationSchema = Schema.Struct({
   url: Schema.String.check(
     Schema.isPattern(
@@ -1569,6 +1597,8 @@ const articlesGroup = HttpApiGroup.make("articles")
     getArticleFacetsEndpoint,
     getArticleEndpoint,
     getArticleMarkdownEndpoint,
+    getArticleSnapshotEndpoint,
+    getArticleSnapshotMarkdownEndpoint,
     getArticleReplayEndpoint,
     streamArticleReplayEndpoint,
     streamArticleReplayAssetEndpoint,
@@ -1719,6 +1749,16 @@ const operationDocumentation = {
     summary: "Get archived article Markdown",
     description:
       "Returns captured Markdown for an article visible to the authenticated owner without exposing storage credentials.",
+  },
+  getArticleSnapshot: {
+    summary: "Get an exact owned article snapshot",
+    description:
+      "Returns immutable snapshot metadata only when the snapshot belongs to both the supplied article and authenticated owner.",
+  },
+  getArticleSnapshotMarkdown: {
+    summary: "Get exact owned article snapshot Markdown",
+    description:
+      "Returns immutable snapshot Markdown only when the snapshot belongs to both the supplied article and authenticated owner.",
   },
   getArticleReplay: {
     summary: "Resolve an owned article replay",

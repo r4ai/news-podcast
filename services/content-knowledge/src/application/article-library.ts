@@ -98,6 +98,8 @@ export type ArticleLibraryError = DeepReadonly<{
   readonly operation:
     | "List"
     | "Find"
+    | "FindSnapshot"
+    | "SnapshotMarkdown"
     | "ReplayAccess"
     | "Patch"
     | "BulkPatch"
@@ -137,9 +139,19 @@ export type ArticleLibraryRepository = DeepReadonly<{
     ownerId: OwnerId,
     articleId: ArticleId
   ) => Effect.Effect<ArticleLookup, ArticleLibraryError>
+  readonly findSnapshot: (
+    ownerId: OwnerId,
+    articleId: ArticleId,
+    snapshotId: SnapshotId
+  ) => Effect.Effect<ArticleLookup, ArticleLibraryError>
   readonly findMarkdown: (
     ownerId: OwnerId,
     articleId: ArticleId
+  ) => Effect.Effect<ArticleObjectLookup, ArticleLibraryError>
+  readonly findSnapshotMarkdown: (
+    ownerId: OwnerId,
+    articleId: ArticleId,
+    snapshotId: SnapshotId
   ) => Effect.Effect<ArticleObjectLookup, ArticleLibraryError>
   readonly findReplayObject: (
     ownerId: OwnerId,
@@ -245,6 +257,30 @@ export const readOwnerArticleMarkdown =
   (ownerId: OwnerId, articleId: ArticleId) =>
     ports.articles
       .findMarkdown(ownerId, articleId)
+      .pipe(
+        Effect.flatMap((lookup) =>
+          lookup._tag === "NotFound"
+            ? Effect.succeed<OwnerArticleMarkdownResult>(
+                deepFreeze({ _tag: "NotFound" })
+              )
+            : ports.objects
+                .read(lookup.key)
+                .pipe(
+                  Effect.map((markdown): OwnerArticleMarkdownResult =>
+                    deepFreeze({ _tag: "Found", markdown })
+                  )
+                )
+        )
+      )
+
+export const readOwnerSnapshotMarkdown =
+  (ports: {
+    readonly articles: Pick<ArticleLibraryRepository, "findSnapshotMarkdown">
+    readonly objects: MarkdownObjectReader
+  }) =>
+  (ownerId: OwnerId, articleId: ArticleId, snapshotId: SnapshotId) =>
+    ports.articles
+      .findSnapshotMarkdown(ownerId, articleId, snapshotId)
       .pipe(
         Effect.flatMap((lookup) =>
           lookup._tag === "NotFound"
