@@ -214,7 +214,13 @@ sequenceDiagram
   Production->>Content: GenerationPlan作成 / Markdownをmaterialize
   Production-->>Gateway: durable AG-UI events
   Gateway-->>Web: SSE + Last-Event-ID
-  Production->>Providers: Effect AI strict output → 音声合成
+  Production->>Providers: Effect AI strict draft
+  Production->>Providers: 独立quality evaluation
+  alt quality reject
+    Production->>Production: failed / checkpointなし
+  else quality pass
+    Production->>Providers: VOICEVOX音声合成
+  end
   opt 利用者が実行中jobをcancel
     Gateway->>Production: cancel RPC
     Production->>Production: SQLite Canceled commit + token fence
@@ -242,7 +248,9 @@ flowchart LR
   Plan --> Input["版固定記事snapshot"]
   Input --> Script["Effect AI structured generation"]
   Script --> Verify["strict schema・入力出典・上限を検証"]
-  Verify --> Dictionary["owner辞書抽出・job snapshot"]
+  Verify --> Quality{"独立quality gate"}
+  Quality -->|reject| Failed["terminal failure<br/>checkpointなし"]
+  Quality -->|pass| Dictionary["owner辞書抽出・job snapshot"]
   Dictionary --> TTS["読み置換後にVOICEVOXでWAV生成"]
   TTS --> Store["音声を保存"]
   Store --> Commit["Episode・出典・Jobをcommit"]
@@ -485,4 +493,5 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 - [ADR-0072: Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
 - [ADR-0073: 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
 - [ADR-0074: 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)
+- [ADR-0080: 未信頼記事の台本を公開前quality gateで拒否する](adr/0080-gate-untrusted-article-scripts-before-publication.md)
 - [ADR-0039: Node self-host runtimeだけをsupport](adr/0039-support-node-self-host-runtime-only.md)

@@ -53,6 +53,7 @@ import {
 import {
   recordCancellationPropagation,
   recordEpisodeWorkerEvent,
+  recordScriptQualityObservation,
 } from "./worker-observability.js"
 import { makeJobCancellationRegistry } from "./job-cancellation-registry.js"
 
@@ -238,10 +239,19 @@ export const runNodeEpisodeProductionService = (
           const script =
             config.providerMode === "fake"
               ? makeFakeScriptGenerator()
-              : makeOpenAiScriptGenerator({
-                  ...config.openAi,
-                  apiUrl: new URL(config.openAi.apiUrl),
-                })
+              : makeOpenAiScriptGenerator(
+                  {
+                    ...config.openAi,
+                    apiUrl: new URL(config.openAi.apiUrl),
+                  },
+                  {
+                    observeQuality: (observation) =>
+                      recordScriptQualityObservation(
+                        observability,
+                        observation
+                      ),
+                  }
+                )
           const readingTerms =
             config.providerMode === "fake"
               ? makeNoopReadingTermExtractor()

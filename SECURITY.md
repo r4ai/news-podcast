@@ -1,5 +1,9 @@
 # Security Policy
 
+## 脅威モデル
+
+外部RSSから台本・音声・Libraryへ至るcontent/prompt injection境界、公開前quality gate、残余リスクは[セキュリティ脅威モデル](docs/security-threat-model.md)を正本とする。記事本文、生成台本、攻撃payload、完全URL、provider ID、credentialをlog・metric・eval reportへ記録しない。
+
 ## CIでの検査
 
 GitHub Actionsのworkflowは、完全SHA固定、7日間のminimum release age、actionlint、zizmor、Gitleaks、`pnpm audit --audit-level=high`で検査する。PR用のセキュリティworkflowはPRコードをcheckout・実行しない。

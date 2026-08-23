@@ -5,7 +5,7 @@
 - Decision owners: Product owner / Architecture
 - Supersedes: ADR-0013、ADR-0015
 - Superseded by: ADR-0057（LLM境界）、ADR-0058（進捗監査）、ADR-0059（自動選定）
-- Related: ADR-0007、ADR-0016、ADR-0026、ADR-0050、`docs/functional-ddd-migration.md`
+- Related: ADR-0007、ADR-0016、ADR-0026、ADR-0050、ADR-0080、`docs/functional-ddd-migration.md`
 
 ## コンテキストと変更契機
 
@@ -25,7 +25,8 @@ flowchart LR
   Archive --> Input["Production<br/>有界な入力snapshot"]
   Input --> LLM["OpenAI<br/>strict structured response"]
   LLM --> Verify["schema・出典・上限を検証"]
-  Verify --> TTS["VOICEVOX"]
+  Verify --> Quality["独立quality gate"]
+  Quality --> TTS["VOICEVOX"]
 ```
 
 ## 判断要因
@@ -66,9 +67,9 @@ flowchart LR
 | コード/ポート | Effect AI structured generationと出典検証 | Done | `services/episode-production/src/adapters/providers/openai-script-generator/` |
 | データ/ストレージ | GenerationPlan、checkpoint、AG-UI eventで再現・監査 | Done | Episode Production repository tests、ADR-0058/0059 |
 | 実行/配備 | Harness/Web検索とFirecracker実装を物理削除 | Done | workspace、Docker、architecture gate |
-| 認証/セキュリティ | owner選択外sourceを受理しない | Done | script generator tests |
+| 認証/セキュリティ | owner選択外sourceと記事内命令へ従ったdraftを受理しない | Done | script generator tests、ADR-0080 |
 | フロント/品質保証 | N/A — Webはjobと出典を表示し、生成方式へ依存しない | Done | Web contract |
-| テスト/運用 | fake provider、provider境界、縦断E2E | Done | functional E2E、coverage gate |
+| テスト/運用 | fake provider、provider境界、縦断E2E、version固定adversarial eval | Done | functional E2E、coverage gate、`pnpm provider-security-eval` |
 
 ## 再検討条件
 
@@ -78,11 +79,12 @@ flowchart LR
 
 ## 受け入れゲート
 
-- fake providerを使う購読→生成→Library E2Eと、provider timeout/retry/schema拒否testがGreenである。
+- fake providerを使う購読→生成→Library E2E、provider timeout/retry/schema拒否test、model変更時のadversarial evalがGreenである。
 - workspace、Docker、CIから旧Agent RuntimeとFirecracker参照が消えている。
 
 ## 検証証拠
 
-- `services/episode-production/src/adapters/openai-script-generator.test.ts`
+- `services/episode-production/src/adapters/providers/openai-script-generator.test.ts`
+- `services/episode-production/src/adapters/providers/openai-script-generator.eval.test.ts`
 - `pnpm test:e2e:functional`
 - `pnpm test:coverage:functional`

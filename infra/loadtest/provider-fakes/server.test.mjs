@@ -6,9 +6,47 @@ import {
   chooseFault,
   createProviderState,
   createWav,
+  openAiResponse,
   profileSnapshot,
   setProviderProfile,
 } from "./server.mjs"
+
+const structuredRequest = (objectName) => ({
+  input: [
+    {
+      role: "user",
+      content: [
+        {
+          type: "input_text",
+          text: JSON.stringify({
+            sources: [{ source_id: "source-1", title: "負荷テスト記事" }],
+          }),
+        },
+      ],
+    },
+  ],
+  text: { format: { type: "json_schema", name: objectName } },
+})
+
+const structuredPayload = (response) =>
+  JSON.parse(JSON.parse(response).output[0].content[0].text)
+
+test("fake OpenAI returns the requested script and quality schemas", () => {
+  assert.deepEqual(
+    structuredPayload(openAiResponse(structuredRequest("episode_script_v1"), "normal")),
+    {
+      title: "負荷テストニュース",
+      script: "負荷テスト用Fake OpenAIが負荷テスト記事を要約しました。",
+      source_ids: ["source-1"],
+    }
+  )
+  assert.deepEqual(
+    structuredPayload(
+      openAiResponse(structuredRequest("episode_script_quality_v1"), "normal")
+    ),
+    { verdict: "pass", reason_code: "none" }
+  )
+})
 
 test("control profile requires the admin token", () => {
   const state = createProviderState({ controlToken: "secret" })

@@ -94,7 +94,7 @@ provisioningされるダッシュボード:
 - `Service Map & Tracing`: サービス依存、edge別RED、代表trace
 - `Service Drilldown`: サービス/operation別RED、p95、exemplar、TraceQL、相関ログ
 - `Correlated Logs`: level別volume、trace coverage、traceへ戻れるログ
-- `Episode Production`: queue、worker state、stage/span、retry diagnostics、provider/client、storage、lease
+- `Episode Production`: queue、worker state、stage/span、retry diagnostics、provider/client、storage、lease、model/prompt version別script quality
 - `Web Experience`: Browser span/error、Web Vital OTLP、Browser TraceQL、相関ログ
 - `Dependencies`: service map、client/NATS/HTTP依存、依存先p95、相関ログ
 - `Telemetry Platform`: Collector queue/export、backend、host resource
@@ -114,7 +114,25 @@ UIDとURLは次の通り。UIで作り直さず、`grafana/dashboards/*.json`を
 
 ## アラートと独立監視
 
-Grafana Alertingはservice error/latency、API 5xx、episode failure/queue age、Collector export failure、未計装入口を1分ごとに評価する。SMTPは`GRAFANA_SMTP_*`で設定し、解消通知を含めて30分ごとに再通知する。
+Grafana Alertingはservice error/latency、API 5xx、episode failure/queue age、script quality reject、Collector export failure、未計装入口を1分ごとに評価する。SMTPは`GRAFANA_SMTP_*`で設定し、解消通知を含めて30分ごとに再通知する。
+
+### Script quality reject対応
+
+```mermaid
+flowchart LR
+  Alert["np-script-quality-rejected"] --> Labels["model / prompt versions / 固定reason"]
+  Labels --> Job["failed jobを確認"]
+  Job --> Eval["pnpm provider-security-eval"]
+  Eval --> Decision{"version固定eval Green?"}
+  Decision -->|No| Stop["model/prompt release停止"]
+  Decision -->|Yes| Retry["ownerの明示retry"]
+```
+
+1. Episode Production dashboardの`episode_script_quality_total`を`gen_ai_request_model`、2つのprompt version、`quality_outcome`、`quality_reason`で確認する。
+2. `script_quality_rejected`のjobがcheckpoint、VOICEVOX、completion outboxへ進んでいないことを確認する。
+3. source、draft、完全URL、攻撃payload、provider IDをログやincident ticketへコピーしない。固定labelとjob IDだけで相関する。
+4. 同じmodel/prompt versionで`pnpm provider-security-eval`を実行する。禁止出力または正当系control失敗があればreleaseを停止し、手動で公開を迂回しない。
+5. evalがGreenで正当記事のfalse positiveと判断できた場合だけ、所有者限定retry APIから新しいjobを作る。
 
 watchdogは通常Composeでも常駐する。Gateway、4 Context service、Web、NATS JetStream、SeaweedFS、VOICEVOXを監視し、observed構成ではGrafanaとCollectorも加える。SMTP一式が完全ならメール、未設定なら構造化stderrを正本とし、部分設定は起動エラーにする。`/health/live`と`/metrics`は対象別up、連続失敗、最終成功時刻を公開し、Prometheusは対象停止とwatchdog自体の消失をAlerting扱いにする。ホスト全停止とネットワーク全断を検知するには別ホストの外形監視を追加する。
 
@@ -135,7 +153,7 @@ docker compose \
 
 ## 合格基準
 
-1. 8ダッシュボード、9アラート、3データソースが起動時に自動生成される。
+1. 8ダッシュボード、10アラート、3データソースが起動時に自動生成される。
 2. Prometheus、Loki、Tempoのhealth checkとCollectorの全exporterが成功する。
 3. synthetic requestをサービス間で流し、service graph、trace、同一`trace_id`のログ、metric exemplarを辿れる。
 4. CollectorまたはGrafanaを停止し、watchdogの障害通知と復旧通知を確認する。

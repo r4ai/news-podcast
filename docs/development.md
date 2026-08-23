@@ -138,7 +138,7 @@ pnpm dev:up:observed # 同じlive providerをGrafanaで観測
 
 VOICEVOXへの長文入力は、音声推論のpeak memoryを抑えるため既定で200文字ごとに逐次合成する。`VOICEVOX_MAXIMUM_TEXT_CHARACTERS`を増やす場合は、実際の台本長でVOICEVOXコンテナのpeak memoryを確認すること。VOICEVOXは一時的なprocess停止やOOM後にComposeが再起動し、Episode Productionの有界retryが回復後の処理を引き継ぐ。
 
-本番生成はownerが選択しContentが版固定した記事だけを入力にする。Content KnowledgeとEpisode Productionは共通の`packages/ai-runtime`を通じてEffect AIの`LanguageModel.generateObject`を使い、strict structured output、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0057](adr/0057-effect-ai-as-llm-boundary.md)）。
+本番生成はownerが選択しContentが版固定した記事だけを入力にする。RSS title/markdownは未信頼データとして扱い、version付き生成promptのdraftを別requestのversion付きquality evaluatorが公開前に判定する。rejectはcheckpoint前にjobを失敗させ、VOICEVOXとLibraryへ進めない。Content KnowledgeとEpisode Productionは共通の`packages/ai-runtime`を通じてEffect AIの`LanguageModel.generateObject`を使い、strict structured output、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0057](adr/0057-effect-ai-as-llm-boundary.md)、[ADR-0080](adr/0080-gate-untrusted-article-scripts-before-publication.md)）。
 
 起動済みlive stackをOpenAPIからブラウザ操作し、実際の記事選択、OpenAI台本生成、VOICEVOX音声合成、durable AG-UI replay、Libraryでの再生まで検証する場合は、明示的に環境変数を読み込んで次を実行する。これはOpenAIへの課金requestを発生させる。
 
@@ -174,7 +174,7 @@ pnpm contract:lint
 
 契約変更では生成物を同じ変更に含め、`contract:check`で差分がないことを確認する。Better Authの`/api/auth/**`は認証provider側の契約で、アプリOpenAPIへ複製しない。
 
-外部provider DTOを変更する前に[外部provider契約台帳](external-provider-contracts.md)を更新する。通常CIは`pnpm provider-contract:check`だけを実行する。live refreshは資格情報とlocal providerを必要とする明示操作であり、`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後に行う。OpenAIは同じ環境で各serviceの`*.contract.test.ts`を実行し、`OPENAI_CONTRACT_SAMPLES`（既定3、最大25/adapter）で実リクエスト数を制御する。model変更は[移行手順](operations/openai-model-migration.md)に従う。
+外部provider DTOを変更する前に[外部provider契約台帳](external-provider-contracts.md)を更新する。通常CIは`pnpm provider-contract:check`だけを実行する。live refreshは資格情報とlocal providerを必要とする明示操作であり、`PROVIDER_CONTRACT_REFRESH=1 pnpm provider-contract:refresh`のpreflight後に行う。OpenAIは同じ環境で各serviceの`*.contract.test.ts`を実行し、`OPENAI_CONTRACT_SAMPLES`（既定3、最大25/adapter）で論理sample数を制御する。台本sampleはdraftとqualityの2 requestを使う。model変更は[移行手順](operations/openai-model-migration.md)に従い、本文や攻撃payloadを出力しない`pnpm provider-security-eval`を必須release gateとして実行する。
 
 ## 品質gate
 
@@ -205,6 +205,7 @@ pnpm audit --audit-level=high
 | `pnpm test:e2e:functional` | Gateway→4 services、NATS/JetStream縦断 |
 | `pnpm test:e2e:live` | 起動済みlive stackのOpenAPI・画面生成・AG-UI再開・音声再生（課金あり） |
 | `pnpm provider-contract:check` | 匿名化した外部契約fixtureのoffline検査 |
+| `pnpm provider-security-eval` | 固定model/promptの4-class adversarial eval + 正当系control（課金・API keyが必要、model変更時） |
 | `pnpm test:e2e` | Web主要journey |
 | `pnpm test:sqlite-state` | service別backup/restore拒否規則 |
 | `pnpm db:generate` | drizzle schemaからmigration SQLを生成（要レビュー） |

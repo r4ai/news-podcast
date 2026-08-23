@@ -20,6 +20,7 @@ const expectedDashboards = [
 const expectedAlertRules = [
   "np-generation-failure",
   "np-generation-queue-age",
+  "np-script-quality-rejected",
   "np-service-errors",
   "np-service-latency",
   "np-api-5xx",

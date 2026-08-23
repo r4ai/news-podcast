@@ -3,9 +3,42 @@ import { describe, expect, it, vi } from "vitest"
 import {
   recordCancellationPropagation,
   recordEpisodeWorkerEvent,
+  recordScriptQualityObservation,
 } from "./worker-observability.js"
 
 describe("episode worker observability", () => {
+  it("records versioned script quality without source or draft content", () => {
+    const log = vi.fn()
+    const count = vi.fn()
+
+    recordScriptQualityObservation(
+      { log, count },
+      {
+        model: "gpt-test",
+        generationPromptVersion: "episode-script-v2",
+        qualityPromptVersion: "episode-script-quality-v1",
+        outcome: "reject",
+        reasonCode: "prompt_injection",
+      }
+    )
+
+    const attributes = {
+      "gen_ai.request.model": "gpt-test",
+      "episode.script.prompt.version": "episode-script-v2",
+      "episode.script.quality_prompt.version": "episode-script-quality-v1",
+      "quality.outcome": "reject",
+      "quality.reason": "prompt_injection",
+    }
+    expect(count).toHaveBeenCalledWith("episode.script.quality", 1, attributes)
+    expect(log).toHaveBeenCalledWith({
+      name: "episode.script.quality_evaluated",
+      level: "warn",
+      attributes,
+    })
+    expect(attributes).not.toHaveProperty("source")
+    expect(attributes).not.toHaveProperty("draft")
+  })
+
   it("measures cancel-to-provider-abort latency with a bounded source tag", () => {
     const measure = vi.fn()
 

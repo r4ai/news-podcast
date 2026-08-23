@@ -58,7 +58,7 @@ flowchart LR
 1. 認証済みユーザーが `Idempotency-Key` 付きで生成ジョブを作成する。
 2. APIは `owner + method + canonical route + key` を一意に保存し、同一request hashなら同じreceiptを返す。異なるhashなら409にする。
 3. Episode Productionはジョブをleaseして `queued -> running` へ遷移する。
-4. 実行開始時に最新InterestProfileと候補metadataから`GenerationPlan`をfirst-write-winsで固定し、その記事snapshot取得、台本生成、VOICEVOX合成、音声保存を各段階で再実行可能にする。
+4. 実行開始時に最新InterestProfileと候補metadataから`GenerationPlan`をfirst-write-winsで固定し、その記事snapshot取得、台本生成、独立quality gate、VOICEVOX合成、音声保存を順に実行する。quality rejectはcheckpoint前のterminal failureとし、音声化・公開しない。
 5. 成功時はfenced transactionでEpisodeを一度だけ関連づけて `succeeded`、失敗時は秘密を含まないfailureへ `failed`。terminal状態からは遷移しない。
 6. 完成eventはoutboxへ原子的に記録し、JetStreamへ再送する。Libraryはdurable consumerとinboxで重複配送を吸収する。
 7. Webはjobの`succeeded`を生成完了として受け取った後、`episodeId`の詳細がLibraryから読めるまで初回を含む最大5回・500ms間隔で確認する。確認中は再生可能な「完成」と区別し、上限到達後は利用者の再確認操作で回復できる。
@@ -126,7 +126,7 @@ flowchart LR
   Watchdog -->|"SMTP / structured stderr"| OnCall["Operations"]
 ```
 
-Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packages/observability`を使う。BrowserからGatewayまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Productionは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はProduction trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
+Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packages/observability`を使う。BrowserからGatewayまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Productionは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はProduction trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。台本qualityはmodel・生成prompt version・quality prompt version・pass/reject・固定reasonだけをmetric/logへ記録し、記事と台本は記録しない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
 Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。OTLPはGatewayの相対proxyを通し、Collector originをBrowserへ公開しない。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningで8 dashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理する。watchdogは通常構成でも常駐し、SMTP完全設定時はメール、未設定時は構造化stderrへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0040](adr/0040-full-path-observability-validation.md)、[ADR-0048](adr/0048-grafana-mcp-observability.md)、[ADR-0052](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
@@ -151,7 +151,7 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 
 - Domain: 公開interfaceから確認できる規則をunit testし、ドメインロジック100%を維持する。行カバレッジを全体KPIにはしない。
 - Application: portのfakeを使ったユースケース統合テスト。
-- Adapters: SQLite、SeaweedFS S3、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは採用モデルのstrict schemaと実行時allow-listを通し、モデル変更時は実API smokeで適合性を確認する。外部実通信は資格情報のないCIでは行わない。
+- Adapters: SQLite、SeaweedFS S3、VOICEVOX、OpenAIの契約テスト。OpenAIリクエストは採用モデルのstrict schemaと実行時allow-listを通し、モデル変更時は実API smokeとversion固定prompt-injection evalで適合性を確認する。外部実通信は資格情報のないCIでは行わない。
 - External contract gate: 公式仕様→稼働version/digest→実データの順に照合し、匿名fixtureを`provider-contract:check`でoffline再生する。詳細は[外部provider契約台帳](external-provider-contracts.md)。
 - API: OpenAPI lint/validation、型生成差分、認証matrix、Problem Details、owner isolation、pagination、冪等性競合。
 - Web: Storybookで状態別story、interaction、a11y、Playwright screenshot差分。機能画面は視覚設計承認後に追加する。
@@ -366,7 +366,7 @@ flowchart TD
 - OpenAIのproviderエラーや生成根拠を外部レスポンスへ露出しない。
 - 任意RSSと記事redirectによるSSRF。接続前とredirectごとに解決IPを検査する。
 - SQLiteとObjectStore間の孤児object。現在は冪等keyと再試行で利用経路を保護し、運用reconcilerを追加する。
-- LLMの費用・latency・非決定性。strict schema、実行limit、代表fixtureのevalを持つ。
+- LLMの費用・latency・非決定性と、同一modelの生成/評価に残るprompt injection false negative。strict schema、公開前quality gate、実行limit、version固定evalを持つ。
 
 ## 12. ADR一覧
 
@@ -407,3 +407,4 @@ flowchart TD
 - [ADR-0072 Episode取消を実行中providerへ即時伝播する](adr/0072-propagate-episode-cancellation-immediately.md)
 - [ADR-0073 記事identityとcapture intent versionを分離する](adr/0073-version-article-capture-intents.md)
 - [ADR-0074 日次予約をEpisode終端結果まで追跡する](adr/0074-complete-daily-schedule-on-terminal-outcome.md)
+- [ADR-0080 未信頼記事から生成した台本を独立quality gateで公開前に拒否する](adr/0080-gate-untrusted-article-scripts-before-publication.md)

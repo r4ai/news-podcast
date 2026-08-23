@@ -478,6 +478,29 @@ describe("executeEpisodeJob", () => {
     expect(ports.audio.put).not.toHaveBeenCalled()
   })
 
+  it("fails a quality-rejected script before checkpoint, speech, audio, or publication", async () => {
+    const ports = makePorts({
+      script: {
+        generate: () =>
+          Effect.fail({ _tag: "QualityRejected" as const } as never),
+      },
+    })
+
+    const outcome = await Effect.runPromise(
+      executeEpisodeJob(ports)({ job: running })
+    )
+
+    expect(outcome).toEqual({
+      _tag: "Failed",
+      failureCode: "script_quality_rejected",
+    })
+    expect(ports.persistence.saveScriptCheckpoint).not.toHaveBeenCalled()
+    expect(ports.dictionary.prepare).not.toHaveBeenCalled()
+    expect(ports.speech.synthesize).not.toHaveBeenCalled()
+    expect(ports.audio.put).not.toHaveBeenCalled()
+    expect(ports.persistence.completeWithOutbox).not.toHaveBeenCalled()
+  })
+
   it("treats a duplicate atomic completion as idempotent success", async () => {
     const ports = makePorts()
     vi.mocked(ports.persistence.completeWithOutbox).mockReturnValue(

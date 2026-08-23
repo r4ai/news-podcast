@@ -20,9 +20,10 @@
 | service state復旧 | `pnpm test:sqlite-state` | Fulfilled |
 | 共通信頼性module | `pnpm test:coverage:reliability`（line/branch 90%以上） | Fulfilled |
 | process/依存障害注入 | `pnpm reliability:chaos` | Fulfilled |
+| 台本prompt injection | deterministic quality rejection tests + model変更時の`pnpm provider-security-eval` | Fulfilled |
 | Watchdog / Grafana MCP | `pnpm observability:validate`、`pnpm observability:smoke`、`pnpm mcp:check` | Fulfilled |
 
-functional coverageの最低値はlines 75%、branches 60%とする。live OpenAI + VOICEVOX smokeはAPI keyと外部runtimeを要する受け入れ確認として分離し、fake provider、schema拒否、timeout、retry上限をCIで常時検証する。
+functional coverageの最低値はlines 75%、branches 60%とする。live OpenAI + VOICEVOX smokeとprovider security evalはAPI keyと外部runtimeを要する受け入れ確認として分離し、fake provider、schema拒否、quality reject、音声化/公開停止、timeout、retry上限をCIで常時検証する。
 
 ## GitHub Actionsへの対応
 
