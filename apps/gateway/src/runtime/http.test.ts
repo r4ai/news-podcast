@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { Effect, Layer, Schema, Tracer } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
@@ -759,7 +760,7 @@ describe("Gateway HTTP runtime", () => {
                 ? "text/html; charset=utf-8"
                 : "text/css",
             byteLength: new TextEncoder().encode(body).byteLength,
-            sha256: "f".repeat(64),
+            sha256: createHash("sha256").update(body).digest("hex"),
           })
         },
       },
@@ -811,6 +812,89 @@ describe("Gateway HTTP runtime", () => {
       expect(asset.headers.get("content-security-policy")).toContain(
         "sandbox; default-src 'none'"
       )
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("rejects a replay whose completed body does not match durable metadata", async () => {
+    const snapshotId = "6518412b-ce2f-4641-9f2c-a02dd515bc31"
+    const body = "same-length-corruption"
+    const runtime = makeGatewayWebHandler(
+      {
+        ...ports,
+        createArticleReplayAccess: () =>
+          Effect.succeed({
+            url: "https://objects.test/Replay",
+            mediaType: "text/html; charset=utf-8",
+            byteLength: new TextEncoder().encode(body).byteLength,
+            sha256: "f".repeat(64),
+          }),
+      },
+      undefined,
+      {
+        fetcher: vi.fn(
+          async () =>
+            new Response(body, {
+              headers: {
+                "content-length": String(
+                  new TextEncoder().encode(body).byteLength
+                ),
+              },
+            })
+        ),
+      }
+    )
+
+    try {
+      const response = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/article-snapshots/${snapshotId}/replay/index.html`
+        )
+      )
+      expect(response.status).toBe(503)
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it("returns unavailable when the replay body fails before completion", async () => {
+    const snapshotId = "6518412b-ce2f-4641-9f2c-a02dd515bc31"
+    const runtime = makeGatewayWebHandler(
+      {
+        ...ports,
+        createArticleReplayAccess: () =>
+          Effect.succeed({
+            url: "https://objects.test/Replay",
+            mediaType: "text/html; charset=utf-8",
+            byteLength: 4,
+            sha256: "f".repeat(64),
+          }),
+      },
+      undefined,
+      {
+        fetcher: vi.fn(
+          async () =>
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode("sa"))
+                  controller.error(new Error("object store disconnected"))
+                },
+              }),
+              { headers: { "content-length": "4" } }
+            )
+        ),
+      }
+    )
+
+    try {
+      const response = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/article-snapshots/${snapshotId}/replay/index.html`
+        )
+      )
+      expect(response.status).toBe(503)
     } finally {
       await runtime.dispose()
     }

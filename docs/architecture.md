@@ -301,10 +301,10 @@ sequenceDiagram
   C->>C: article_owner_access + snapshot metadata
   C-->>G: 1分署名URL + type/size/hash
   G->>S: signed GET
-  G-->>W: CSP/sandbox + bounded stream
+  G-->>W: CSP/sandbox + verified bounded body
 ```
 
-resolve、HTML、assetの3 routeはすべてowner認可付きである。Gatewayは署名URLとobject keyを公開せず、保存metadataとupstream `Content-Length`が一致するobjectだけをsame-originで返す。購読解除後も`article_owner_access`を削除しないため、本人の過去snapshotは引き続き読める（[ADR-0079](adr/0079-deliver-owned-private-artifacts-through-gateway.md)）。
+resolve、HTML、assetの3 routeはすべてowner認可付きである。Gatewayは署名URLとobject keyを公開せず、上限内でbodyを読み切り、保存metadataのbyte lengthとSHA-256が一致するobjectだけをsame-originで返す。購読解除後も`article_owner_access`を削除しないため、本人の過去snapshotは引き続き読める（[ADR-0079](adr/0079-deliver-owned-private-artifacts-through-gateway.md)）。
 
 ### 4.6 記事archive objectの回収
 

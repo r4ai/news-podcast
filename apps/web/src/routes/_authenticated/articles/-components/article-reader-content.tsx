@@ -1,5 +1,6 @@
 import { MarkdownBody, type MarkdownCompileState } from "@/shared/markdown"
 import { Button } from "@workspace/ui/components/button"
+import { useEffect, useRef, useState } from "react"
 import type { Article, ArticleSource } from "../-model"
 
 export type ArticleReaderContentProps = {
@@ -81,6 +82,17 @@ export function ArticleReaderContent({
   retryArchive,
   useMarkdown,
 }: ArticleReaderContentProps) {
+  const [archiveLoadFailed, setArchiveLoadFailed] = useState(false)
+  const [archiveAttempt, setArchiveAttempt] = useState(0)
+  const archiveFrameRef = useRef<HTMLIFrameElement>(null)
+  useEffect(() => {
+    const frame = archiveFrameRef.current
+    if (frame === null) return
+    const reportFailure = () => setArchiveLoadFailed(true)
+    frame.addEventListener("error", reportFailure)
+    return () => frame.removeEventListener("error", reportFailure)
+  }, [archiveUrl, archiveAttempt])
+
   if (source === "archive") {
     if (isArchiveLoading) {
       return (
@@ -91,12 +103,16 @@ export function ArticleReaderContent({
         />
       )
     }
-    if (archiveUnavailable || !archiveUrl) {
+    if (archiveUnavailable || archiveLoadFailed || !archiveUrl) {
       return (
         <ArchiveUnavailableNotice
           article={article}
           canUseMarkdown={Boolean(markdown)}
-          retryArchive={retryArchive}
+          retryArchive={() => {
+            setArchiveLoadFailed(false)
+            setArchiveAttempt((attempt) => attempt + 1)
+            retryArchive()
+          }}
           useMarkdown={useMarkdown}
         />
       )
@@ -104,6 +120,8 @@ export function ArticleReaderContent({
     return (
       <iframe
         className="h-[70vh] w-full rounded-lg border"
+        key={`${archiveUrl}:${archiveAttempt}`}
+        ref={archiveFrameRef}
         sandbox=""
         src={archiveUrl}
         title={article.title}

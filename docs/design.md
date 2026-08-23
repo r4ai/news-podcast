@@ -144,7 +144,7 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 
 計装は呼び出しごとの手動spanではなく、**自動計装（`instrumentation-http` + `instrumentation-undici`）を正本**にする。Node processはbootstrapで`@news-podcast/observability/node/register`を初期化してからcomposition rootを動的importし、依存moduleの評価より先に`node:http`をpatchする。入り口HTTPと全outbound HTTP（OpenAI、VOICEVOX、RSS、記事archive、AI enrich、S3）へspanを自動生成する。W3C trace headerの注入はallowlist（既定`api.openai.com`・`localhost`・`127.0.0.1`、`OTEL_PROPAGATION_ALLOWLIST`で拡張）へ限定し、任意RSS等の管理外宛先へは注入しない（ADR-0017の「外部へ送らない」方針を部分改訂）。span自体は生成・記録され続け、受信は常にW3Cで継続する。schedulerやconsumerなど非HTTP入口は`withGuaranteedSpan`でroot spanを合成して`trace.entry.synthesized`を計数し、本番はmetric/ruleで、非本番は`assertActiveSpan`で計装欠落を検出する。エラー詳細はredact済み`error.message`・`error.type`をlogs/spansへ記録し、metric属性は低cardinalityに限定する（高cardinalityの`error.message`はmetricsへ入れない）。詳細は[ADR-0025](adr/0025-automatic-instrumentation-and-trace-guarantee.md)を正本とする。
 
-記事replay proxyは`article.replay_proxy`を成功・失敗の両方で記録し、属性は`object_kind`（`replay`/`asset`）、`outcome`、`duration_ms`だけに限定する。署名URL、object key、元記事URL、owner/snapshot IDは記録しない。
+記事replay proxyはbounded bodyの読了とSHA-256照合後だけ成功として`article.replay_proxy`を記録し、途中切断・digest不一致を失敗に含める。属性は`object_kind`（`replay`/`asset`）、`outcome`、`duration_ms`だけに限定する。署名URL、object key、元記事URL、owner/snapshot IDは記録しない。
 
 ## 7. 品質戦略
 

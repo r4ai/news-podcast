@@ -13,7 +13,7 @@ Captureは`replay/index.html`と相対参照するassetをprivate S3へ保存し
 
 ## Decision
 
-音声の既存規則を維持し、記事replayにも同じprivate artifact配信境界を適用する。Content Knowledgeは`article_owner_access`、snapshot ID、保存済みobject metadataの完全一致を確認して1分の内部署名URLを発行する。Gatewayは署名URLを公開せず、同一originのsnapshot routeからstreamする。
+音声の既存規則を維持し、記事replayにも同じprivate artifact配信境界を適用する。Content Knowledgeは`article_owner_access`、snapshot ID、保存済みobject metadataの完全一致を確認して1分の内部署名URLを発行する。Gatewayは署名URLを公開せず、同一originのsnapshot routeから上限内でbodyを読み切って検証してから返す。
 
 ```mermaid
 flowchart LR
@@ -30,7 +30,7 @@ flowchart LR
 | replay HTML | 5 MiB | stored Content-Type、CSP `sandbox`/`default-src 'none'`、`nosniff` |
 | captured asset | 20 MiB | exact hashed filename、stored Content-Type、`nosniff` |
 
-両方とも`private, no-store`とし、upstreamの`Content-Length`が保存metadataと一致しない応答は503へ閉じる。Web iframeにも`sandbox=""`を付け、失敗時は再試行、Markdown、元記事への回復導線を出す。
+両方とも`private, no-store`とし、upstreamのbody読了、byte length、SHA-256のいずれかが保存metadataと一致しない応答は503へ閉じる。これにより途中切断を成功telemetryに数えない。Web iframeにも`sandbox=""`を付け、resolver後のiframe load失敗を含め、再試行、Markdown、元記事への回復導線を出す。
 
 ## Decision drivers
 

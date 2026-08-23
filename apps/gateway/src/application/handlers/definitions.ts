@@ -12,6 +12,34 @@ const REPLAY_CSP =
 const REPLAY_ASSET_CSP =
   "sandbox; default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
+const toSha256 = async (body: ArrayBuffer) => {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", body)
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("")
+}
+
+const readExactBody = async (response: Response, expectedBytes: number) => {
+  if (response.body === null) throw new Error("replay upstream body missing")
+  const reader = response.body.getReader()
+  const body = new Uint8Array(expectedBytes)
+  let offset = 0
+  while (true) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    if (offset + chunk.value.byteLength > expectedBytes) {
+      await reader.cancel()
+      throw new Error("replay upstream body exceeds metadata")
+    }
+    body.set(chunk.value, offset)
+    offset += chunk.value.byteLength
+  }
+  if (offset !== expectedBytes) {
+    throw new Error("replay upstream body shorter than metadata")
+  }
+  return body.buffer
+}
+
 const freezeSuccess = <Success, Error, Requirements>(
   effect: Effect.Effect<Success, Error, Requirements>
 ) => effect.pipe(Effect.map(deepFreeze))
@@ -359,6 +387,13 @@ export const makeGatewayHandlers = (
                     await upstream.body?.cancel()
                     throw new Error("replay upstream metadata mismatch")
                   }
+                  const body = await readExactBody(upstream, access.byteLength)
+                  if (
+                    body.byteLength !== access.byteLength ||
+                    (await toSha256(body)) !== access.sha256
+                  ) {
+                    throw new Error("replay upstream digest mismatch")
+                  }
                   const headers = new Headers({
                     "cache-control": "private, no-store",
                     "content-security-policy": REPLAY_ASSET_CSP,
@@ -371,7 +406,7 @@ export const makeGatewayHandlers = (
                     headers.set("content-security-policy", REPLAY_CSP)
                   }
                   return HttpServerResponse.fromWeb(
-                    new Response(upstream.body, {
+                    new Response(body, {
                       status: 200,
                       headers,
                     })
