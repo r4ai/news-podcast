@@ -23,7 +23,26 @@ test("configuration fixes the documented durability policy and distinct destinat
   })
   assert.equal(configuration.backupIntervalMs, 86_400_000)
   assert.equal(configuration.drillIntervalMs, 604_800_000)
+  assert.equal(configuration.barrierTimeoutMillis, 30_000)
   assert.equal(configuration.archive.bucket, "news-podcast-backup")
+})
+
+test("configuration bounds the SQLite write barrier timeout", () => {
+  assert.equal(
+    loadConfiguration({
+      ...environment,
+      BACKUP_BARRIER_TIMEOUT_MS: "45000",
+    }).barrierTimeoutMillis,
+    45_000
+  )
+  assert.throws(
+    () =>
+      loadConfiguration({
+        ...environment,
+        BACKUP_BARRIER_TIMEOUT_MS: "120001",
+      }),
+    /BACKUP_BARRIER_TIMEOUT_MS must be at most 120000/
+  )
 })
 
 test("configuration refuses to back up into the live source bucket", () => {

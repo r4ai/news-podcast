@@ -4,7 +4,7 @@
 - Date: 2026-08-20
 - Decision owners: Platform / Identity Access / Content Knowledge / Episode Production / Episode Library
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0078（DB/object logical cutとProduction/Library横断整合性）
 - Related: Issue #15、ADR-0011、ADR-0039、`docs/operations/service-state-recovery.md`
 
 ## コンテキストと変更契機
@@ -70,7 +70,7 @@ manifestは4 DBのprofile、必須table、`user_version`、SHA-256、sizeと、o
 - 全objectを世代ごとに取得・暗号化するため、容量と転送量は増える。
 - 暗号鍵を失うと全世代を復元できず、鍵rotationは保持期間と調整が必要になる。
 - S3 lifecycleの30成功世代維持は外部bucket側の設定・監査を必要とする。
-- SQLite backup後からobject inventory完了までの変更は、size/ETag/hashとDB参照照合でfail closedするが、業務書き込みを横断transactionにはしない。
+- SQLite backupとobject inventoryのlogical cutは[ADR-0078](0078-bound-coordinated-backup-with-write-barrier.md)のwrite barrierへ置換した。
 
 ## 影響と同期
 

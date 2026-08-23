@@ -12,9 +12,11 @@ import {
 
 test("source adapter snapshots every paginated object and downloads its body", async () => {
   const calls = []
+  const requestOptions = []
   const client = {
-    async send(command) {
+    async send(command, options) {
       calls.push(command)
+      requestOptions.push(options)
       if (command.constructor.name === "ListObjectsV2Command") {
         return command.input.ContinuationToken
           ? {
@@ -37,10 +39,13 @@ test("source adapter snapshots every paginated object and downloads its body", a
   const directory = await mkdtemp(join(tmpdir(), "backup-s3-"))
   try {
     const source = createSourceObjectStore({ client, bucket: "source" })
-    assert.deepEqual(await source.listObjects(), [
+    const controller = new AbortController()
+    assert.deepEqual(await source.listObjects({ signal: controller.signal }), [
       { key: "a", size: 1, etag: "etag-a" },
       { key: "b", size: 2, etag: "etag-b" },
     ])
+    assert.equal(requestOptions[0]?.abortSignal, controller.signal)
+    assert.equal(requestOptions[1]?.abortSignal, controller.signal)
     const destination = join(directory, "object")
     assert.deepEqual(await source.downloadObject("a", destination), {
       etag: "etag-a",

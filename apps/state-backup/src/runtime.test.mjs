@@ -12,13 +12,19 @@ test("runtime records committed backups, drills, age, and failures durably", asy
   let now = new Date("2026-08-20T00:00:00.000Z")
   let backupCalls = 0
   let drillCalls = 0
+  let monotonicMillis = 0
   try {
     const runtime = await BackupRuntime.open({
       statePath,
       now: () => now,
+      monotonicNow: () => monotonicMillis,
       createGeneration: async () => {
         backupCalls += 1
-        return { commit: { generationId: "generation-a" } }
+        monotonicMillis = 12_000
+        return {
+          commit: { generationId: "generation-a" },
+          manifest: { consistency: { barrierDurationMillis: 750 } },
+        }
       },
       runRestoreDrill: async () => {
         drillCalls += 1
@@ -34,6 +40,14 @@ test("runtime records committed backups, drills, age, and failures durably", asy
       renderMetrics(runtime.snapshot(), now),
       /generation_age_seconds 7200/
     )
+    assert.match(
+      renderMetrics(runtime.snapshot(), now),
+      /backup_duration_seconds 12/
+    )
+    assert.match(
+      renderMetrics(runtime.snapshot(), now),
+      /backup_barrier_duration_seconds 0\.75/
+    )
     assert.equal(backupCalls, 1)
     assert.equal(drillCalls, 1)
 
@@ -44,8 +58,13 @@ test("runtime records committed backups, drills, age, and failures durably", asy
     const failing = await BackupRuntime.open({
       statePath,
       now: () => now,
+      monotonicNow: () => monotonicMillis,
       createGeneration: async () => {
-        throw new Error("remote unavailable")
+        monotonicMillis = 14_000
+        const error = new Error("writers did not quiesce")
+        error.code = "barrier_timeout"
+        error.barrierDurationMillis = 2_000
+        throw error
       },
       runRestoreDrill: async () => {
         throw new Error("corrupt generation")
@@ -56,6 +75,11 @@ test("runtime records committed backups, drills, age, and failures durably", asy
     assert.equal(await failing.runRestoreDrill(), false)
     assert.equal(failing.snapshot().backupFailuresTotal, 1)
     assert.equal(failing.snapshot().drillFailuresTotal, 1)
+    assert.equal(failing.snapshot().backupRejectionsTotal.barrier_timeout, 1)
+    assert.match(
+      renderMetrics(failing.snapshot(), now),
+      /backup_rejections_total\{reason="barrier_timeout"\} 1/
+    )
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

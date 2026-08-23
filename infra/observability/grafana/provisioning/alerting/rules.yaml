@@ -108,6 +108,40 @@ groups:
           description: Restore the latest committed generation and verify all article archive and Episode audio references before clearing this alert.
         labels: { severity: critical, team: platform }
 
+      - uid: np-backup-consistency
+        title: Backup consistency barrier rejected or exceeded its budget
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum(increase(news_podcast_backup_rejections_total[5m])) + (max(news_podcast_backup_barrier_duration_seconds) > bool 25)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: The coordinated backup consistency boundary was rejected or slow
+          description: Inspect the reason label and state-backup log. Do not restore or manually commit a rejected generation; verify writer contention, Production/Library completion convergence, and object inventory stability.
+        labels: { severity: critical, team: platform }
+
   - orgId: 1
     name: service-reliability
     folder: News Podcast
