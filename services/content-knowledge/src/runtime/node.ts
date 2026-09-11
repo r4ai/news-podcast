@@ -1,3 +1,4 @@
+import { makeArchiveRefreshObserver } from "./archive-refresh-observability.js"
 import { createArchiveRefreshQueue } from "../adapters/persistence/archive-refresh/repository.js"
 import type { ArchiveRefreshQueue } from "../application/archive-refresh.js"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
@@ -534,42 +535,8 @@ export const runNodeService = (
                           undefined,
                           makeArticleLibraryHandler({
                             archiveQueue: runtime.archiveRefreshQueue,
-                            observeArchiveRefresh: (value) => {
-                              if (value.depth !== undefined) {
-                                for (const [state, depth] of Object.entries(
-                                  value.depth
-                                ))
-                                  observability.gauge(
-                                    "archive.refresh.jobs",
-                                    depth,
-                                    { state }
-                                  )
-                                return
-                              }
-                              observability.count("archive.refresh", 1, {
-                                outcome: value.event,
-                                reason: value.reason ?? "none",
-                              })
-                              if (value.waitMillis !== undefined)
-                                observability.count(
-                                  "archive.refresh.wait",
-                                  value.waitMillis
-                                )
-                              observability.log({
-                                name: "archive.refresh",
-                                level:
-                                  value.event === "rejected" ||
-                                  value.event === "failed" ||
-                                  value.event === "deadline"
-                                    ? "warn"
-                                    : "info",
-                                attributes: {
-                                  outcome: value.event,
-                                  reason: value.reason ?? "none",
-                                  waitMillis: value.waitMillis ?? 0,
-                                },
-                              })
-                            },
+                            observeArchiveRefresh:
+                              makeArchiveRefreshObserver(observability),
                             articles: runtime.library,
                             objects: markdown.reader,
                             replaySigner: makeS3ReplayAccessSignerUnsafe(

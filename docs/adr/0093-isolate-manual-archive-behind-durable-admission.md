@@ -53,7 +53,7 @@ HTTP POSTの契約は同期200から非同期202へ変更する。status取得�
 
 別ownerのcontrol/read RPCはcapture待ちから独立する。新規HTTPクライアントは202のjobIdを使ってstatusをpollする必要がある。queue満杯またはrate超過の503は時間を置いて再試行する。クラッシュ直前にsnapshotがcommitされた場合、receiptがfailedでもsnapshotが残る可能性がある。記事詳細で最新snapshotを確認してから再受付する。
 
-`archive.refresh`は受付・再利用・拒否・開始・成功・失敗・deadline・cancelを数える。`archive.refresh.wait`は開始時の待ち時間、`archive.refresh.jobs{state=queued|processing|expired}`はキュー状態を示す。expiredは保持期間内のdeadline失敗数。owner、記事ID、URLはmetric labelに入れない。
+`archive.refresh`は受付・再利用・拒否・開始・成功・失敗・deadline・cancelを数える。`archive.refresh.wait`は開始時の待ち時間ヒストグラム、`archive.refresh.jobs{state=queued|processing|expired}`はキュー状態を示す。expiredは保持期間内のdeadline失敗数。owner、記事ID、URLはmetric labelに入れない。
 
 ## 影響と同期
 
