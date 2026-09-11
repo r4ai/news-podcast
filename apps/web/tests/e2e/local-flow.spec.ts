@@ -144,6 +144,7 @@ test("logout clears owner A state before owner B logs in", async ({ page }) => {
 
   await page.getByLabel("開発パスワード").fill("e2e-password-b")
   await page.getByRole("button", { name: "開発ユーザーでログイン" }).click()
+  await expect(page.getByRole("button", { name: "ログアウト" })).toBeVisible()
   await page.goto("/articles")
 
   await expect(
