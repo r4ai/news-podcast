@@ -5,7 +5,7 @@
 - Amended: 2026-08-20（Issue #48: parser validation failureを同期結果へ保持）
 - Decision owners: Content Knowledge / Architecture
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0094](0094-bound-and-yield-feed-sync-work.md)（実行単位・lease・continuation。既存の公開statusと失敗分類は継続）
 - Related: Issue #38、Issue #48、ADR-0012、ADR-0041
 
 ## コンテキストと変更契機

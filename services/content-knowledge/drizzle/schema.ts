@@ -215,6 +215,9 @@ export const feedSyncJobs = sqliteTable(
       enum: ["Queued", "Processing", "Succeeded", "Failed"],
     }).notNull(),
     attempt: integer("attempt").notNull().default(0),
+    readySequence: integer("ready_sequence").notNull().default(0),
+    readyAt: text("ready_at").notNull().default(""),
+    continuationJson: text("continuation_json"),
     leaseToken: text("lease_token"),
     leaseExpiresAt: text("lease_expires_at"),
     discovered: integer("discovered").notNull().default(0),
@@ -228,7 +231,7 @@ export const feedSyncJobs = sqliteTable(
   (table) => [
     index("feed_sync_jobs_claim").on(
       table.status,
-      table.createdAt,
+      table.readySequence,
       table.jobId
     ),
     check(

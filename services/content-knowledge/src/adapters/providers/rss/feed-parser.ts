@@ -202,9 +202,10 @@ export const parseRssFeed = (
   try {
     const parser = new XMLParser(parserOptions)
     const parsed = parser.parse(body, true)
-    const parsedItems = parseRootItems(parsed).map((item) =>
-      parseItem(item, feedUrl)
-    )
+    const entries = parseRootItems(parsed)
+    if (entries.length > 1_000)
+      throw { _tag: "FeedFetchFailed", reason: "ResourceLimit" }
+    const parsedItems = entries.map((item) => parseItem(item, feedUrl))
     return deepFreeze({
       items: parsedItems.flatMap((item) =>
         item._tag === "ValidItem" ? [item.item] : []

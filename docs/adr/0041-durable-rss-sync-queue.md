@@ -4,7 +4,7 @@
 - Date: 2026-08-13
 - Decision owners: Product owner / Content Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0094](0094-bound-and-yield-feed-sync-work.md)（実行単位・lease・continuation。既存の公開statusと失敗分類は継続）
 - Related: [ADR-0012](adr/0012-rss-reader-web-archive.md)、[ADR-0002](adr/0002-openapi-async-jobs.md)、[ADR-0068](0068-isolate-feed-item-sync-failures.md)、`GET /v1/me/feed-sync-jobs`、`POST /v1/me/feed-subscriptions/{subscriptionId}/sync`
 
 ## Context and change trigger
@@ -66,7 +66,7 @@ flowchart LR
 ### Negative and risks
 
 - feedごとのqueue rowとstatus APIを保守する必要がある。
-- lease期限、外部HTTP timeout、archive処理時間のずれで重複処理は起こり得る。完了更新はclaimごとのlease tokenでfenceし、archiveはsnapshot ID単位で版を分離する。
+- 実行単位・deadline・leaseの関係はADR-0094で置換した。crash時に現在の1項目を再実行する可能性は残るため、archiveの既存identityで冪等性を保つ。
 - 現在のUIは短いintervalのpollingであり、利用者数が増えた場合はSSE等のpushへ再評価する。
 
 ## Impact and synchronization

@@ -203,6 +203,7 @@ describe("SQLite feed sync queue", () => {
 
       for (let cycle = 0; cycle < 5; cycle += 1) {
         await Effect.runPromise(run())
+        tick += 301
       }
 
       expect(pollFeed).toHaveBeenCalledTimes(5)

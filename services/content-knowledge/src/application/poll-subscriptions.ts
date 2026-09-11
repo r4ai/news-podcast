@@ -42,6 +42,7 @@ export type FeedPollFailure = DeepReadonly<{
 }>
 
 export type FeedPollResult = DeepReadonly<{
+  readonly hasPending?: boolean
   readonly feeds: number
   readonly discovered: number
   readonly archived: number
