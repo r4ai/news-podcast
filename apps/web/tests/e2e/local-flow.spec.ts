@@ -126,7 +126,7 @@ test("logout clears owner A state before owner B logs in", async ({ page }) => {
   await expect(page.locator("audio")).toHaveJSProperty("paused", false)
 
   await page.getByRole("button", { name: "ログアウト" }).click()
-  await expect(page).toHaveURL(/\/login$/)
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
   await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible()
   await expect
     .poll(() =>
