@@ -54,6 +54,8 @@ describe("feed sync worker", () => {
           listFeedsForPolling: () => Effect.succeed([job]),
         },
         queue: {
+          hasPending: () => Effect.succeed(false),
+          checkpoint: vi.fn(() => Effect.void),
           enqueue: vi.fn(),
           enqueueForPolling: vi.fn(() => Effect.void),
           listForOwner: vi.fn(),
@@ -68,15 +70,19 @@ describe("feed sync worker", () => {
     )
 
     expect(result).toMatchObject({ discovered: 3, archived: 2 })
-    expect(pollFeed).toHaveBeenCalledWith({
-      feedId: job.feedId,
-      feedUrl: job.feedUrl,
-    })
+    expect(pollFeed).toHaveBeenCalledWith(
+      {
+        feedId: job.feedId,
+        feedUrl: job.feedUrl,
+      },
+      expect.objectContaining({ checkpoint: expect.any(Function) })
+    )
     expect(complete).toHaveBeenCalledWith(
       job.jobId,
       "lease-1",
       { discovered: 3, archived: 2, failed: 0 },
-      "2026-08-13T01:00:05.000Z"
+      "2026-08-13T01:00:05.000Z",
+      undefined
     )
     expect(claim).toHaveBeenNthCalledWith(
       1,
@@ -111,6 +117,8 @@ describe("feed sync worker", () => {
           listFeedsForPolling: () => Effect.succeed([job]),
         },
         queue: {
+          hasPending: () => Effect.succeed(false),
+          checkpoint: vi.fn(() => Effect.void),
           enqueue: vi.fn(),
           enqueueForPolling: vi.fn(() => Effect.void),
           listForOwner: vi.fn(),
@@ -147,7 +155,8 @@ describe("feed sync worker", () => {
         failureScope: "Item",
         error: "MissingLink",
       },
-      "2026-08-13T01:00:05.000Z"
+      "2026-08-13T01:00:05.000Z",
+      undefined
     )
   })
 })

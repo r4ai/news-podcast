@@ -8,6 +8,7 @@ import {
   FeedSyncJobSchema,
   SyncJobIdSchema,
 } from "../../../domain/feed-sync.js"
+import { Sha256Schema } from "../../../domain/article.js"
 import { FeedIdSchema, FeedUrlSchema } from "../../../domain/subscription.js"
 import type { QueryRunner } from "../../../infrastructure/unsafe/drizzle/open.js"
 
@@ -20,6 +21,8 @@ const RowSchema = Schema.Struct({
   status: Schema.String,
   attempt: Schema.Int,
   leaseToken: Schema.NullOr(Schema.String),
+  readyAt: Schema.optional(Schema.String),
+  continuationJson: Schema.optional(Schema.NullOr(Schema.String)),
   discovered: Schema.Int,
   archived: Schema.Int,
   failed: Schema.Int,
@@ -43,6 +46,8 @@ export const jobProjection = {
   status: feedSyncJobs.status,
   attempt: feedSyncJobs.attempt,
   leaseToken: feedSyncJobs.leaseToken,
+  continuationJson: feedSyncJobs.continuationJson,
+  readyAt: feedSyncJobs.readyAt,
   discovered: feedSyncJobs.discovered,
   archived: feedSyncJobs.archived,
   failed: feedSyncJobs.failed,
@@ -71,6 +76,8 @@ export const decodeJob = (
       const {
         error,
         leaseToken: _leaseToken,
+        continuationJson: _continuationJson,
+        readyAt: _readyAt,
         startedAt,
         completedAt,
         ...required
@@ -105,8 +112,53 @@ export const decodeClaimedJob = (
       return leaseToken === null
         ? Effect.fail(failure(operation, "CorruptRecord"))
         : decodeJob(row, operation).pipe(
-            Effect.map((job) => deepFreeze({ ...job, leaseToken }))
+            Effect.flatMap((job) =>
+              value.continuationJson == null
+                ? Effect.succeed(
+                    deepFreeze({
+                      ...job,
+                      readyAt: value.readyAt || job.createdAt,
+                      leaseToken,
+                    })
+                  )
+                : parse(Schema.fromJsonString(ContinuationSchema))(
+                    value.continuationJson
+                  ).pipe(
+                    Effect.map((continuation) =>
+                      deepFreeze({
+                        ...job,
+                        readyAt: value.readyAt || job.createdAt,
+                        leaseToken,
+                        continuation,
+                      })
+                    )
+                  )
+            )
           )
     }),
     Effect.mapError(() => failure(operation, "CorruptRecord"))
   )
+
+const ContinuationSchema = Schema.Struct({
+  items: Schema.Array(
+    Schema.Struct({
+      externalId: Schema.String,
+      captureFingerprint: Sha256Schema,
+      title: Schema.String,
+      url: Schema.String,
+      publishedAt: Schema.optional(Schema.String),
+    })
+  ).check(Schema.isMaxLength(1_000)),
+  failures: Schema.Array(
+    Schema.Struct({
+      _tag: Schema.Literal("FeedItemValidationFailed"),
+      reason: Schema.Literals([
+        "InvalidItem",
+        "InvalidUrl",
+        "MissingLink",
+        "MissingTitle",
+        "TitleTooLong",
+      ]),
+    })
+  ).check(Schema.isMaxLength(1_000)),
+})

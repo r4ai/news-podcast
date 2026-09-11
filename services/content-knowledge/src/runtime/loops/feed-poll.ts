@@ -138,10 +138,10 @@ export const runFeedPollLoop = <Failure>(
           const outcome = deepFreeze({
             _tag: "FeedPollCycleSucceeded" as const,
             ...result,
-            nextDelayMillis: config.intervalMillis,
+            nextDelayMillis: result.hasPending ? 100 : config.intervalMillis,
           })
           return observe(outcome).pipe(
-            Effect.andThen(waitForNextCycle(config.intervalMillis)),
+            Effect.andThen(waitForNextCycle(outcome.nextDelayMillis)),
             Effect.andThen(
               Effect.suspend(() => loop(0, config.initialBackoffMillis))
             )

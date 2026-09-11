@@ -1,3 +1,4 @@
+import type { FeedReadResult } from "./ports/article-catalog.js"
 import type { DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
@@ -10,14 +11,29 @@ import type { FeedId, OwnerId, PollingFeed } from "../domain/subscription.js"
 
 export type FeedSyncQueueError = DeepReadonly<{
   readonly _tag: "FeedSyncQueueFailed"
-  readonly operation: "Initialize" | "Enqueue" | "List" | "Claim" | "Complete"
-  readonly reason: "CorruptRecord" | "StaleLease" | "Unavailable"
+  readonly operation:
+    | "Initialize"
+    | "Enqueue"
+    | "List"
+    | "Claim"
+    | "Complete"
+    | "Checkpoint"
+  readonly reason:
+    | "CorruptRecord"
+    | "StaleLease"
+    | "Unavailable"
+    | "ResourceLimit"
 }>
 
 export type ClaimedFeedSyncJob = FeedSyncJob &
-  DeepReadonly<{ readonly leaseToken: string }>
+  DeepReadonly<{
+    readonly readyAt?: string
+    readonly continuation?: FeedReadResult
+    readonly leaseToken: string
+  }>
 
 export type FeedSyncQueueRepository = DeepReadonly<{
+  readonly hasPending: () => Effect.Effect<boolean, FeedSyncQueueError>
   readonly enqueue: (
     feedId: FeedId,
     now: string
@@ -34,10 +50,17 @@ export type FeedSyncQueueRepository = DeepReadonly<{
     leaseExpiresAt: string,
     leaseToken: string
   ) => Effect.Effect<ClaimedFeedSyncJob | undefined, FeedSyncQueueError>
+  readonly checkpoint: (
+    jobId: SyncJobId,
+    leaseToken: string,
+    continuation: FeedReadResult,
+    now: string
+  ) => Effect.Effect<void, FeedSyncQueueError>
   readonly complete: (
     jobId: SyncJobId,
     leaseToken: string,
     outcome: FeedSyncOutcome,
-    now: string
+    now: string,
+    continuation?: FeedReadResult
   ) => Effect.Effect<FeedSyncJob, FeedSyncQueueError>
 }>

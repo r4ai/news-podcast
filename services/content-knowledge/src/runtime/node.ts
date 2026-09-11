@@ -1,3 +1,4 @@
+import { makeFeedSyncObserver } from "./feed-sync-observability.js"
 import { makeArchiveRefreshObserver } from "./archive-refresh-observability.js"
 import { createArchiveRefreshQueue } from "../adapters/persistence/archive-refresh/repository.js"
 import type { ArchiveRefreshQueue } from "../application/archive-refresh.js"
@@ -565,7 +566,8 @@ export const runNodeService = (
                           runtime,
                           capture,
                           undefined,
-                          feedPollWakeup
+                          feedPollWakeup,
+                          makeFeedSyncObserver(observability)
                         ),
                         dependencies.runEnrichment(
                           config.enrichment.loop,
