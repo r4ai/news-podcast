@@ -116,6 +116,7 @@ const makePorts = (): GatewayPorts => ({
       aiPending: 0,
     }),
   archiveArticle: () => Effect.fail(unavailable),
+  getArticleArchiveStatus: () => Effect.fail(unavailable),
   listArticleTags: () => Effect.fail(unavailable),
   setArticleTags: () => Effect.fail(unavailable),
   enrichArticle: () => Effect.fail(unavailable),

@@ -1,3 +1,6 @@
+import { makeArchiveRefreshObserver } from "./archive-refresh-observability.js"
+import { createArchiveRefreshQueue } from "../adapters/persistence/archive-refresh/repository.js"
+import type { ArchiveRefreshQueue } from "../application/archive-refresh.js"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import {
   noopObservability,
@@ -239,6 +242,7 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
   readonly library: ArticleLibraryRepository
   readonly searchIndex: ArticleSearchIndexRepository
   readonly subscriptions: SubscriptionRepository
+  readonly archiveRefreshQueue: ArchiveRefreshQueue
   readonly feedSyncQueue: FeedSyncQueueRepository
   readonly taxonomy: ReturnType<typeof createContentTaxonomy>
   readonly interestProfiles: ReturnType<typeof createInterestProfileOperations>
@@ -380,6 +384,10 @@ export const startNodeRuntime = (
                       searchIndex,
                       subscriptions,
                       feedSyncQueue,
+                      archiveRefreshQueue: createArchiveRefreshQueue(
+                        handle.database,
+                        dependencies.newJobId
+                      ),
                       taxonomy,
                       interestProfiles,
                       createEnrichment,
@@ -526,6 +534,9 @@ export const runNodeService = (
                           markdown.reader,
                           undefined,
                           makeArticleLibraryHandler({
+                            archiveQueue: runtime.archiveRefreshQueue,
+                            observeArchiveRefresh:
+                              makeArchiveRefreshObserver(observability),
                             articles: runtime.library,
                             objects: markdown.reader,
                             replaySigner: makeS3ReplayAccessSignerUnsafe(

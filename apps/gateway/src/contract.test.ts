@@ -62,6 +62,7 @@ describe("gateway HttpApi contract", () => {
       "/v1/me/articles/facets",
       "/v1/me/articles/{articleId}",
       "/v1/me/articles/{articleId}/archive",
+      "/v1/me/articles/{articleId}/archive/{jobId}",
       "/v1/me/articles/{articleId}/enrich",
       "/v1/me/articles/{articleId}/markdown",
       "/v1/me/articles/{articleId}/snapshots/{snapshotId}",

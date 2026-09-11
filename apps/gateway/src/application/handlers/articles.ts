@@ -90,6 +90,13 @@ export const articlesGroup = (handlers: GatewayHandlers) =>
       .handle("bulkPatchArticles", ({ headers, payload }) =>
         handlers.bulkPatchArticles({ headers, payload })
       )
+      .handle("getArticleArchiveStatus", ({ headers, params }) =>
+        handlers.getArticleArchiveStatus({
+          headers,
+          articleId: params.articleId,
+          jobId: params.jobId,
+        })
+      )
       .handle("archiveArticle", ({ headers, params }) =>
         handlers.archiveArticle({ headers, articleId: params.articleId })
       )

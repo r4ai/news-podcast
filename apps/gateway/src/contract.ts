@@ -586,7 +586,11 @@ export const ArticleMarkdownSchema = Schema.Struct({
   markdown: Schema.String.check(Schema.isMaxLength(1_048_576)),
 })
 export const ArticleArchiveResultSchema = Schema.Struct({
-  status: Schema.Literals(["archived", "already_archived"]),
+  jobId: Schema.String.check(Schema.isUUID(4)),
+  status: Schema.Literals(["queued", "processing", "succeeded", "failed"]),
+  createdAt: Schema.String,
+  completedAt: Schema.NullOr(Schema.String),
+  error: Schema.NullOr(Schema.Literals(["deadline", "capture", "canceled"])),
 })
 export const ArticleTagSchema = Schema.Struct({
   articleId: ArticleIdSchema,
@@ -1425,6 +1429,23 @@ export const archiveArticleEndpoint = HttpApiEndpoint.post(
   {
     headers: SessionHeadersSchema,
     params: { articleId: ArticleIdSchema },
+    success: ArticleArchiveResultSchema.pipe(HttpApiSchema.status(202)),
+    error: [
+      UnauthorizedProblemSchema,
+      NotFoundProblemSchema,
+      UnavailableProblemSchema,
+    ],
+  }
+)
+export const getArticleArchiveStatusEndpoint = HttpApiEndpoint.get(
+  "getArticleArchiveStatus",
+  "/v1/me/articles/:articleId/archive/:jobId",
+  {
+    headers: SessionHeadersSchema,
+    params: {
+      articleId: ArticleIdSchema,
+      jobId: Schema.String.check(Schema.isUUID(4)),
+    },
     success: ArticleArchiveResultSchema,
     error: [
       UnauthorizedProblemSchema,
@@ -1683,6 +1704,7 @@ const articlesGroup = HttpApiGroup.make("articles")
     patchArticleEndpoint,
     bulkPatchArticlesEndpoint,
     archiveArticleEndpoint,
+    getArticleArchiveStatusEndpoint,
     listArticleTagsEndpoint,
     setArticleTagsEndpoint,
     enrichArticleEndpoint
@@ -1861,7 +1883,12 @@ const operationDocumentation = {
   archiveArticle: {
     summary: "Archive an owned article",
     description:
-      "Captures and stores a fixed article snapshot for the authenticated owner within the bounded archive deadline.",
+      "Accepts a bounded background archive job. Active requests for the same owner and article reuse the receipt. Poll the job status endpoint for completion.",
+  },
+  getArticleArchiveStatus: {
+    summary: "Read an owned archive job",
+    description:
+      "Returns an archive receipt only for its authenticated owner and accessible article. Receipts expire after 24 hours.",
   },
   listArticleTags: {
     summary: "List tags on an owned article",

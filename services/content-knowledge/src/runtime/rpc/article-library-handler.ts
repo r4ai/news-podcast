@@ -1,3 +1,12 @@
+import type {
+  ArchiveRefreshQueue,
+  ArchiveRefreshJob,
+  ArchiveRefreshFailure,
+} from "../../application/archive-refresh.js"
+import {
+  runArchiveRefreshWorker,
+  type ArchiveRefreshObservation,
+} from "../loops/archive-refresh.js"
 import { deepFreeze, parse, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect, Schema } from "effect"
 
@@ -28,6 +37,10 @@ import type {
   ArchiveStoreError,
   CaptureError,
 } from "../../application/ports/archive.js"
+
+type RefreshReply =
+  | { readonly _tag: "NotFound" }
+  | { readonly _tag: "ArchiveAccepted"; readonly job: ArchiveRefreshJob }
 
 const ArticleIdentitySchema = Schema.Struct({
   ownerId: OwnerIdSchema,
@@ -95,6 +108,8 @@ const strict =
     parse(schema)(input).pipe(Effect.mapError(invalidRequest))
 
 export type ArticleLibraryHandlerDependencies = Readonly<{
+  readonly archiveQueue?: ArchiveRefreshQueue
+  readonly observeArchiveRefresh?: (value: ArchiveRefreshObservation) => void
   readonly articles: ArticleLibraryRepository
   readonly objects: MarkdownObjectReader
   readonly replaySigner?: import("../../application/article-library.js").ReplayAccessSigner
@@ -139,7 +154,97 @@ export const makeArticleLibraryHandler = (
     nowEpochMillis: dependencies.nowEpochMillis ?? Date.now,
   })
 
+  const observe = dependencies.observeArchiveRefresh ?? (() => undefined)
+  const unavailableQueue = () =>
+    Effect.fail({
+      _tag: "ArchiveRefreshFailed" as const,
+      reason: "storage" as const,
+    })
   return deepFreeze({
+    runArchiveWorker: () =>
+      dependencies.archiveQueue === undefined
+        ? Effect.never
+        : runArchiveRefreshWorker(
+            dependencies.archiveQueue,
+            (input) =>
+              triggerArchive(input).pipe(
+                Effect.flatMap((result) =>
+                  result._tag === "NotFound"
+                    ? Effect.fail({ _tag: "ArchiveArticleNotFound" })
+                    : Effect.succeed(result)
+                )
+              ),
+            observe
+          ),
+    enqueueArchive: (input: unknown, context: ArchiveMessageContext) =>
+      strict(ArticleIdentitySchema)(input).pipe(
+        Effect.flatMap(({ ownerId, articleId }) =>
+          dependencies.articles.find(ownerId, articleId).pipe(
+            Effect.flatMap(
+              (found): Effect.Effect<RefreshReply, ArchiveRefreshFailure> =>
+                found._tag === "NotFound"
+                  ? Effect.succeed({ _tag: "NotFound" as const })
+                  : (
+                      dependencies.archiveQueue?.enqueue(
+                        { ownerId, articleId, context },
+                        dependencies.now()
+                      ) ?? unavailableQueue()
+                    ).pipe(
+                      Effect.tap((result) =>
+                        Effect.sync(() =>
+                          observe({
+                            event: result.reused ? "reused" : "admitted",
+                          })
+                        )
+                      ),
+                      Effect.tapError((error) =>
+                        Effect.sync(() =>
+                          observe({ event: "rejected", reason: error.reason })
+                        )
+                      ),
+                      Effect.map(({ job }) => ({
+                        _tag: "ArchiveAccepted" as const,
+                        job,
+                      }))
+                    )
+            )
+          )
+        )
+      ),
+    archiveStatus: (input: unknown) =>
+      strict(
+        Schema.Struct({
+          ownerId: OwnerIdSchema,
+          articleId: ArticleIdSchema,
+          jobId: Schema.String.check(Schema.isUUID(4)),
+        })
+      )(input).pipe(
+        Effect.flatMap(({ ownerId, articleId, jobId }) =>
+          dependencies.articles
+            .find(ownerId, articleId)
+            .pipe(
+              Effect.flatMap(
+                (found): Effect.Effect<RefreshReply, ArchiveRefreshFailure> =>
+                  found._tag === "NotFound"
+                    ? Effect.succeed({ _tag: "NotFound" as const })
+                    : (
+                        dependencies.archiveQueue?.find(
+                          ownerId,
+                          articleId,
+                          jobId,
+                          dependencies.now()
+                        ) ?? unavailableQueue()
+                      ).pipe(
+                        Effect.map((job) =>
+                          job === undefined
+                            ? { _tag: "NotFound" as const }
+                            : { _tag: "ArchiveAccepted" as const, job }
+                        )
+                      )
+              )
+            )
+        )
+      ),
     list: (input: unknown) =>
       strict(ListInputSchema)(input).pipe(
         Effect.flatMap(({ ownerId, query }) =>

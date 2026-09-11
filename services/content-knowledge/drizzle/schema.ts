@@ -430,3 +430,33 @@ export const contentEnrichmentDailyProgress = sqliteTable(
     ),
   ]
 )
+
+export const archiveRefreshJobs = sqliteTable(
+  "archive_refresh_jobs",
+  {
+    jobId: text("job_id").primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    articleId: text("article_id")
+      .notNull()
+      .references(() => feedItems.articleId, { onDelete: "cascade" }),
+    contextJson: text("context_json").notNull(),
+    status: text("status", {
+      enum: ["queued", "processing", "succeeded", "failed"],
+    }).notNull(),
+    createdAt: text("created_at").notNull(),
+    deadlineAt: text("deadline_at").notNull(),
+    completedAt: text("completed_at"),
+    error: text("error", { enum: ["deadline", "capture", "canceled"] }),
+  },
+  (table) => [
+    uniqueIndex("archive_refresh_active_article")
+      .on(table.ownerId, table.articleId)
+      .where(sql`${table.status} IN ('queued', 'processing')`),
+    index("archive_refresh_status_created").on(table.status, table.createdAt),
+    index("archive_refresh_owner_created").on(table.ownerId, table.createdAt),
+    check(
+      "archive_refresh_status",
+      sql`${table.status} IN ('queued', 'processing', 'succeeded', 'failed')`
+    ),
+  ]
+)

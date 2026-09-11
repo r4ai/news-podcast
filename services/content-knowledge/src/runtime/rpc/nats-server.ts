@@ -127,34 +127,40 @@ export const runNatsContentKnowledgeRpc = (
                 },
               })
         config.onReady?.()
-        return runSequentialRpcLoop({
-          receive: Effect.tryPromise({
-            try: () => server.receive(),
-            catch: runtimeFailure,
-          }),
-          sourceClosed: runtimeFailure,
-          handle: (delivery) => {
-            const selected =
-              delivery.subject === subjects.content.articleLibrary &&
-              libraryHandler !== undefined
-                ? libraryHandler
-                : delivery.subject === subjects.content.personalization &&
-                    personalizationHandler !== undefined
-                  ? personalizationHandler
-                  : handler
-            return selected({
-              subject: delivery.subject,
-              payload: delivery.payload,
-              reply: (payload) =>
-                Effect.tryPromise({
-                  try: () => delivery.reply(payload),
-                  catch: runtimeFailure,
-                }),
-            }).pipe(Effect.mapError(() => runtimeFailure()))
-          },
-          onDeliveryFailure: (cause) =>
-            logRpcDeliveryFailure("content-knowledge", "rpc", cause),
-        })
+        return Effect.all(
+          [
+            runSequentialRpcLoop({
+              receive: Effect.tryPromise({
+                try: () => server.receive(),
+                catch: runtimeFailure,
+              }),
+              sourceClosed: runtimeFailure,
+              handle: (delivery) => {
+                const selected =
+                  delivery.subject === subjects.content.articleLibrary &&
+                  libraryHandler !== undefined
+                    ? libraryHandler
+                    : delivery.subject === subjects.content.personalization &&
+                        personalizationHandler !== undefined
+                      ? personalizationHandler
+                      : handler
+                return selected({
+                  subject: delivery.subject,
+                  payload: delivery.payload,
+                  reply: (payload) =>
+                    Effect.tryPromise({
+                      try: () => delivery.reply(payload),
+                      catch: runtimeFailure,
+                    }),
+                }).pipe(Effect.mapError(() => runtimeFailure()))
+              },
+              onDeliveryFailure: (cause) =>
+                logRpcDeliveryFailure("content-knowledge", "rpc", cause),
+            }),
+            articleLibrary?.runArchiveWorker() ?? Effect.never,
+          ],
+          { concurrency: "unbounded" }
+        ).pipe(Effect.asVoid)
       })
     )
   )
