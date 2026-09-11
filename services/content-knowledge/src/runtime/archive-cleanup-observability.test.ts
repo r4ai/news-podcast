@@ -3,6 +3,30 @@ import { describe, expect, it, vi } from "vitest"
 import { makeArchiveCleanupObserver } from "./archive-cleanup-observability.js"
 
 describe("archive cleanup observability", () => {
+  it("records asset budget limits without URL or owner labels", () => {
+    const count = vi.fn()
+    const log = vi.fn()
+    makeArchiveCleanupObserver({ count, log }).assets?.({
+      attempted: 2,
+      downloadedBytes: 6,
+      retainedBytes: 3,
+      limit: "total_bytes",
+    })
+    expect(count).toHaveBeenCalledWith("archive.assets.limit", 1, {
+      reason: "total_bytes",
+    })
+    expect(count).toHaveBeenCalledWith("archive.assets.downloaded_bytes", 6)
+    expect(log).toHaveBeenCalledWith({
+      name: "archive.assets.budget",
+      level: "warn",
+      attributes: {
+        attempted: 2,
+        downloadedBytes: 6,
+        retainedBytes: 3,
+        limit: "total_bytes",
+      },
+    })
+  })
   it("counts and logs best-effort deletion failures without object keys", () => {
     const count = vi.fn()
     const log = vi.fn()

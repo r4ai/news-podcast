@@ -10,6 +10,26 @@ type ArchiveCleanupTelemetry = Pick<Observability, "count" | "log">
 export const makeArchiveCleanupObserver = (
   observability: ArchiveCleanupTelemetry
 ): HttpS3ArticleCaptureObserver => ({
+  assets: (outcome) => {
+    observability.count("archive.assets.attempted", outcome.attempted)
+    observability.count(
+      "archive.assets.downloaded_bytes",
+      outcome.downloadedBytes
+    )
+    observability.count("archive.assets.retained_bytes", outcome.retainedBytes)
+    if (outcome.limit !== "none")
+      observability.count("archive.assets.limit", 1, { reason: outcome.limit })
+    observability.log({
+      name: "archive.assets.budget",
+      level: outcome.limit === "none" ? "info" : "warn",
+      attributes: {
+        attempted: outcome.attempted,
+        downloadedBytes: outcome.downloadedBytes,
+        retainedBytes: outcome.retainedBytes,
+        limit: outcome.limit,
+      },
+    })
+  },
   cleanup: (outcome: ArchiveObjectCleanupOutcome) => {
     observability.count("object.cleanup", outcome.deleted, {
       "cleanup.result": "deleted",
