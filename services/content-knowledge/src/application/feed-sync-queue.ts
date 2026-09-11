@@ -33,6 +33,7 @@ export type ClaimedFeedSyncJob = FeedSyncJob &
   }>
 
 export type FeedSyncQueueRepository = DeepReadonly<{
+  readonly hasPending: () => Effect.Effect<boolean, FeedSyncQueueError>
   readonly enqueue: (
     feedId: FeedId,
     now: string

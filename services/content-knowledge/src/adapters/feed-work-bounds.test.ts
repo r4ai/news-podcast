@@ -360,3 +360,215 @@ it("times out a poison article and preserves its sibling for the next claim", as
     vi.useRealTimers()
   }
 })
+
+it("does not turn a six-feed transient outage into rapid retry exhaustion", async () => {
+  const database = openTestDatabase()
+  try {
+    let sequence = 0
+    let clock = now
+    const feeds = Array.from({ length: 6 }, (_, i) => ({
+      feedId: Schema.decodeUnknownSync(FeedIdSchema)(
+        `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`
+      ),
+      feedUrl: Schema.decodeUnknownSync(FeedUrlSchema)(
+        `https://example.com/${i}`
+      ),
+    }))
+    feeds.forEach((feed, i) =>
+      database.execSql(`INSERT INTO feed_catalog VALUES ('${feed.feedId}', '${feed.feedUrl}', '${now}');
+      INSERT INTO feed_subscriptions VALUES ('subscription-${i}', 'owner-${i}', '${feed.feedId}', '${now}', 1);`)
+    )
+    const queue = await Effect.runPromise(
+      createFeedSyncQueue(
+        database.db,
+        () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`
+      )
+    )
+    const run = runFeedSyncCycle({
+      subscriptions: { listFeedsForPolling: () => Effect.succeed(feeds) },
+      queue,
+      now: () => clock,
+      newLeaseToken: () => `lease-${++sequence}`,
+      pollFeed: () => Effect.fail({ _tag: "FeedFetchFailed" }),
+    })
+    const result = await Effect.runPromise(run())
+    expect(result.hasPending ?? false).toBe(false)
+    clock = "2026-09-11T00:00:00.100Z"
+    expect((await Effect.runPromise(run())).feeds).toBe(0)
+    expect(
+      (await Effect.runPromise(queue.listForOwner("owner-0" as never)))[0]
+        ?.attempt
+    ).toBe(1)
+  } finally {
+    database.close()
+  }
+})
+
+it("does not label a recovered feed as having failed articles", async () => {
+  const database = openTestDatabase()
+  try {
+    database.execSql(`INSERT INTO feed_catalog VALUES ('${feedId}', '${feedUrl}', '${now}');
+      INSERT INTO feed_subscriptions VALUES ('subscription-a', 'owner-a', '${feedId}', '${now}', 1);`)
+    const queue = await Effect.runPromise(
+      createFeedSyncQueue(
+        database.db,
+        () => "00000000-0000-4000-8000-000000000001"
+      )
+    )
+    const job = await Effect.runPromise(queue.enqueue(feedId, now))
+    await Effect.runPromise(
+      queue.claim(now, "2026-09-11T00:05:00.000Z", "first")
+    )
+    await Effect.runPromise(
+      queue.complete(
+        job.jobId,
+        "first",
+        {
+          discovered: 0,
+          archived: 0,
+          failed: 1,
+          failureScope: "Feed",
+          error: "HttpStatus",
+        },
+        now
+      )
+    )
+    const retryAt = "2026-09-11T00:05:01.000Z"
+    await Effect.runPromise(
+      queue.enqueueForPolling([{ feedId, feedUrl }], retryAt)
+    )
+    await Effect.runPromise(
+      queue.claim(retryAt, "2026-09-11T00:10:01.000Z", "second")
+    )
+    const result = await Effect.runPromise(
+      queue.complete(
+        job.jobId,
+        "second",
+        { discovered: 1, archived: 1, failed: 0 },
+        retryAt
+      )
+    )
+    expect(result).toMatchObject({
+      status: "Succeeded",
+      failed: 0,
+      archived: 1,
+    })
+    expect(result.error).toBeUndefined()
+  } finally {
+    database.close()
+  }
+})
+
+it("loads scheduling metadata once for a large existing catalog", async () => {
+  const database = openTestDatabase()
+  try {
+    const feeds = Array.from({ length: 100 }, (_, i) => ({
+      feedId: Schema.decodeUnknownSync(FeedIdSchema)(
+        `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`
+      ),
+      feedUrl: Schema.decodeUnknownSync(FeedUrlSchema)(
+        `https://example.com/${i}`
+      ),
+    }))
+    feeds.forEach((feed, i) =>
+      database.execSql(`INSERT INTO feed_catalog VALUES ('${feed.feedId}', '${feed.feedUrl}', '${now}');
+      INSERT INTO feed_subscriptions VALUES ('subscription-${i}', 'owner-${i}', '${feed.feedId}', '${now}', 1);
+      INSERT INTO feed_sync_jobs (job_id, feed_id, status, created_at) VALUES ('${feed.feedId}', '${feed.feedId}', 'Queued', '${now}');`)
+    )
+    const queue = await Effect.runPromise(
+      createFeedSyncQueue(
+        database.db,
+        () => "00000000-0000-4000-8000-000000000001"
+      )
+    )
+    const prepared = vi.spyOn(database.client, "prepare")
+    await Effect.runPromise(queue.enqueueForPolling(feeds, now))
+    const reads = prepared.mock.calls.filter(([sql]) =>
+      /^select/i.test(sql.trim())
+    )
+    expect(reads.length).toBeLessThanOrEqual(2)
+    prepared.mockRestore()
+  } finally {
+    database.close()
+  }
+})
+
+it("preserves real item failures and continuation progress through a feed-level retry", async () => {
+  const database = openTestDatabase()
+  try {
+    database.execSql(`INSERT INTO feed_catalog VALUES ('${feedId}', '${feedUrl}', '${now}');
+      INSERT INTO feed_subscriptions VALUES ('subscription-a', 'owner-a', '${feedId}', '${now}', 1);`)
+    const queue = await Effect.runPromise(
+      createFeedSyncQueue(
+        database.db,
+        () => "00000000-0000-4000-8000-000000000001"
+      )
+    )
+    const job = await Effect.runPromise(queue.enqueue(feedId, now))
+    const snapshot = parseRssFeed(
+      "<rss><channel><item><title>Remaining</title><link>https://example.com/remaining</link></item></channel></rss>",
+      feedUrl
+    )
+    await Effect.runPromise(
+      queue.claim(now, "2026-09-11T00:05:00.000Z", "first")
+    )
+    await Effect.runPromise(
+      queue.complete(
+        job.jobId,
+        "first",
+        {
+          discovered: 1,
+          archived: 0,
+          failed: 1,
+          failureScope: "Item",
+          error: "ArchiveFailed",
+        },
+        now,
+        snapshot
+      )
+    )
+    await Effect.runPromise(
+      queue.claim(now, "2026-09-11T00:05:00.000Z", "second")
+    )
+    await Effect.runPromise(
+      queue.complete(
+        job.jobId,
+        "second",
+        {
+          discovered: 1,
+          archived: 0,
+          failed: 1,
+          failureScope: "Feed",
+          error: "CatalogFailed",
+        },
+        now
+      )
+    )
+    const retryAt = "2026-09-11T00:05:01.000Z"
+    await Effect.runPromise(
+      queue.enqueueForPolling([{ feedId, feedUrl }], retryAt)
+    )
+    expect(
+      await Effect.runPromise(
+        queue.claim(retryAt, "2026-09-11T00:10:01.000Z", "third")
+      )
+    ).toMatchObject({ continuation: snapshot })
+    const recovered = await Effect.runPromise(
+      queue.complete(
+        job.jobId,
+        "third",
+        { discovered: 1, archived: 1, failed: 0 },
+        retryAt
+      )
+    )
+    expect(recovered).toMatchObject({
+      status: "Succeeded",
+      discovered: 2,
+      archived: 1,
+      failed: 1,
+      error: "ArchiveFailed",
+    })
+  } finally {
+    database.close()
+  }
+})

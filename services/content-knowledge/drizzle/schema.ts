@@ -218,6 +218,7 @@ export const feedSyncJobs = sqliteTable(
     readySequence: integer("ready_sequence").notNull().default(0),
     readyAt: text("ready_at").notNull().default(""),
     continuationJson: text("continuation_json"),
+    itemError: text("item_error"),
     leaseToken: text("lease_token"),
     leaseExpiresAt: text("lease_expires_at"),
     discovered: integer("discovered").notNull().default(0),

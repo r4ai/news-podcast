@@ -377,7 +377,7 @@ erDiagram
 | `archive_refresh_jobs` | 手動archiveの有界受付、owner/article active重複排除、deadlineとreceipt。共有RPCと独立したworkerで実行（[ADR-0093](adr/0093-isolate-manual-archive-behind-durable-admission.md)） |
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。parser validationを含む個別記事失敗は件数とsanitized reasonをdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 
-RSS同期の実行量は[ADR-0094](adr/0094-bound-and-yield-feed-sync-work.md)で制限する。active受付は全体6件・owner 2件、1 claimは1項目・45秒（archive 30秒）、RSSは2 MiB・1,000項目まで。正規化snapshotと残件をSQLiteへ保存し、他feedへ順番を譲る。通常yieldは再試行回数を消費せず、期限切れtokenのcheckpoint・完了は拒否する。cycleは最大6 claimで継続し、完了feedの自動再投入は5分後とする。`rss.sync.batch`、duration、queued_age、processed、deferredで負荷とlease喪失を監視する。
+RSS同期の実行量は[ADR-0094](adr/0094-bound-and-yield-feed-sync-work.md)で制限する。active受付は全体6件・owner 2件、1 claimは1項目・45秒（archive 30秒）、RSSは2 MiB・1,000項目まで。正規化snapshotと残件をSQLiteへ保存し、他feedへ順番を譲る。通常yieldは再試行回数を消費せず、期限切れtokenのcheckpoint・完了は拒否する。cycleは最大6 claimとし、実際の待機jobがある場合に継続する。完了・失敗feedの自動再投入は5分後とし、一時的なfeed障害を復旧後の記事失敗件数へ残さない。`rss.sync.batch`、duration、queued_age、processed、deferredで負荷とlease喪失を監視する。
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_search_index_queue` / `article_search_fts` / `article_search_short_grams` | snapshot commit後に再試行可能に更新するMarkdown本文索引。記事一覧検索はowner access内の最新snapshotだけを参照 |
 | `article_owner_access` | 購読解除・一時停止後も既存分は残り、再開時に未付与分を補うowner単位の恒久アクセス権 |

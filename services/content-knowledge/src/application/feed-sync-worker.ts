@@ -177,5 +177,5 @@ export const runFeedSyncCycle =
           : Effect.sync(() => ports.observe!(observation))
         result = combine(result, outcome)
       }
-      return { ...result, hasPending: true }
+      return { ...result, hasPending: yield* ports.queue.hasPending() }
     })

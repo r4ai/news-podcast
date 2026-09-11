@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "48569ddf-4134-46c3-8f1b-f41d45972eab",
+  "id": "012b4d2c-d363-4cfb-bc41-2d571d0add7c",
   "prevIds": ["10274359-cc8f-4648-8d6f-27853da6bdb0"],
   "ddl": [
     {
@@ -1058,11 +1058,31 @@
     },
     {
       "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "ready_at",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
       "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "continuation_json",
+      "entityType": "columns",
+      "table": "feed_sync_jobs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "item_error",
       "entityType": "columns",
       "table": "feed_sync_jobs"
     },

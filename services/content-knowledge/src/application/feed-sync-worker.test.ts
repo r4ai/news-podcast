@@ -54,6 +54,7 @@ describe("feed sync worker", () => {
           listFeedsForPolling: () => Effect.succeed([job]),
         },
         queue: {
+          hasPending: () => Effect.succeed(false),
           checkpoint: vi.fn(() => Effect.void),
           enqueue: vi.fn(),
           enqueueForPolling: vi.fn(() => Effect.void),
@@ -116,6 +117,7 @@ describe("feed sync worker", () => {
           listFeedsForPolling: () => Effect.succeed([job]),
         },
         queue: {
+          hasPending: () => Effect.succeed(false),
           checkpoint: vi.fn(() => Effect.void),
           enqueue: vi.fn(),
           enqueueForPolling: vi.fn(() => Effect.void),

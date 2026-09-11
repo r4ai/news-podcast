@@ -41,6 +41,7 @@ export { FEED_SYNC_MAX_ATTEMPTS }
 const resetFields = (now: string) => ({
   status: "Queued" as const,
   continuationJson: null,
+  itemError: null,
   readyAt: now,
   leaseToken: null,
   leaseExpiresAt: null,
@@ -161,13 +162,28 @@ export const createFeedSyncQueue = (
           database.transaction(
             (tx) => {
               releaseDisabled(tx, now)
-              const ordered = [...feeds].sort((a, b) => {
-                const left = currentJob(tx, a.feedId)?.completedAt ?? ""
-                const right = currentJob(tx, b.feedId)?.completedAt ?? ""
+              const jobs = new Map(
+                tx
+                  .select({
+                    jobId: feedSyncJobs.jobId,
+                    feedId: feedSyncJobs.feedId,
+                    status: feedSyncJobs.status,
+                    attempt: feedSyncJobs.attempt,
+                    completedAt: feedSyncJobs.completedAt,
+                  })
+                  .from(feedSyncJobs)
+                  .all()
+                  .map((job) => [job.feedId, job])
+              )
+              const ordered = [
+                ...new Map(feeds.map((feed) => [feed.feedId, feed])).values(),
+              ].sort((a, b) => {
+                const left = jobs.get(a.feedId)?.completedAt ?? ""
+                const right = jobs.get(b.feedId)?.completedAt ?? ""
                 return left.localeCompare(right)
               })
               for (const feed of ordered) {
-                const current = currentJob(tx, feed.feedId)
+                const current = jobs.get(feed.feedId)
                 if (current !== undefined && isActive(current.status)) continue
                 // 上限まで失敗した仕事は、明示的な再投入があるまで自動で蘇らせない。
                 if (
@@ -178,7 +194,9 @@ export const createFeedSyncQueue = (
                 }
 
                 if (
-                  current?.status === "Succeeded" &&
+                  current !== undefined &&
+                  (current.status === "Succeeded" ||
+                    current.status === "Failed") &&
                   current.completedAt !== null &&
                   Date.parse(now) - Date.parse(current.completedAt) < 300_000
                 )
@@ -204,6 +222,7 @@ export const createFeedSyncQueue = (
                     ...(current.status === "Failed"
                       ? {
                           status: "Queued" as const,
+                          error: sql`${feedSyncJobs.itemError}`,
                           leaseToken: null,
                           leaseExpiresAt: null,
                           startedAt: null,
@@ -368,19 +387,21 @@ export const createFeedSyncQueue = (
         try: () =>
           database.transaction(
             (tx) => {
+              const feedFailed =
+                outcome.failed > 0 && outcome.failureScope !== "Item"
               const updated = tx
                 .update(feedSyncJobs)
                 .set({
                   status:
                     continuation !== undefined
                       ? "Queued"
-                      : outcome.failed > 0 && outcome.failureScope !== "Item"
+                      : feedFailed
                         ? "Failed"
                         : "Succeeded",
                   leaseToken: null,
                   leaseExpiresAt: null,
                   ...(continuation === undefined
-                    ? outcome.failureScope === "Feed"
+                    ? feedFailed
                       ? {}
                       : { continuationJson: null }
                     : {
@@ -389,10 +410,16 @@ export const createFeedSyncQueue = (
                         readyAt: now,
                         attempt: sql`${feedSyncJobs.attempt} - 1`,
                       }),
-                  discovered: sql`${feedSyncJobs.discovered} + ${outcome.discovered}`,
-                  archived: sql`${feedSyncJobs.archived} + ${outcome.archived}`,
-                  failed: sql`${feedSyncJobs.failed} + ${outcome.failed}`,
-                  error: outcome.error ?? sql`${feedSyncJobs.error}`,
+                  ...(feedFailed
+                    ? { error: outcome.error ?? "Unavailable" }
+                    : {
+                        discovered: sql`${feedSyncJobs.discovered} + ${outcome.discovered}`,
+                        archived: sql`${feedSyncJobs.archived} + ${outcome.archived}`,
+                        failed: sql`${feedSyncJobs.failed} + ${outcome.failed}`,
+                        itemError:
+                          outcome.error ?? sql`${feedSyncJobs.itemError}`,
+                        error: outcome.error ?? sql`${feedSyncJobs.itemError}`,
+                      }),
                   completedAt: continuation === undefined ? now : null,
                 })
                 .where(
@@ -460,7 +487,36 @@ export const createFeedSyncQueue = (
         catch: (error) => (isQueueError(error) ? error : failure("Checkpoint")),
       })
 
+    const hasPending: FeedSyncQueueRepository["hasPending"] = () =>
+      Effect.try({
+        try: () =>
+          database
+            .select({ jobId: feedSyncJobs.jobId })
+            .from(feedSyncJobs)
+            .where(
+              and(
+                eq(feedSyncJobs.status, "Queued"),
+                lt(feedSyncJobs.attempt, FEED_SYNC_MAX_ATTEMPTS),
+                exists(
+                  database
+                    .select({ one: sql`1` })
+                    .from(feedSubscriptions)
+                    .where(
+                      and(
+                        eq(feedSubscriptions.feedId, feedSyncJobs.feedId),
+                        eq(feedSubscriptions.enabled, 1)
+                      )
+                    )
+                )
+              )
+            )
+            .limit(1)
+            .get() !== undefined,
+        catch: () => failure("List"),
+      })
+
     return deepFreeze({
+      hasPending,
       checkpoint,
       enqueue,
       enqueueForPolling,

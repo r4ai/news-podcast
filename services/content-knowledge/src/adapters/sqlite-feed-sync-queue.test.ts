@@ -114,11 +114,12 @@ describe("SQLite feed sync queue", () => {
       let job = await Effect.runPromise(
         queue.enqueue(feedId, "2026-08-13T01:00:00.000Z")
       )
+      let retryClock = Date.parse("2026-08-13T01:00:00.000Z")
       for (let attempt = 1; attempt <= 4; attempt += 1) {
         const claimed = await Effect.runPromise(
           queue.claim(
-            `2026-08-13T01:00:0${attempt}.000Z`,
-            `2026-08-13T01:05:0${attempt}.000Z`,
+            new Date(retryClock).toISOString(),
+            new Date(retryClock + 300_000).toISOString(),
             `lease-attempt-${attempt}`
           )
         )
@@ -128,13 +129,14 @@ describe("SQLite feed sync queue", () => {
             claimed!.jobId,
             claimed!.leaseToken,
             { discovered: 1, archived: 0, failed: 1, error: "HttpStatus" },
-            `2026-08-13T01:00:1${attempt}.000Z`
+            new Date(retryClock + 1_000).toISOString()
           )
         )
+        retryClock += 302_000
         await Effect.runPromise(
           queue.enqueueForPolling(
             [{ feedId, feedUrl }],
-            `2026-08-13T01:00:2${attempt}.000Z`
+            new Date(retryClock).toISOString()
           )
         )
         if (attempt < 4) expect(job.status).toBe("Failed")
