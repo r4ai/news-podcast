@@ -65,7 +65,15 @@ export type ArchiveObjectCleanupOutcome = DeepReadonly<{
 }>
 
 export type HttpS3ArticleCaptureObserver = Readonly<{
+  readonly assets?: (outcome: ArchiveAssetOutcome) => void
   readonly cleanup: (outcome: ArchiveObjectCleanupOutcome) => void
+}>
+
+export type ArchiveAssetOutcome = Readonly<{
+  attempted: number
+  downloadedBytes: number
+  retainedBytes: number
+  limit: "none" | "count" | "asset_bytes" | "total_bytes" | "retained_bytes"
 }>
 
 const noopObserver: HttpS3ArticleCaptureObserver = Object.freeze({
@@ -96,11 +104,14 @@ const sha256 = (bytes: Uint8Array): string =>
 
 const readBounded = async (
   response: Response,
-  maximumBytes: number
+  maximumBytes: number,
+  onChunk: (bytes: number) => void = () => undefined
 ): Promise<Uint8Array> => {
   const declared = Number(response.headers.get("content-length"))
-  if (Number.isFinite(declared) && declared > maximumBytes)
+  if (Number.isFinite(declared) && declared > maximumBytes) {
+    await response.body?.cancel()
     throw failure("ResourceLimit")
+  }
   if (response.body === null) return new Uint8Array()
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
@@ -108,6 +119,7 @@ const readBounded = async (
   for (;;) {
     const chunk = await reader.read()
     if (chunk.done) break
+    onChunk(chunk.value.byteLength)
     length += chunk.value.byteLength
     if (length > maximumBytes) {
       await reader.cancel()
@@ -137,7 +149,7 @@ type CapturedAsset = Readonly<{
 
 type FetchedAsset = Readonly<{
   url: string
-  body: Uint8Array
+  digest: string
   mediaType: string
 }>
 
@@ -336,237 +348,289 @@ const captureReplay = async (input: {
   maximumAssetBytes: number
   maximumAssetCount: number
   maximumAssetTotalBytes: number
+  observer: HttpS3ArticleCaptureObserver
 }): Promise<{ replay: Uint8Array; assets: readonly CapturedAsset[] }> => {
   const html = new TextDecoder().decode(input.raw)
   const dom = new JSDOM(html, { url: input.sourceUrl })
-  const document = dom.window.document
-  document
-    .querySelectorAll("script, iframe, frame, object, embed, form, base")
-    .forEach((element) => element.remove())
-  for (const element of document.querySelectorAll("*")) {
-    for (const attribute of [...element.attributes]) {
-      if (attribute.name.toLowerCase().startsWith("on")) {
-        element.removeAttribute(attribute.name)
-      }
-    }
+  const outcome: {
+    -readonly [K in keyof ArchiveAssetOutcome]: ArchiveAssetOutcome[K]
+  } = {
+    attempted: 0,
+    downloadedBytes: 0,
+    retainedBytes: 0,
+    limit: "none",
   }
-
-  const references: Array<{
-    url: string
-    required: boolean
-    rewrite: (path: string | undefined) => void
-  }> = []
-  const addAttribute = (
-    selector: string,
-    attribute: string,
-    required = false
-  ) => {
-    for (const element of document.querySelectorAll(selector)) {
-      const value = element.getAttribute(attribute)
-      const url =
-        value === null ? undefined : resourceUrl(value, input.sourceUrl)
-      if (url === undefined) {
-        element.removeAttribute(attribute)
-        continue
-      }
-      references.push({
-        url,
-        required,
-        rewrite: (path) => {
-          if (path === undefined) {
-            element.removeAttribute(attribute)
-            return
-          }
-          element.setAttribute(attribute, path)
-          if (required) element.removeAttribute("integrity")
-        },
-      })
-    }
+  const rejectLimit = (limit: ArchiveAssetOutcome["limit"]): never => {
+    outcome.limit = limit
+    throw failure("ResourceLimit")
   }
-  addAttribute('link[rel~="stylesheet"]', "href", true)
-  addAttribute('link[rel~="icon"]', "href")
-  addAttribute("img[src], source[src], audio[src], video[src]", "src")
-  addAttribute("video[poster]", "poster")
-
-  const srcsets: Array<{
-    element: Element
-    candidates: readonly Readonly<{ url: string; descriptor: string }>[]
-  }> = []
-  for (const element of document.querySelectorAll(
-    "img[srcset], source[srcset]"
-  )) {
-    const candidates = (element.getAttribute("srcset") ?? "")
-      .split(",")
-      .flatMap((candidate) => {
-        const [value, ...descriptor] = splitWhitespace(candidate.trim())
-        const url =
-          value === undefined ? undefined : resourceUrl(value, input.sourceUrl)
-        return url === undefined
-          ? []
-          : [{ url, descriptor: descriptor.join(" ") }]
-      })
-    if (candidates.length === 0) element.removeAttribute("srcset")
-    else srcsets.push({ element, candidates })
-  }
-
-  const inlineCss: Array<{ element: Element; attribute?: "style" }> = [
-    ...[...document.querySelectorAll("style")].map((element) => ({ element })),
-    ...[...document.querySelectorAll("[style]")].map((element) => ({
-      element,
-      attribute: "style" as const,
-    })),
-  ]
-
-  const maximumCount = input.maximumAssetCount
-  const stylesheetUrls = references
-    .filter(({ required }) => required)
-    .map(({ url }) => url)
-  const inlineCssUrls = inlineCss.flatMap(({ element, attribute }) =>
-    cssResourceUrls(
-      attribute === "style"
-        ? (element.getAttribute(attribute) ?? "")
-        : (element.textContent ?? ""),
-      input.sourceUrl,
-      attribute === "style"
-    )
-  )
-  const remainingUrls = [
-    ...references.filter(({ required }) => !required).map(({ url }) => url),
-    ...srcsets.flatMap(({ candidates }) => candidates.map(({ url }) => url)),
-  ]
-  const queued = [
-    ...new Set([...stylesheetUrls, ...inlineCssUrls, ...remainingUrls]),
-  ]
-  const fetched = new Map<string, FetchedAsset>()
-  const countedDigests = new Set<string>()
-  let totalBytes = 0
-  let requiredFailure = false
-  for (let index = 0; index < queued.length; index += 1) {
-    const url = queued[index]!
-    try {
-      const response = await input.fetcher(url, {
-        headers: { "User-Agent": "NewsPodcastArchive/0.1 (+self-hosted)" },
-        signal: input.signal,
-      })
-      if (!response.ok) throw new Error("asset response failed")
-      const body = await readBounded(response, input.maximumAssetBytes)
-      const digest = sha256(body)
-      if (!countedDigests.has(digest)) {
-        if (countedDigests.size >= maximumCount) throw failure("ResourceLimit")
-        totalBytes += body.byteLength
-      }
-      if (totalBytes > input.maximumAssetTotalBytes)
-        throw failure("ResourceLimit")
-      countedDigests.add(digest)
-      const mediaType = canonicalMediaType(response)
-      fetched.set(url, {
-        url,
-        body,
-        mediaType,
-      })
-      if (mediaType === "text/css") {
-        const css = new TextDecoder().decode(body)
-        let insertionIndex = index + 1
-        for (const nested of cssResourceUrls(css, url)) {
-          if (!queued.includes(nested))
-            queued.splice(insertionIndex++, 0, nested)
+  try {
+    const document = dom.window.document
+    document
+      .querySelectorAll("script, iframe, frame, object, embed, form, base")
+      .forEach((element) => element.remove())
+    for (const element of document.querySelectorAll("*")) {
+      for (const attribute of [...element.attributes]) {
+        if (attribute.name.toLowerCase().startsWith("on")) {
+          element.removeAttribute(attribute.name)
         }
       }
-    } catch (error) {
-      if (isCaptureError(error) && error.reason === "ResourceLimit") throw error
-      if (
-        references.some(
-          (reference) => reference.url === url && reference.required
-        )
-      ) {
-        requiredFailure = true
+    }
+
+    const references: Array<{
+      url: string
+      required: boolean
+      rewrite: (path: string | undefined) => void
+    }> = []
+    const addAttribute = (
+      selector: string,
+      attribute: string,
+      required = false
+    ) => {
+      for (const element of document.querySelectorAll(selector)) {
+        const value = element.getAttribute(attribute)
+        const url =
+          value === null ? undefined : resourceUrl(value, input.sourceUrl)
+        if (url === undefined) {
+          element.removeAttribute(attribute)
+          continue
+        }
+        references.push({
+          url,
+          required,
+          rewrite: (path) => {
+            if (path === undefined) {
+              element.removeAttribute(attribute)
+              return
+            }
+            element.setAttribute(attribute, path)
+            if (required) element.removeAttribute("integrity")
+          },
+        })
       }
     }
-  }
+    addAttribute('link[rel~="stylesheet"]', "href", true)
+    addAttribute('link[rel~="icon"]', "href")
+    addAttribute("img[src], source[src], audio[src], video[src]", "src")
+    addAttribute("video[poster]", "poster")
 
-  if (requiredFailure) {
-    dom.window.close()
-    return { replay: input.fallbackReplay, assets: [] }
-  }
+    const srcsets: Array<{
+      element: Element
+      candidates: readonly Readonly<{ url: string; descriptor: string }>[]
+    }> = []
+    for (const element of document.querySelectorAll(
+      "img[srcset], source[srcset]"
+    )) {
+      const candidates = (element.getAttribute("srcset") ?? "")
+        .split(",")
+        .flatMap((candidate) => {
+          const [value, ...descriptor] = splitWhitespace(candidate.trim())
+          const url =
+            value === undefined
+              ? undefined
+              : resourceUrl(value, input.sourceUrl)
+          return url === undefined
+            ? []
+            : [{ url, descriptor: descriptor.join(" ") }]
+        })
+      if (candidates.length === 0) element.removeAttribute("srcset")
+      else srcsets.push({ element, candidates })
+    }
 
-  const materialized = new Map<string, CapturedAsset>()
-  const visiting = new Set<string>()
-  const materialize = (url: string): CapturedAsset | undefined => {
-    const cached = materialized.get(url)
-    if (cached !== undefined) return cached
-    const source = fetched.get(url)
-    if (source === undefined || visiting.has(url)) return undefined
-    visiting.add(url)
-    let body = source.body
-    if (source.mediaType === "text/css") {
-      const css = rewriteCss(
-        new TextDecoder().decode(body),
+    const inlineCss: Array<{ element: Element; attribute?: "style" }> = [
+      ...[...document.querySelectorAll("style")].map((element) => ({
+        element,
+      })),
+      ...[...document.querySelectorAll("[style]")].map((element) => ({
+        element,
+        attribute: "style" as const,
+      })),
+    ]
+
+    const maximumCount = input.maximumAssetCount
+    const stylesheetUrls = references
+      .filter(({ required }) => required)
+      .map(({ url }) => url)
+    const inlineCssUrls = inlineCss.flatMap(({ element, attribute }) =>
+      cssResourceUrls(
+        attribute === "style"
+          ? (element.getAttribute(attribute) ?? "")
+          : (element.textContent ?? ""),
+        input.sourceUrl,
+        attribute === "style"
+      )
+    )
+    const remainingUrls = [
+      ...references.filter(({ required }) => !required).map(({ url }) => url),
+      ...srcsets.flatMap(({ candidates }) => candidates.map(({ url }) => url)),
+    ]
+    const queued = [
+      ...new Set([...stylesheetUrls, ...inlineCssUrls, ...remainingUrls]),
+    ]
+    const fetched = new Map<string, FetchedAsset>()
+    const bodies = new Map<string, Uint8Array>()
+    let requiredFailure = false
+    for (let index = 0; index < queued.length; index += 1) {
+      const url = queued[index]!
+      if (outcome.attempted >= maximumCount) rejectLimit("count")
+      outcome.attempted += 1
+      try {
+        const response = await input.fetcher(url, {
+          headers: { "User-Agent": "NewsPodcastArchive/0.1 (+self-hosted)" },
+          signal: input.signal,
+        })
+        if (!response.ok) {
+          await response.body?.cancel()
+          throw new Error("asset response failed")
+        }
+        const remainingBytes =
+          input.maximumAssetTotalBytes - outcome.downloadedBytes
+        const maximumBytes = Math.min(input.maximumAssetBytes, remainingBytes)
+        let body: Uint8Array
+        try {
+          body = await readBounded(response, maximumBytes, (bytes) => {
+            outcome.downloadedBytes += bytes
+          })
+        } catch (error) {
+          if (isCaptureError(error) && error.reason === "ResourceLimit") {
+            rejectLimit(
+              remainingBytes <= input.maximumAssetBytes
+                ? "total_bytes"
+                : "asset_bytes"
+            )
+          }
+          throw error
+        }
+        const digest = sha256(body)
+        if (!bodies.has(digest)) {
+          bodies.set(digest, body)
+          outcome.retainedBytes += body.byteLength
+        }
+        const mediaType = canonicalMediaType(response)
+        fetched.set(url, { url, digest, mediaType })
+        if (mediaType === "text/css") {
+          const css = new TextDecoder().decode(body)
+          let insertionIndex = index + 1
+          for (const nested of cssResourceUrls(css, url)) {
+            if (!queued.includes(nested))
+              queued.splice(insertionIndex++, 0, nested)
+          }
+        }
+      } catch (error) {
+        if (isCaptureError(error) && error.reason === "ResourceLimit")
+          throw error
+        if (
+          references.some(
+            (reference) => reference.url === url && reference.required
+          )
+        ) {
+          requiredFailure = true
+        }
+      }
+    }
+
+    if (requiredFailure) {
+      return { replay: input.fallbackReplay, assets: [] }
+    }
+
+    const materialized = new Map<string, CapturedAsset>()
+    const visiting = new Set<string>()
+    const materialize = (url: string): CapturedAsset | undefined => {
+      const cached = materialized.get(url)
+      if (cached !== undefined) return cached
+      const source = fetched.get(url)
+      if (source === undefined || visiting.has(url)) return undefined
+      visiting.add(url)
+      let body = bodies.get(source.digest)!
+      if (source.mediaType === "text/css") {
+        const css = rewriteCss(
+          new TextDecoder().decode(body),
+          url,
+          false,
+          (nestedUrl) => {
+            const nested = materialize(nestedUrl)
+            return nested === undefined ? undefined : assetCssPath(nested)
+          }
+        )
+        // Rewritten CSS can expand references, so it has its own retained-byte cap.
+        if (
+          Buffer.byteLength(css) + outcome.retainedBytes >
+          2 * input.maximumAssetTotalBytes
+        )
+          rejectLimit("retained_bytes")
+        body = new TextEncoder().encode(css)
+      }
+      visiting.delete(url)
+      const digest = sha256(body)
+      const existingBody = bodies.get(digest)
+      if (existingBody === undefined) {
+        bodies.set(digest, body)
+        outcome.retainedBytes += body.byteLength
+      } else body = existingBody
+      const asset = {
         url,
-        false,
-        (nestedUrl) => {
-          const nested = materialize(nestedUrl)
-          return nested === undefined ? undefined : assetCssPath(nested)
+        key: `${input.prefix}/assets/${digest}.${extensionFor(source.mediaType)}`,
+        body,
+        mediaType: source.mediaType,
+      }
+      materialized.set(url, asset)
+      return asset
+    }
+    for (const url of queued) materialize(url)
+
+    for (const reference of references) {
+      const asset = materialized.get(reference.url)
+      reference.rewrite(
+        asset === undefined ? undefined : assetReplayPath(asset)
+      )
+    }
+    for (const { element, candidates } of srcsets) {
+      const rewritten = candidates.flatMap(({ url, descriptor }) => {
+        const asset = materialized.get(url)
+        return asset === undefined
+          ? []
+          : [
+              `${assetReplayPath(asset)}${descriptor === "" ? "" : ` ${descriptor}`}`,
+            ]
+      })
+      if (rewritten.length === 0) element.removeAttribute("srcset")
+      else element.setAttribute("srcset", rewritten.join(", "))
+    }
+    for (const { element, attribute } of inlineCss) {
+      const original =
+        attribute === "style"
+          ? (element.getAttribute(attribute) ?? "")
+          : (element.textContent ?? "")
+      const rewritten = rewriteCss(
+        original,
+        input.sourceUrl,
+        attribute === "style",
+        (url) => {
+          const asset = materialized.get(url)
+          return asset === undefined ? undefined : assetReplayPath(asset)
         }
       )
-      body = new TextEncoder().encode(css)
+      if (attribute === "style") element.setAttribute(attribute, rewritten)
+      else element.textContent = rewritten
     }
-    visiting.delete(url)
-    const digest = sha256(body)
-    const asset = {
-      url,
-      key: `${input.prefix}/assets/${digest}.${extensionFor(source.mediaType)}`,
-      body,
-      mediaType: source.mediaType,
-    }
-    materialized.set(url, asset)
-    return asset
-  }
-  for (const url of queued) materialize(url)
-
-  for (const reference of references) {
-    const asset = materialized.get(reference.url)
-    reference.rewrite(asset === undefined ? undefined : assetReplayPath(asset))
-  }
-  for (const { element, candidates } of srcsets) {
-    const rewritten = candidates.flatMap(({ url, descriptor }) => {
-      const asset = materialized.get(url)
-      return asset === undefined
-        ? []
-        : [
-            `${assetReplayPath(asset)}${descriptor === "" ? "" : ` ${descriptor}`}`,
-          ]
-    })
-    if (rewritten.length === 0) element.removeAttribute("srcset")
-    else element.setAttribute("srcset", rewritten.join(", "))
-  }
-  for (const { element, attribute } of inlineCss) {
-    const original =
-      attribute === "style"
-        ? (element.getAttribute(attribute) ?? "")
-        : (element.textContent ?? "")
-    const rewritten = rewriteCss(
-      original,
-      input.sourceUrl,
-      attribute === "style",
-      (url) => {
-        const asset = materialized.get(url)
-        return asset === undefined ? undefined : assetReplayPath(asset)
-      }
+    const meta = document.createElement("meta")
+    meta.httpEquiv = "Content-Security-Policy"
+    meta.content =
+      "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'"
+    document.head?.prepend(meta)
+    const replay = new TextEncoder().encode(dom.serialize())
+    const uniqueAssets = new Map(
+      [...materialized.values()].map((asset) => [asset.key, asset] as const)
     )
-    if (attribute === "style") element.setAttribute(attribute, rewritten)
-    else element.textContent = rewritten
+    return { replay, assets: [...uniqueAssets.values()] }
+  } finally {
+    dom.window.close()
+    try {
+      input.observer.assets?.(Object.freeze({ ...outcome }))
+    } catch {
+      // Telemetry must never replace the capture result.
+    }
   }
-  const meta = document.createElement("meta")
-  meta.httpEquiv = "Content-Security-Policy"
-  meta.content =
-    "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'"
-  document.head?.prepend(meta)
-  const replay = new TextEncoder().encode(dom.serialize())
-  dom.window.close()
-  const uniqueAssets = new Map(
-    [...materialized.values()].map((asset) => [asset.key, asset] as const)
-  )
-  return { replay, assets: [...uniqueAssets.values()] }
 }
 
 const isCaptureError = (error: unknown): error is CaptureError =>
@@ -664,6 +728,7 @@ export const openHttpS3ArticleCaptureUnsafe = (
             signal,
             maximumAssetBytes: config.maximumAssetBytes ?? 20 * 1_024 * 1_024,
             maximumAssetCount: config.maximumAssetCount ?? 512,
+            observer,
             maximumAssetTotalBytes:
               config.maximumAssetTotalBytes ?? 100 * 1_024 * 1_024,
           })

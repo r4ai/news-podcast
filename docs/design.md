@@ -305,7 +305,7 @@ bucketは公開しない。アーカイブHTMLはscriptと外部通信を除去�
 
 Episode出典から保存版を開く場合は、出典が保持する`articleId + snapshotId`をURL stateへ渡し、metadataとMarkdownをowner/article/snapshot複合認可、replayをowner認可済みsnapshot routeで読む。これにより同じ記事の新snapshot追加後も生成時のtitle・本文・保存ページを表示する。snapshot IDがないlegacy sourceだけarticle単位latestへfallbackし、UIでは「外部サイト」「生成時の保存版」「最新の保存版」を区別する（[ADR-0081](adr/0081-bind-episode-reader-to-source-snapshot.md)）。
 
-初期HTMLで参照される静的resourceは、linked stylesheetを起点にCSSの`@import`と`url()`を再帰取得し、inline style、画像、`srcset`、font、audio/videoも同一snapshotへ保存する。content hashが同じresourceは上限へ重複計上しない。既定上限はHTML 5 MiB、単一asset 20 MiB、snapshotあたりasset 512件かつ合計100 MiBとし、環境変数で変更できる。主要stylesheetが取得失敗または上限超過した場合は、壊れた元レイアウトではなく保存本文をreader viewで返す。JavaScript実行後にだけ生成されるDOMは対象外とする。
+初期HTMLで参照される静的resourceは、linked stylesheetを起点にCSSの`@import`と`url()`を再帰取得し、inline style、画像、`srcset`、font、audio/videoも同一snapshotへ保存する。取得を試みるdistinct URLは失敗分も512件まで、decoded bodyは重複contentも毎回加算して合計100 MiBまでとする。HTML 5 MiB、単一asset 20 MiBを含め設定可能。bodyはdigestごとに共有し、CSS書換後を含む保持byte列は合計予算の2倍までとする。上限超過は保存前にResourceLimitで失敗し、主要stylesheetの通常の取得失敗だけreader viewへfallbackする。詳細は[ADR-0092](adr/0092-charge-archive-downloads-before-deduplication.md)。JavaScript実行後にだけ生成されるDOMは対象外とする。
 
 ### 8.3 構造化生成の裁量と制約
 

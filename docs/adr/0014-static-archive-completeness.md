@@ -4,7 +4,7 @@
 - Date: 2026-08-10
 - Decision owners: Product owner / Content Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0092](0092-charge-archive-downloads-before-deduplication.md)（resource上限の計上規則）
 - Related: ADR-0012、`docs/design.md` §8.2
 
 ## コンテキストと変更契機
