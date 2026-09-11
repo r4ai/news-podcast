@@ -3268,23 +3268,60 @@
         ],
         "security": [],
         "responses": {
-          "200": {
+          "202": {
             "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
+                    "jobId": {
                       "type": "string",
-                      "enum": [
-                        "archived",
-                        "already_archived"
+                      "allOf": [
+                        {
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                          "format": "uuid"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/Union_6"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "completedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deadline",
+                            "capture",
+                            "canceled"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
                       ]
                     }
                   },
                   "required": [
-                    "status"
+                    "jobId",
+                    "status",
+                    "createdAt",
+                    "completedAt",
+                    "error"
                   ],
                   "additionalProperties": false
                 }
@@ -3323,7 +3360,164 @@
           }
         },
         "summary": "Archive an owned article",
-        "description": "Captures and stores a fixed article snapshot for the authenticated owner within the bounded archive deadline."
+        "description": "Accepts a bounded background archive job. Active requests for the same owner and article reuse the receipt. Poll the job status endpoint for completion."
+      }
+    },
+    "/v1/me/articles/{articleId}/archive/{jobId}": {
+      "get": {
+        "tags": [
+          "Articles"
+        ],
+        "operationId": "articles.getArticleArchiveStatus",
+        "parameters": [
+          {
+            "name": "articleId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "format": "uuid"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "cookie",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_"
+            },
+            "required": false
+          },
+          {
+            "name": "traceparent",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Union_1"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string",
+                      "allOf": [
+                        {
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                          "format": "uuid"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/Union_6"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "completedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deadline",
+                            "capture",
+                            "canceled"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "jobId",
+                    "status",
+                    "createdAt",
+                    "completedAt",
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UnavailableProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableProblem"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read an owned archive job",
+        "description": "Returns an archive receipt only for its authenticated owner and accessible article. Receipts expire after 24 hours."
       }
     },
     "/v1/me/articles/{articleId}/tags": {
@@ -4531,7 +4725,7 @@
                         ]
                       },
                       "reading": {
-                        "$ref": "#/components/schemas/Union_6"
+                        "$ref": "#/components/schemas/Union_7"
                       },
                       "accentType": {
                         "anyOf": [
@@ -4559,7 +4753,7 @@
                     "type": "object",
                     "properties": {
                       "surface": {
-                        "$ref": "#/components/schemas/Union_6"
+                        "$ref": "#/components/schemas/Union_7"
                       },
                       "reading": {
                         "type": "string",
@@ -4601,10 +4795,10 @@
                     "type": "object",
                     "properties": {
                       "surface": {
-                        "$ref": "#/components/schemas/Union_6"
+                        "$ref": "#/components/schemas/Union_7"
                       },
                       "reading": {
-                        "$ref": "#/components/schemas/Union_6"
+                        "$ref": "#/components/schemas/Union_7"
                       },
                       "accentType": {
                         "type": "integer",
@@ -7179,6 +7373,15 @@
           }
         ]
       },
+      "Union_6": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "processing",
+          "succeeded",
+          "failed"
+        ]
+      },
       "Objects_1": {
         "type": "object",
         "properties": {
@@ -7825,7 +8028,7 @@
         ],
         "additionalProperties": false
       },
-      "Union_6": {
+      "Union_7": {
         "anyOf": [
           {
             "type": "string",

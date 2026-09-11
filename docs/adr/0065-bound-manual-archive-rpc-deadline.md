@@ -4,7 +4,7 @@
 - Date: 2026-08-19
 - Decision owners: Product owner / Content Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0093](0093-isolate-manual-archive-behind-durable-admission.md)
 - Related: Issue #23、`POST /v1/me/articles/{articleId}/archive`、ADR-0012、ADR-0041、ADR-0066
 
 ## コンテキストと変更契機

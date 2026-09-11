@@ -374,6 +374,7 @@ erDiagram
 | データ | 設計上の意味 |
 | --- | --- |
 | `feed_catalog` / `feed_subscriptions` / `public_feed_listings` | HTTP境界でcanonicalizeしたfeed URL identity、ownerごとの購読状態、明示公開listingを分離。既登録は409、削除後は同じfeedへ再購読する（ADR-0087） |
+| `archive_refresh_jobs` | 手動archiveの有界受付、owner/article active重複排除、deadlineとreceipt。共有RPCと独立したworkerで実行（[ADR-0093](adr/0093-isolate-manual-archive-behind-durable-admission.md)） |
 | `feed_sync_jobs` | feedごとのRSS同期lease、状態、試行回数、発見・archive結果。parser validationを含む個別記事失敗は件数とsanitized reasonをdegradedな成功として保持し、feed取得失敗だけを試行上限へ数える |
 | `feed_items` / `article_snapshots` / `archive_assets` | RSS記事、版固定したHTML・Markdown、ObjectStore資産metadata |
 | `article_search_index_queue` / `article_search_fts` / `article_search_short_grams` | snapshot commit後に再試行可能に更新するMarkdown本文索引。記事一覧検索はowner access内の最新snapshotだけを参照 |

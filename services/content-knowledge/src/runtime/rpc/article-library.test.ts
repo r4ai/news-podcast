@@ -29,6 +29,40 @@ const dependencies = {
 }
 
 describe("article library RPC handler", () => {
+  it("acknowledges queued archive without waiting for outbound capture", async () => {
+    const archive = vi.fn(() => Effect.never)
+    const job = {
+      jobId: snapshotId,
+      status: "queued",
+      createdAt: dependencies.now(),
+      completedAt: null,
+      error: null,
+    }
+    const enqueueArchive = vi.fn(() =>
+      Effect.succeed({ _tag: "ArchiveAccepted", job })
+    )
+    const reply = vi.fn((_payload: string) => Effect.void)
+    await Effect.runPromiseExit(
+      makeArticleLibraryRpcHandler(
+        { archive, enqueueArchive } as never,
+        dependencies
+      )({
+        subject: subjects.content.articleLibrary,
+        payload: request({
+          operation: "Archive",
+          articleId,
+          deadlineAt: "2026-08-13T00:01:00.000Z",
+        }),
+        reply,
+      }).pipe(Effect.timeout(50))
+    )
+    expect(reply).toHaveBeenCalledOnce()
+    expect(JSON.parse(reply.mock.calls[0]![0]).payload).toEqual({
+      _tag: "ArchiveAccepted",
+      job,
+    })
+    expect(archive).not.toHaveBeenCalled()
+  })
   it("derives the owner only from the user actor and correlates the reply", async () => {
     const find = vi.fn(() =>
       Effect.succeed(deepFreeze({ _tag: "NotFound" as const }))
@@ -212,12 +246,14 @@ describe("article library RPC handler", () => {
     })
   })
 
-  it("interrupts archive work when its end-to-end deadline expires", async () => {
-    const archive = vi.fn(() => Effect.never)
+  it("reports queue admission failure without starting capture", async () => {
+    const enqueueArchive = vi.fn(() =>
+      Effect.fail({ _tag: "ArchiveRefreshFailed", reason: "capacity" })
+    )
     const reply = vi.fn((_payload: string) => Effect.void)
     await Effect.runPromise(
       makeArticleLibraryRpcHandler(
-        { archive } as never,
+        { enqueueArchive } as never,
         dependencies
       )({
         subject: subjects.content.articleLibrary,
@@ -230,7 +266,7 @@ describe("article library RPC handler", () => {
       })
     )
 
-    expect(archive).toHaveBeenCalledOnce()
+    expect(enqueueArchive).toHaveBeenCalledOnce()
     expect(JSON.parse(reply.mock.calls[0]![0]).payload).toEqual({
       _tag: "Rejected",
       code: "STORAGE_FAILURE",

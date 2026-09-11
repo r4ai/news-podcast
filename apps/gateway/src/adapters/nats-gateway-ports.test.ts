@@ -188,7 +188,16 @@ describe("NATS GatewayPorts adapter", () => {
                     },
                   }
                 : payload.operation === "Archive"
-                  ? { _tag: "ArchiveTriggered", status: "AlreadyArchived" }
+                  ? {
+                      _tag: "ArchiveAccepted",
+                      job: {
+                        jobId: ids[3],
+                        status: "queued",
+                        createdAt: "2026-08-12T00:00:00.000Z",
+                        completedAt: null,
+                        error: null,
+                      },
+                    }
                   : payload.operation === "Patch"
                     ? { _tag: "Updated", article }
                     : { _tag: "Found", article }
@@ -234,13 +243,13 @@ describe("NATS GatewayPorts adapter", () => {
     expect(patched.saved).toBe(true)
     expect(bulk.updated).toBe(1)
     expect(facets.states.all).toBe(1)
-    expect(archived.status).toBe("already_archived")
+    expect(archived.status).toBe("queued")
     expect(requests).toHaveLength(7)
     const archiveRequest = requests.find(
       ({ envelope }) =>
         (envelope.payload as { operation?: string }).operation === "Archive"
     )
-    expect(archiveRequest?.timeoutMillis).toBe(35_000)
+    expect(archiveRequest?.timeoutMillis).toBe(2_000)
     expect(archiveRequest?.envelope.payload).toMatchObject({
       deadlineAt: "2026-08-12T00:00:30.000Z",
     })

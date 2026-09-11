@@ -343,6 +343,16 @@ export type GatewayPorts = Readonly<{
     | TypeOf<typeof NotFoundProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
+  getArticleArchiveStatus: (input: {
+    readonly headers: TypeOf<typeof SessionHeadersSchema>
+    readonly jobId: string
+    readonly articleId: TypeOf<typeof ArticleIdSchema>
+  }) => Effect.Effect<
+    TypeOf<typeof ArticleArchiveResultSchema>,
+    | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof UnavailableProblemSchema>
+  >
   listArticleTags: (input: {
     readonly headers: TypeOf<typeof SessionHeadersSchema>
     readonly articleId: TypeOf<typeof ArticleIdSchema>

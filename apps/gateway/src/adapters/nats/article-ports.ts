@@ -98,6 +98,7 @@ type ArticlePorts = Pick<
   | "bulkPatchArticles"
   | "getArticleFacets"
   | "archiveArticle"
+  | "getArticleArchiveStatus"
   | "listArticleTags"
   | "setArticleTags"
   | "enrichArticle"
@@ -106,7 +107,7 @@ type ArticlePorts = Pick<
 export const makeArticlePorts = (
   transport: Transport,
   archiveExecutionTimeoutMillis: number,
-  archiveRequestTimeoutMillis: number
+  _archiveRequestTimeoutMillis: number
 ): ArticlePorts => {
   const libraryRpc = (
     headers: Parameters<GatewayPorts["getArticle"]>[0]["headers"],
@@ -298,23 +299,33 @@ export const makeArticlePorts = (
         Effect.mapError(normalizeProblem)
       ),
     archiveArticle: ({ headers, articleId }) =>
-      libraryRpc(
-        headers,
-        {
-          operation: "Archive",
-          articleId,
-          deadlineAt: new Date(
-            Date.parse(transport.now()) + archiveExecutionTimeoutMillis
-          ).toISOString(),
-        },
-        archiveRequestTimeoutMillis
-      ).pipe(
+      libraryRpc(headers, {
+        operation: "Archive",
+        articleId,
+        deadlineAt: new Date(
+          Date.parse(transport.now()) + archiveExecutionTimeoutMillis
+        ).toISOString(),
+      }).pipe(
         Effect.flatMap((reply) =>
-          reply._tag === "ArchiveTriggered"
-            ? parse(ArticleArchiveResultSchema)({
-                status:
-                  reply.status === "Archived" ? "archived" : "already_archived",
-              }).pipe(Effect.mapError(unavailable))
+          reply._tag === "ArchiveAccepted"
+            ? parse(ArticleArchiveResultSchema)(reply.job).pipe(
+                Effect.mapError(unavailable)
+              )
+            : Effect.fail(articleReplyFailure(reply))
+        ),
+        Effect.mapError(normalizeProblem)
+      ),
+    getArticleArchiveStatus: ({ headers, articleId, jobId }) =>
+      libraryRpc(headers, {
+        operation: "ArchiveStatus",
+        articleId,
+        jobId,
+      }).pipe(
+        Effect.flatMap((reply) =>
+          reply._tag === "ArchiveAccepted"
+            ? parse(ArticleArchiveResultSchema)(reply.job).pipe(
+                Effect.mapError(unavailable)
+              )
             : Effect.fail(articleReplyFailure(reply))
         ),
         Effect.mapError(normalizeProblem)

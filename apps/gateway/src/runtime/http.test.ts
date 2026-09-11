@@ -59,6 +59,7 @@ const ports: GatewayPorts = {
   bulkPatchArticles: () => Effect.fail(unavailable),
   getArticleFacets: () => Effect.fail(unavailable),
   archiveArticle: () => Effect.fail(unavailable),
+  getArticleArchiveStatus: () => Effect.fail(unavailable),
   listArticleTags: () => Effect.fail(unavailable),
   setArticleTags: () => Effect.fail(unavailable),
   enrichArticle: () => Effect.fail(unavailable),
@@ -79,6 +80,33 @@ const ports: GatewayPorts = {
 }
 
 describe("Gateway HTTP runtime", () => {
+  it("exposes archive receipt status independently from admission", async () => {
+    const jobId = "651b86e0-481a-42e2-aef4-7b6419d7447a"
+    const articleId = "5af55f2e-ff0b-475c-866a-f2cff48c101d"
+    const receipt = {
+      jobId,
+      status: "processing" as const,
+      createdAt: "2026-09-11T00:00:00.000Z",
+      completedAt: null,
+      error: null,
+    }
+    const getArticleArchiveStatus = vi.fn(() => Effect.succeed(receipt))
+    const runtime = makeGatewayWebHandler({ ...ports, getArticleArchiveStatus })
+    try {
+      const response = await runtime.handler(
+        new Request(
+          `http://gateway.test/v1/me/articles/${articleId}/archive/${jobId}`
+        )
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(receipt)
+      expect(getArticleArchiveStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ articleId, jobId })
+      )
+    } finally {
+      await runtime.dispose()
+    }
+  })
   it("serves the generated OpenAPI document and Scalar reference", async () => {
     const runtime = makeGatewayWebHandler(ports)
 
@@ -212,7 +240,14 @@ describe("Gateway HTTP runtime", () => {
           ],
           aiPending: 0,
         }),
-      archiveArticle: () => Effect.succeed({ status: "already_archived" }),
+      archiveArticle: () =>
+        Effect.succeed({
+          jobId: "651b86e0-481a-42e2-aef4-7b6419d7447a",
+          status: "queued",
+          createdAt: "2026-08-13T00:00:01.000Z",
+          completedAt: null,
+          error: null,
+        }),
       listArticleTags: () => Effect.succeed({ items: [] }),
       setArticleTags: () => Effect.succeed({ items: [] }),
       enrichArticle: () => Effect.succeed({ enqueued: 1 }),
@@ -272,7 +307,7 @@ describe("Gateway HTTP runtime", () => {
         requests.map((request) => runtime.handler(request))
       )
       expect(responses.map(({ status }) => status)).toEqual([
-        200, 201, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200,
+        200, 201, 200, 200, 200, 200, 200, 200, 200, 200, 200, 202, 200, 200,
         200,
       ])
     } finally {

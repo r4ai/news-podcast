@@ -241,36 +241,27 @@ export const makeArticleLibraryRpcHandler =
                           deepFreeze({ _tag: "Facets", facets })
                         )
                       )
+                  case "ArchiveStatus":
+                    return library.archiveStatus({
+                      ownerId,
+                      articleId: command.articleId,
+                      jobId: command.jobId,
+                    })
                   case "Archive":
-                    const remainingMillis =
-                      Date.parse(command.deadlineAt) -
+                    if (
+                      Date.parse(command.deadlineAt) <=
                       Date.parse(dependencies.now())
-                    if (remainingMillis <= 0)
+                    )
                       return Effect.fail(archiveDeadlineExceeded())
-                    return library
-                      .archive(
-                        { ownerId, articleId: command.articleId },
-                        {
-                          messageId: request.messageId,
-                          correlationId: request.correlationId,
-                          traceparent: request.traceparent,
-                          actor: request.actor,
-                        }
-                      )
-                      .pipe(
-                        Effect.timeoutOrElse({
-                          duration: remainingMillis,
-                          orElse: () => Effect.fail(archiveDeadlineExceeded()),
-                        }),
-                        Effect.map((value) =>
-                          value._tag === "NotFound"
-                            ? deepFreeze({ _tag: "NotFound" })
-                            : deepFreeze({
-                                _tag: "ArchiveTriggered",
-                                status: value._tag,
-                              })
-                        )
-                      )
+                    return library.enqueueArchive(
+                      { ownerId, articleId: command.articleId },
+                      {
+                        messageId: request.messageId,
+                        correlationId: request.correlationId,
+                        traceparent: request.traceparent,
+                        actor: request.actor,
+                      }
+                    )
                 }
               }
             ),

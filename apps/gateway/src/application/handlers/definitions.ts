@@ -452,6 +452,9 @@ export const makeGatewayHandlers = (
     getArticleFacets: (
       input: Parameters<GatewayPorts["getArticleFacets"]>[0]
     ) => freezeSuccess(ports.getArticleFacets(deepFreeze(input))),
+    getArticleArchiveStatus: (
+      input: Parameters<GatewayPorts["getArticleArchiveStatus"]>[0]
+    ) => freezeSuccess(ports.getArticleArchiveStatus(deepFreeze(input))),
     archiveArticle: (input: Parameters<GatewayPorts["archiveArticle"]>[0]) =>
       freezeSuccess(ports.archiveArticle(deepFreeze(input))),
     listArticleTags: (input: Parameters<GatewayPorts["listArticleTags"]>[0]) =>

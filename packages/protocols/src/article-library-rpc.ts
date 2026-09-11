@@ -79,6 +79,11 @@ const patch = Schema.Struct(patchFields).check(
 
 export const ArticleLibraryRequestSchema = Schema.Union([
   Schema.Struct({
+    operation: Schema.Literal("ArchiveStatus"),
+    articleId: ArticleIdSchema,
+    jobId: uuid("ArchiveRefreshJobId"),
+  }),
+  Schema.Struct({
     operation: Schema.Literal("List"),
     query: Schema.Struct({
       limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
@@ -167,6 +172,17 @@ const rejection = Schema.TaggedStruct("Rejected", {
   ]),
 })
 export const ArticleLibraryReplySchema = Schema.Union([
+  Schema.TaggedStruct("ArchiveAccepted", {
+    job: Schema.Struct({
+      jobId: uuid("ArchiveRefreshJobId"),
+      status: Schema.Literals(["queued", "processing", "succeeded", "failed"]),
+      createdAt: utc,
+      completedAt: Schema.NullOr(utc),
+      error: Schema.NullOr(
+        Schema.Literals(["deadline", "capture", "canceled"])
+      ),
+    }),
+  }),
   Schema.TaggedStruct("Listed", {
     articles: Schema.Array(ContentArticleViewSchema).check(
       Schema.isMaxLength(100)
