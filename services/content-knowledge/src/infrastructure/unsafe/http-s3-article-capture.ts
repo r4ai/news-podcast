@@ -546,6 +546,7 @@ const captureReplay = async (input: {
       if (source === undefined || visiting.has(url)) return undefined
       visiting.add(url)
       let body = bodies.get(source.digest)!
+      let digest = source.digest
       if (source.mediaType === "text/css") {
         const css = rewriteCss(
           new TextDecoder().decode(body),
@@ -556,20 +557,20 @@ const captureReplay = async (input: {
             return nested === undefined ? undefined : assetCssPath(nested)
           }
         )
-        body = new TextEncoder().encode(css)
+        digest = createHash("sha256").update(css).digest("hex")
+        const existingBody = bodies.get(digest)
+        if (existingBody === undefined) {
+          if (
+            Buffer.byteLength(css) + outcome.retainedBytes >
+            2 * input.maximumAssetTotalBytes
+          )
+            rejectLimit("retained_bytes")
+          body = new TextEncoder().encode(css)
+          bodies.set(digest, body)
+          outcome.retainedBytes += body.byteLength
+        } else body = existingBody
       }
       visiting.delete(url)
-      const digest = sha256(body)
-      const existingBody = bodies.get(digest)
-      if (existingBody === undefined) {
-        if (
-          body.byteLength + outcome.retainedBytes >
-          2 * input.maximumAssetTotalBytes
-        )
-          rejectLimit("retained_bytes")
-        bodies.set(digest, body)
-        outcome.retainedBytes += body.byteLength
-      } else body = existingBody
       const asset = {
         url,
         key: `${input.prefix}/assets/${digest}.${extensionFor(source.mediaType)}`,
