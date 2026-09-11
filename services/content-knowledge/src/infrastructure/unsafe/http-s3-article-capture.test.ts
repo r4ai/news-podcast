@@ -263,6 +263,101 @@ describe("HTTP to S3 article capture", () => {
     }
   })
 
+  it("accepts a compressed response whose decoded body fits the remaining budget", async () => {
+    const compressed = gzipSync("abc")
+    const server = createServer((request, response) => {
+      if (request.url === "/article") {
+        response.setHeader("content-type", "text/html")
+        response.end(
+          '<article><h1>Article</h1><p>Content</p><img src="/a"></article>'
+        )
+      } else {
+        response.setHeader("content-type", "image/png")
+        response.setHeader("content-encoding", "gzip")
+        response.setHeader("content-length", compressed.byteLength)
+        response.end(compressed)
+      }
+    })
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (address === null || typeof address === "string")
+      throw new Error("missing address")
+    const assets = vi.fn()
+    const stored = vi.fn()
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      { ...config, maximumAssetTotalBytes: 3 },
+      {
+        createS3: () => ({
+          client: { send: stored } as never,
+          close: () => undefined,
+        }),
+        createSafeFetch: () => ({ fetch, close: async () => undefined }),
+      },
+      { cleanup: () => undefined, assets }
+    )
+    try {
+      const result = await Effect.runPromise(
+        resource.capture({
+          sourceUrl: `http://127.0.0.1:${address.port}/article` as never,
+          snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
+        })
+      )
+      expect(result.assets).toHaveLength(1)
+      expect(assets).toHaveBeenCalledWith({
+        attempted: 1,
+        downloadedBytes: 3,
+        retainedBytes: 3,
+        limit: "none",
+      })
+    } finally {
+      await Effect.runPromise(resource.close)
+    }
+  })
+
+  it("deduplicates rewritten CSS before charging retained bytes", async () => {
+    const css = "a{background:url(/i)}"
+    const assets = vi.fn()
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      { ...config, maximumAssetTotalBytes: Buffer.byteLength(css) * 3 + 3 },
+      {
+        createS3: () => ({
+          client: { send: async () => undefined } as never,
+          close: () => undefined,
+        }),
+        createSafeFetch: () => ({
+          fetch: (async (url: string) => {
+            if (url.endsWith("/article"))
+              return new Response(
+                '<article><h1>Article</h1><p>Content</p><link rel="stylesheet" href="/a.css"><link rel="stylesheet" href="/b.css"><link rel="stylesheet" href="/c.css"></article>',
+                { headers: { "content-type": "text/html" } }
+              )
+            return new Response(url.endsWith(".css") ? css : "abc", {
+              headers: {
+                "content-type": url.endsWith(".css") ? "text/css" : "image/png",
+              },
+            })
+          }) as typeof fetch,
+          close: async () => undefined,
+        }),
+      },
+      { cleanup: () => undefined, assets }
+    )
+    try {
+      const result = await Effect.runPromise(
+        resource.capture({
+          sourceUrl: "https://news.example.com/article" as never,
+          snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
+        })
+      )
+      expect(result.assets).toHaveLength(2)
+      expect(assets).toHaveBeenCalledWith(
+        expect.objectContaining({ attempted: 4, limit: "none" })
+      )
+    } finally {
+      await Effect.runPromise(resource.close)
+    }
+  })
   it(
     "stores deterministic bounded artifacts with hashes through a real HTTP server",
     async () => {

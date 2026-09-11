@@ -108,7 +108,11 @@ const readBounded = async (
   onChunk: (bytes: number) => void = () => undefined
 ): Promise<Uint8Array> => {
   const declared = Number(response.headers.get("content-length"))
-  if (Number.isFinite(declared) && declared > maximumBytes) {
+  if (
+    !response.headers.has("content-encoding") &&
+    Number.isFinite(declared) &&
+    declared > maximumBytes
+  ) {
     await response.body?.cancel()
     throw failure("ResourceLimit")
   }
@@ -552,18 +556,17 @@ const captureReplay = async (input: {
             return nested === undefined ? undefined : assetCssPath(nested)
           }
         )
-        // Rewritten CSS can expand references, so it has its own retained-byte cap.
-        if (
-          Buffer.byteLength(css) + outcome.retainedBytes >
-          2 * input.maximumAssetTotalBytes
-        )
-          rejectLimit("retained_bytes")
         body = new TextEncoder().encode(css)
       }
       visiting.delete(url)
       const digest = sha256(body)
       const existingBody = bodies.get(digest)
       if (existingBody === undefined) {
+        if (
+          body.byteLength + outcome.retainedBytes >
+          2 * input.maximumAssetTotalBytes
+        )
+          rejectLimit("retained_bytes")
         bodies.set(digest, body)
         outcome.retainedBytes += body.byteLength
       } else body = existingBody
