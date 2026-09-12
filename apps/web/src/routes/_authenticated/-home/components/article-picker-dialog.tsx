@@ -249,7 +249,7 @@ export function ArticlePickerDialog({
               <DialogTitle>番組にする記事を選ぶ</DialogTitle>
               <DialogDescription>
                 選んだ記事だけを題材にします。最大{MAX_SELECTED_ARTICLES}
-                件まで、おすすめ順に並んでいます。
+                件まで、新着順に並んでいます。
               </DialogDescription>
             </div>
             <Badge className="shrink-0 tabular-nums" variant="secondary">
@@ -277,7 +277,7 @@ export function ArticlePickerDialog({
               size="sm"
               variant="outline"
             >
-              おすすめを一括選択
+              上から一括選択
             </Button>
             <Button
               disabled={selectedCount === 0}
