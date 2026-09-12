@@ -1,3 +1,5 @@
+import { getNodeObservability } from "@news-podcast/observability/node/register"
+import type { ScheduleSuppression } from "../domain/schedule-completion.js"
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
@@ -44,6 +46,7 @@ export type IdentityAccessRuntime = DeepReadonly<{
 }>
 
 export type IdentityAccessRuntimeDependencies = Readonly<{
+  readonly observeScheduleSuppression?: (reason: ScheduleSuppression) => void
   readonly openRuntime: (
     config: ReturnType<typeof toIdentityAuthConfig>
   ) => Promise<UnsafeIdentityRuntimeResource>
@@ -86,10 +89,21 @@ const serviceFailure = (
     component,
   })
 
+const observeScheduleSuppression = (reason: ScheduleSuppression) =>
+  getNodeObservability({ serviceName: "identity-access" }).count(
+    "identity.schedule.suppressed",
+    1,
+    { "schedule.outcome": reason }
+  )
+
 const defaultRuntimeDependencies: IdentityAccessRuntimeDependencies =
   deepFreeze({
     openRuntime: createIdentityRuntimeResourceUnsafe,
-    createSettings: createGenerationSettingsRepository,
+    createSettings: (database) =>
+      createGenerationSettingsRepository(database, {
+        observeSuppression: observeScheduleSuppression,
+      }),
+    observeScheduleSuppression,
   })
 
 /** Transport-neutral seam sharing one SQLite handle across auth and settings. */
@@ -118,7 +132,10 @@ export const startIdentityAccessRuntime = (
               settings: deepFreeze({
                 get: makeGetGenerationSettingsHandler(repository),
                 update: makeUpdateGenerationSettingsHandler(repository),
-                findDue: makeFindDueGenerationSchedulesHandler(repository),
+                findDue: makeFindDueGenerationSchedulesHandler(
+                  repository,
+                  dependencies.observeScheduleSuppression
+                ),
                 completeScheduled:
                   makeCompleteScheduledGenerationHandler(repository),
               }),

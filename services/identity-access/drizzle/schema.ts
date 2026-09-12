@@ -16,6 +16,8 @@ export const userSettings = sqliteTable(
       .notNull()
       .default("Asia/Tokyo"),
     lastScheduledLocalDate: text("last_scheduled_local_date"),
+    lastScheduledDay: integer("last_scheduled_day"),
+    lastScheduledCompletion: text("last_scheduled_completion"),
   },
   (table) => [
     check(

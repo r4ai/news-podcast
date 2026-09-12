@@ -1,7 +1,7 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import { Schema } from "effect"
 
-const IanaTimeZoneSchema = Schema.String.check(
+export const IanaTimeZoneSchema = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(255),
   Schema.makeFilter<string>((timeZone) => {

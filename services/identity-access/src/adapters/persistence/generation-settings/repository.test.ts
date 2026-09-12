@@ -1,6 +1,8 @@
 import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
+import { findDueGenerationSchedules } from "../../../application/generation-settings.js"
+
 import { UserIdSchema } from "../../../domain/actor.js"
 import { GenerationScheduleSchema } from "../../../domain/generation-settings.js"
 import { openIdentityDatabaseUnsafe } from "../../../infrastructure/unsafe/drizzle/open.js"
@@ -24,11 +26,75 @@ const replacement = decode(GenerationScheduleSchema, {
 })
 
 describe("generation settings repository", () => {
+  it.each(["America/Adak", "Pacific/Honolulu"])(
+    "does not reopen a completed day when the timezone moves backward to %s",
+    async (timeZone) => {
+      const handle = openIdentityDatabaseUnsafe(":memory:")
+      try {
+        const repository = await Effect.runPromise(
+          createGenerationSettingsRepository(handle.database, {
+            now: () => "2026-08-13T00:00:00.000Z",
+          })
+        )
+        await Effect.runPromise(
+          repository.save(
+            ownerA,
+            decode(GenerationScheduleSchema, {
+              enabled: true,
+              localTime: "07:30",
+              timeZone: "Pacific/Kiritimati",
+            })
+          )
+        )
+        await Effect.runPromise(repository.markScheduled(ownerA, "2026-08-30"))
+        await Effect.runPromise(
+          repository.save(
+            ownerA,
+            decode(GenerationScheduleSchema, {
+              enabled: true,
+              localTime: "07:30",
+              timeZone,
+            })
+          )
+        )
+        expect(
+          await Effect.runPromise(
+            findDueGenerationSchedules(repository)("2026-08-30T08:00:00.000Z")
+          )
+        ).toEqual([])
+      } finally {
+        handle.close()
+      }
+    }
+  )
+
+  it("does not move the completion marker backward on a delayed completion", async () => {
+    const handle = openIdentityDatabaseUnsafe(":memory:")
+    try {
+      const repository = await Effect.runPromise(
+        createGenerationSettingsRepository(handle.database, {
+          now: () => "2026-08-13T00:00:00.000Z",
+        })
+      )
+      await Effect.runPromise(repository.save(ownerA, first))
+      await Effect.runPromise(repository.markScheduled(ownerA, "2026-08-30"))
+      await Effect.runPromise(repository.markScheduled(ownerA, "2026-08-29"))
+      expect(
+        (await Effect.runPromise(repository.listEnabled()))[0]?.lastCompletion
+          ?.localDate
+      ).toBe("2026-08-30")
+    } finally {
+      handle.close()
+    }
+  })
+
   it("transitions absent -> saved -> replaced for one owner", async () => {
     const handle = openIdentityDatabaseUnsafe(":memory:")
     try {
       const repository = await Effect.runPromise(
-        createGenerationSettingsRepository(handle.database)
+        createGenerationSettingsRepository(handle.database, {
+          now: () => "2026-08-13T00:00:00.000Z",
+        })
       )
 
       expect((await Effect.runPromise(repository.find(ownerA)))._tag).toBe(
@@ -52,7 +118,9 @@ describe("generation settings repository", () => {
     const handle = openIdentityDatabaseUnsafe(":memory:")
     try {
       const repository = await Effect.runPromise(
-        createGenerationSettingsRepository(handle.database)
+        createGenerationSettingsRepository(handle.database, {
+          now: () => "2026-08-13T00:00:00.000Z",
+        })
       )
       await Effect.runPromise(repository.save(ownerA, first))
       await Effect.runPromise(repository.save(ownerB, replacement))
@@ -70,7 +138,9 @@ describe("generation settings repository", () => {
     const handle = openIdentityDatabaseUnsafe(":memory:")
     try {
       const repository = await Effect.runPromise(
-        createGenerationSettingsRepository(handle.database)
+        createGenerationSettingsRepository(handle.database, {
+          now: () => "2026-08-13T00:00:00.000Z",
+        })
       )
       await Effect.runPromise(repository.save(ownerA, first))
       await Effect.runPromise(repository.save(ownerB, replacement))
@@ -84,7 +154,12 @@ describe("generation settings repository", () => {
         {
           ownerId: ownerA,
           schedule: first,
-          lastScheduledLocalDate: "2026-08-13",
+          lastCompletion: {
+            source: "recorded",
+            localDate: "2026-08-13",
+            recordedAt: "2026-08-13T00:00:00.000Z",
+            timeZone: "Asia/Tokyo",
+          },
         },
       ])
     } finally {
@@ -96,7 +171,9 @@ describe("generation settings repository", () => {
     const handle = openIdentityDatabaseUnsafe(":memory:")
     try {
       const repository = await Effect.runPromise(
-        createGenerationSettingsRepository(handle.database)
+        createGenerationSettingsRepository(handle.database, {
+          now: () => "2026-08-13T00:00:00.000Z",
+        })
       )
       handle.client
         .prepare(
@@ -120,7 +197,9 @@ describe("generation settings repository", () => {
     const handle = openIdentityDatabaseUnsafe(":memory:")
     try {
       const repository = await Effect.runPromise(
-        createGenerationSettingsRepository(handle.database)
+        createGenerationSettingsRepository(handle.database, {
+          now: () => "2026-08-13T00:00:00.000Z",
+        })
       )
       handle.client.exec("PRAGMA ignore_check_constraints = ON")
       handle.client
@@ -143,7 +222,9 @@ describe("generation settings repository", () => {
     const handle = openIdentityDatabaseUnsafe(":memory:")
     try {
       const repository = await Effect.runPromise(
-        createGenerationSettingsRepository(handle.database)
+        createGenerationSettingsRepository(handle.database, {
+          now: () => "2026-08-13T00:00:00.000Z",
+        })
       )
       await Effect.runPromise(repository.save(ownerA, first))
       expect(

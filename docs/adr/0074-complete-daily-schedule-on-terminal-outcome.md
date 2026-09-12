@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-20
+- Superseded by: [ADR-0097](0097-monotonic-daily-schedule-completion.md)（完了日保存と設定変更時のdue判定に限る）
 - Decision owners: Episode Production / Identity Access / Architecture
 - Related: Issue #47、ADR-0037、ADR-0044
 

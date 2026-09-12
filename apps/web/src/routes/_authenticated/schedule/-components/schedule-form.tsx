@@ -80,7 +80,8 @@ export function ScheduleFormView({
             <h2>自動生成</h2>
           </CardTitle>
           <CardDescription>
-            Worker再起動時も、当日未生成であれば一度だけ補完します。
+            当日未生成であれば、再起動後も一度だけ補完します。
+            タイムゾーンを変更しても、処理済みの日付以前の番組は追加生成しません。
           </CardDescription>
           <CardAction>
             <SaveIndicator state={saveState} />

@@ -94,7 +94,10 @@ describe("generation settings use cases", () => {
           {
             ownerId,
             schedule: alreadyCompletedSchedule,
-            lastScheduledLocalDate: "2026-08-13",
+            lastCompletion: {
+              source: "legacy" as const,
+              localDate: "2026-08-13",
+            },
           },
         ])
       ),
@@ -108,7 +111,7 @@ describe("generation settings use cases", () => {
     ).toEqual([])
   })
 
-  it("records the local date only after the caller completes job creation", async () => {
+  it("records the local date after the caller reconciles a terminal job outcome", async () => {
     const ownerId = await Effect.runPromise(parseUserId("owner-a"))
     const repository: GenerationSettingsRepository = {
       find: vi.fn(),
