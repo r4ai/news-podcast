@@ -117,7 +117,10 @@ Cloudflare/D1/R2/Queuesは実装しない。再導入条件は[ADR-0039](adr/003
 ```mermaid
 flowchart LR
   Browser["Browser OTel Web SDK"] -->|"relative /v1/telemetry/*"| Gateway["Gateway OTLP proxy"]
-  Gateway -->|"fixed /v1/{traces,logs,metrics}"| Ingress
+  Gateway -->|"session + limits + allowlist"| BrowserCollector["Collector browser :4319"]
+  BrowserCollector --> Prometheus
+  BrowserCollector --> Loki
+  BrowserCollector --> Tempo
   Node["Gateway + 4 Node services"] -->|"OTLP HTTP"| Ingress["HTTPS OTLP ingress"]
   Ingress --> Collector["OpenTelemetry Collector"]
   Collector --> Prometheus[("Prometheus / Metrics")]
@@ -133,7 +136,7 @@ flowchart LR
 
 Domain/Applicationは監視実装を知らず、runtimeとadapterだけが`packages/observability`を使う。BrowserからGatewayまでの同期HTTPはW3C parentを継続する。生成要求時のcontextをジョブへ保存し、Productionは試行ごとの独立traceからenqueue spanへlinkする。OpenAI、VOICEVOX、S3はProduction trace内のclient spanで計測するが、管理外serviceへtrace headerを送らない。台本qualityはmodel・生成prompt version・quality prompt version・pass/reject・固定reasonだけをmetric/logへ記録し、記事と台本は記録しない。Collector障害時はtelemetryだけを有界queueから破棄し、API・生成処理を継続する。
 
-Browserは匿名操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。OTLPはGatewayの相対proxyを通し、Collector originをBrowserへ公開しない。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningで8 dashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理する。watchdogは通常構成でも常駐し、SMTP完全設定時はメール、未設定時は構造化stderrへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0040](adr/0040-full-path-observability-validation.md)、[ADR-0048](adr/0048-grafana-mcp-observability.md)、[ADR-0052](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
+Browserはログイン中の操作、例外、Web Vitalsだけを送り、通常traceを20% samplingする。OTLPはGatewayで既存sessionを解決し、owner/IP/global quota、同時実行数、圧縮前後のbyte/ratio上限、JSON allowlistを適用する。ブラウザー専用Collector receiver/pipelineへ送り、service.nameをnews-podcast-web、telemetry.trustをuntrustedに固定する。Browser由来span metricsは別namespaceで、backend障害alertとservice graphへ混ぜない。未ログイン・logout後は401で破棄する（[ADR-0096](adr/0096-isolate-authenticated-browser-telemetry.md)）。属性allowlistでユーザーID、入力、RSS・台本・音声内容、完全URL、認証情報を拒否する。job IDは生成trace/logだけで許可し、metric adapterが物理的に除去する。Collectorはspan metricsとservice graphを生成する。Grafana provisioningで8 dashboard、alert、metrics exemplar、trace-to-logs、logs-to-traceを管理する。watchdogは通常構成でも常駐し、SMTP完全設定時はメール、未設定時は構造化stderrへ通知する。DNTまたは設定OFFならSDKを開始しない。詳細は[ADR-0032](adr/0032-grafana-correlated-observability.md)、[ADR-0040](adr/0040-full-path-observability-validation.md)、[ADR-0048](adr/0048-grafana-mcp-observability.md)、[ADR-0052](adr/0052-rpc-failure-isolation-and-self-healing-runtime.md)、[ADR-0016](adr/0016-bounded-observable-episode-execution.md)、[ADR-0017](adr/0017-linked-distributed-tracing.md)、[運用手順](../infra/observability/README.md)を正本にする。
 
 ### 6.2 常駐serviceの障害境界
 

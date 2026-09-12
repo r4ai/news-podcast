@@ -12,7 +12,10 @@ import {
 } from "../infrastructure/unsafe/runtime-values.js"
 import { makeGatewayAuthProxy } from "./auth-proxy.js"
 import { makeGatewayWebHandler } from "./http.js"
-import { makeGatewayTelemetryProxy } from "./telemetry-proxy.js"
+import {
+  makeGatewayTelemetryProxy,
+  type GatewayRequestHandler,
+} from "./telemetry-proxy.js"
 
 const NatsServerSchema = Schema.String.check(
   Schema.isPattern(/^nats:\/\/[\w.-]+(?::\d{1,5})?$/)
@@ -88,7 +91,7 @@ export type UnsafeGatewayHttpServer = DeepReadonly<{
 type ListenInput = Readonly<{
   hostname: string
   port: number
-  handler: (request: Request) => Promise<Response>
+  handler: GatewayRequestHandler
 }>
 
 export type NodeGatewayRuntimeError = DeepReadonly<{
@@ -104,6 +107,7 @@ export type NodeGatewayDependencies = Readonly<{
   readonly nextMessageId: () => string
   readonly now: () => string
   readonly onReady?: () => void
+  readonly onTelemetryOutcome?: (status: number) => void
   readonly telemetry?: Layer.Layer<never, never, never>
 }>
 
@@ -148,6 +152,23 @@ export const runNodeGateway = (
             maximumResponseBytes: config.telemetryProxyMaximumResponseBytes,
             fetch: globalThis.fetch,
             next: authProxy,
+            ...(dependencies.onTelemetryOutcome
+              ? { onOutcome: dependencies.onTelemetryOutcome }
+              : {}),
+            resolveOwner: async (request, signal) => {
+              const session = await Effect.runPromise(
+                ports.resolveSession({
+                  ...(request.headers.has("cookie")
+                    ? { cookie: request.headers.get("cookie")! }
+                    : {}),
+                  ...(request.headers.has("authorization")
+                    ? { authorization: request.headers.get("authorization")! }
+                    : {}),
+                }),
+                { signal }
+              )
+              return session.authenticated ? session.userId : undefined
+            },
           })
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => web.dispose()).pipe(Effect.ignore)

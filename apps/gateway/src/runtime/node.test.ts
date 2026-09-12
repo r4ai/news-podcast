@@ -1,4 +1,10 @@
-import { Effect, Fiber } from "effect"
+import {
+  fakeClient,
+  encodedReply,
+  userSessionReply,
+} from "../adapters/nats/port-test-harness.js"
+
+import { Effect, Fiber, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import type { UnsafeNatsRequestClient } from "../infrastructure/unsafe/nats-request.js"
@@ -19,13 +25,76 @@ const validConfig = {
   identityHttpOrigin: "http://identity-access:4002",
   authProxyTimeoutMillis: 5_000,
   authProxyMaximumResponseBytes: 1_048_576,
-  telemetryHttpOrigin: "http://otel-collector:4318",
+  telemetryHttpOrigin: "http://otel-collector:4319",
   telemetryProxyTimeoutMillis: 5_000,
   telemetryProxyMaximumRequestBytes: 1_048_576,
   telemetryProxyMaximumResponseBytes: 1_048_576,
 }
 
 describe("Gateway Node runtime", () => {
+  it("authenticates browser exports through the actual correlated session port", async () => {
+    let authenticated = false
+    const sentHeaders: unknown[] = []
+    const client = fakeClient(async (request) => {
+      sentHeaders.push(request.envelope.payload)
+      return authenticated
+        ? userSessionReply(request)
+        : encodedReply(
+            request.envelope,
+            "identity-access",
+            Schema.Struct({
+              actor: Schema.Struct({ _tag: Schema.Literal("Anonymous") }),
+            }),
+            { actor: { _tag: "Anonymous" } }
+          )
+    })
+    const collector = vi.fn(async () => Response.json({}))
+    vi.stubGlobal("fetch", collector)
+    let handler!: (request: Request) => Promise<Response>
+    let ready!: () => void
+    const listening = new Promise<void>((resolve) => {
+      ready = resolve
+    })
+    const fiber = Effect.runFork(
+      runNodeGateway(validConfig, {
+        connectNats: async () => client,
+        listen: async (input) => {
+          handler = input.handler
+          ready()
+          return { close: async () => undefined }
+        },
+        nextMessageId: () => "7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80",
+        now: () => "2026-08-13T00:00:00.000Z",
+      })
+    )
+    try {
+      await listening
+      const request = () =>
+        new Request("http://gateway/v1/telemetry/traces", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "session=opaque",
+            "x-owner-id": "forged",
+          },
+          body: '{"resourceSpans":[]}',
+        })
+      expect((await handler(request())).status).toBe(401)
+      expect(collector).not.toHaveBeenCalled()
+      authenticated = true
+      expect((await handler(request())).status).toBe(200)
+      expect(collector).toHaveBeenCalledOnce()
+      expect(sentHeaders).toEqual(
+        Array.from({ length: 2 }, () => ({
+          headers: [{ name: "cookie", value: "session=opaque" }],
+        }))
+      )
+    } finally {
+      await Effect.runPromise(Fiber.interrupt(fiber))
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("rejects invalid external configuration before acquiring resources", async () => {
     const failure = await Effect.runPromise(
       parseNodeGatewayConfig({ ...validConfig, port: 70_000 }).pipe(Effect.flip)

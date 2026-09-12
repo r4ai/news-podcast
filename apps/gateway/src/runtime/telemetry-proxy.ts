@@ -1,46 +1,15 @@
-const telemetryPaths = new Map([
-  ["/v1/telemetry/traces", "/v1/traces"],
-  ["/v1/telemetry/logs", "/v1/logs"],
-  ["/v1/telemetry/metrics", "/v1/metrics"],
+import {
+  InvalidBrowserTelemetry,
+  sanitizeBrowserTelemetry,
+  type BrowserSignal,
+} from "./browser-telemetry.js"
+import { makeTelemetryAdmission } from "./telemetry-admission.js"
+
+const telemetryPaths = new Map<string, BrowserSignal>([
+  ["/v1/telemetry/traces", "traces"],
+  ["/v1/telemetry/logs", "logs"],
+  ["/v1/telemetry/metrics", "metrics"],
 ])
-
-const hopByHopHeaders = new Set([
-  "connection",
-  "content-length",
-  "host",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-])
-
-const blockedResponseHeaders = new Set([...hopByHopHeaders, "set-cookie"])
-
-const otlpRequestHeaders = new Set([
-  "accept",
-  "content-encoding",
-  "content-type",
-])
-
-const forwardRequestHeaders = (source: Headers) => {
-  const headers = new Headers()
-  source.forEach((value, name) => {
-    if (otlpRequestHeaders.has(name.toLowerCase())) headers.set(name, value)
-  })
-  return headers
-}
-
-const forwardResponseHeaders = (source: Headers) => {
-  const headers = new Headers()
-  source.forEach((value, name) => {
-    if (!blockedResponseHeaders.has(name.toLowerCase()))
-      headers.set(name, value)
-  })
-  return headers
-}
 
 const requestTooLarge = Object.freeze({ _tag: "RequestTooLarge" as const })
 const deadlineExceeded = Object.freeze({ _tag: "DeadlineExceeded" as const })
@@ -71,7 +40,7 @@ const readBounded = async (
       chunks.push(result.value)
     }
   } catch (error) {
-    void reader.cancel(error)
+    void reader.cancel(error).catch(() => undefined)
     throw error
   }
   const output = new Uint8Array(size)
@@ -83,46 +52,127 @@ const readBounded = async (
   return output
 }
 
-/** Proxies browser-relative OTLP requests to the Collector without exposing its origin. */
-export const makeGatewayTelemetryProxy =
-  (input: {
-    readonly upstream: URL
-    readonly timeoutMillis: number
-    readonly maximumRequestBytes: number
-    readonly maximumResponseBytes: number
-    readonly fetch: typeof globalThis.fetch
-    readonly next: (request: Request) => Promise<Response>
-  }) =>
-  async (request: Request): Promise<Response> => {
-    const source = new URL(request.url)
-    const upstreamPath = telemetryPaths.get(source.pathname)
-    if (upstreamPath === undefined) return input.next(request)
-    if (request.method !== "POST")
-      return new Response(null, {
-        status: 405,
-        headers: { allow: "POST" },
-      })
+export type GatewayRequestHandler = (
+  request: Request,
+  peerAddress?: string
+) => Promise<Response>
 
+/** Session and resource admission precede parsing, then only rebuilt browser data is exported. */
+export const makeGatewayTelemetryProxy = (input: {
+  readonly upstream: URL
+  readonly timeoutMillis: number
+  readonly maximumRequestBytes: number
+  readonly maximumResponseBytes: number
+  readonly fetch: typeof globalThis.fetch
+  readonly resolveOwner: (
+    request: Request,
+    signal: AbortSignal
+  ) => Promise<string | undefined>
+  readonly now?: () => number
+  readonly onOutcome?: (status: number) => void
+  readonly next: GatewayRequestHandler
+}): GatewayRequestHandler => {
+  const admission = makeTelemetryAdmission(input.now ?? Date.now)
+  return async (request, peerAddress) => {
+    const signal = telemetryPaths.get(new URL(request.url).pathname)
+    if (signal === undefined) return input.next(request, peerAddress)
+    const respond = (status: number, title: string) => {
+      input.onOutcome?.(status)
+      return Response.json(
+        { title, status },
+        { status, headers: status === 429 ? { "retry-after": "60" } : {} }
+      )
+    }
+    if (request.method !== "POST")
+      return new Response(null, { status: 405, headers: { allow: "POST" } })
+    if (!admission.enter(peerAddress ?? "unknown"))
+      return respond(429, "Telemetry rate limit exceeded")
     const controller = new AbortController()
     const deadline = setTimeout(() => controller.abort(), input.timeoutMillis)
+    const abort = () => controller.abort()
+    request.signal.addEventListener("abort", abort, { once: true })
+    if (request.signal.aborted) controller.abort()
     try {
-      const requestLength = Number(request.headers.get("content-length") ?? "0")
-      if (requestLength > input.maximumRequestBytes) throw requestTooLarge
-      const body = await readBounded(
-        request.body,
-        input.maximumRequestBytes,
-        controller.signal
+      if (request.headers.get("sec-fetch-site") === "cross-site")
+        return respond(403, "Cross-site telemetry forbidden")
+      const owner = await Promise.race([
+        input.resolveOwner(request, controller.signal),
+        new Promise<never>((_, reject) => {
+          if (controller.signal.aborted) reject(deadlineExceeded)
+          else
+            controller.signal.addEventListener(
+              "abort",
+              () => reject(deadlineExceeded),
+              { once: true }
+            )
+        }),
+      ])
+      if (owner === undefined) return respond(401, "Session required")
+      if (!admission.owner(owner))
+        return respond(429, "Telemetry rate limit exceeded")
+      if (
+        request.headers
+          .get("content-type")
+          ?.split(";", 1)[0]
+          ?.trim()
+          .toLowerCase() !== "application/json"
       )
-      const target = new URL(upstreamPath + source.search, input.upstream)
-      const response = await input.fetch(target, {
-        method: "POST",
-        headers: forwardRequestHeaders(request.headers),
-        body,
-        redirect: "manual",
-        signal: controller.signal,
-      } as RequestInit)
-      const stated = Number(response.headers.get("content-length") ?? "0")
-      if (stated > input.maximumResponseBytes) throw responseTooLarge
+        return respond(415, "OTLP JSON required")
+      const encoding = (request.headers.get("content-encoding") ?? "identity")
+        .trim()
+        .toLowerCase()
+      if (encoding !== "identity" && encoding !== "gzip")
+        return respond(415, "Unsupported telemetry encoding")
+      const wireLimit = Math.min(input.maximumRequestBytes, 262_144)
+      if (Number(request.headers.get("content-length") ?? "0") > wireLimit)
+        throw requestTooLarge
+      const wire = await readBounded(request.body, wireLimit, controller.signal)
+      let decoded = wire
+      if (encoding === "gzip") {
+        const stream = new ReadableStream<BufferSource>({
+          start(c) {
+            c.enqueue(new Uint8Array(wire))
+            c.close()
+          },
+        }).pipeThrough(new DecompressionStream("gzip"))
+        try {
+          decoded = await readBounded(
+            stream,
+            Math.min(input.maximumRequestBytes, 1_048_576, wire.length * 20),
+            controller.signal
+          )
+        } catch (error) {
+          if (error === requestTooLarge || controller.signal.aborted)
+            throw error
+          throw new InvalidBrowserTelemetry()
+        }
+      }
+      let payload: unknown
+      try {
+        payload = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(decoded)
+        )
+      } catch {
+        throw new InvalidBrowserTelemetry()
+      }
+      const body = JSON.stringify(sanitizeBrowserTelemetry(signal, payload))
+      const response = await input.fetch(
+        new URL(`/v1/${signal}`, input.upstream),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          redirect: "manual",
+          signal: controller.signal,
+        }
+      )
+      if (
+        Number(response.headers.get("content-length") ?? "0") >
+        input.maximumResponseBytes
+      ) {
+        void response.body?.cancel().catch(() => undefined)
+        throw responseTooLarge
+      }
       const responseBody = await readBounded(
         response.body,
         input.maximumResponseBytes,
@@ -131,26 +181,23 @@ export const makeGatewayTelemetryProxy =
         if (error === requestTooLarge) throw responseTooLarge
         throw error
       })
+      input.onOutcome?.(response.status)
       return new Response(responseBody.byteLength === 0 ? null : responseBody, {
         status: response.status,
-        headers: forwardResponseHeaders(response.headers),
+        headers: { "content-type": "application/json" },
       })
     } catch (error) {
-      if (error === requestTooLarge)
-        return Response.json(
-          { title: "Payload Too Large", status: 413 },
-          { status: 413 }
-        )
+      if (error instanceof InvalidBrowserTelemetry)
+        return respond(400, "Invalid browser telemetry")
+      if (error === requestTooLarge) return respond(413, "Payload Too Large")
       if (error === responseTooLarge)
-        return Response.json(
-          { title: "Collector response too large", status: 502 },
-          { status: 502 }
-        )
-      return Response.json(
-        { title: "Telemetry Collector unavailable", status: 503 },
-        { status: 503 }
-      )
+        return respond(502, "Collector response too large")
+      return respond(503, "Telemetry Collector unavailable")
     } finally {
       clearTimeout(deadline)
+      request.signal.removeEventListener("abort", abort)
+      if (!request.bodyUsed) void request.body?.cancel().catch(() => undefined)
+      admission.leave()
     }
   }
+}

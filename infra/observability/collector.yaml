@@ -12,7 +12,20 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
+  otlp/browser:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4319
+        max_request_body_size: 1048576
 connectors:
+  spanmetrics/browser:
+    namespace: traces.browser_spanmetrics
+    histogram:
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, 30s]
+    exemplars:
+      enabled: true
+    dimensions_cache_size: 1000
   spanmetrics:
     namespace: traces.spanmetrics
     histogram:
@@ -87,6 +100,37 @@ processors:
         statements:
           - set(resource.attributes["telemetry.backend"], "grafana-lgtm")
           - keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name", "telemetry.schema.version", "telemetry.backend"])
+  transform/browser_identity:
+    error_mode: propagate
+    trace_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["service.name"], "news-podcast-web")
+          - set(resource.attributes["telemetry.source"], "browser")
+          - set(resource.attributes["telemetry.trust"], "untrusted")
+          - set(resource.attributes["telemetry.backend"], "grafana-lgtm")
+          - keep_keys(resource.attributes, ["service.name", "telemetry.source", "telemetry.trust", "telemetry.backend"])
+    metric_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["service.name"], "news-podcast-web")
+          - set(resource.attributes["telemetry.source"], "browser")
+          - set(resource.attributes["telemetry.trust"], "untrusted")
+          - set(resource.attributes["telemetry.backend"], "grafana-lgtm")
+          - keep_keys(resource.attributes, ["service.name", "telemetry.source", "telemetry.trust", "telemetry.backend"])
+      - context: datapoint
+        statements:
+          - set(datapoint.attributes["service.name"], "news-podcast-web")
+          - set(datapoint.attributes["telemetry.source"], "browser")
+          - set(datapoint.attributes["telemetry.trust"], "untrusted")
+    log_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["service.name"], "news-podcast-web")
+          - set(resource.attributes["telemetry.source"], "browser")
+          - set(resource.attributes["telemetry.trust"], "untrusted")
+          - set(resource.attributes["telemetry.backend"], "grafana-lgtm")
+          - keep_keys(resource.attributes, ["service.name", "telemetry.source", "telemetry.trust", "telemetry.backend"])
   batch:
     send_batch_size: 512
     send_batch_max_size: 1024
@@ -152,4 +196,16 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, attributes/privacy, transform/resource_allowlist, batch]
+      exporters: [otlphttp/loki]
+    traces/browser:
+      receivers: [otlp/browser]
+      processors: [memory_limiter, attributes/privacy, transform/browser_identity, batch]
+      exporters: [otlp/tempo, spanmetrics/browser]
+    metrics/browser:
+      receivers: [otlp/browser, spanmetrics/browser]
+      processors: [memory_limiter, attributes/privacy, transform/browser_identity, batch]
+      exporters: [prometheusremotewrite]
+    logs/browser:
+      receivers: [otlp/browser]
+      processors: [memory_limiter, attributes/privacy, transform/browser_identity, batch]
       exporters: [otlphttp/loki]

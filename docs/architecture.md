@@ -463,6 +463,7 @@ Cloudflare/D1/R2/Queues runtimeは実装しない。再導入する場合は、�
 | API契約 | Effect HttpApi code-first OpenAPI、全operation利用条件、closed typed Problem union（公開detailなし）、Spectral 0件、生成型の差分検査 |
 | 可観測性 | OpenTelemetryでlogs/traces/metricsを統一し、CollectorからPrometheus/Loki/Tempoへ送りGrafanaで相関する。BrowserはGatewayの相対OTLP proxyを経由し、Collector originを公開しない。span metricsとservice graphを生成し、exemplar、trace ID、span IDでmetrics↔traces↔logsを往復できるようにする。自動計装（http/undici）に加えてNATS、outbox/inbox、DB、providerの意味的spanを作る。W3C trace headerの注入は管理先allowlistへ限定する |
 | 永続性 | 4 SQLiteをwrite barrierで同じlogical cutへ固定し、その内側のSeaweedFS inventoryとProduction/Library横断不変条件を暗号化manifestへ記録する。全成果物のimmutable Put後だけcommitし、24時間RPO、4時間RTO、30成功世代、週次full restore drillをADR-0075/0078で固定する |
+| Browser trust | Gateway session認証 + owner/IP/global quota + 圧縮前後の上限 + OTLP JSON allowlist。内部4319の専用pipeline、固定service/source/trust、browser専用span metricsでbackend alertと分離（[ADR-0096](adr/0096-isolate-authenticated-browser-telemetry.md)） |
 | Privacy | user ID、認証情報、RSS本文、台本、音声内容、完全URLをtelemetryへ送らない |
 | 障害分離 | telemetry障害でAPIや生成処理を停止しない。計装欠落は非本番で`assertActiveSpan`がfail-fastし、本番は`synthesized`カウンタとruleで監視する。processクラッシュは構造化log + `process.error` + flush後にexit(1)し、有界実行の回収（ADR-0016）へ委ねる。エラー詳細はredact済み`error.message`をlogs/spansへ記録し、metricsは低cardinality属性に限定する。外部provider障害はjob retryへ変換する |
 | テスト | Domain 100%、Application fake、Adapter契約、API/OpenAPI、Web unit/visual/E2Eをレイヤー別に実施 |

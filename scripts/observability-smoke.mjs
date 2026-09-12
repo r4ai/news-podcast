@@ -22,6 +22,7 @@ const expectedAlertRules = [
   "np-generation-queue-age",
   "np-script-quality-rejected",
   "np-service-errors",
+  "np-browser-errors",
   "np-service-latency",
   "np-api-5xx",
   "np-otel-export-failure",
@@ -54,6 +55,12 @@ export const request = async (
   } catch {
     return body
   }
+}
+
+export const validateProvisionedAlerts = (alertRules) => {
+  const registeredAlerts = new Set(alertRules.map((rule) => rule.uid))
+  for (const uid of expectedAlertRules)
+    assert(registeredAlerts.has(uid), `Alert rule is not provisioned: ${uid}`)
 }
 
 const grafanaRequest = (path, init = {}) =>
@@ -145,9 +152,7 @@ const main = async () => {
   }
 
   const alertRules = await grafanaRequest("/api/v1/provisioning/alert-rules")
-  const registeredAlerts = new Set(alertRules.map((rule) => rule.uid))
-  for (const uid of expectedAlertRules)
-    assert(registeredAlerts.has(uid), `Alert rule is not provisioned: ${uid}`)
+  validateProvisionedAlerts(alertRules)
   console.log(
     `alerts=${alertRules.length} expected=${expectedAlertRules.length}`
   )
@@ -172,12 +177,18 @@ const main = async () => {
     `service_graph_edges=${serviceGraphEdges.length} synthetic_trace_id=${syntheticTraceId}`
   )
 
-  await request(`${gateway}/v1/telemetry/traces`, {
+  const browserResponse = await fetch(`${gateway}/v1/telemetry/traces`, {
+    signal: AbortSignal.timeout(10_000),
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ resourceSpans: [] }),
   })
-  console.log("browser_otlp_proxy=200")
+  await browserResponse.body?.cancel()
+  assert(
+    browserResponse.status === 401,
+    "Unauthenticated browser OTLP must be rejected"
+  )
+  console.log("browser_otlp_unauthenticated=401")
 
   const dependencies = [
     ["nats", "http://127.0.0.1:8222/healthz?js-enabled-only=true"],

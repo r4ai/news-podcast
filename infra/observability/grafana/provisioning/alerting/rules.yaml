@@ -216,6 +216,40 @@ groups:
           description: Open Service Overview, then follow an exemplar or Tempo service graph to the failing dependency and correlated logs.
         labels: { severity: critical, team: platform }
 
+      - uid: np-browser-errors
+        title: Browser-reported error rate is above 5%
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum by (service_name) (rate(traces_browser_spanmetrics_calls_total{status_code="STATUS_CODE_ERROR"}[5m])) / clamp_min(sum by (service_name) (rate(traces_browser_spanmetrics_calls_total[5m])), 0.001)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0.05], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: 'Browser-supplied (untrusted) error rate is above 5%'
+          description: Open Web Experience. These signals are supplied by authenticated browsers and do not prove a backend service failure.
+        labels: { severity: warning, team: web, telemetry_trust: untrusted }
+
       - uid: np-service-latency
         title: Service p95 latency exceeds 2 seconds
         condition: C

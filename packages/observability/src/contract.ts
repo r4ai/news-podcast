@@ -107,6 +107,7 @@ export const telemetryEventNames = [
 export type TelemetryEventName = (typeof telemetryEventNames)[number]
 
 export const metricNames = [
+  "browser.telemetry.ingest",
   "episode.requested",
   "episode.started",
   "episode.succeeded",
@@ -168,6 +169,7 @@ export const metricNames = [
 export type MetricName = (typeof metricNames)[number]
 
 export const metricUnits: Readonly<Record<MetricName, string>> = {
+  "browser.telemetry.ingest": "{request}",
   "episode.requested": "{job}",
   "episode.started": "{job}",
   "episode.succeeded": "{job}",

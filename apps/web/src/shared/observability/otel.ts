@@ -65,7 +65,8 @@ export function start(preInit?: PreInitLogs): void {
     }),
     spanProcessors: [
       new BatchSpanProcessor(
-        new OTLPTraceExporter({ url: "/v1/telemetry/traces" })
+        new OTLPTraceExporter({ url: "/v1/telemetry/traces" }),
+        { maxExportBatchSize: 128 }
       ),
     ],
   })
@@ -85,6 +86,7 @@ export function start(preInit?: PreInitLogs): void {
     processors: [
       new BatchLogRecordProcessor({
         exporter: new OTLPLogExporter({ url: "/v1/telemetry/logs" }),
+        maxExportBatchSize: 128,
       }),
     ],
   })

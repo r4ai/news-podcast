@@ -36,6 +36,10 @@ const core = readGatewayConfig(process.env).pipe(
       listen: listenNodeHttpUnsafe,
       telemetry: effectTelemetry,
       onReady: markReady,
+      onTelemetryOutcome: (status) =>
+        observability.count("browser.telemetry.ingest", 1, {
+          "http.response.status_code": status,
+        }),
     })
   )
 )

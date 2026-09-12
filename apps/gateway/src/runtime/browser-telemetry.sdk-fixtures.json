@@ -1,0 +1,238 @@
+{
+  "traces": {
+    "resourceSpans": [
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": {
+                "stringValue": "news-podcast-web"
+              }
+            }
+          ],
+          "droppedAttributesCount": 0
+        },
+        "scopeSpans": [
+          {
+            "scope": {
+              "name": "news-podcast-web"
+            },
+            "spans": [
+              {
+                "traceId": "3bcc32ddd752c24d3ac31dac06c279d6",
+                "spanId": "9f2f6994ca5c2982",
+                "name": "GET",
+                "kind": 3,
+                "startTimeUnixNano": "1789208538390000000",
+                "endTimeUnixNano": "1789208538390187524",
+                "attributes": [
+                  {
+                    "key": "url.full",
+                    "value": {
+                      "stringValue": "http://example.test/private"
+                    }
+                  },
+                  {
+                    "key": "http.request.method",
+                    "value": {
+                      "stringValue": "GET"
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": {
+                "stringValue": "news-podcast-web"
+              }
+            }
+          ],
+          "droppedAttributesCount": 0
+        },
+        "scopeSpans": [
+          {
+            "scope": {
+              "name": "news-podcast-web"
+            },
+            "spans": [
+              {
+                "traceId": "2a0211d6f1dffe7f9f1bfa898d6297c7",
+                "spanId": "25506032e406478f",
+                "name": "episode.requested",
+                "kind": 1,
+                "startTimeUnixNano": "1789208538402000000",
+                "endTimeUnixNano": "1789208538402013363",
+                "attributes": [],
+                "droppedAttributesCount": 0,
+                "events": [],
+                "droppedEventsCount": 0,
+                "status": {
+                  "code": 0
+                },
+                "links": [],
+                "droppedLinksCount": 0,
+                "flags": 257
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logs": {
+    "resourceLogs": [
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": {
+                "stringValue": "news-podcast-web"
+              }
+            }
+          ],
+          "droppedAttributesCount": 0
+        },
+        "scopeLogs": [
+          {
+            "scope": {
+              "name": "news-podcast-web"
+            },
+            "logRecords": [
+              {
+                "timeUnixNano": "1789208538403000000",
+                "observedTimeUnixNano": "1789208538403000000",
+                "severityNumber": 9,
+                "body": {
+                  "stringValue": "episode.requested"
+                },
+                "attributes": [
+                  {
+                    "key": "result",
+                    "value": {
+                      "stringValue": "succeeded"
+                    }
+                  }
+                ],
+                "droppedAttributesCount": 0
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "metrics": {
+    "resourceMetrics": [
+      {
+        "resource": {
+          "attributes": [
+            {
+              "key": "service.name",
+              "value": {
+                "stringValue": "news-podcast-web"
+              }
+            }
+          ],
+          "droppedAttributesCount": 0
+        },
+        "scopeMetrics": [
+          {
+            "scope": {
+              "name": "news-podcast-web",
+              "version": ""
+            },
+            "metrics": [
+              {
+                "name": "browser.event",
+                "description": "",
+                "unit": "",
+                "sum": {
+                  "aggregationTemporality": 2,
+                  "isMonotonic": true,
+                  "dataPoints": [
+                    {
+                      "attributes": [
+                        {
+                          "key": "event.name",
+                          "value": {
+                            "stringValue": "episode.requested"
+                          }
+                        },
+                        {
+                          "key": "result",
+                          "value": {
+                            "stringValue": "succeeded"
+                          }
+                        }
+                      ],
+                      "startTimeUnixNano": "1789208538404000000",
+                      "timeUnixNano": "1789208538405000000",
+                      "asDouble": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "browser.web_vital",
+                "description": "",
+                "unit": "",
+                "histogram": {
+                  "aggregationTemporality": 2,
+                  "dataPoints": [
+                    {
+                      "attributes": [
+                        {
+                          "key": "web_vital.name",
+                          "value": {
+                            "stringValue": "LCP"
+                          }
+                        },
+                        {
+                          "key": "web_vital.rating",
+                          "value": {
+                            "stringValue": "good"
+                          }
+                        }
+                      ],
+                      "bucketCounts": [
+                        0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0
+                      ],
+                      "explicitBounds": [
+                        0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500,
+                        5000, 7500, 10000
+                      ],
+                      "count": 1,
+                      "sum": 200,
+                      "min": 200,
+                      "max": 200,
+                      "startTimeUnixNano": "1789208538404000000",
+                      "timeUnixNano": "1789208538405000000"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

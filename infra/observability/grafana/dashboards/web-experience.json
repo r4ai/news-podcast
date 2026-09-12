@@ -1,6 +1,6 @@
 {
   "annotations": { "list": [] },
-  "description": "Browser traces, errors, and Web Vital OTLP metrics. Browser errors and events are linked to their trace_id logs.",
+  "description": "Authenticated browser-supplied telemetry (untrusted). Separate span metrics do not feed backend service alerts. Browser errors and events are linked to their trace_id logs.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -16,7 +16,7 @@
       "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
       "id": 1,
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "auto" },
-      "targets": [{ "editorMode": "code", "expr": "sum(rate(traces_spanmetrics_calls_total{service_name=\"news-podcast-web\"}[5m]))", "legendFormat": "browser spans", "range": true, "refId": "A" }],
+      "targets": [{ "editorMode": "code", "expr": "sum(rate(traces_browser_spanmetrics_calls_total{service_name=\"news-podcast-web\"}[5m]))", "legendFormat": "browser spans", "range": true, "refId": "A" }],
       "title": "Browser span rate",
       "type": "stat"
     },
@@ -36,7 +36,7 @@
       "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
       "id": 3,
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "textMode": "auto" },
-      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "p95", "range": true, "refId": "A", "exemplars": true }],
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_browser_spanmetrics_duration_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "p95", "range": true, "refId": "A", "exemplars": true }],
       "title": "Browser interaction/request p95",
       "type": "stat"
     },
@@ -46,7 +46,7 @@
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
       "id": 4,
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
-      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.75, sum by (le, span_name) (rate(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "{{span_name}} p75", "range": true, "refId": "A" }],
+      "targets": [{ "editorMode": "code", "expr": "histogram_quantile(0.75, sum by (le, span_name) (rate(traces_browser_spanmetrics_duration_milliseconds_bucket{service_name=\"news-podcast-web\"}[5m])))", "legendFormat": "{{span_name}} p75", "range": true, "refId": "A" }],
       "title": "Browser operation latency",
       "type": "timeseries"
     },
@@ -77,6 +77,43 @@
       "targets": [{ "editorMode": "code", "expr": "{service_name=\"news-podcast-web\"} |~ `browser.error|route.error|panel.error`", "queryType": "range", "refId": "A" }],
       "title": "Browser error logs — TraceID opens Tempo",
       "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (http_response_status_code) (rate(browser_telemetry_ingest_total{service_name=\"gateway\",http_response_status_code=~\"400|403|413|415|429|502|503\"}[5m]))",
+          "legendFormat": "HTTP {{http_response_status_code}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Gateway browser ingestion rejection rate (server measured)",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -85,7 +122,7 @@
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timezone": "browser",
-  "title": "News Podcast / Web Experience",
+  "title": "News Podcast / Web Experience (browser supplied)",
   "uid": "news-podcast-web",
   "version": 1
 }
