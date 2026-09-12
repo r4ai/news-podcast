@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 
+import { createFakeApi } from "../../scripts/fake-api"
+
 const candidates = Array.from({ length: 40 }, (_, index) => ({
   id: `00000000-0000-4000-8000-${String(index + 500).padStart(12, "0")}`,
   feedId: "00000000-0000-4000-8000-000000000001",
@@ -20,6 +22,27 @@ for (const width of [1440, 390]) {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 })
+    // Every viewport owns its API state, including the submitted generation job.
+    const api = createFakeApi()
+    await page.route(
+      (url) =>
+        url.pathname.startsWith("/api/") || url.pathname.startsWith("/v1/"),
+      async (route) => {
+        const request = route.request()
+        const response = await api.fetch(
+          new Request(request.url(), {
+            method: request.method(),
+            headers: await request.allHeaders(),
+            body: request.postDataBuffer(),
+          })
+        )
+        await route.fulfill({
+          status: response.status,
+          headers: Object.fromEntries(response.headers),
+          body: Buffer.from(await response.arrayBuffer()),
+        })
+      }
+    )
     // The fake stack has no Collector; keep browser diagnostics local to this flow.
     await page.route("**/v1/telemetry/*", (route) =>
       route.fulfill({ json: {} })

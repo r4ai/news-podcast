@@ -4,10 +4,8 @@
 - Date: 2026-08-11
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: 一部（「プロフィール変更時の再計算方針」）はADR-0024、一部（`temperature: 0`）はADR-0026、一部（要約形式とMermaid検証）はADR-0027
+- Superseded by: 一部（「プロフィール変更時の再計算方針」）はADR-0024、一部（`temperature: 0`）はADR-0026、一部（要約形式とMermaid検証）はADR-0027、一部（推薦順・スコアなし末尾）は[ADR-0098](0098-align-manual-picker-with-supported-order.md)
 - Related: `docs/design.md`§7（LLM呼び出しはfake providerで契約テスト）、ADR-0016（`job_outbox`/リース機構と同様の「ワーカーがtickで進める」設計）、ADR-0019（keysetページネーション）、ADR-0020（FTS5全文検索・述語ビルダー方式）、ADR-0031（LLM応答の完全性・retry分類）
-
-> 現行実装との差分（2026-09-12）: 本文の`sort=relevance`・スコアなし末尾は旧構成の履歴であり、現行APIは新着順/古い順のみ対応する。手動生成の表示との整合は[ADR-0022の実装状況](0022-tag-vocabulary-and-ai-tagging.md#現行実装との差分2026-09-12issue-116)を参照。
 
 ## コンテキストと変更契機
 

@@ -4,22 +4,10 @@
 - Date: 2026-08-11
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0098](0098-align-manual-picker-with-supported-order.md)（記事一覧の推薦順・スコア表示と手動生成候補の順序に限る）
 - Related: ADR-0021（AI補助の日次バッチ・プロンプト版管理・profile_hash設計を継承）、ADR-0019（keysetページネーション）、ADR-0020（FTS5・述語ビルダー方式）、ADR-0018（hookが状態・viewはprops）
 
 ## コンテキストと変更契機
-
-### 現行実装との差分（2026-09-12、Issue #116）
-
-以下の決定と検証証拠は旧構成での履歴である。現行マイクロサービスの
-`ArticleListQuery`とOpenAPIは`newest` / `oldest`のみを受理し、`relevance`は未対応。
-手動生成の候補は`sort=newest`で取得するため、表示を「新着順」、操作を
-「上から一括選択」に一致させる。検索・ページ追加後もAPIの順序を保ち、
-表示済みの先頭から最大20件を選ぶ。現行契約は[設計書 §5](../design.md#5-rest契約方針)を参照。
-
-この修正は推薦順の復旧を含まない。旧ADRのスコア順・スコアなし末尾という
-規則を現行UIが提供しているとは扱わず、復旧時にはスコア生成・保存・
-owner境界・keysetページングを含む後続ADRと実装で改めて検証する。
 
 タグはこのタスク（`docs`のタスク一覧「タグとAI結果の一覧統合」）で新規追加する最後の主要機能であり、ADR-0021で明示的にスコープ外とされていた「タグ自動付与」を実装する。確定済み仕様（ユーザーと合意済み、変更しない）:
 
