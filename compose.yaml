@@ -347,6 +347,7 @@ services:
       BACKUP_ARCHIVE_ACCESS_KEY_ID: ${BACKUP_ARCHIVE_ACCESS_KEY_ID:-}
       BACKUP_ARCHIVE_SECRET_ACCESS_KEY: ${BACKUP_ARCHIVE_SECRET_ACCESS_KEY:-}
       BACKUP_ARCHIVE_FORCE_PATH_STYLE: ${BACKUP_ARCHIVE_FORCE_PATH_STYLE:-false}
+      BACKUP_TARGET_ATTESTATION_FILE: /run/secrets/backup-target-attestation
       BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup-encryption-key
       BACKUP_STATE_PATH: /var/lib/news-podcast-backup/state.json
       BACKUP_STAGING_ROOT: /var/lib/news-podcast-backup/staging
@@ -370,13 +371,14 @@ services:
       - backup-data:/var/lib/news-podcast-backup
     secrets:
       - backup-encryption-key
+      - backup-target-attestation
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:4198/health/live').then(r=>{if(!r.ok)process.exit(1)})",
+          "fetch('http://127.0.0.1:4198/health/ready').then(r=>{if(!r.ok)process.exit(1)})",
         ]
       interval: 30s
       timeout: 3s
@@ -396,3 +398,6 @@ volumes:
 secrets:
   backup-encryption-key:
     file: ${BACKUP_ENCRYPTION_KEY_FILE_HOST:-./.secrets/backup-encryption-key}
+
+  backup-target-attestation:
+    file: ${BACKUP_TARGET_ATTESTATION_FILE_HOST:-./.secrets/backup-target-attestation.json}

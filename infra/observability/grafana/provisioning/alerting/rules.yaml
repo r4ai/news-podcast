@@ -142,6 +142,41 @@ groups:
           description: Inspect the reason label and state-backup log. Do not restore or manually commit a rejected generation; verify writer contention, Production/Library completion convergence, and object inventory stability.
         labels: { severity: critical, team: platform }
 
+
+      - uid: np-backup-target-approval
+        title: Backup target approval needs renewal
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              editorMode: code
+              expr: '(news_podcast_backup_target_attestation_expires_timestamp_seconds - time() < bool 604800) + (news_podcast_backup_target_ready == bool 0)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Independently review backup account, failure domain and permissions before approval expires
+          description: Target independence is operator-attested, not inferred from DNS. Renew the bound evidence within seven days; expired approval blocks new backups while archive-only drills remain available.
+        labels: { severity: warning, team: platform }
+
   - orgId: 1
     name: service-reliability
     folder: News Podcast
