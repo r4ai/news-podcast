@@ -172,12 +172,18 @@ const main = async () => {
     `service_graph_edges=${serviceGraphEdges.length} synthetic_trace_id=${syntheticTraceId}`
   )
 
-  await request(`${gateway}/v1/telemetry/traces`, {
+  const browserResponse = await fetch(`${gateway}/v1/telemetry/traces`, {
+    signal: AbortSignal.timeout(10_000),
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ resourceSpans: [] }),
   })
-  console.log("browser_otlp_proxy=200")
+  await browserResponse.body?.cancel()
+  assert(
+    browserResponse.status === 401,
+    "Unauthenticated browser OTLP must be rejected"
+  )
+  console.log("browser_otlp_unauthenticated=401")
 
   const dependencies = [
     ["nats", "http://127.0.0.1:8222/healthz?js-enabled-only=true"],

@@ -51,7 +51,7 @@ export const readGatewayConfig = (
         env.AUTH_PROXY_MAX_RESPONSE_BYTES ?? "1048576"
       ),
       telemetryHttpOrigin:
-        env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || "http://otel-collector:4318",
+        env.BROWSER_OTLP_HTTP_ORIGIN?.trim() || "http://otel-collector:4319",
       telemetryProxyTimeoutMillis: Number(
         env.TELEMETRY_PROXY_TIMEOUT_MS ?? "5000"
       ),

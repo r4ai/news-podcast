@@ -1,9 +1,11 @@
 services:
   gateway:
-    environment: &context-otel
-      OTEL_ENABLED: "true"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_TRACE_SAMPLE_RATE: "1"
+    environment:
+      BROWSER_OTLP_HTTP_ORIGIN: http://otel-collector:4319
+      <<: &context-otel
+        OTEL_ENABLED: "true"
+        OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+        OTEL_TRACE_SAMPLE_RATE: "1"
     networks: [default, observability]
 
   identity-access:

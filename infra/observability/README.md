@@ -7,7 +7,10 @@ flowchart LR
   Entry["HTTP / NATS / Scheduler"] --> App["API / Context Services"]
   App -->|"OTLP metrics + logs + traces"| Collector["OTel Collector"]
   Browser["Browser :4173"] -->|"/v1/telemetry/*"| Gateway["Gateway :4001"]
-  Gateway -->|"/v1/{traces,logs,metrics}"| Collector
+  Gateway -->|"session + bounded JSON"| BrowserCollector["Collector browser :4319"]
+  BrowserCollector --> Prometheus
+  BrowserCollector --> Loki
+  BrowserCollector --> Tempo
   Collector --> Prometheus["Prometheus · 180d"]
   Collector --> Loki["Loki · 30d"]
   Collector --> Tempo["Tempo · 15d"]
@@ -136,6 +139,24 @@ flowchart LR
 
 watchdogは通常Composeでも常駐する。Gateway、4 Context service、Web、NATS JetStream、SeaweedFS、VOICEVOXを監視し、observed構成ではGrafanaとCollectorも加える。SMTP一式が完全ならメール、未設定なら構造化stderrを正本とし、部分設定は起動エラーにする。`/health/live`と`/metrics`は対象別up、連続失敗、最終成功時刻を公開し、Prometheusは対象停止とwatchdog自体の消失をAlerting扱いにする。ホスト全停止とネットワーク全断を検知するには別ホストの外形監視を追加する。
 
+## Browser OTLPの認証・分離
+
+`/v1/telemetry/{traces,logs,metrics}` はPOST + 既存sessionが必須。未認証は401、制限超過は429/413、不正payloadは400、非JSON/未対応圧縮は415、依存先障害は503。ログイン前・logout後のbatchは失われる。ブラウザーSDKのsame-origin cookieで認証し、共有tokenをクライアントへ埋め込まない。
+
+| 境界 | 上限・契約 |
+| --- | --- |
+| 圧縮・body | JSON、identity/gzipのみ。wire 256KiB、decoded 1MiB、gzip展開比20倍以下。既存MAX_REQUEST_BYTESでさらに縮小可 |
+| work | Gateway process全体8並行、5秒deadline。固定60秒windowでowner 30、socket peer IP 120、global 300 request。拒否/無効payloadも課金 |
+| limiter | 最大1000 key、期限前のevictionなし。IP/ownerはメモリ内のみでtelemetryへ出さない |
+| data | 最大128 record/datapoint、8 resource、16 scope/resource、64 attribute/record。event/body/span名は列挙値、metricはbrowser.event / browser.web_vitalのみ。histogram境界もSDK既定値に固定 |
+| trust | GatewayとCollectorでservice.name=news-podcast-web、telemetry.source=browser、telemetry.trust=untrustedに固定。resource/scope、span event/link、exemplar、未知属性・自由文は転送しない |
+
+`BROWSER_OTLP_HTTP_ORIGIN=http://otel-collector:4319` は内部専用。hostへ4319を公開しない。Nodeの `OTEL_EXPORTER_OTLP_ENDPOINT` は従来の4318。`TELEMETRY_PROXY_TOKEN` は下記のservice用HTTPS ingressだけのsecretであり、browser認証には使わない。
+
+IPは実socket peerを使い、X-Forwarded-Forを信用しない。reverse proxy配下ではproxyのIPを共有するため、120 request/分の共有枠になる。複数Gateway replicaへ増やす場合は共有limiterを先に導入する。現Composeは1processである。
+
+`Web Experience (browser supplied)` と `np-browser-errors` は未信頼のbrowser報告を表示する。backendは `traces_spanmetrics_*`、browserは `traces_browser_spanmetrics_*` を使い、browserからservice graphを作らない。Gatewayの `browser.telemetry.ingest` がHTTP status別の拒否を計数する。401はログイン前の正常動作として拒否パネルから除外する。詳細は[ADR-0096](../../docs/adr/0096-isolate-authenticated-browser-telemetry.md)。
+
 ## 本番OTLP ingress
 
 443以外を外部公開せず、GrafanaはVPNまたはSSH tunnelから利用する。証明書を`/etc/letsencrypt/live/$OTLP_DOMAIN`へ配置してから、base構成へgateway overrideを重ねる。
@@ -159,4 +180,4 @@ docker compose \
 4. CollectorまたはGrafanaを停止し、watchdogの障害通知と復旧通知を確認する。
 5. metrics 180日、logs 30日、traces 15日のretentionとvolume backup/restoreを定期的に確認する。
 
-設定の構文検証は各公式imageで行う。`pnpm observability:smoke`は毎回synthetic client/server traceを送信し、Dashboard UID、datasource health、Collector accepted/refused/export、service graph、Browser OTLP proxy、NATS/VOICEVOX/SeaweedFS endpointを自己完結して確認する。`OBSERVABILITY_TRACE_ID`を指定するとTempo trace、Loki同一trace_id、Prometheus span metric、同じtrace_idのexemplarも検証する。rollbackは直前commitの設定へ戻してComposeを再適用する。volumeは`docker compose down`では削除されない。
+設定の構文検証は各公式imageで行う。`pnpm observability:smoke`は毎回synthetic client/server traceを送信し、Dashboard UID、datasource health、Collector accepted/refused/export、service graph、Browser OTLP未認証401、NATS/VOICEVOX/SeaweedFS endpointを自己完結して確認する。`OBSERVABILITY_TRACE_ID`を指定するとTempo trace、Loki同一trace_id、Prometheus span metric、同じtrace_idのexemplarも検証する。rollbackは直前commitの設定へ戻してComposeを再適用する。volumeは`docker compose down`では削除されない。
