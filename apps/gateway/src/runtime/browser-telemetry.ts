@@ -90,6 +90,8 @@ const attributeValue = (
   switch (key) {
     case "event.name":
       return enumValue(text, browserEvents)
+    case "action":
+      return enumValue(text, new Set(["add"]))
     case "result":
       return enumValue(text, new Set(["succeeded", "failed"]))
     case "web_vital.name":
@@ -169,7 +171,12 @@ const span = (value: unknown) => {
     BigInt(endTimeUnixNano) - BigInt(startTimeUnixNano) > 300_000_000_000n
   )
     invalid()
-  const code = integer(object(item.status ?? {}).code ?? 0, 2)
+  const reportedCode = integer(object(item.status ?? {}).code ?? 0, 2)
+  const code = new Set(["browser.error", "route.error", "panel.error"]).has(
+    name!
+  )
+    ? 2
+    : reportedCode
   return {
     name,
     ...correlation(item),
@@ -211,7 +218,7 @@ const metric = (value: unknown, consume: () => void) => {
       attributes: attributes(point.attributes, true).filter(({ key }) =>
         (histogram
           ? ["web_vital.name", "web_vital.rating"]
-          : ["event.name", "result", "failure.code"]
+          : ["event.name", "action", "result", "failure.code"]
         ).includes(key)
       ),
     }

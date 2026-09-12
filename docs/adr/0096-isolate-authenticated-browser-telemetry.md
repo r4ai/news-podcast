@@ -24,9 +24,9 @@ flowchart LR
 
 Gatewayで既存sessionからownerを解決する。IPはNode socket peerのみを用いる。global/IP admissionをsession RPCより前、owner admissionをbody処理より前に行う。60秒windowでglobal 300、IP 120、owner 30 request、8並行、最大1000 keyを保持し、active keyを追い出さない。deadlineは認証から応答まで5秒。
 
-現在のSDKが使う[OTLP JSON](https://opentelemetry.io/docs/specs/otlp/)だけを受け付ける。wire 256KiB、decoded 1MiB、gzip ratio 20倍、record/datapoint合計128、resource 8、scope/resource 16、属性64/recordを上限とする。未知・入れ子データを転送せず、許可済みevent、HTTP method、例外の分類、Web Vitalsから出力を再構築する。ログ本文・span名・metric名・histogram境界は列挙値とする。job IDはUUID形式でlog/spanだけ許可し、metric属性はevent/result/failure.codeまたはvital name/ratingだけとする。
+現在のSDKが使う[OTLP JSON](https://opentelemetry.io/docs/specs/otlp/)だけを受け付ける。wire 256KiB、decoded 1MiB、gzip ratio 20倍、record/datapoint合計128、resource 8、scope/resource 16、属性64/recordを上限とする。未知・入れ子データを転送せず、許可済みevent、HTTP method、例外の分類、Web Vitalsから出力を再構築する。ログ本文・span名・metric名・histogram境界は列挙値とする。job IDはUUID形式でlog/spanだけ許可し、metric属性はevent/action(add)/result/failure.codeまたはvital name/ratingだけとする。
 
-GatewayとCollector専用processorでservice.name、source、trustを固定する。browser traceのIDは相関用に保持し、未信頼であることをresourceに表示する。browserのspanmetrics namespaceを分離し、servicegraphへ投入しない。backend alertとbrowser alertを分け、拒否はGateway counterで観測する。
+GatewayとCollector専用processorでservice.name、source、trustを固定する。browser traceのIDは相関用に保持し、未信頼であることをresourceに表示する。browserのspanmetrics namespaceを分離し、servicegraphへ投入しない。backend alertとbrowser alertを分け、拒否はGateway counterで観測する。route.error/panel.errorはstatus未設定でもerrorに分類する。Browser alertのUIDもsmokeで必須検証する。
 
 ## Decision drivers
 

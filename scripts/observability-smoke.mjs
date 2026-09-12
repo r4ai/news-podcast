@@ -22,6 +22,7 @@ const expectedAlertRules = [
   "np-generation-queue-age",
   "np-script-quality-rejected",
   "np-service-errors",
+  "np-browser-errors",
   "np-service-latency",
   "np-api-5xx",
   "np-otel-export-failure",
@@ -54,6 +55,12 @@ export const request = async (
   } catch {
     return body
   }
+}
+
+export const validateProvisionedAlerts = (alertRules) => {
+  const registeredAlerts = new Set(alertRules.map((rule) => rule.uid))
+  for (const uid of expectedAlertRules)
+    assert(registeredAlerts.has(uid), `Alert rule is not provisioned: ${uid}`)
 }
 
 const grafanaRequest = (path, init = {}) =>
@@ -145,9 +152,7 @@ const main = async () => {
   }
 
   const alertRules = await grafanaRequest("/api/v1/provisioning/alert-rules")
-  const registeredAlerts = new Set(alertRules.map((rule) => rule.uid))
-  for (const uid of expectedAlertRules)
-    assert(registeredAlerts.has(uid), `Alert rule is not provisioned: ${uid}`)
+  validateProvisionedAlerts(alertRules)
   console.log(
     `alerts=${alertRules.length} expected=${expectedAlertRules.length}`
   )

@@ -8,6 +8,40 @@ import {
 // Captured from the installed OTLP HTTP exporters 0.221.0 and SDK 2.10.0.
 // Node and browser exports use the same Json*Serializer.
 describe("browser OTLP allowlist", () => {
+  it.each(["route.error", "panel.error"])(
+    "classifies caught %s spans as browser errors",
+    (name) => {
+      const input = structuredClone(fixtures.traces)
+      const span = input.resourceSpans[0]!.scopeSpans[0]!.spans[0]!
+      span.name = name
+      span.status.code = 0
+      expect(
+        JSON.stringify(sanitizeBrowserTelemetry("traces", input))
+      ).toContain('"status":{"code":2}')
+    }
+  )
+
+  it("preserves the finite subscription action in every signal", () => {
+    const input = structuredClone(fixtures)
+    const attributes = [
+      { key: "action", value: { stringValue: "add" } },
+      { key: "action", value: { stringValue: "private-value" } },
+    ]
+    input.traces.resourceSpans[0]!.scopeSpans[0]!.spans[0]!.attributes =
+      attributes
+    input.logs.resourceLogs[0]!.scopeLogs[0]!.logRecords[0]!.attributes =
+      attributes
+    input.metrics.resourceMetrics[0]!.scopeMetrics[0]!.metrics[0]!.sum!.dataPoints[0]!.attributes =
+      attributes
+    for (const signal of ["traces", "logs", "metrics"] as const) {
+      const output = JSON.stringify(
+        sanitizeBrowserTelemetry(signal, input[signal])
+      )
+      expect(output).toContain('"key":"action","value":{"stringValue":"add"}')
+      expect(output).not.toContain("private-value")
+    }
+  })
+
   it.each(["logs", "traces", "metrics"] as const)(
     "preserves actual SDK %s payloads",
     (signal) => {

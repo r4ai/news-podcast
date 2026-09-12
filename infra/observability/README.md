@@ -155,6 +155,8 @@ watchdogは通常Composeでも常駐する。Gateway、4 Context service、Web�
 
 IPは実socket peerを使い、X-Forwarded-Forを信用しない。reverse proxy配下ではproxyのIPを共有するため、120 request/分の共有枠になる。複数Gateway replicaへ増やす場合は共有limiterを先に導入する。現Composeは1processである。
 
+`route.error` / `panel.error` はSDKの未設定statusにかかわらずBrowserエラーspanとして分類する。購読操作の `action=add` は有限属性として維持する。
+
 `Web Experience (browser supplied)` と `np-browser-errors` は未信頼のbrowser報告を表示する。backendは `traces_spanmetrics_*`、browserは `traces_browser_spanmetrics_*` を使い、browserからservice graphを作らない。Gatewayの `browser.telemetry.ingest` がHTTP status別の拒否を計数する。401はログイン前の正常動作として拒否パネルから除外する。詳細は[ADR-0096](../../docs/adr/0096-isolate-authenticated-browser-telemetry.md)。
 
 ## 本番OTLP ingress
@@ -174,7 +176,7 @@ docker compose \
 
 ## 合格基準
 
-1. 8ダッシュボード、10アラート、3データソースが起動時に自動生成される。
+1. 8ダッシュボード、11個の必須core alert（Browserを含む）と5個のbackup alert、3データソースが起動時に自動生成される。
 2. Prometheus、Loki、Tempoのhealth checkとCollectorの全exporterが成功する。
 3. synthetic requestをサービス間で流し、service graph、trace、同一`trace_id`のログ、metric exemplarを辿れる。
 4. CollectorまたはGrafanaを停止し、watchdogの障害通知と復旧通知を確認する。

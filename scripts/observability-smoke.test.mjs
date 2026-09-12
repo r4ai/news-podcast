@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   request,
+  validateProvisionedAlerts,
   waitForPrometheusResult,
   waitForSyntheticServiceGraph,
 } from "./observability-smoke.mjs"
@@ -70,4 +71,23 @@ test("exports a synthetic trace before waiting for its service graph edge", asyn
   assert.deepEqual(calls, ["send", "query"])
   assert.equal(result.traceId, "0123456789abcdef0123456789abcdef")
   assert.deepEqual(result.edges, [{ value: ["0", "1"] }])
+})
+
+test("requires browser alert provisioning in addition to backend alerts", () => {
+  const backend = [
+    "np-generation-failure",
+    "np-generation-queue-age",
+    "np-script-quality-rejected",
+    "np-service-errors",
+    "np-service-latency",
+    "np-api-5xx",
+    "np-otel-export-failure",
+    "np-uninstrumented-entry",
+    "np-watchdog-target-down",
+    "np-watchdog-missing",
+  ].map((uid) => ({ uid }))
+  assert.throws(() => validateProvisionedAlerts(backend), /np-browser-errors/)
+  assert.doesNotThrow(() =>
+    validateProvisionedAlerts([...backend, { uid: "np-browser-errors" }])
+  )
 })
