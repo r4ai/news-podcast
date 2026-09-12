@@ -7,6 +7,8 @@
 - Superseded by: 一部（「プロフィール変更時の再計算方針」）はADR-0024、一部（`temperature: 0`）はADR-0026、一部（要約形式とMermaid検証）はADR-0027
 - Related: `docs/design.md`§7（LLM呼び出しはfake providerで契約テスト）、ADR-0016（`job_outbox`/リース機構と同様の「ワーカーがtickで進める」設計）、ADR-0019（keysetページネーション）、ADR-0020（FTS5全文検索・述語ビルダー方式）、ADR-0031（LLM応答の完全性・retry分類）
 
+> 現行実装との差分（2026-09-12）: 本文の`sort=relevance`・スコアなし末尾は旧構成の履歴であり、現行APIは新着順/古い順のみ対応する。手動生成の表示との整合は[ADR-0022の実装状況](0022-tag-vocabulary-and-ai-tagging.md#現行実装との差分2026-09-12issue-116)を参照。
+
 ## コンテキストと変更契機
 
 製品方針は「AIで情報を見やすくする」であり、単なるRSSリーダーに留まらない。確定済み仕様は以下の通り（ユーザーと合意済み、変更しない）:

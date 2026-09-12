@@ -49,6 +49,14 @@ function SearchHarness() {
 }
 
 describe("ArticlePickerDialog", () => {
+  it("describes the chronological list and its bulk selection honestly", () => {
+    render(<SearchHarness />)
+
+    expect(screen.getByText(/新着順に並んでいます/)).toBeTruthy()
+    expect(screen.getByRole("button", { name: "上から一括選択" })).toBeTruthy()
+    expect(screen.queryByText(/おすすめ/)).toBeNull()
+  })
+
   it("keeps search input urgent while server results stay visible", async () => {
     const user = userEvent.setup()
     render(<SearchHarness />)
