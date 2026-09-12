@@ -1,6 +1,12 @@
 import { deepFreeze, type DeepReadonly } from "@news-podcast/kernel"
 import { Effect, Option } from "effect"
 
+import {
+  localDateOrdinal,
+  type ScheduleCompletion,
+  type ScheduleSuppression,
+} from "../domain/schedule-completion.js"
+
 import type { UserId } from "../domain/actor.js"
 import {
   defaultGenerationSchedule,
@@ -16,7 +22,7 @@ export type GenerationSettingsStoreError = DeepReadonly<{
 export type ScheduledOwner = DeepReadonly<{
   readonly ownerId: UserId
   readonly schedule: GenerationSchedule
-  readonly lastScheduledLocalDate?: string
+  readonly lastCompletion?: ScheduleCompletion
 }>
 
 export type DueGenerationSchedule = DeepReadonly<{
@@ -93,9 +99,12 @@ const localClock = (instant: string, schedule: GenerationSchedule) => {
   })
 }
 
-/** Read-only due discovery. Production creates an idempotent job before completion is recorded. */
+/** Read-only due discovery. Production reconciles the idempotent job to a terminal outcome before closing the day. */
 export const findDueGenerationSchedules =
-  (repository: GenerationSettingsRepository) =>
+  (
+    repository: GenerationSettingsRepository,
+    observeSuppression: (reason: ScheduleSuppression) => void = () => undefined
+  ) =>
   (
     instant: string
   ): Effect.Effect<
@@ -106,8 +115,17 @@ export const findDueGenerationSchedules =
       Effect.map((owners) =>
         owners.flatMap((owner) => {
           const local = localClock(instant, owner.schedule)
+          const completedDay =
+            owner.lastCompletion === undefined
+              ? undefined
+              : localDateOrdinal(owner.lastCompletion.localDate)
+          const candidateDay = localDateOrdinal(local.date)
+          if (completedDay !== undefined && candidateDay < completedDay) {
+            observeSuppression("past_local_day")
+            return []
+          }
           return local.time < owner.schedule.localTime ||
-            local.date === owner.lastScheduledLocalDate
+            candidateDay === completedDay
             ? []
             : [deepFreeze({ ownerId: owner.ownerId, localDate: local.date })]
         })

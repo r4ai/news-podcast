@@ -241,6 +241,8 @@ sequenceDiagram
 
 定期生成も同じ `CreateEpisodeJob` を `trigger=scheduled` で呼ぶ。Episode ProductionのschedulerはIANA time zoneでdue設定を問い合わせ、`scheduled:{ownerId}:{localDate}`の冪等keyで同じローカル日付の二重生成を防ぐ。Identityの完了日はEpisodeが`Succeeded`、またはcancel・回復対象外の終端失敗を`missed`と判定した後だけ進める。`Queued / Running / Retrying`はdueを維持し、`no_generation_candidates`は同じjobを再queueして候補到着後に回復する（[ADR-0074](adr/0074-complete-daily-schedule-on-terminal-outcome.md)）。
 
+日次生成の完了は、有効なGregorian暦日番号と記録時のinstant/time zoneを持つ。due発見とSQLiteの条件付き更新の両方で暦日の後退を防ぎ、設定変更や古い完了通知で日付を再開しない（[ADR-0097](adr/0097-monotonic-daily-schedule-completion.md)）。
+
 completion consumerはLibrary保存transactionが成功してからACKする。DB保存失敗は上限付き指数backoffでNACKし、JetStream側では再配送を打ち切らない。設定済み回数は停止上限ではなくerror通知の開始閾値である。JSON・protocol・domain契約違反はACKして破棄し、failure tagと検証済み識別子をerror eventへ残してpoison payloadの無限再配送を防ぐ。詳細は[ADR-0070](adr/0070-recover-episode-completion-after-redelivery-threshold.md)を正本とする。
 
 ### 4.2 生成パイプライン
@@ -385,7 +387,7 @@ RSS同期の実行量は[ADR-0094](adr/0094-bound-and-yield-feed-sync-work.md)�
 | `episode_jobs` / `episode_generation_plans` / `episode_job_articles` | 状態、lease、retry、冪等性、初回実行時に固定した嗜好・記事集合 |
 | `episodes` / `episode_sources` | 台本・音声keyと、`articleId`・snapshot・入力RSSへ遡れるprovenance。legacy sourceだけ`articleId`がnullable |
 | `episode_job_agui_events` | 公式AG-UI event envelopeを保存する再開可能な進捗ログ |
-| `user_settings` | 日次生成の有効化、local time、IANA time zone、最終実行日 |
+| `user_settings` | 日次生成設定、完了local date・暦日番号・記録instant/time zone（legacy履歴は不明を保持） |
 | `content_enrichment_daily_progress` | ownerとUTC日付ごとの有料AI試行数。provider送信直前に原子的に予約し、成功・失敗を問わずhard limitを守る |
 | `job_outbox` | Productionが完成eventをJetStreamへ確実に配信するtransactional outbox |
 | Better Auth tables | user、session、account、verification |

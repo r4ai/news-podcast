@@ -1,6 +1,6 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
 import { databaseSpanOptions } from "@news-podcast/persistence"
-import { eq } from "drizzle-orm"
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
 
 import { userSettings } from "../../../../drizzle/schema.js"
@@ -11,6 +11,13 @@ import type {
 } from "../../../application/generation-settings.js"
 import { UserIdSchema } from "../../../domain/actor.js"
 import { GenerationScheduleSchema } from "../../../domain/generation-settings.js"
+import {
+  localDateOrdinal,
+  parseLocalDate,
+  parseScheduleCompletion,
+  type ScheduleSuppression,
+} from "../../../domain/schedule-completion.js"
+import { currentScheduleInstantUnsafe } from "../../../infrastructure/unsafe/schedule-clock.js"
 import type { IdentityDatabase } from "../../../infrastructure/unsafe/drizzle/open.js"
 
 const SettingsRowSchema = Schema.Struct({
@@ -19,6 +26,8 @@ const SettingsRowSchema = Schema.Struct({
   localTime: Schema.String,
   timeZone: Schema.String,
   lastScheduledLocalDate: Schema.NullOr(Schema.String),
+  lastScheduledDay: Schema.NullOr(Schema.Int),
+  lastScheduledCompletion: Schema.NullOr(Schema.String),
 })
 const parseSettingsRow = parse(SettingsRowSchema)
 
@@ -37,6 +46,8 @@ const projection = {
   localTime: userSettings.scheduleLocalTime,
   timeZone: userSettings.scheduleTimeZone,
   lastScheduledLocalDate: userSettings.lastScheduledLocalDate,
+  lastScheduledDay: userSettings.lastScheduledDay,
+  lastScheduledCompletion: userSettings.lastScheduledCompletion,
 }
 
 /**
@@ -49,30 +60,53 @@ const decodeRow = (
 ) =>
   parseSettingsRow(row).pipe(
     Effect.flatMap((value) =>
-      Effect.all({
-        ownerId: parse(UserIdSchema)(value.ownerId),
-        schedule: parse(GenerationScheduleSchema)({
+      Effect.gen(function* () {
+        const ownerId = yield* parse(UserIdSchema)(value.ownerId)
+        const schedule = yield* parse(GenerationScheduleSchema)({
           enabled: value.enabled === 1,
           localTime: value.localTime,
           timeZone: value.timeZone,
-        }),
-      }).pipe(
-        Effect.map(({ ownerId, schedule }): ScheduledOwner =>
-          deepFreeze({
-            ownerId,
-            schedule,
-            ...(value.lastScheduledLocalDate === null
-              ? {}
-              : { lastScheduledLocalDate: value.lastScheduledLocalDate }),
-          })
+        })
+        if (value.lastScheduledLocalDate === null) {
+          if (
+            value.lastScheduledDay !== null ||
+            value.lastScheduledCompletion !== null
+          )
+            return yield* Effect.fail(failure(operation, "CorruptRecord"))
+          return deepFreeze({ ownerId, schedule })
+        }
+        const lastCompletion = yield* (
+          value.lastScheduledCompletion === null
+            ? Effect.succeed({
+                source: "legacy",
+                localDate: value.lastScheduledLocalDate,
+              })
+            : Effect.try({
+                try: (): unknown => JSON.parse(value.lastScheduledCompletion!),
+                catch: () => failure(operation, "CorruptRecord"),
+              })
+        ).pipe(Effect.flatMap(parseScheduleCompletion))
+        if (
+          lastCompletion.localDate !== value.lastScheduledLocalDate ||
+          localDateOrdinal(lastCompletion.localDate) !== value.lastScheduledDay
         )
-      )
+          return yield* Effect.fail(failure(operation, "CorruptRecord"))
+        return deepFreeze({
+          ownerId,
+          schedule,
+          lastCompletion,
+        }) satisfies ScheduledOwner
+      })
     ),
     Effect.mapError(() => failure(operation, "CorruptRecord"))
   )
 
 export const createGenerationSettingsRepository = (
-  database: IdentityDatabase
+  database: IdentityDatabase,
+  options: {
+    readonly now?: () => string
+    readonly observeSuppression?: (reason: ScheduleSuppression) => void
+  } = {}
 ): Effect.Effect<GenerationSettingsRepository, GenerationSettingsStoreError> =>
   Effect.sync(() => {
     const find: GenerationSettingsRepository["find"] = (ownerId) =>
@@ -148,15 +182,47 @@ export const createGenerationSettingsRepository = (
       ownerId,
       localDate
     ) =>
-      Effect.try({
-        try: () =>
-          database
-            .update(userSettings)
-            .set({ lastScheduledLocalDate: localDate })
-            .where(eq(userSettings.ownerId, ownerId))
-            .run(),
-        catch: () => failure("MarkScheduled"),
-      }).pipe(
+      parseLocalDate(localDate).pipe(
+        Effect.mapError(() => failure("MarkScheduled", "CorruptRecord")),
+        Effect.flatMap((date) =>
+          Effect.try({
+            try: () => {
+              const day = localDateOrdinal(date)
+              const recordedAt = (options.now ?? currentScheduleInstantUnsafe)()
+              const result = database
+                .update(userSettings)
+                .set({
+                  lastScheduledLocalDate: date,
+                  lastScheduledDay: day,
+                  lastScheduledCompletion: sql`json_object('source', 'recorded', 'localDate', ${date}, 'recordedAt', ${recordedAt}, 'timeZone', ${userSettings.scheduleTimeZone})`,
+                })
+                .where(
+                  and(
+                    eq(userSettings.ownerId, ownerId),
+                    or(
+                      isNull(userSettings.lastScheduledDay),
+                      lt(userSettings.lastScheduledDay, day)
+                    )
+                  )
+                )
+                .run()
+              if (result.changes === 0) {
+                const current = database
+                  .select({ day: userSettings.lastScheduledDay })
+                  .from(userSettings)
+                  .where(eq(userSettings.ownerId, ownerId))
+                  .get()
+                if (
+                  current?.day !== null &&
+                  current?.day !== undefined &&
+                  current.day > day
+                )
+                  options.observeSuppression?.("stale_completion")
+              }
+            },
+            catch: () => failure("MarkScheduled"),
+          })
+        ),
         Effect.asVoid,
         Effect.withSpan(
           "sqlite identity_settings mark_scheduled",
