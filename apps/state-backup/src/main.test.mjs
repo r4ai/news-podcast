@@ -133,19 +133,19 @@ for (const endpoint of [
   })
 }
 
-test("identity template is unapproved JSON and contains no source/archive secrets", async () => {
+test("legacy environment can generate unapproved identity JSON without exposing secrets", async () => {
   const { execFileSync } = await import("node:child_process")
   const output = execFileSync(
     process.execPath,
     [new URL("./target-identity-template.mjs", import.meta.url).pathname],
     {
-      env: { ...environment },
+      env: { ...environment, BACKUP_TARGET_ATTESTATION_FILE: undefined },
       encoding: "utf8",
     }
   )
   const document = JSON.parse(output)
   assert.equal(document.approval.archiveCannotModifySource, false)
-  assert.equal(document.approval.sourceCannotDeleteArchive, false)
+  assert.equal(document.approval.sourceCannotModifyArchive, false)
   assert.equal(document.source.forcePathStyle, true)
   assert.equal(document.archive.accountId, "")
   assert.ok(!output.includes(environment.S3_SECRET_ACCESS_KEY))

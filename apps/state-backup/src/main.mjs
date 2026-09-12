@@ -88,10 +88,6 @@ export const loadTargetConfiguration = (environment) => {
   )
     throw new Error("source and archive credentials must be distinct")
   return {
-    targetAttestationFile: required(
-      environment,
-      "BACKUP_TARGET_ATTESTATION_FILE"
-    ),
     source: {
       endpoint: sourceEndpoint,
       region: environment.S3_REGION ?? "us-east-1",
@@ -117,6 +113,11 @@ export const loadTargetConfiguration = (environment) => {
 export const loadConfiguration = (environment) => {
   return {
     ...loadTargetConfiguration(environment),
+    targetAttestationFile: required(
+      environment,
+      "BACKUP_TARGET_ATTESTATION_FILE"
+    ),
+
     databaseSources: {
       identity:
         environment.BACKUP_IDENTITY_DATABASE ??

@@ -43,7 +43,7 @@ const fixture = () => {
       independentFailureDomains: true,
       separateAdministrators: true,
       archiveCannotModifySource: true,
-      sourceCannotDeleteArchive: true,
+      sourceCannotModifyArchive: true,
     },
   }
   return { configuration, document }
@@ -114,7 +114,7 @@ for (const [name, change, expected] of [
   [
     "unapproved permissions",
     ({ document }) => {
-      document.approval.sourceCannotDeleteArchive = false
+      document.approval.sourceCannotModifyArchive = false
     },
     /explicitly approved/,
   ],

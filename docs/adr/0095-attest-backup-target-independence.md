@@ -71,6 +71,7 @@ probe結果は全prefixやbucket管理権限の証明ではない。providerの�
 - Green: 承認必須と境界検査、別表記のlocalhost拒否、credential再利用拒否。
 - Red: local成功履歴なし + source障害ではschedulerがdrillを開始しなかった。Green: sourceの成功履歴への依存を除去。
 - ローカルの4 DBと6 objectを保存後、source停止/失効と元DB喪失を模して復元。
+- レビュー指摘もRed/Greenで検証：sourceからarchiveへのPut権限を見逃さず、承認path未設定の既存環境から未承認templateを生成できる。
 - 本番providerの権限probe・停止・credential失効は実施していない。
 
 ## 再検討条件・未決事項

@@ -28,7 +28,7 @@ console.log(
         independentFailureDomains: false,
         separateAdministrators: false,
         archiveCannotModifySource: false,
-        sourceCannotDeleteArchive: false,
+        sourceCannotModifyArchive: false,
       },
     },
     null,

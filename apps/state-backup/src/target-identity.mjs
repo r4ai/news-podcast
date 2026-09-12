@@ -82,7 +82,7 @@ export const validateTargetAttestation = (
     "independentFailureDomains",
     "separateAdministrators",
     "archiveCannotModifySource",
-    "sourceCannotDeleteArchive",
+    "sourceCannotModifyArchive",
   ])
     if (approval[key] !== true) fail(`${key} must be explicitly approved`)
   const reviewedAt = Date.parse(approval.reviewedAt)

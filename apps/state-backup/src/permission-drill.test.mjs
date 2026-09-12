@@ -51,9 +51,9 @@ test("both credentials work on their own target but cross-target mutation is den
   const data = fixture()
   assert.equal(
     (await runPermissionDrill(data.configuration, data.clients)).checked,
-    8
+    9
   )
-  assert.equal(data.calls.length, 10)
+  assert.equal(data.calls.length, 11)
   assert.equal(data.closed(), 4)
   for (const call of data.calls.filter((call) => call.key !== undefined))
     assert.match(
@@ -66,6 +66,7 @@ for (const [principal, bucket, action] of [
   ["archive", "source", "PutObject"],
   ["archive", "source", "DeleteObject"],
   ["archive", "source", "DeleteObjectVersion"],
+  ["source", "archive", "PutObject"],
   ["source", "archive", "DeleteObject"],
   ["source", "archive", "DeleteObjectVersion"],
 ])

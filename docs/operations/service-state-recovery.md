@@ -62,7 +62,7 @@ endpoint、bucket、専用credentialsは`.env`の`BACKUP_ARCHIVE_*`へ設定す�
 
 ### Target identityと期限付き承認
 
-`.env`のsource/archive設定を確定し、未承認templateを生成する。templateは承認済みファイルを上書きせず、secretそのものを出力しない。
+`.env`のsource/archive設定を確定し、未承認templateを生成する。既存の`.env`に承認ファイルの変数がなくても、この生成コマンドは動く。ファイルpathはservice起動時だけ必須で、Composeがcontainer内のpathを設定する。templateは承認済みファイルを上書きせず、secretそのものを出力しない。
 
 ```bash
 umask 077
@@ -80,7 +80,7 @@ pnpm --silent --filter @news-podcast/state-backup identity:template > .secrets/b
 | `failureDomain` | host/datacenter/region等、同時喪失範囲の識別子。別accountでも同じ範囲は不可 |
 | `administrativeDomain` | 管理者・組織権限の境界。共通管理権限で両方を失える構成は不可 |
 
-`approval` の `reviewedBy`、UTCの `reviewedAt` / `expiresAt`（最大90日）、`identityEvidence`、`permissionEvidence`を記入する。証拠は調査報告やproviderのpolicy評価結果への参照であり、単なる異なるDNS名では足りない。全prefixの権限と管理権限を確認してから `independentFailureDomains`、`separateAdministrators`、`archiveCannotModifySource`、`sourceCannotDeleteArchive` を明示的に `true` にする。
+`approval` の `reviewedBy`、UTCの `reviewedAt` / `expiresAt`（最大90日）、`identityEvidence`、`permissionEvidence`を記入する。証拠は調査報告やproviderのpolicy評価結果への参照であり、単なる異なるDNS名では足りない。全prefixの権限と管理権限を確認してから `independentFailureDomains`、`separateAdministrators`、`archiveCannotModifySource`、`sourceCannotModifyArchive` を明示的に `true` にする。
 
 完成した承認を `.secrets/backup-target-attestation.json` に保存し、`BACKUP_TARGET_ATTESTATION_FILE_HOST`で指定する。Composeはこれを `/run/secrets/backup-target-attestation` へread-onlyでmountする。承認欠如・設定との不一致・期限切れでは起動しない。稼働中に期限へ達した場合、`/health/ready`は503になり新しいbackupを停止する。既存archiveからのrestore drillは継続できる。承認更新後はserviceを再起動して読み直す。
 

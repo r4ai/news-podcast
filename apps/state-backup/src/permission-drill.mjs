@@ -79,6 +79,11 @@ export const runPermissionDrill = async (
     }
     await probe(
       sourceOnArchive,
+      new PutObjectCommand({ ...input, Body: "", IfNoneMatch: "*" }),
+      "source_put_archive"
+    )
+    await probe(
+      sourceOnArchive,
       new DeleteObjectCommand(input),
       "source_delete_archive"
     )
@@ -88,7 +93,7 @@ export const runPermissionDrill = async (
       "source_delete_archive_version"
     )
     return {
-      checked: 8,
+      checked: 9,
       outcome: "denied",
       scope: "reserved probe keys only; full policy review remains required",
     }
