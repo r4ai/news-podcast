@@ -6,6 +6,11 @@ import test from "node:test"
 
 import { BackupRuntime, renderMetrics } from "./runtime.mjs"
 
+const targetAttestation = {
+  mode: "operator-attested",
+  expiresAt: "2099-01-01T00:00:00Z",
+}
+
 test("runtime records committed backups, drills, age, and failures durably", async () => {
   const directory = await mkdtemp(join(tmpdir(), "backup-runtime-"))
   const statePath = join(directory, "state.json")
@@ -15,6 +20,7 @@ test("runtime records committed backups, drills, age, and failures durably", asy
   let monotonicMillis = 0
   try {
     const runtime = await BackupRuntime.open({
+      targetAttestation,
       statePath,
       now: () => now,
       monotonicNow: () => monotonicMillis,
@@ -56,6 +62,7 @@ test("runtime records committed backups, drills, age, and failures durably", asy
     assert.equal(persisted.lastDrillGeneration, "generation-a")
 
     const failing = await BackupRuntime.open({
+      targetAttestation,
       statePath,
       now: () => now,
       monotonicNow: () => monotonicMillis,
@@ -93,6 +100,7 @@ test("runtime rejects overlapping backup and drill work", async () => {
   })
   try {
     const runtime = await BackupRuntime.open({
+      targetAttestation,
       statePath: join(directory, "state.json"),
       createGeneration: () => pending,
       runRestoreDrill: async () => ({ generationId: "unused" }),
@@ -104,5 +112,72 @@ test("runtime rejects overlapping backup and drill work", async () => {
     assert.equal(await first, true)
   } finally {
     await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("expired target approval stops new backups but allows an archive-only restore drill", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "backup-expiry-"))
+  let now = new Date("2026-09-11T00:00:00Z")
+  let writes = 0
+  try {
+    const runtime = await BackupRuntime.open({
+      statePath: join(directory, "state.json"),
+      now: () => now,
+      targetAttestation: {
+        mode: "operator-attested",
+        expiresAt: "2026-09-11T00:01:00Z",
+      },
+      createGeneration: async () => {
+        writes += 1
+        return { commit: { generationId: "a" } }
+      },
+      runRestoreDrill: async () => ({ generationId: "a" }),
+      logger: { error() {} },
+    })
+    assert.equal(runtime.isReady(), true)
+    assert.equal(await runtime.runBackup(), true)
+    now = new Date("2026-09-11T00:01:00Z")
+    assert.equal(runtime.isReady(), false)
+    assert.equal(await runtime.runBackup(), false)
+    assert.equal(writes, 1)
+    assert.equal(await runtime.runRestoreDrill(), true)
+    assert.match(
+      renderMetrics(runtime.snapshot(), now),
+      /backup_target_operator_attested 1/
+    )
+    assert.match(
+      renderMetrics(runtime.snapshot(), now),
+      /backup_target_ready 0/
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("a fresh scheduler can restore from archive while the source is unavailable", async () => {
+  const { startScheduler } = await import("./runtime.mjs")
+  let drills = 0
+  const state = { lastBackupSuccessAt: null, lastDrillSuccessAt: null }
+  const scheduler = startScheduler({
+    runtime: {
+      snapshot: () => state,
+      runBackup: async () => false,
+      runRestoreDrill: async () => {
+        drills += 1
+        state.lastDrillSuccessAt = new Date().toISOString()
+        return true
+      },
+    },
+    backupIntervalMs: 86_400_000,
+    drillIntervalMs: 604_800_000,
+  })
+  try {
+    await scheduler.tick()
+    assert.ok(
+      drills > 0,
+      "source availability and local backup history must not gate archive recovery"
+    )
+  } finally {
+    scheduler.stop()
   }
 })

@@ -431,3 +431,5 @@ flowchart TD
 - [ADR-0086 Episode leaseを優先度とready時刻で決定する](adr/0086-order-episode-leases-by-ready-time.md)
 
 - [ADR-0094 RSS同期を有界な処理単位へ分割し永続的に順番を譲る](adr/0094-bound-and-yield-feed-sync-work.md)
+
+Backup targetの独立性は[ADR-0095](adr/0095-attest-backup-target-independence.md)の期限付き運用承認を必須とする。provider/account/bucket/backend/障害・管理ドメインを設定へ結び付け、同一の宣言や期限切れを拒否する。APIで自動検証済みとは扱わず、operator-attested metricと期限alertで監視する。詳細と権限・source喪失drillは[復旧runbook](operations/service-state-recovery.md)。

@@ -665,3 +665,43 @@ test("restore drill rejects a legacy generation with forward completion skew", a
     await rm(fixture.directory, { recursive: true, force: true })
   }
 })
+
+for (const failure of ["source stopped", "source credential revoked"]) {
+  test(`independence drill restores the committed generation with ${failure} and no live SQLite`, async () => {
+    const fixture = await setup()
+    try {
+      await createGeneration({
+        databaseSources: fixture.databaseSources,
+        sourceObjects: fixture.sourceObjects,
+        archive: fixture.archive,
+        encryptionKey,
+        stagingRoot: fixture.directory,
+        createdAt,
+        generationId: "20260820T000000000Z-independent",
+      })
+      for (const path of Object.values(fixture.databaseSources)) await rm(path)
+      fixture.objects.clear()
+      fixture.sourceObjects.listObjects = async () => {
+        throw new Error(failure)
+      }
+      fixture.sourceObjects.downloadObject = async () => {
+        throw new Error(failure)
+      }
+      await assert.rejects(
+        fixture.sourceObjects.listObjects(),
+        new RegExp(failure)
+      )
+      const result = await runRestoreDrill({
+        archive: fixture.archive,
+        encryptionKey,
+        stagingRoot: fixture.directory,
+      })
+      assert.equal(result.databases, 4)
+      assert.equal(result.objects, 6)
+      assert.equal(result.articleArchiveObjects, 4)
+      assert.equal(result.episodeAudioObjects, 1)
+    } finally {
+      await rm(fixture.directory, { recursive: true, force: true })
+    }
+  })
+}

@@ -4,7 +4,7 @@
 - Date: 2026-08-20
 - Decision owners: Platform / Identity Access / Content Knowledge / Episode Production / Episode Library
 - Supersedes: N/A
-- Superseded by: ADR-0078（DB/object logical cutとProduction/Library横断整合性）
+- Superseded by: ADR-0078（DB/object logical cutとProduction/Library横断整合性）、[ADR-0095](0095-attest-backup-target-independence.md)（target identityと独立性の保証範囲）
 - Related: Issue #15、ADR-0011、ADR-0039、`docs/operations/service-state-recovery.md`
 
 ## コンテキストと変更契機
@@ -82,7 +82,7 @@ manifestは4 DBのprofile、必須table、`user_version`、SHA-256、sizeと、o
 | コード/ポート | coordinator、S3 source/archive adapter、scheduler | Done | `apps/state-backup/src` |
 | データ/ストレージ | 暗号化manifest、commit marker、Object Lock | Done | coordinator/S3 adapter tests |
 | 実行/配備 | `backup` Compose profile、secret、read-only DB mounts | Done | `compose.yaml`、`compose.observability.yaml` |
-| 認証/セキュリティ | source/archive credentials分離、client-side encryption | Done | runtime config、startup gate |
+| 認証/セキュリティ | client-side encryption。target/credential独立性はADR-0095の期限付き運用承認へ置換 | Done | target-identity、permission-drill、startup gate |
 | フロント/品質保証 | N/A — UI変更なし | Done | N/A |
 | テスト/運用 | Red→Green、runbook、metrics、alerts | Done | `pnpm --filter @news-podcast/state-backup test`、`pnpm observability:validate` |
 

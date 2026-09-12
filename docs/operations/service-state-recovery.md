@@ -34,7 +34,7 @@ SeaweedFSの対象bucketは、同じinventoryに含まれる全objectである�
 | 世代保持 | 直近30成功世代 | bucket lifecycleはObject Lock満了前に削除してはならない |
 | 改変不能期間 | 最低35日 | 各PutをS3 Object Lock `COMPLIANCE`で固定 |
 | 暗号化 | client-side AES-256-GCM | 32 byte鍵はCompose secret。外部bucket管理者から分離保管 |
-| 外部保管 | sourceと異なるoff-host S3 bucket | versioningとObject Lockが起動時の必須検査 |
+| 外部保管 | 独立したbackend・account・障害/管理ドメインのS3 bucket | 設定に結び付いた期限付き運用承認、versioning、Object Lockが起動時の必須検査 |
 | drill | 7日ごと | 8日未成功でcritical alert |
 | write barrier | 既定30秒、最大120秒 | 4 DB snapshotとobject inventoryだけを囲み、25秒超または拒否でalert |
 
@@ -42,7 +42,11 @@ bucket lifecycleは「35日間は保持し、30成功世代を下回らない」
 
 ## 初期設定と自動Backup
 
-外部bucketは作成時にObject Lockを有効にし、versioningを停止しない。sourceと同じSeaweedFS bucketは設定検査で拒否される。32 byte鍵をhexまたはbase64でsecret fileへ保存し、権限をowner read-onlyにする。
+外部bucketは作成時にObject Lockを有効にし、versioningを停止しない。同一endpoint/hostname、既知のloopback、credential再利用は設定で拒否する。宣言された同一bucket identity・provider/account・backend・障害/管理ドメインも承認検査で拒否する。DNS名やIPの違いだけで独立性を証明したとは扱わない。
+
+S3互換providerを含む物理・管理ドメインの検証は、運用者の証拠付き承認に依存する。source/archiveの所有者情報、backend識別子、設置先、管理者、全prefixのIAM/bucket policyを確認する。APIから自動検証済みという保証は提供しない。詳細は[ADR-0095](../adr/0095-attest-backup-target-independence.md)。
+
+32 byte鍵をhexまたはbase64でsecret fileへ保存し、権限をowner read-onlyにする。起動前に次節の承認ファイルも用意する。
 
 ```bash
 mkdir -p .secrets
@@ -55,6 +59,50 @@ curl --fail --silent http://127.0.0.1:4198/metrics
 ```
 
 endpoint、bucket、専用credentialsは`.env`の`BACKUP_ARCHIVE_*`へ設定する。`BACKUP_ENCRYPTION_KEY_FILE_HOST`はhost上のsecret fileを指す。`BACKUP_BARRIER_TIMEOUT_MS`は既定30秒、最大120秒で、通常は変更しない。state-backupのsource volumeはSQLite lock取得に必要なwrite-capable mountだが、coordinatorが実行するSQLは`BEGIN IMMEDIATE`と`ROLLBACK`だけである。起動直後に1世代を作り、全成果物のimmutable Putが成功した最後にだけ`generations/<generation>/commit.json`を置く。
+
+### Target identityと期限付き承認
+
+`.env`のsource/archive設定を確定し、未承認templateを生成する。既存の`.env`に承認ファイルの変数がなくても、この生成コマンドは動く。ファイルpathはservice起動時だけ必須で、Composeがcontainer内のpathを設定する。templateは承認済みファイルを上書きせず、secretそのものを出力しない。
+
+```bash
+umask 077
+pnpm --silent --filter @news-podcast/state-backup identity:template > .secrets/backup-target-attestation.template.json
+```
+
+`source` / `archive` の各項目は次の契約を持つ。
+
+| 項目 | 設定・証拠 |
+| --- | --- |
+| `endpoint`, `region`, `forcePathStyle`, `bucket` | 実際に使う設定と一致。alias変更でも再承認 |
+| `credentialFingerprint` | access keyとsecretの組のSHA-256。rotation時にtemplateを再生成 |
+| `provider`, `accountId` | providerの正式識別名と所有account。別bucketでも同一accountは不可 |
+| `backendId` | DNS aliasに依存しない実体識別子。同じcluster/storage実体は不可 |
+| `failureDomain` | host/datacenter/region等、同時喪失範囲の識別子。別accountでも同じ範囲は不可 |
+| `administrativeDomain` | 管理者・組織権限の境界。共通管理権限で両方を失える構成は不可 |
+
+`approval` の `reviewedBy`、UTCの `reviewedAt` / `expiresAt`（最大90日）、`identityEvidence`、`permissionEvidence`を記入する。証拠は調査報告やproviderのpolicy評価結果への参照であり、単なる異なるDNS名では足りない。全prefixの権限と管理権限を確認してから `independentFailureDomains`、`separateAdministrators`、`archiveCannotModifySource`、`sourceCannotModifyArchive` を明示的に `true` にする。
+
+完成した承認を `.secrets/backup-target-attestation.json` に保存し、`BACKUP_TARGET_ATTESTATION_FILE_HOST`で指定する。Composeはこれを `/run/secrets/backup-target-attestation` へread-onlyでmountする。承認欠如・設定との不一致・期限切れでは起動しない。稼働中に期限へ達した場合、`/health/ready`は503になり新しいbackupを停止する。既存archiveからのrestore drillは継続できる。承認更新後はserviceを再起動して読み直す。
+
+### Credential分離の権限drill
+
+まずproviderのpolicy評価・監査で、archive credentialがsourceのobject/bucket/configurationを変更できず、source credentialがarchiveのobject/version/lifecycle/権限を変更できないことを確認する。そのうえで、隔離した環境で次のprobeを実行し、結果を承認の証拠へ含める。
+
+```bash
+pnpm --filter @news-podcast/state-backup permissions:drill --probe
+```
+
+各credentialで自分のbucketをlistできることを確認してから、sourceの `articles/` / `episodes/` とarchiveの `generations/` 配下にある新規ランダムprobe keyに対し、権限を交差させたPut/Delete/DeleteVersionが拒否されることを検査する。既存の業務objectを削除対象にしない。想定外の成功は失敗扱いであり、過剰権限がある場合は空probe objectやdelete markerが作成され得る。その場合は権限を直し、管理者がprobe残骸を確認する。ネットワーク障害や未対応operationを拒否の証拠にしない。
+
+このprobeは指定prefixの予約keyだけを検査し、全IAM/bucket policyや物理独立性の証明ではない。特定prefix、tag、既存version、lifecycle、管理APIによる抜け道はprovider側の評価と承認で確認する。S3では通常の削除とversion削除は別権限なので両方を対象にする（[AWS DeleteObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html)、[必要権限一覧](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-policy-actions.html)）。本番権限の確認をローカルfixtureの成功で代用しない。
+
+### Source喪失を模した独立性drill
+
+```bash
+pnpm --filter @news-podcast/state-backup exec node --test --test-name-pattern='independence drill|fresh scheduler' src/coordinator.test.mjs src/runtime.test.mjs
+```
+
+ローカルの4 SQLiteとobjectから世代を作成し、元DB削除、source store停止、source credential失効を模した状態で、archiveと復号鍵だけから全DB・article archive・audio参照を復元する。schedulerのlocal成功履歴が失われてもdrillを開始する。これはコードの依存分離の検証であり、本番providerの停止・credential失効を実施した証拠ではない。本番の災害訓練では隔離した復旧先から、sourceへのnetwork経路とsource credentialを使わず同じ検証を行い、結果を別途保管する。
 
 ```mermaid
 stateDiagram-v2
@@ -83,6 +131,9 @@ daemonは週次に最新commit世代を隔離stagingへ取得し、次をすべ�
 
 | metric / alert | 意味 | 初動 |
 | --- | --- | --- |
+| `news_podcast_backup_target_operator_attested` | 1なら独立性は運用承認に依存 | 自動検証済みと解釈せず、identity/policy証跡を維持 |
+| `news_podcast_backup_target_attestation_expires_timestamp_seconds` / `np-backup-target-approval` | 承認期限 / 残り7日以下でwarning | 現在の設定と権限で再承認 |
+| `news_podcast_backup_target_ready` | 期限切れなら0、new backup停止 | 承認更新後に再起動。restore drillは継続 |
 | `news_podcast_backup_last_success_timestamp_seconds` | 最後のcommit時刻 | generation prefixと構造化failure logを確認 |
 | `news_podcast_backup_generation_age_seconds` / `np-backup-rpo` | 最新世代age / 25時間超過 | source DB・SeaweedFS・外部S3を切り分ける |
 | `news_podcast_backup_failures_total` / `np-backup-failure` | backup失敗 | commitなしprefixを成功扱いしない |

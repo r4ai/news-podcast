@@ -1,3 +1,4 @@
+import { assertAttestationCurrent } from "./target-identity.mjs"
 import { createServer } from "node:http"
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
@@ -73,7 +74,25 @@ export class BackupRuntime {
   }
 
   snapshot() {
-    return { ...this.state, inProgress: this.running }
+    return {
+      ...this.state,
+      inProgress: this.running,
+      targetAttestation: this.options.targetAttestation,
+      ready: this.isReady(),
+    }
+  }
+
+  isReady() {
+    if (this.options.targetAttestation === undefined) return false
+    try {
+      assertAttestationCurrent(
+        this.options.targetAttestation,
+        (this.options.now ?? (() => new Date()))()
+      )
+      return true
+    } catch {
+      return false
+    }
   }
 
   async #run(kind, operation) {
@@ -82,6 +101,8 @@ export class BackupRuntime {
     const monotonicNow = this.options.monotonicNow ?? (() => performance.now())
     const startedAt = monotonicNow()
     try {
+      if (kind === "backup" && !this.isReady())
+        throw new Error("backup target approval expired")
       const result = await operation()
       const completedAt = (
         this.options.now ?? (() => new Date())
@@ -160,7 +181,16 @@ export const renderMetrics = (state, now = new Date()) => {
         `news_podcast_backup_rejections_total{reason="${reason}"} ${state.backupRejectionsTotal?.[reason] ?? 0}`
     )
     .join("\n")
-  return `# HELP news_podcast_backup_last_success_timestamp_seconds Unix time of the last committed coordinated backup.
+  return `# HELP news_podcast_backup_target_operator_attested Physical and administrative independence relies on operator evidence, not automatic verification.
+# TYPE news_podcast_backup_target_operator_attested gauge
+news_podcast_backup_target_operator_attested ${state.targetAttestation?.mode === "operator-attested" ? 1 : 0}
+# HELP news_podcast_backup_target_attestation_expires_timestamp_seconds Expiry of the required target approval.
+# TYPE news_podcast_backup_target_attestation_expires_timestamp_seconds gauge
+news_podcast_backup_target_attestation_expires_timestamp_seconds ${timestampSeconds(state.targetAttestation?.expiresAt ?? null)}
+# HELP news_podcast_backup_target_ready Whether current target approval permits new backups.
+# TYPE news_podcast_backup_target_ready gauge
+news_podcast_backup_target_ready ${state.ready === false ? 0 : 1}
+# HELP news_podcast_backup_last_success_timestamp_seconds Unix time of the last committed coordinated backup.
 # TYPE news_podcast_backup_last_success_timestamp_seconds gauge
 news_podcast_backup_last_success_timestamp_seconds ${lastBackup}
 # HELP news_podcast_backup_generation_age_seconds Age of the latest committed generation, or -1 before first success.
@@ -197,6 +227,17 @@ export const startStatusServer = (runtime, port) => {
       response.end(renderMetrics(runtime.snapshot()))
       return
     }
+    if (request.url === "/health/ready") {
+      response.writeHead(runtime.isReady() ? 200 : 503, {
+        "content-type": "application/json",
+      })
+      response.end(
+        JSON.stringify({
+          status: runtime.isReady() ? "ready" : "target-approval-expired",
+        })
+      )
+      return
+    }
     if (request.url === "/health/live") {
       response.writeHead(200, { "content-type": "application/json" })
       response.end('{"status":"live"}\n')
@@ -227,10 +268,7 @@ export const startScheduler = ({
       await runtime.runBackup()
     }
     const afterBackup = runtime.snapshot()
-    if (
-      afterBackup.lastBackupSuccessAt !== null &&
-      due(afterBackup.lastDrillSuccessAt, drillIntervalMs, now())
-    ) {
+    if (due(afterBackup.lastDrillSuccessAt, drillIntervalMs, now())) {
       await runtime.runRestoreDrill()
     }
   }

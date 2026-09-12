@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "start": "node src/main.mjs",
-    "build": "node --check src/consistency.mjs && node --check src/coordinator.mjs && node --check src/s3-storage.mjs && node --check src/runtime.mjs && node --check src/main.mjs",
+    "build": "node --check src/consistency.mjs && node --check src/coordinator.mjs && node --check src/s3-storage.mjs && node --check src/runtime.mjs && node --check src/main.mjs && node --check src/target-identity.mjs && node --check src/permission-drill.mjs && node --check src/target-identity-template.mjs",
     "lint": "oxlint",
     "typecheck": "pnpm build",
-    "test": "node --test src/*.test.mjs"
+    "test": "node --test src/*.test.mjs",
+    "permissions:drill": "node --env-file=../../.env src/permission-drill.mjs",
+    "identity:template": "node --env-file=../../.env src/target-identity-template.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1106.0"

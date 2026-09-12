@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { S3Client } from "@aws-sdk/client-s3"
+import { loadTargetAttestation } from "./target-identity.mjs"
 import { readFile } from "node:fs/promises"
 
 import {
@@ -40,33 +41,52 @@ const assertHttpEndpoint = (value, name) => {
   if (!["http:", "https:"].includes(endpoint.protocol)) {
     throw new Error(`${name} must use HTTP or HTTPS`)
   }
+  if (
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.search ||
+    endpoint.hash
+  )
+    throw new Error(`${name} must not contain credentials, query or fragment`)
   return endpoint
 }
 
-export const loadConfiguration = (environment) => {
+export const loadTargetConfiguration = (environment) => {
   const sourceEndpoint = normalizedEndpoint(
     environment.S3_ENDPOINT ?? "http://seaweedfs:8333"
   )
-  const sourceBucket = environment.S3_BUCKET ?? "news-podcast"
+  const sourceBucket = (environment.S3_BUCKET ?? "news-podcast").trim()
   const archiveEndpoint = normalizedEndpoint(
     required(environment, "BACKUP_ARCHIVE_ENDPOINT")
   )
   const archiveBucket = required(environment, "BACKUP_ARCHIVE_BUCKET")
-  assertHttpEndpoint(sourceEndpoint, "S3_ENDPOINT")
+  const sourceUrl = assertHttpEndpoint(sourceEndpoint, "S3_ENDPOINT")
   const archiveUrl = assertHttpEndpoint(
     archiveEndpoint,
     "BACKUP_ARCHIVE_ENDPOINT"
   )
-  if (sourceEndpoint === archiveEndpoint) {
+  const sourceHost = sourceUrl.hostname.replace(/\.$/, "")
+  const archiveHost = archiveUrl.hostname.replace(/\.$/, "")
+  if (sourceEndpoint === archiveEndpoint || sourceHost === archiveHost) {
     throw new Error(
       "backup archive must use a different endpoint from the source"
     )
   }
   if (
-    ["localhost", "127.0.0.1", "::1", "seaweedfs"].includes(archiveUrl.hostname)
+    ["localhost", "::1", "[::1]", "seaweedfs"].includes(archiveHost) ||
+    archiveHost.startsWith("127.") ||
+    archiveHost.endsWith(".localhost") ||
+    /^\[::ffff:7f[0-9a-f]{2}:/.test(archiveHost)
   ) {
     throw new Error("backup archive must be off-host")
   }
+  if (
+    required(environment, "S3_ACCESS_KEY_ID") ===
+      required(environment, "BACKUP_ARCHIVE_ACCESS_KEY_ID") &&
+    required(environment, "S3_SECRET_ACCESS_KEY") ===
+      required(environment, "BACKUP_ARCHIVE_SECRET_ACCESS_KEY")
+  )
+    throw new Error("source and archive credentials must be distinct")
   return {
     source: {
       endpoint: sourceEndpoint,
@@ -87,6 +107,17 @@ export const loadConfiguration = (environment) => {
       ),
       forcePathStyle: environment.BACKUP_ARCHIVE_FORCE_PATH_STYLE === "true",
     },
+  }
+}
+
+export const loadConfiguration = (environment) => {
+  return {
+    ...loadTargetConfiguration(environment),
+    targetAttestationFile: required(
+      environment,
+      "BACKUP_TARGET_ATTESTATION_FILE"
+    ),
+
     databaseSources: {
       identity:
         environment.BACKUP_IDENTITY_DATABASE ??
@@ -148,7 +179,7 @@ export const decodeEncryptionKey = (secret) => {
   return key
 }
 
-const s3Client = (configuration) =>
+export const s3Client = (configuration) =>
   new S3Client({
     endpoint: configuration.endpoint,
     region: configuration.region,
@@ -161,6 +192,13 @@ const s3Client = (configuration) =>
 
 const main = async () => {
   const configuration = loadConfiguration(process.env)
+  const targetAttestation = await loadTargetAttestation(configuration)
+  console.warn(
+    JSON.stringify({
+      event: "backup.target_identity.operator_attested",
+      expiresAt: targetAttestation.expiresAt,
+    })
+  )
   const encryptionKey = decodeEncryptionKey(
     await readFile(configuration.encryptionKeyFile, "utf8")
   )
@@ -183,6 +221,7 @@ const main = async () => {
   }
   const runtime = await BackupRuntime.open({
     statePath: configuration.statePath,
+    targetAttestation,
     createGeneration: () =>
       createGeneration({
         ...common,
