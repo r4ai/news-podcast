@@ -275,7 +275,7 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
 
       expect(response.status).toBe(200)
       const media = successMediaTypes("/v1/episodes/{episodeId}", "GET")
-      const episode = await response.json()
+      const episode = (await response.json()) as { sources: unknown }
       assertMatches(
         episode,
         media["application/json"]!.schema!,
@@ -289,7 +289,13 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
             })
           )
           expect(articleResponse.status).toBe(200)
-          const article = await articleResponse.json()
+          const article = (await articleResponse.json()) as {
+            id: string
+            snapshotId: string
+            title: string
+            url: string
+            publishedAt: string
+          }
           return {
             articleId: article.id,
             snapshotId: article.snapshotId,
