@@ -516,12 +516,10 @@ const main = Effect.scoped(
       )
       assert(
         Array.isArray(episodes.items) &&
-          (
-            (episodes.items[0] as Record<string, unknown>)[
-              "sources"
-            ] as readonly Record<string, unknown>[]
-          )[0]?.articleId === articleA,
-        "episode list did not retain the saved article link"
+          Object.keys(episodes.items[0] as Record<string, unknown>)
+            .sort()
+            .join(",") === "createdAt,id,title",
+        "episode list must contain summary metadata only"
       )
 
       const episodeResponse = await request(
@@ -534,6 +532,10 @@ const main = Effect.scoped(
       assert(
         episodeDetail.id === episodeId,
         "episode detail returned another episode"
+      )
+      assert(
+        episodeDetail.script === "A complete generated script.",
+        "episode detail did not retain the immutable script"
       )
       assert(
         Array.isArray(episodeDetail.sources) &&
