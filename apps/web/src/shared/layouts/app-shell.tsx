@@ -114,7 +114,12 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       >
         本文へスキップ
       </a>
-      <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6 md:pb-[calc(var(--player-h)+1rem)]">
+      {/*
+        再生バーの高さは**引かない**。板はサイドバーの右隣までしか来ないので、
+        ここで空けるとログアウトなどの末尾の操作だけが、何にも隠されていない
+        まま1段浮いて止まる。
+      */}
+      <aside className="fixed inset-y-0 left-0 hidden w-56 border-r bg-background p-4 md:flex md:flex-col md:gap-6">
         <Brand />
         <Navigation />
         {/*

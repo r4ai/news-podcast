@@ -56,7 +56,21 @@ export function PlayerBar() {
       aria-label="再生中の番組"
       className={cn(
         // モバイルは下部ナビの上へ浮かせる。ナビの実高は`--app-nav-h`が持つ。
-        "fixed inset-x-0 bottom-[calc(var(--app-nav-h)+0.5rem)] z-30 px-2 md:bottom-3 md:pr-4 md:pl-[15rem]",
+        "fixed inset-x-0 bottom-[calc(var(--app-nav-h)+0.5rem)] z-30 px-2 md:bottom-3",
+        /*
+          板は**画面の中央**へ置く。主領域(サイドバーの右)の中央に置くと、
+          板だけが画面全体の中で右へずれて見える。
+
+          ただしサイドバー(14rem)へは掛けない。左右へ同じだけ余白を取り、
+          その余白を「中央寄せに必要な量」と「サイドバー＋1rem」の**大きい方**
+          にすることで、広い画面では画面中央・狭い画面ではサイドバーの右隣まで、
+          どちらも板を左右対称に保ったまま満たせる。
+
+          lgより下ではサイドバーと板が近すぎて板が潰れるので、主領域の中で
+          収める従来の置き方に留める。
+        */
+        "md:pr-4 md:pl-[15rem]",
+        "lg:px-[max(15rem,calc(50%-24rem))]",
         // 枠は板の外側の余白でしかない。ここで操作を受けると、板の脇を押した
         // だけで本文の操作が効かなくなる。
         "pointer-events-none"
