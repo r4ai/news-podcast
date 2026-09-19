@@ -459,3 +459,7 @@ flowchart TD
 Backup targetの独立性は[ADR-0095](adr/0095-attest-backup-target-independence.md)の期限付き運用承認を必須とする。provider/account/bucket/backend/障害・管理ドメインを設定へ結び付け、同一の宣言や期限切れを拒否する。APIで自動検証済みとは扱わず、operator-attested metricと期限alertで監視する。詳細と権限・source喪失drillは[復旧runbook](operations/service-state-recovery.md)。
 
 - [ADR-0100 Episode一覧をsummaryに限定する](adr/0100-separate-episode-summary-from-detail.md)
+
+## サービスのcredential境界
+
+Composeはサービス別の環境変数allowlistだけを注入する。S3は記事・音声書込・音声読取・backup source読取の専用principalを分け、archiveは独立credentialを使う。ホスト `.env` を全量配布しない。詳細は[ADR-0101](adr/0101-isolate-service-environments-and-storage-permissions.md)と[secret移行runbook](operations/service-secrets.md)を参照。

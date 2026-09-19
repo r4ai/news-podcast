@@ -20,7 +20,7 @@ pnpm setup:env
 pnpm dev:up
 ```
 
-`pnpm setup:env`は`.env`がない場合だけ`.env.example`から作成し、開発用secretを生成する。既存`.env`は更新しないため、項目追加時は手動で差分を反映する。
+`pnpm setup:env`は`.env`がない場合だけ`.env.example`から作成し、開発用secretを生成する。既存`.env`は更新しないため、項目追加時は手動で差分を反映する。S3のprivate設定も生成する。サービス別鍵の注入・既存共有鍵の移行は[secret runbook](operations/service-secrets.md)を参照。
 
 | 接続先 | URL |
 | --- | --- |
@@ -127,7 +127,8 @@ functional E2Eは実NATS/JetStreamを使うbackend縦断、Web E2Eは分離し�
 ```dotenv
 APP_ENV=development
 PROVIDER_MODE=live
-OPENAI_API_KEY=your-api-key
+CONTENT_OPENAI_API_KEY=your-content-api-key
+PRODUCTION_OPENAI_API_KEY=your-production-api-key
 OPENAI_MODEL=gpt-5.6-luna
 ```
 
@@ -371,7 +372,7 @@ flowchart LR
 | auth | `BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`DEV_AUTH_*`、`GOOGLE_CLIENT_*` |
 | Gateway/Identity HTTP | `GATEWAY_PORT`、`IDENTITY_HTTP_ORIGIN`、`AUTH_PROXY_*` |
 | service DB | `IDENTITY_DATABASE_PATH`、`CONTENT_KNOWLEDGE_DATABASE_PATH`、`EPISODE_PRODUCTION_DATABASE_PATH`、`EPISODE_LIBRARY_DATABASE_PATH` |
-| LLM | `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_REQUEST_TIMEOUT_MS`、`PROVIDER_*` |
+| LLM | `CONTENT_OPENAI_API_KEY` / `PRODUCTION_OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_REQUEST_TIMEOUT_MS`、`PROVIDER_*` |
 | storage/TTS | `S3_*`、`CONTENT_ARCHIVE_*`、`VOICEVOX_*` |
 | scheduler | `EPISODE_SCHEDULER_INTERVAL_MS`、`EPISODE_SCHEDULER_FAILURE_BACKOFF_MS`、`EPISODE_SCHEDULER_REQUEST_TIMEOUT_MS` |
 

@@ -34,7 +34,7 @@
     "test:coverage:functional": "bash scripts/run-functional-coverage.sh",
     "test:coverage:reliability": "pnpm --filter @news-podcast/service-runtime test:coverage && pnpm --filter @news-podcast/nats-runtime test:coverage",
     "test:sqlite-state": "node --test scripts/sqlite-state.test.mjs",
-    "test:runtime-config": "node --test scripts/content-enrichment-reset-config.test.mjs scripts/voicevox-runtime-config.test.mjs",
+    "test:runtime-config": "node --test scripts/content-enrichment-reset-config.test.mjs scripts/voicevox-runtime-config.test.mjs scripts/service-environment.test.mjs scripts/s3-identities.test.mjs",
     "test:sse-reader": "node --test scripts/read-first-sse-event.test.mjs",
     "test:publication-safety": "node --test scripts/publication-safety.test.mjs && pnpm provider-contract:check",
     "test:visual": "bash scripts/run-visual.sh",
@@ -54,7 +54,11 @@
     "loadtest:spike": "node scripts/loadtest-run.mjs --mode spike",
     "loadtest:chaos": "node scripts/loadtest-run.mjs --mode chaos",
     "reliability:chaos": "bash scripts/reliability-chaos.sh",
-    "loadtest:test": "node --test scripts/loadtest-run.test.mjs scripts/loadtest-seed.test.mjs infra/loadtest/provider-fakes/server.test.mjs"
+    "loadtest:test": "node --test scripts/loadtest-run.test.mjs scripts/loadtest-seed.test.mjs infra/loadtest/provider-fakes/server.test.mjs",
+    "test:s3-permissions": "node --test scripts/s3-permissions.integration.test.mjs",
+    "security:env:check": "node scripts/check-service-environment.mjs",
+    "security:env:runtime": "node scripts/check-service-environment.mjs --runtime",
+    "setup:s3": "node scripts/s3-identities.mjs"
   },
   "devDependencies": {
     "oxfmt": "0.62.0",

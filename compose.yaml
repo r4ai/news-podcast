@@ -7,16 +7,32 @@ services:
       dockerfile: infra/Dockerfile.node
       network: host
     command: ["pnpm", "--filter", "@news-podcast/gateway", "start"]
-    env_file:
-      - path: .env.example
-      - path: .env
-        required: false
     environment:
-      GATEWAY_PORT: "4001"
+      APP_ENV: "${APP_ENV:-development}"
+      AUTH_PROXY_MAX_RESPONSE_BYTES: "${AUTH_PROXY_MAX_RESPONSE_BYTES:-1048576}"
+      AUTH_PROXY_TIMEOUT_MS: "${AUTH_PROXY_TIMEOUT_MS:-5000}"
+      BROWSER_OTLP_HTTP_ORIGIN: "${BROWSER_OTLP_HTTP_ORIGIN:-http://otel-collector:4319}"
+      CONTENT_ARCHIVE_TIMEOUT_MS: "${CONTENT_ARCHIVE_TIMEOUT_MS:-30000}"
+      DEV_AUTH_ENABLED: "${DEV_AUTH_ENABLED:-true}"
       GATEWAY_HEALTH_PORT: "4101"
+      GATEWAY_HOST: "${GATEWAY_HOST:-}"
+      GATEWAY_PORT: "4001"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
       HEALTH_PORT: "4101"
-      NATS_SERVERS: nats://nats:4222
       IDENTITY_HTTP_ORIGIN: http://identity-access:4002
+      NATS_REQUEST_TIMEOUT_MS: "${NATS_REQUEST_TIMEOUT_MS:-2000}"
+      NATS_SERVERS: nats://nats:4222
+      OTEL_AUTO_INSTRUMENTATION: "${OTEL_AUTO_INSTRUMENTATION:-}"
+      OTEL_ENABLED: "${OTEL_ENABLED:-false}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+      OTEL_EXPORTER_OTLP_HEADERS: "${OTEL_EXPORTER_OTLP_HEADERS:-}"
+      OTEL_PROPAGATION_ALLOWLIST: "${OTEL_PROPAGATION_ALLOWLIST:-}"
+      OTEL_SERVICE_VERSION: "${OTEL_SERVICE_VERSION:-development}"
+      OTEL_TRACE_SAMPLE_RATE: "${OTEL_TRACE_SAMPLE_RATE:-1}"
+      TELEMETRY_PROXY_MAX_REQUEST_BYTES: "${TELEMETRY_PROXY_MAX_REQUEST_BYTES:-1048576}"
+      TELEMETRY_PROXY_MAX_RESPONSE_BYTES: "${TELEMETRY_PROXY_MAX_RESPONSE_BYTES:-1048576}"
+      TELEMETRY_PROXY_TIMEOUT_MS: "${TELEMETRY_PROXY_TIMEOUT_MS:-5000}"
+      TELEMETRY_PROXY_TOKEN: "${TELEMETRY_PROXY_TOKEN:-}"
     ports:
       - "127.0.0.1:4001:4001"
       - "127.0.0.1:4101:4101"
@@ -50,16 +66,29 @@ services:
       dockerfile: infra/Dockerfile.node
       network: host
     command: ["pnpm", "--filter", "@news-podcast/identity-access", "start"]
-    env_file:
-      - path: .env.example
-      - path: .env
-        required: false
     environment:
+      APP_ENV: "${APP_ENV:-development}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:4173}"
+      DEV_AUTH_ENABLED: "${DEV_AUTH_ENABLED:-true}"
+      DEV_AUTH_PASSWORD: "${DEV_AUTH_PASSWORD:-}"
+      DEV_AUTH_USER_ID: "${DEV_AUTH_USER_ID:-00000000-0000-4000-8000-000000000100}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      HEALTH_PORT: "4102"
       IDENTITY_DATABASE_PATH: /app/data/identity.sqlite
       IDENTITY_HEALTH_PORT: "4102"
+      IDENTITY_HTTP_HOST: "${IDENTITY_HTTP_HOST:-}"
       IDENTITY_HTTP_PORT: "4002"
-      HEALTH_PORT: "4102"
+      IDENTITY_QUEUE_GROUP: "${IDENTITY_QUEUE_GROUP:-identity-access}"
       NATS_SERVERS: nats://nats:4222
+      OTEL_AUTO_INSTRUMENTATION: "${OTEL_AUTO_INSTRUMENTATION:-}"
+      OTEL_ENABLED: "${OTEL_ENABLED:-false}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+      OTEL_EXPORTER_OTLP_HEADERS: "${OTEL_EXPORTER_OTLP_HEADERS:-}"
+      OTEL_PROPAGATION_ALLOWLIST: "${OTEL_PROPAGATION_ALLOWLIST:-}"
+      OTEL_SERVICE_VERSION: "${OTEL_SERVICE_VERSION:-development}"
+      OTEL_TRACE_SAMPLE_RATE: "${OTEL_TRACE_SAMPLE_RATE:-1}"
     ports:
       - "127.0.0.1:4102:4102"
     volumes:
@@ -77,20 +106,52 @@ services:
       dockerfile: infra/Dockerfile.node
       network: host
     command: ["pnpm", "--filter", "@news-podcast/content-knowledge", "start"]
-    env_file:
-      - path: .env.example
-      - path: .env
-        required: false
     environment:
-      CONTENT_KNOWLEDGE_DATABASE_PATH: /app/data/content.sqlite
+      APP_ENV: "${APP_ENV:-development}"
+      CONTENT_ARCHIVE_CLEANUP_INTERVAL_MS: "${CONTENT_ARCHIVE_CLEANUP_INTERVAL_MS:-21600000}"
+      CONTENT_ARCHIVE_MAX_ASSET_BYTES: "${CONTENT_ARCHIVE_MAX_ASSET_BYTES:-20971520}"
+      CONTENT_ARCHIVE_MAX_ASSET_COUNT: "${CONTENT_ARCHIVE_MAX_ASSET_COUNT:-512}"
+      CONTENT_ARCHIVE_MAX_ASSET_TOTAL_BYTES: "${CONTENT_ARCHIVE_MAX_ASSET_TOTAL_BYTES:-104857600}"
+      CONTENT_ARCHIVE_MAX_HTML_BYTES: "${CONTENT_ARCHIVE_MAX_HTML_BYTES:-5242880}"
+      CONTENT_ARCHIVE_ORPHAN_RETENTION_MS: "${CONTENT_ARCHIVE_ORPHAN_RETENTION_MS:-86400000}"
+      CONTENT_ARCHIVE_TIMEOUT_MS: "${CONTENT_ARCHIVE_TIMEOUT_MS:-30000}"
+      CONTENT_ENRICH_DAILY_LIMIT: "200"
+      CONTENT_ENRICH_INITIAL_BACKOFF_MS: "1000"
+      CONTENT_ENRICH_INTERVAL_MS: "60000"
+      CONTENT_ENRICH_MAX_BACKOFF_MS: "30000"
+      CONTENT_ENRICH_OPENAI_MODEL: "${CONTENT_ENRICH_OPENAI_MODEL:-}"
+      CONTENT_ENRICH_OPENAI_TIMEOUT_MS: "${CONTENT_ENRICH_OPENAI_TIMEOUT_MS:-60000}"
+      CONTENT_ENRICH_RESET_ENABLED: "${CONTENT_ENRICH_RESET_ENABLED:-false}"
       CONTENT_HEALTH_PORT: "4103"
+      CONTENT_KNOWLEDGE_DATABASE_PATH: /app/data/content.sqlite
+      CONTENT_RPC_QUEUE_GROUP: "${CONTENT_RPC_QUEUE_GROUP:-content-knowledge}"
+      CONTENT_RSS_INITIAL_BACKOFF_MS: "${CONTENT_RSS_INITIAL_BACKOFF_MS:-1000}"
+      CONTENT_RSS_INTERVAL_MS: "${CONTENT_RSS_INTERVAL_MS:-300000}"
+      CONTENT_RSS_MAX_BACKOFF_MS: "${CONTENT_RSS_MAX_BACKOFF_MS:-30000}"
+      CONTENT_RSS_MAX_BYTES: "${CONTENT_RSS_MAX_BYTES:-2097152}"
+      CONTENT_RSS_TIMEOUT_MS: "${CONTENT_RSS_TIMEOUT_MS:-10000}"
+      CONTENT_SEARCH_INDEX_BATCH_SIZE: "${CONTENT_SEARCH_INDEX_BATCH_SIZE:-10}"
+      CONTENT_SEARCH_INDEX_INITIAL_BACKOFF_MS: "${CONTENT_SEARCH_INDEX_INITIAL_BACKOFF_MS:-1000}"
+      CONTENT_SEARCH_INDEX_INTERVAL_MS: "${CONTENT_SEARCH_INDEX_INTERVAL_MS:-5000}"
+      CONTENT_SEARCH_INDEX_MAX_BACKOFF_MS: "${CONTENT_SEARCH_INDEX_MAX_BACKOFF_MS:-30000}"
       HEALTH_PORT: "4103"
       NATS_SERVERS: nats://nats:4222
-      CONTENT_ENRICH_DAILY_LIMIT: "200"
-      CONTENT_ENRICH_RESET_ENABLED: "${CONTENT_ENRICH_RESET_ENABLED:-false}"
-      CONTENT_ENRICH_INTERVAL_MS: "60000"
-      CONTENT_ENRICH_INITIAL_BACKOFF_MS: "1000"
-      CONTENT_ENRICH_MAX_BACKOFF_MS: "30000"
+      OPENAI_API_KEY: "${CONTENT_OPENAI_API_KEY:-}"
+      OPENAI_API_URL: "${OPENAI_API_URL:-https://api.openai.com/v1}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.6-luna}"
+      OTEL_AUTO_INSTRUMENTATION: "${OTEL_AUTO_INSTRUMENTATION:-}"
+      OTEL_ENABLED: "${OTEL_ENABLED:-false}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+      OTEL_EXPORTER_OTLP_HEADERS: "${OTEL_EXPORTER_OTLP_HEADERS:-}"
+      OTEL_PROPAGATION_ALLOWLIST: "${OTEL_PROPAGATION_ALLOWLIST:-}"
+      OTEL_SERVICE_VERSION: "${OTEL_SERVICE_VERSION:-development}"
+      OTEL_TRACE_SAMPLE_RATE: "${OTEL_TRACE_SAMPLE_RATE:-1}"
+      PROVIDER_MODE: "${PROVIDER_MODE:-fake}"
+      S3_ACCESS_KEY_ID: "${CONTENT_S3_ACCESS_KEY_ID:-news-podcast-content}"
+      S3_BUCKET: "${S3_BUCKET:-news-podcast}"
+      S3_ENDPOINT: "${S3_ENDPOINT:-http://seaweedfs:8333}"
+      S3_REGION: "${S3_REGION:-us-east-1}"
+      S3_SECRET_ACCESS_KEY: "${CONTENT_S3_SECRET_ACCESS_KEY:-news-podcast-content-development-secret}"
     ports:
       - "127.0.0.1:4103:4103"
     volumes:
@@ -98,8 +159,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
-      seaweedfs:
-        condition: service_healthy
+      s3-provision:
+        condition: service_completed_successfully
     healthcheck: *context-health
 
   episode-production:
@@ -110,15 +171,54 @@ services:
       dockerfile: infra/Dockerfile.node
       network: host
     command: ["pnpm", "--filter", "@news-podcast/episode-production", "start"]
-    env_file:
-      - path: .env.example
-      - path: .env
-        required: false
     environment:
+      APP_ENV: "${APP_ENV:-development}"
+      CONTENT_REQUEST_TIMEOUT_MS: "${CONTENT_REQUEST_TIMEOUT_MS:-}"
+      EPISODE_COMPLETION_BATCH_SIZE: "${EPISODE_COMPLETION_BATCH_SIZE:-50}"
+      EPISODE_COMPLETION_INITIAL_BACKOFF_MS: "${EPISODE_COMPLETION_INITIAL_BACKOFF_MS:-1000}"
+      EPISODE_COMPLETION_INTERVAL_MS: "${EPISODE_COMPLETION_INTERVAL_MS:-1000}"
+      EPISODE_COMPLETION_MAX_BACKOFF_MS: "${EPISODE_COMPLETION_MAX_BACKOFF_MS:-30000}"
       EPISODE_PRODUCTION_DATABASE_PATH: /app/data/production.sqlite
       EPISODE_PRODUCTION_HEALTH_PORT: "4104"
+      EPISODE_PRODUCTION_QUEUE_GROUP: "${EPISODE_PRODUCTION_QUEUE_GROUP:-episode-production}"
+      EPISODE_SCHEDULER_FAILURE_BACKOFF_MS: "${EPISODE_SCHEDULER_FAILURE_BACKOFF_MS:-5000}"
+      EPISODE_SCHEDULER_INTERVAL_MS: "${EPISODE_SCHEDULER_INTERVAL_MS:-60000}"
+      EPISODE_SCHEDULER_REQUEST_TIMEOUT_MS: "${EPISODE_SCHEDULER_REQUEST_TIMEOUT_MS:-5000}"
+      EPISODE_WORKER_CANCELLATION_POLL_MS: "${EPISODE_WORKER_CANCELLATION_POLL_MS:-250}"
+      EPISODE_WORKER_HEARTBEAT_MS: "${EPISODE_WORKER_HEARTBEAT_MS:-60000}"
+      EPISODE_WORKER_IDLE_MS: "${EPISODE_WORKER_IDLE_MS:-1000}"
+      EPISODE_WORKER_LEASE_MS: "${EPISODE_WORKER_LEASE_MS:-300000}"
+      EPISODE_WORKER_RETRY_DELAY_MS: "${EPISODE_WORKER_RETRY_DELAY_MS:-30000}"
       HEALTH_PORT: "4104"
       NATS_SERVERS: nats://nats:4222
+      OPENAI_API_KEY: "${PRODUCTION_OPENAI_API_KEY:-}"
+      OPENAI_API_URL: "${OPENAI_API_URL:-https://api.openai.com/v1}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.6-luna}"
+      OPENAI_REQUEST_TIMEOUT_MS: "${OPENAI_REQUEST_TIMEOUT_MS:-120000}"
+      OTEL_AUTO_INSTRUMENTATION: "${OTEL_AUTO_INSTRUMENTATION:-}"
+      OTEL_ENABLED: "${OTEL_ENABLED:-false}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+      OTEL_EXPORTER_OTLP_HEADERS: "${OTEL_EXPORTER_OTLP_HEADERS:-}"
+      OTEL_PROPAGATION_ALLOWLIST: "${OTEL_PROPAGATION_ALLOWLIST:-}"
+      OTEL_SERVICE_VERSION: "${OTEL_SERVICE_VERSION:-development}"
+      OTEL_TRACE_SAMPLE_RATE: "${OTEL_TRACE_SAMPLE_RATE:-1}"
+      PROVIDER_BASE_DELAY_MS: "${PROVIDER_BASE_DELAY_MS:-1000}"
+      PROVIDER_MAXIMUM_ATTEMPTS: "${PROVIDER_MAXIMUM_ATTEMPTS:-3}"
+      PROVIDER_MAXIMUM_DELAY_MS: "${PROVIDER_MAXIMUM_DELAY_MS:-30000}"
+      PROVIDER_MAXIMUM_ELAPSED_MS: "${PROVIDER_MAXIMUM_ELAPSED_MS:-180000}"
+      PROVIDER_MODE: "${PROVIDER_MODE:-fake}"
+      S3_ACCESS_KEY_ID: "${PRODUCTION_S3_ACCESS_KEY_ID:-news-podcast-production}"
+      S3_BUCKET: "${S3_BUCKET:-news-podcast}"
+      S3_ENDPOINT: "${S3_ENDPOINT:-http://seaweedfs:8333}"
+      S3_REGION: "${S3_REGION:-us-east-1}"
+      S3_REQUEST_TIMEOUT_MS: "${S3_REQUEST_TIMEOUT_MS:-60000}"
+      S3_SECRET_ACCESS_KEY: "${PRODUCTION_S3_SECRET_ACCESS_KEY:-news-podcast-production-development-secret}"
+      VOICEVOX_BASE_URL: "${VOICEVOX_BASE_URL:-http://voicevox:50021}"
+      VOICEVOX_CHARACTER_NAME: "${VOICEVOX_CHARACTER_NAME:-ずんだもん}"
+      VOICEVOX_MAXIMUM_AUDIO_BYTES: "${VOICEVOX_MAXIMUM_AUDIO_BYTES:-134217728}"
+      VOICEVOX_MAXIMUM_TEXT_CHARACTERS: "${VOICEVOX_MAXIMUM_TEXT_CHARACTERS:-200}"
+      VOICEVOX_REQUEST_TIMEOUT_MS: "${VOICEVOX_REQUEST_TIMEOUT_MS:-60000}"
+      VOICEVOX_STYLE_NAME: "${VOICEVOX_STYLE_NAME:-}"
     ports:
       - "127.0.0.1:4104:4104"
     volumes:
@@ -128,8 +228,8 @@ services:
         condition: service_healthy
       voicevox:
         condition: service_healthy
-      seaweedfs:
-        condition: service_healthy
+      s3-provision:
+        condition: service_completed_successfully
     healthcheck: *context-health
 
   episode-library:
@@ -140,21 +240,31 @@ services:
       dockerfile: infra/Dockerfile.node
       network: host
     command: ["pnpm", "--filter", "@news-podcast/episode-library", "start"]
-    env_file:
-      - path: .env.example
-      - path: .env
-        required: false
     environment:
+      APP_ENV: "${APP_ENV:-development}"
+      EPISODE_LIBRARY_COMPLETION_ACK_WAIT_MILLIS: "30000"
+      EPISODE_LIBRARY_COMPLETION_DURABLE_NAME: episode-library-completions
+      EPISODE_LIBRARY_COMPLETION_INITIAL_NACK_DELAY_MILLIS: "1000"
+      EPISODE_LIBRARY_COMPLETION_MAXIMUM_DELIVERIES: "10"
+      EPISODE_LIBRARY_COMPLETION_MAXIMUM_NACK_DELAY_MILLIS: "30000"
+      EPISODE_LIBRARY_COMPLETION_STREAM: EPISODE_PRODUCTION
       EPISODE_LIBRARY_DATABASE_PATH: /app/data/library.sqlite
       EPISODE_LIBRARY_HEALTH_PORT: "4105"
+      EPISODE_LIBRARY_QUEUE_GROUP: "${EPISODE_LIBRARY_QUEUE_GROUP:-episode-library}"
       HEALTH_PORT: "4105"
       NATS_SERVERS: nats://nats:4222
-      EPISODE_LIBRARY_COMPLETION_STREAM: EPISODE_PRODUCTION
-      EPISODE_LIBRARY_COMPLETION_DURABLE_NAME: episode-library-completions
-      EPISODE_LIBRARY_COMPLETION_ACK_WAIT_MILLIS: "30000"
-      EPISODE_LIBRARY_COMPLETION_MAXIMUM_DELIVERIES: "10"
-      EPISODE_LIBRARY_COMPLETION_INITIAL_NACK_DELAY_MILLIS: "1000"
-      EPISODE_LIBRARY_COMPLETION_MAXIMUM_NACK_DELAY_MILLIS: "30000"
+      OTEL_AUTO_INSTRUMENTATION: "${OTEL_AUTO_INSTRUMENTATION:-}"
+      OTEL_ENABLED: "${OTEL_ENABLED:-false}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+      OTEL_EXPORTER_OTLP_HEADERS: "${OTEL_EXPORTER_OTLP_HEADERS:-}"
+      OTEL_PROPAGATION_ALLOWLIST: "${OTEL_PROPAGATION_ALLOWLIST:-}"
+      OTEL_SERVICE_VERSION: "${OTEL_SERVICE_VERSION:-development}"
+      OTEL_TRACE_SAMPLE_RATE: "${OTEL_TRACE_SAMPLE_RATE:-1}"
+      S3_ACCESS_KEY_ID: "${LIBRARY_S3_ACCESS_KEY_ID:-news-podcast-library}"
+      S3_BUCKET: "${S3_BUCKET:-news-podcast}"
+      S3_ENDPOINT: "${S3_ENDPOINT:-http://seaweedfs:8333}"
+      S3_REGION: "${S3_REGION:-us-east-1}"
+      S3_SECRET_ACCESS_KEY: "${LIBRARY_S3_SECRET_ACCESS_KEY:-news-podcast-library-development-secret}"
     ports:
       - "127.0.0.1:4105:4105"
     volumes:
@@ -162,8 +272,8 @@ services:
     depends_on:
       nats-provision:
         condition: service_completed_successfully
-      seaweedfs:
-        condition: service_healthy
+      s3-provision:
+        condition: service_completed_successfully
     healthcheck: *context-health
 
   nats-provision:
@@ -249,16 +359,26 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     image: chrislusf/seaweedfs@sha256:e0b528145ea514040ab00d03ff0833f56acb1f0e07aeab232e20485af9278fd8
-    command: ["mini", "-dir=/data", "-s3.port=8333"]
+    command:
+      [
+        "mini",
+        "-dir=/data",
+        "-s3.port=8333",
+        "-s3.config=/run/seaweedfs-secrets/s3-identities.json",
+      ]
+    entrypoint: ["sh", "/start-seaweedfs.sh"]
+    tmpfs:
+      - /run/seaweedfs-secrets:mode=0700
+    secrets:
+      - s3-identities
     environment:
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-news-podcast}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-news-podcast-development-secret}
       S3_BUCKET: ${S3_BUCKET:-news-podcast}
     ports:
       - "127.0.0.1:8333:8333"
       - "127.0.0.1:9333:9333"
     volumes:
       - object-data:/data
+      - ./infra/security/start-seaweedfs.sh:/start-seaweedfs.sh:ro
     healthcheck:
       test:
         [
@@ -273,6 +393,18 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+
+  s3-provision:
+    image: chrislusf/seaweedfs@sha256:e0b528145ea514040ab00d03ff0833f56acb1f0e07aeab232e20485af9278fd8
+    entrypoint: ["sh", "/provision-s3.sh"]
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-news-podcast}
+    volumes:
+      - ./infra/security/provision-s3.sh:/provision-s3.sh:ro
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    restart: "no"
 
   voicevox:
     image: voicevox/voicevox_engine@sha256:eb8c7f46a7d01217d1ff2b6f018261faedeceded3cc756b4fbbf371791ad6c90
@@ -333,13 +465,13 @@ services:
     restart: unless-stopped
     stop_grace_period: 5m
     depends_on:
-      seaweedfs:
-        condition: service_healthy
+      s3-provision:
+        condition: service_completed_successfully
     environment:
       S3_ENDPOINT: http://seaweedfs:8333
       S3_REGION: ${S3_REGION:-us-east-1}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-news-podcast}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-news-podcast-development-secret}
+      S3_ACCESS_KEY_ID: ${BACKUP_SOURCE_S3_ACCESS_KEY_ID:-news-podcast-backup-source}
+      S3_SECRET_ACCESS_KEY: ${BACKUP_SOURCE_S3_SECRET_ACCESS_KEY:-news-podcast-backup-source-development-secret}
       S3_BUCKET: ${S3_BUCKET:-news-podcast}
       BACKUP_ARCHIVE_ENDPOINT: ${BACKUP_ARCHIVE_ENDPOINT:-}
       BACKUP_ARCHIVE_REGION: ${BACKUP_ARCHIVE_REGION:-us-east-1}
@@ -401,3 +533,6 @@ secrets:
 
   backup-target-attestation:
     file: ${BACKUP_TARGET_ATTESTATION_FILE_HOST:-./.secrets/backup-target-attestation.json}
+
+  s3-identities:
+    file: ${S3_IDENTITIES_FILE_HOST:-./infra/security/s3-identities.development.json}
