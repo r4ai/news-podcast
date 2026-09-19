@@ -164,6 +164,19 @@ export type PlaybackStatus = "idle" | "playing" | "paused" | "error"
 export const playbackStatusAtom = atom<PlaybackStatus>("idle")
 
 /**
+ * バーを展開しているか。
+ *
+ * 端末には残さない。「速度と音量をいじりたい」は今この瞬間の意図で、次に
+ * 開いたときまで持ち越す性質のものではない。残すと、開くたびに本文が
+ * バー1枚分だけ余計に隠れた状態から始まる。
+ *
+ * 購読するのはバーの外枠だけ。位置や再生状態とは独立した軸なので
+ * `playbackStatusAtom`へは混ぜない。混ぜると、展開しただけで
+ * 「鳴っているか」を見ている全ての行が描き直される。
+ */
+export const playerExpandedAtom = atom(false)
+
+/**
  * 音が届くのを待っている最中かどうか。
  *
  * 番組の音声はGateway経由でS3からstreamされるので、押してから鳴り始めるまでに
@@ -451,6 +464,7 @@ export const closePlayerAtom = atom(null, (get, set) => {
   if (element !== null && !element.paused) element.pause()
   set(saveProgressAtom)
   set(currentTrackAtom, null)
+  set(playerExpandedAtom, false)
   set(playbackStatusAtom, "idle")
   set(bufferingAtom, false)
   set(playbackPositionAtom, 0)
@@ -466,6 +480,7 @@ export const resetOwnerPlaybackAtom = atom(null, (get, set) => {
     unloadAudio(element)
   }
   set(currentTrackAtom, null)
+  set(playerExpandedAtom, false)
   set(progressMapAtom, {})
   set(playbackStatusAtom, "idle")
   set(playbackPositionAtom, 0)

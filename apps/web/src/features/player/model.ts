@@ -200,3 +200,23 @@ export function parseProgressMap(raw: unknown): ProgressMap {
     )
   )
 }
+
+/**
+ * 番組の見た目の種。
+ *
+ * 契約に絵は無い (`Episode`はid/題名/台本/出典/日時だけ) ので、番組ごとの
+ * 絵は持てない。しかし「今どれを聴いているか」は、題名を読む前に色で判る方が
+ * 速い。IDから色相を導けば、絵を持たないまま番組ごとに安定した見た目になる。
+ *
+ * 乱数でも時刻でもなくIDから導くのは、**同じ番組は何度開いても同じ色**で
+ * なければ目印として働かないため。
+ */
+export function artworkHue(episodeId: string): number {
+  // FNV-1a (32bit)。短い文字列でも先頭の1文字差が全体へ効く。
+  let hash = 0x811c9dc5
+  for (let index = 0; index < episodeId.length; index += 1) {
+    hash ^= episodeId.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return Math.abs(hash) % 360
+}

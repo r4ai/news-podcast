@@ -97,8 +97,12 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       `--player-h`は再生バーが実際に立っている時だけ値を持つ。バーの有無を
       stateで配ると、鳴らし始めた瞬間に画面全体が描き直されるので、DOMに
       在るかどうか (`:has`) で決める。
+
+      確保するのは**折りたたんだ板と、その下の浮きしろ**だけ。展開した段は
+      板の上へ伸びる覆いなので、ここへは足さない。足すと、開閉のたびに本文が
+      1段ぶん跳ねる。
     */
-    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:6rem] md:[&:has([data-slot=player-bar])]:[--player-h:5.5rem]">
+    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:4.75rem]">
       {/*
         キーボードだけで使う場合、ページを開くたびに6本のナビゲーションを
         通り抜けないと本文へ入れない。最初のTabで本文へ飛べる出口を置く。
@@ -161,9 +165,10 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       {player}
 
       {/*
-        背景は透かさない。この帯のすぐ上に再生バーが載り、その中の目盛りは
-        鳴っている間ずっと動く。backdrop-filterを持つ面が隣接していると、
-        目盛りが動くたびにこの帯まで描き直される (docs/design.md §7.2)。
+        背景は透かさない。再生バーはこの帯より手前(z-30)に浮いているので、
+        バーの中で毎秒動く目盛りは**この帯の背後には来ない**。それでもここを
+        透かすと、滲みが読むのは本文になり、スクロールのたびに下端の帯全体を
+        計算し直すことになる (docs/design.md §7.2)。
       */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden">
         <Navigation mobile />

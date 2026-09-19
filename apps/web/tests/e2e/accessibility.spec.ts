@@ -182,4 +182,30 @@ test.describe("アクセシビリティ", () => {
     ).toBeVisible()
     expect(await collectViolations(page)).toEqual([])
   })
+
+  /*
+    再生バーを展開した状態。
+
+    畳んでいる間は`aria-controls`の指す先が無く、透過した面の上に字と操作が
+    載る。どちらも畳んだ状態のページを検査しただけでは見えないので、
+    開いたところを別に検査する。
+  */
+  test("再生バーを展開した状態に違反がない", async ({ page }) => {
+    await login(page)
+    await page.goto("/library")
+    await page
+      .getByRole("button", { name: /今日の開発ニュース.*を再生/ })
+      .first()
+      .click()
+    await expect(
+      page.getByRole("region", { name: "再生中の番組" })
+    ).toBeVisible()
+
+    await page.getByRole("button", { name: "再生の詳細" }).click()
+    await expect(
+      page.getByRole("link", { name: "原稿と出典を読む" })
+    ).toBeVisible()
+
+    expect(await collectViolations(page)).toEqual([])
+  })
 })

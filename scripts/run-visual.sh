@@ -12,8 +12,12 @@ set -euo pipefail
 # 素のPlaywrightを直接叩くのは、このスクリプトがコンテナの中で呼ぶ
 # `test:visual:run` だけ。
 #
-#   pnpm test:visual                            比較する
-#   pnpm test:visual -- --update-snapshots=all  基準画像を作り直す
+#   pnpm test:visual                         比較する
+#   pnpm test:visual --update-snapshots=all  基準画像を作り直す
+#
+# `--`は挟まない。pnpmは`--`を取り除かずそのまま引数として渡すので、Playwright
+# 側では`--`がテストの絞り込みとして解釈され、後続のflagが効かない
+# (実測: 既存の基準画像が1枚も更新されないまま「passed」になる)。
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

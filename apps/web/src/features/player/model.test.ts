@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   FINISH_TAIL_SECONDS,
+  artworkHue,
   PLAYBACK_RATES,
   clampTime,
   clampVolume,
@@ -236,5 +237,34 @@ describe("parsePlayerTrack", () => {
     { episodeId: "id", title: 1, createdAt: "x" },
   ] as const)("形が合わない値(%o)は載っていない扱いにする", (raw) => {
     expect(parsePlayerTrack(raw)).toBeUndefined()
+  })
+})
+
+describe("artworkHue", () => {
+  it("同じ番組は何度導いても同じ色になる。目印として働く条件", () => {
+    const id = "6f1d8f0e-3a1b-4c2d-8e9f-0a1b2c3d4e5f"
+    expect(artworkHue(id)).toBe(artworkHue(id))
+  })
+
+  it("色相の範囲に収める。範囲外はCSSが黙って丸める", () => {
+    for (const id of ["", "a", "episode-a", "0".repeat(64), "🎧"]) {
+      const hue = artworkHue(id)
+      expect(Number.isInteger(hue)).toBe(true)
+      expect(hue).toBeGreaterThanOrEqual(0)
+      expect(hue).toBeLessThan(360)
+    }
+  })
+
+  it("1文字違う番組は別の色になる。隣り合う番組を見分けられる", () => {
+    expect(artworkHue("episode-a")).not.toBe(artworkHue("episode-b"))
+  })
+
+  it("番組が並んでも色が固まらない。UUIDを100件で色相の偏りを見る", () => {
+    const hues = Array.from({ length: 100 }, (_value, index) =>
+      artworkHue(`0000000${index}-3a1b-4c2d-8e9f-0a1b2c3d4e5f`)
+    )
+    // 12分割の色環に対し、少なくとも半分の区画へ散る。
+    const buckets = new Set(hues.map((hue) => Math.floor(hue / 30)))
+    expect(buckets.size).toBeGreaterThanOrEqual(6)
   })
 })

@@ -19,6 +19,7 @@ import {
   mutedAtom,
   playbackRateAtom,
   playbackStatusAtom,
+  playerExpandedAtom,
   volumeAtom,
   type PlaybackStatus,
 } from "../atoms"
@@ -115,12 +116,24 @@ describe("PlayerBar", () => {
     expect(container.textContent).toContain("2:00 / 10:00 (残り 8:00)")
   })
 
-  it("目盛りは幅いっぱいの縁に置く。狭い幅で数十pxまで縮まない", () => {
+  it("目盛りは板の上端の縁いっぱいに置く。狭い幅で数十pxまで縮まない", () => {
     renderBar()
     const scrubber = screen.getByRole("slider", { name: "再生位置" })
-    // 掴み代は帯より広く、バーの上端の縁に重ねる。
-    expect(scrubber.parentElement?.className).toContain("inset-x-0")
-    expect(scrubber.parentElement?.className).toContain("top-0")
+    // 掴み代は帯より広く、板の上端の縁に重ねる。
+    const edge = scrubber.parentElement?.parentElement
+    expect(edge?.className).toContain("inset-x-0")
+    expect(edge?.className).toContain("top-0")
+  })
+
+  it("目盛りの両端は角の丸みの内側に収める。先頭と末尾を掴める", () => {
+    renderBar()
+    const scrubber = screen.getByRole("slider", { name: "再生位置" })
+    /*
+      板は`rounded-3xl`(1.5rem)で、`overflow-hidden`の丸めはヒットテストにも
+      効く。端まで伸ばすと両端が角のカーブの外に出て、「先頭へ戻す」
+      「末尾へ飛ぶ」が掴めなくなる。角の半径ぶんの余白でそれを防ぐ。
+    */
+    expect(scrubber.parentElement?.parentElement?.className).toContain("px-6")
   })
 
   it("再生中は一時停止として押せる", async () => {
@@ -237,5 +250,100 @@ describe("PlayerBar の読み込みと失敗", () => {
     expect(audio.load).toHaveBeenCalledTimes(1)
     expect(audio.play).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole("alert")).toBeNull()
+  })
+})
+
+/**
+ * 段の開閉。
+ *
+ * 常設の1行には題名と再生しか入らない。入り切らないもの (大きい目盛り・
+ * 速度・音量・原稿への道) へ**必ず辿り着ける**ことと、辿り着いた先で同じ
+ * ものが二重に並ばないことを固定する。
+ */
+describe("PlayerBar の展開", () => {
+  beforeEach(() => localStorage.clear())
+
+  it("初めは畳んでいる。聴いていない間まで本文を削らない", () => {
+    renderBar()
+    expect(
+      screen
+        .getByRole("button", { name: "再生の詳細" })
+        .getAttribute("aria-expanded")
+    ).toBe("false")
+    expect(screen.queryByRole("link", { name: "原稿と出典を読む" })).toBeNull()
+  })
+
+  it("展開すると、常設の行に入らないものが出る", async () => {
+    const user = userEvent.setup()
+    renderBar()
+
+    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
+
+    expect(
+      screen
+        .getByRole("button", { name: "再生の詳細" })
+        .getAttribute("aria-expanded")
+    ).toBe("true")
+    expect(screen.getByRole("link", { name: "原稿と出典を読む" })).toBeDefined()
+    // 残りは負の符号で右端に出る。経過と同じ書式で並べると読み分けられない。
+    expect(screen.getByText("-8:00")).toBeDefined()
+  })
+
+  it("展開しても題名と目盛りは1つずつ。段をまたいで重ならない", async () => {
+    const user = userEvent.setup()
+    renderBar()
+
+    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
+
+    expect(screen.getAllByRole("link", { name: track.title })).toHaveLength(1)
+    expect(screen.getAllByRole("slider", { name: "再生位置" })).toHaveLength(1)
+    expect(screen.getAllByRole("slider", { name: "音量" })).toHaveLength(1)
+  })
+
+  it("展開中の目盛りも、掴んだ位置へ飛ばせる", async () => {
+    const user = userEvent.setup()
+    const { audio } = renderBar()
+    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
+
+    const scrubber = screen.getByRole("slider", { name: "再生位置" })
+    Object.defineProperty(scrubber, "value", { value: "420", writable: true })
+    scrubber.dispatchEvent(new Event("change", { bubbles: true }))
+
+    expect(audio.currentTime).toBe(420)
+  })
+
+  it("Escapeは畳むだけ。音は止めない", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar({ playing: true })
+    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
+
+    await user.keyboard("{Escape}")
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
+    expect(store.get(currentTrackAtom)).not.toBeNull()
+    expect(store.get(playbackStatusAtom)).toBe("playing")
+  })
+
+  it("畳んでいる間のEscapeは何も畳まない。他の画面の解除を奪わない", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar()
+
+    await user.click(screen.getByRole("link", { name: track.title }))
+    await user.keyboard("{Escape}")
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
+    expect(store.get(currentTrackAtom)).not.toBeNull()
+  })
+
+  it("閉じると展開も畳む。次に載せた番組が開いた状態で始まらない", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar()
+    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
+
+    await user.click(
+      screen.getByRole("button", { name: "再生を終了してバーを閉じる" })
+    )
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
   })
 })

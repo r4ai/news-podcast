@@ -50,6 +50,7 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --font-sans: "Geist Variable", "Noto Sans JP Variable", sans-serif;
+  --animate-player-eq: player-eq 900ms ease-in-out infinite;
 }
 
 :root {
@@ -85,6 +86,23 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /*
+   * Glassの素材。面ごとに色を決め打たず、ここだけを見て組む。
+   *
+   * `--glass-bg`は透ける版、`--glass-bg-opaque`は透けない版。透けない版は
+   * 「見た目を落とした代替」ではなく、`backdrop-filter`が無い環境と
+   * 透過を減らす設定で**同じ階層**を成立させるための正規の値なので、
+   * 背景との差が単独で読み取れる不透明度を持たせる。
+   */
+  --glass-bg: oklch(1 0 0 / 60%);
+  --glass-bg-opaque: oklch(0.995 0 0);
+  /* 上端の白い縁。Appleのglassは「面の厚み」をこの1本で見せている。 */
+  --glass-highlight: oklch(1 0 0 / 85%);
+  --glass-border: oklch(0.145 0 0 / 10%);
+  --glass-shadow:
+    0 1px 2px oklch(0.145 0 0 / 5%), 0 16px 40px -12px oklch(0.145 0 0 / 20%);
+  --glass-blur: 28px;
 }
 
 .dark {
@@ -119,6 +137,17 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /*
+   * 暗所のglassは明所の反転ではない。背景が暗いので、面を白で薄く起こし、
+   * 縁は白、影は黒を濃くしないと面が浮かない。
+   */
+  --glass-bg: oklch(0.26 0 0 / 62%);
+  --glass-bg-opaque: oklch(0.23 0 0);
+  --glass-highlight: oklch(1 0 0 / 14%);
+  --glass-border: oklch(1 0 0 / 10%);
+  --glass-shadow:
+    0 1px 2px oklch(0 0 0 / 40%), 0 20px 48px -12px oklch(0 0 0 / 65%);
 }
 
 @layer base {
@@ -150,5 +179,54 @@
   /* 全体の`disabled:opacity-50`が既に効くので、ここは操作性だけ揃える。 */
   [data-slot="input"]:disabled::-webkit-calendar-picker-indicator {
     @apply cursor-not-allowed;
+  }
+}
+
+/*
+ * Glassの面。背景を透かし、後ろを滲ませ、上端の縁で厚みを見せる。
+ *
+ * **`backdrop-filter`が読むのは、この面より後ろに描かれたものだけ**。面の
+ * 中身 (`children`) は前面なので、毎秒動く目盛りや時刻をいくら描き直しても
+ * 滲みは計算し直されない。逆に、頻繁に動くものをこの面と**同じか後ろ**の
+ * 階層へ置くと、その都度この面まで巻き込む (docs/design.md §7.2)。
+ *
+ * 透過できない/透過を望まれない環境では、不透明の面へ落とす。滲みが無いだけで
+ * 階層は同じに保つ。
+ */
+@utility glass-surface {
+  background-color: var(--glass-bg-opaque);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  /* 縁の内側に1本、面の厚みを示す白。`box-shadow`のinsetで重ねる。 */
+  --tw-glass-highlight-shadow: inset 0 1px 0 0 var(--glass-highlight);
+  box-shadow: var(--tw-glass-highlight-shadow), var(--glass-shadow);
+
+  @supports (backdrop-filter: blur(1px)) {
+    background-color: var(--glass-bg);
+    /* 彩度を上げないと、滲ませた背景が灰色へ寄って面が濁る。 */
+    backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  }
+
+  /*
+   * OS側で透過を減らしている利用者には滲ませない。未対応のブラウザでは
+   * この条件は成立しないので、glassのまま残る。
+   */
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: var(--glass-bg-opaque);
+    backdrop-filter: none;
+  }
+}
+
+/*
+ * 再生中を示す波。振幅だけを`transform`で動かす。高さ(`height`)を動かすと
+ * 毎フレームレイアウトからやり直しになる。
+ */
+@keyframes player-eq {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
   }
 }

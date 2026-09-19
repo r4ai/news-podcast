@@ -215,6 +215,17 @@ for (const theme of ["light", "dark"] as const) {
       await expectStablePage(page, `library-episode-${suffix}`, {
         fullPage: false,
       })
+
+      // 展開した段は、常設の1行に入らないもの (大きい目盛り・速度・音量・
+      // 原稿への道) を全部抱える。畳んだ絵だけでは、glassの面の上でそれらが
+      // 読めるかどうかが判らない。
+      await page.getByRole("button", { name: "再生の詳細" }).click()
+      await expect(
+        page.getByRole("link", { name: "原稿と出典を読む" })
+      ).toBeVisible()
+      await expectStablePage(page, `library-player-expanded-${suffix}`, {
+        fullPage: false,
+      })
     })
   }
 }
