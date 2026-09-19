@@ -4,7 +4,7 @@ import { playEpisodeAtom } from "@/features/player"
 import { Panel } from "@/shared/components/panel"
 import { useArticlePicker } from "../hooks/use-article-picker"
 import { useGeneration } from "../hooks/use-generation"
-import { ArticlePickerDialog } from "./article-picker-dialog"
+import { ConnectedArticlePickerDialog } from "./connected-article-picker-dialog"
 import { ConnectedGenerationTimeline } from "./connected-generation-timeline"
 import {
   ConnectedGenerationSettingsSummary,
@@ -70,9 +70,10 @@ export function GenerationDashboard() {
         }
         timelineSlot={<ConnectedGenerationTimeline />}
       />
-      <ArticlePickerDialog
+      <ConnectedArticlePickerDialog
         articles={picker.articles}
         atLimit={picker.atLimit}
+        isRefreshing={picker.isRefreshing}
         hasNextPage={picker.hasNextPage}
         hasSearchQuery={picker.hasSearchQuery}
         isError={picker.isError}

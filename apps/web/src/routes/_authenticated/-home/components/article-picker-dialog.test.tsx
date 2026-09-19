@@ -4,7 +4,34 @@ import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 
 import type { Article } from "@/features/articles"
-import { ArticlePickerDialog } from "./article-picker-dialog"
+import { renderWithStubRouter } from "@/shared/test/render"
+import {
+  ArticlePickerDialog,
+  type ArticlePickerDialogProps,
+} from "./article-picker-dialog"
+
+function emptyProps(
+  overrides: Partial<ArticlePickerDialogProps> = {}
+): ArticlePickerDialogProps {
+  return {
+    articles: [],
+    atLimit: false,
+    hasSearchQuery: false,
+    open: true,
+    searchQuery: "",
+    selected: new Set(),
+    selectedCount: 0,
+    onClear: vi.fn(),
+    onConfirm: vi.fn(),
+    onLoadMore: vi.fn(),
+    onOpenChange: vi.fn(),
+    onRetry: vi.fn(),
+    onSearchChange: vi.fn(),
+    onSelectTop: vi.fn(),
+    onToggle: vi.fn(),
+    ...overrides,
+  }
+}
 
 function article(id: string, title: string): Article {
   return {
@@ -49,6 +76,115 @@ function SearchHarness() {
 }
 
 describe("ArticlePickerDialog", () => {
+  it.each([
+    ["paused", "購読が一時停止中です", "購読を再開"],
+    ["syncing", "記事を取り込み中です", "同期状況を確認"],
+    ["sync-failed", "記事の取り込みに失敗しました", "購読を管理・再同期"],
+    ["empty", "選べる記事がまだありません", "購読を管理"],
+  ] as const)(
+    "offers the next action for %s",
+    async (emptyState, title, action) => {
+      renderWithStubRouter(
+        <ArticlePickerDialog {...emptyProps({ emptyState })} />
+      )
+      expect(await screen.findByText(title)).toBeTruthy()
+      expect(
+        screen.getByRole("link", { name: action }).getAttribute("href")
+      ).toBe("/subscriptions")
+      expect(
+        screen
+          .getByRole("button", { name: "この記事で生成" })
+          .hasAttribute("disabled")
+      ).toBe(true)
+    }
+  )
+
+  it("retries unknown source state without claiming subscriptions are empty", async () => {
+    const props = emptyProps({ emptyState: "source-error" })
+    render(<ArticlePickerDialog {...props} />)
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "再確認" }))
+    expect(props.onRetry).toHaveBeenCalledOnce()
+    expect(screen.queryByText("RSSフィードを追加しましょう")).toBeNull()
+  })
+
+  it("clears an empty search instead of sending the owner to subscriptions", async () => {
+    const props = emptyProps({
+      hasSearchQuery: true,
+      searchQuery: "none",
+      emptyState: "no-subscriptions",
+    })
+    render(<ArticlePickerDialog {...props} />)
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "検索語をクリア" }))
+    expect(props.onSearchChange).toHaveBeenCalledWith("")
+    expect(screen.queryByRole("link")).toBeNull()
+  })
+
+  it("can continue past a page with no archived candidates", async () => {
+    const props = emptyProps({
+      hasNextPage: true,
+      emptyState: "no-subscriptions",
+    })
+    render(<ArticlePickerDialog {...props} />)
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "もっと読み込む" }))
+    expect(props.onLoadMore).toHaveBeenCalledOnce()
+    expect(screen.queryByRole("link")).toBeNull()
+  })
+
+  it("keeps saved candidates selectable without any subscription", async () => {
+    const props = emptyProps({
+      articles: [article("saved", "保存済みの記事")],
+      emptyState: "no-subscriptions",
+    })
+    render(<ArticlePickerDialog {...props} />)
+    await userEvent.setup().click(screen.getByRole("checkbox"))
+    expect(props.onToggle).toHaveBeenCalledWith("saved")
+    expect(screen.queryByRole("link")).toBeNull()
+  })
+
+  it("does not show a settled empty state during an in-flight search", () => {
+    render(
+      <ArticlePickerDialog
+        {...emptyProps({ hasSearchQuery: true, isSearching: true })}
+      />
+    )
+    expect(screen.getByText("検索中…")).toBeTruthy()
+    expect(screen.queryByText("検索に一致する記事がありません")).toBeNull()
+  })
+
+  it("takes an owner with no sources directly to subscriptions", async () => {
+    const { router } = renderWithStubRouter(
+      <ArticlePickerDialog
+        articles={[]}
+        emptyState="no-subscriptions"
+        atLimit={false}
+        hasSearchQuery={false}
+        onClear={vi.fn()}
+        onConfirm={vi.fn()}
+        onLoadMore={vi.fn()}
+        onOpenChange={vi.fn()}
+        onRetry={vi.fn()}
+        onSearchChange={vi.fn()}
+        onSelectTop={vi.fn()}
+        onToggle={vi.fn()}
+        open
+        searchQuery=""
+        selected={new Set()}
+        selectedCount={0}
+      />
+    )
+    const link = await screen.findByRole("link", { name: "RSSフィードを追加" })
+    expect(link.getAttribute("href")).toBe("/subscriptions")
+    expect(screen.queryByText(/少し待って/)).toBeNull()
+    await userEvent.setup().click(link)
+    expect(router.state.location.pathname).toBe("/subscriptions")
+  })
+
   it("describes the chronological list and its bulk selection honestly", () => {
     render(<SearchHarness />)
 
