@@ -45,7 +45,7 @@ describe("useArticlePicker", () => {
     expect(calls).toHaveLength(0)
   })
 
-  it("filters archived articles from the recommended list", async () => {
+  it("filters archived articles from the chronological list", async () => {
     const { calls } = stubFetch([
       {
         path: "/v1/me/articles",
@@ -69,6 +69,58 @@ describe("useArticlePicker", () => {
     expect(calls[0]?.search.get("state")).toBe("all")
     expect(calls[0]?.search.get("sort")).toBe("newest")
     expect(calls[0]?.search.has("archiveStatus")).toBe(false)
+  })
+
+  it("preserves server chronology regardless of scores through paging and search", async () => {
+    const newest = { ...article("newest"), relevanceScore: 10 }
+    const unscored = { ...article("unscored"), relevanceScore: null }
+    const oldest = { ...article("oldest"), relevanceScore: 95 }
+    const { calls } = stubFetch([
+      {
+        path: "/v1/me/articles",
+        query: { q: undefined, cursor: undefined },
+        body: {
+          items: [newest, unscored],
+          page: { hasMore: true, nextCursor: "older" },
+        },
+      },
+      {
+        path: "/v1/me/articles",
+        query: { q: undefined, cursor: "older" },
+        body: { items: [oldest], page: { hasMore: false } },
+      },
+      {
+        path: "/v1/me/articles",
+        query: { q: "match", cursor: undefined },
+        body: { items: [unscored, oldest], page: { hasMore: false } },
+      },
+    ])
+    const { result } = renderHookWithProviders(() => useArticlePicker(true))
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true))
+    act(() => result.current.onLoadMore())
+    await waitFor(() =>
+      expect(result.current.articles.map((item) => item.id)).toEqual([
+        "newest",
+        "unscored",
+        "oldest",
+      ])
+    )
+    act(() => result.current.onSelectTop())
+    expect(result.current.selectedIds).toEqual(["newest", "unscored", "oldest"])
+
+    act(() => result.current.onSearchChange("match"))
+    await waitFor(() =>
+      expect(result.current.articles.map((item) => item.id)).toEqual([
+        "unscored",
+        "oldest",
+      ])
+    )
+    act(() => result.current.onSelectTop())
+    expect(result.current.selectedIds).toEqual(["unscored", "oldest"])
+    expect(calls).toHaveLength(3)
+    expect(calls.every((call) => call.search.get("sort") === "newest")).toBe(
+      true
+    )
   })
 
   it("searches the server without paging through already loaded candidates", async () => {
