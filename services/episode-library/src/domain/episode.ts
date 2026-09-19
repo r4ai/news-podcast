@@ -115,3 +115,23 @@ export const toPublicEpisode = (episode: CompletedEpisode): PublicEpisode =>
     sources: episode.sources,
     createdAt: episode.createdAt,
   }) as PublicEpisode
+
+/** An owned read projection; never hydrates the immutable detail aggregate. */
+export const OwnedEpisodeSummarySchema = Schema.Struct({
+  id: EpisodeIdSchema,
+  ownerId: OwnerIdSchema,
+  title: EpisodeTitleSchema,
+  createdAt: UtcInstantSchema,
+})
+export type OwnedEpisodeSummary = Schema.Schema.Type<
+  typeof OwnedEpisodeSummarySchema
+>
+export type EpisodeSummary = Readonly<Omit<OwnedEpisodeSummary, "ownerId">>
+export const toEpisodeSummary = (
+  episode: OwnedEpisodeSummary
+): EpisodeSummary =>
+  deepFreeze({
+    id: episode.id,
+    title: episode.title,
+    createdAt: episode.createdAt,
+  })

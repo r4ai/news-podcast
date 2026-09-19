@@ -3,6 +3,7 @@ import { Effect } from "effect"
 
 import {
   toPublicEpisode,
+  toEpisodeSummary,
   type EpisodeId,
   type HttpUrl,
   type OwnerId,
@@ -45,7 +46,7 @@ export const listCompletedEpisodes = (reader: CompletedEpisodeReader) =>
     const visible = owned.slice(0, COMPLETED_EPISODE_PAGE_SIZE)
     const last = visible.at(-1)
     return deepFreeze({
-      items: visible.map(toPublicEpisode),
+      items: visible.map(toEpisodeSummary),
       hasMore,
       ...(hasMore && last !== undefined
         ? { next: { createdAt: last.createdAt, episodeId: last.id } }

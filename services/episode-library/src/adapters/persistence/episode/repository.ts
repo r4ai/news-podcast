@@ -1,4 +1,4 @@
-import { deepFreeze } from "@news-podcast/kernel"
+import { deepFreeze, parse } from "@news-podcast/kernel"
 import { Effect } from "effect"
 
 import type {
@@ -12,11 +12,13 @@ import type {
   EpisodePageQuery,
 } from "../../../application/ports/episode-library.js"
 import type { InboxMessageId } from "../../../domain/episode-completion.js"
-import type {
-  CompletedEpisode,
-  EpisodeId,
-  OwnerId,
-  UtcInstant,
+import {
+  OwnedEpisodeSummarySchema,
+  type OwnedEpisodeSummary,
+  type CompletedEpisode,
+  type EpisodeId,
+  type OwnerId,
+  type UtcInstant,
 } from "../../../domain/episode.js"
 import {
   openEpisodeLibraryDatabaseUnsafe,
@@ -83,11 +85,16 @@ export const makeEpisodeRepository = (
   const listPageByOwner = (
     ownerId: OwnerId,
     query: EpisodePageQuery
-  ): Effect.Effect<readonly CompletedEpisode[], EpisodeLibraryStorageFailure> =>
+  ): Effect.Effect<
+    readonly OwnedEpisodeSummary[],
+    EpisodeLibraryStorageFailure
+  > =>
     Effect.try(() => selectEpisodePage(handle.database, ownerId, query)).pipe(
-      Effect.flatMap((rows) => decodeWithSources(handle, rows)),
+      Effect.flatMap((rows) =>
+        Effect.forEach(rows, parse(OwnedEpisodeSummarySchema))
+      ),
       Effect.map(
-        (episodes) => deepFreeze(episodes) as readonly CompletedEpisode[]
+        (episodes) => deepFreeze(episodes) as readonly OwnedEpisodeSummary[]
       ),
       Effect.mapError(() => storageFailure("list"))
     )

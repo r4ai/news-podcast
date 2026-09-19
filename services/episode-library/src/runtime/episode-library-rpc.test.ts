@@ -158,12 +158,15 @@ describe("episode-library RPC handler", () => {
         items: [
           {
             id: episodeId,
-            sources: [{ sourceKind: "rss", articleId, snapshotId }],
+            title: "Daily news",
+            createdAt: "2026-08-12T00:00:00.000Z",
           },
         ],
         page: { hasMore: false },
       },
     })
+    expect(JSON.stringify(parsed)).not.toContain("script")
+    expect(JSON.stringify(parsed)).not.toContain("sources")
     expect(JSON.stringify(parsed)).not.toContain("ownerId")
     expect(JSON.stringify(parsed)).not.toContain("objectKey")
   })

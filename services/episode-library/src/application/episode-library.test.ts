@@ -61,7 +61,13 @@ describe("episode library use cases", () => {
       limit: 21,
     })
     expect(repository.findByOwner).toHaveBeenCalledWith(ownerId, episodeId)
-    expect(found).toEqual(listed.items[0])
+    expect(listed.items[0]).toEqual({
+      id: found.id,
+      title: found.title,
+      createdAt: found.createdAt,
+    })
+    expect(found).toHaveProperty("script", "台本")
+    expect(found.sources).toHaveLength(1)
     expect(found).not.toHaveProperty("ownerId")
     expect(found).not.toHaveProperty("audio")
     expect(listed).toMatchObject({ hasMore: false })

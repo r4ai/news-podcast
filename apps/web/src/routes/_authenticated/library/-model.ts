@@ -3,11 +3,12 @@ import type { components } from "@news-podcast/contracts/openapi"
 import {
   episodeSubtitle,
   type Episode,
+  type EpisodeSummary,
   type EpisodePage,
 } from "@/features/episodes"
 import { groupByDate, type DateGroupKey } from "@/shared/lib/date-group"
 
-export type { Episode, EpisodePage }
+export type { Episode, EpisodeSummary, EpisodePage }
 export type EpisodeSource = components["schemas"]["EpisodeSource"]
 
 /** 選択中の番組。URLが唯一の情報源で、詳細の開閉もこれで表す。 */
@@ -31,11 +32,11 @@ export function validateLibrarySearch(
 export type EpisodeGroup = {
   readonly key: DateGroupKey
   readonly label: string
-  readonly episodes: readonly Episode[]
+  readonly episodes: readonly EpisodeSummary[]
 }
 
 export function groupEpisodesByDate(
-  episodes: readonly Episode[],
+  episodes: readonly EpisodeSummary[],
   now: Date = new Date()
 ): readonly EpisodeGroup[] {
   return groupByDate(episodes, (episode) => episode.createdAt, now).map(
@@ -70,7 +71,8 @@ export function scriptLength(script: string): number {
 }
 
 /** 一覧と詳細で同じ書式を使う。番組の素性は「いつ・何件・どれだけ」で足りる。 */
-export function episodeMetaLabel(episode: Episode): string {
+export function episodeMetaLabel(episode: Episode | EpisodeSummary): string {
+  if (!("script" in episode)) return episodeSubtitle(episode)
   return `${episodeSubtitle(episode)} ・ 台本${scriptLength(episode.script).toLocaleString("ja-JP")}字`
 }
 
@@ -87,7 +89,7 @@ export function sourceKindLabel(
  * 押した先が一覧の空白になり、操作が途切れる。
  */
 export function siblingEpisodeId(
-  episodes: readonly Episode[],
+  episodes: readonly EpisodeSummary[],
   currentId: string | undefined,
   step: 1 | -1
 ): string | undefined {

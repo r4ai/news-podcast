@@ -1,7 +1,11 @@
 import { useSuspenseInfiniteQuery } from "@tanstack/react-query"
 
 import { episodesInfiniteQueryOptions } from "@/features/episodes"
-import { groupEpisodesByDate, type Episode, type EpisodePage } from "../-model"
+import {
+  groupEpisodesByDate,
+  type EpisodeSummary,
+  type EpisodePage,
+} from "../-model"
 
 /**
  * 番組一覧。
@@ -17,7 +21,7 @@ export function useEpisodeItems() {
 
   const episodes = query.data.pages.flatMap(
     (page: EpisodePage) => page.items
-  ) as Episode[]
+  ) as EpisodeSummary[]
 
   return {
     episodes,

@@ -68,7 +68,7 @@ export type PodcastDashboardProps = {
     readonly id: string
     readonly title: string
     readonly createdAt: string
-    readonly sourceCount: number
+    readonly sourceCount?: number
   }
   /** 最新の番組を下端のバーで鳴らす。実際の再生はplayer featureが持つ。 */
   readonly onPlayEpisode?: () => void
@@ -405,8 +405,10 @@ function LatestEpisode({
             <div className="flex min-w-0 flex-col gap-1">
               <p className="font-medium">{episode.title}</p>
               <p className="text-sm text-muted-foreground">
-                {new Date(episode.createdAt).toLocaleString("ja-JP")} ・ 出典
-                {episode.sourceCount}件
+                {new Date(episode.createdAt).toLocaleString("ja-JP")}
+                {episode.sourceCount === undefined
+                  ? null
+                  : ` ・ 出典${episode.sourceCount}件`}
               </p>
             </div>
             <Button
