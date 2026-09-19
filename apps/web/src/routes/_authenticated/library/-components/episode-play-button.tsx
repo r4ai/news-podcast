@@ -9,10 +9,10 @@ import {
   playEpisodeAtom,
   togglePlaybackAtom,
 } from "@/features/player"
-import type { Episode } from "../-model"
+import type { EpisodeSummary } from "../-model"
 
 export type EpisodePlayButtonProps = {
-  readonly episode: Episode
+  readonly episode: EpisodeSummary
   readonly className?: string
   /** 文言を伴う大きい形にするか。詳細側だけがtrueにする。 */
   readonly labelled?: boolean

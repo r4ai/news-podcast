@@ -141,6 +141,17 @@ VOICEVOXへの長文入力は、音声推論のpeak memoryを抑えるため既�
 
 本番生成はownerが選択しContentが版固定した記事だけを入力にする。RSS title/markdownは未信頼データとして扱い、version付き生成promptのdraftを別requestのversion付きquality evaluatorが公開前に判定する。rejectはcheckpoint前にjobを失敗させ、VOICEVOXとLibraryへ進めない。Content KnowledgeとEpisode Productionは共通の`packages/ai-runtime`を通じてEffect AIの`LanguageModel.generateObject`を使い、strict structured output、request deadline、応答byte上限、一時障害だけの有界retryを適用する。hosted Web検索と一般Agent Harnessは本番経路へ接続しない（[ADR-0057](adr/0057-effect-ai-as-llm-boundary.md)、[ADR-0080](adr/0080-gate-untrusted-article-scripts-before-publication.md)）。
 
+製品説明・サンプルもこの入力境界に合わせる。`pnpm architecture:check` はREADMEの「できること」へWeb検索が戻ることを検出し、Webの `scripts/fake-api.contract.test.ts` はseedの全出典が保存済みRSS記事のID・snapshot・URL・titleと一致することを検証する。StorybookとE2Eも同じfake APIを使う。
+
+| 対象 | 現行仕様と互換性 |
+| --- | --- |
+| README・design・architecture・UIの生成操作 | 選択された保存記事の固定版から生成。入力外のWeb検索や外部ファクトチェックは提供しない |
+| OpenAPI `EpisodeSource.sourceKind`・UIの `Web` 出典表示 | 過去の完成番組を読めるよう `web` とsnapshotなしの出典を保持する。新規生成の機能一覧ではない |
+| fake API・Storybook | 新規生成と同じ保存済みRSS出典を例示する。legacy表示は専用の単体テストで検証する |
+
+Web検索の再導入はADR-0038の再検討として、出典保存、品質eval、費用・latency SLO、owner consentを定義してから判断する。
+
+
 起動済みlive stackをOpenAPIからブラウザ操作し、実際の記事選択、OpenAI台本生成、VOICEVOX音声合成、durable AG-UI replay、Libraryでの再生まで検証する場合は、明示的に環境変数を読み込んで次を実行する。これはOpenAIへの課金requestを発生させる。
 
 ```bash

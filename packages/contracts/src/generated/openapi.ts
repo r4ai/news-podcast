@@ -1048,6 +1048,18 @@ export interface components {
             /** @enum {string} */
             code: "episode_job_not_found";
         };
+        EpisodeSummary: {
+            id: string & unknown;
+            title: string & (unknown & unknown & unknown);
+            createdAt: string;
+        };
+        EpisodePage: {
+            items: components["schemas"]["EpisodeSummary"][];
+            page: {
+                hasMore: boolean;
+                nextCursor?: (string & (unknown & unknown & unknown)) | null;
+            };
+        };
         EpisodeSource: {
             articleId?: (string & unknown) | null;
             url: string;
@@ -1056,19 +1068,12 @@ export interface components {
             snapshotId?: (string & unknown) | null;
             sourceKind?: ("rss" | "web") | null;
         };
-        Episode: {
+        EpisodeDetail: {
             id: string & unknown;
             title: string & (unknown & unknown & unknown);
             script: string & (unknown & unknown & unknown);
             sources: components["schemas"]["EpisodeSource"][] & unknown;
             createdAt: string;
-        };
-        EpisodePage: {
-            items: components["schemas"]["Episode"][];
-            page: {
-                hasMore: boolean;
-                nextCursor?: (string & (unknown & unknown & unknown)) | null;
-            };
         };
         AddFeedSubscriptionRequest: {
             /** @description Absolute HTTP(S) RSS/Atom URL. The server canonicalizes host casing, default ports, paths, percent-encoding, and query text before identity and duplicate checks; the canonical result must be at most 2,048 characters, and credentials and fragments are forbidden. */
@@ -1830,13 +1835,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Episode */
+            /** @description EpisodeDetail */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Episode"];
+                    "application/json": components["schemas"]["EpisodeDetail"];
                 };
             };
             /** @description UnauthorizedProblem */

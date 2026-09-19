@@ -102,6 +102,8 @@ Content KnowledgeとEpisode Productionのprovider modeは共有runtime parserで
 
 `POST /v1/episode-jobs` は手動生成を表し、重複のない1〜20件の`articleIds`を必須とする。重複IDはqueueへ入れる前にHTTP境界で拒否し、Episode ProductionのRPC境界でも同じ不変条件を再検証する。定期生成は記事IDなしの`automatic` jobを作成し、workerが最新InterestProfileを1回だけ読み、有効な購読に属する未使用記事を最大50件取得して1〜20件を選定する。成功済み自動GenerationPlanの記事は期限なしで候補から除外し、手動指定では再利用を許す。空profileではLLMを呼ばず媒体を跨ぐ決定論的fallbackを使う。`POST`の成功は現在のjob状態と`Location`を返し、冪等再送でもqueuedへ巻き戻さない。Webは記事選択を確定した論理送信ごとにkeyを1つ割り当て、receipt未確認の同一選択では再利用する。選択変更、dialog破棄、明示的新規生成だけがkeyを切り替える。failed jobの`POST .../retry`もkey必須で、同じsource jobへの曖昧な再送は同じkeyを使う。永続化境界はkeyを記録せず`accepted / replay / conflict`を観測する（[ADR-0085](adr/0085-bind-idempotency-keys-to-logical-generation-actions.md)）。`GET /v1/episode-jobs/{jobId}/events`はdurable AG-UI eventを100件ずつreplayし、`Last-Event-ID`以降をterminal状態まで追尾する。詳細は[進捗protocol](protocols/episode-job-ag-ui.md)を正本とする。`PATCH /v1/me/settings` は日次のlocal time、IANA time zone、有効/無効を更新する。日次intentの暦日番号はownerごとに前進のみとし、完了記録（有効なlocal date、記録instant、記録時の適用time zone）を設定変更で消さない。新しいlocal dateが処理済みの日付以前なら抑止し、後の日付なら新しいlocal timeに従う。既存recordは履歴不明のlegacyとして移行する（[ADR-0097](adr/0097-monotonic-daily-schedule-completion.md)）。
 
+Episode一覧は`EpisodeSummary`（id・title・createdAt）のみ返し、SQLもmetadata列だけ読む。台本・完全な出典は選択時の`EpisodeDetail`に限定する。一覧とHome最新番組は題名/作成日時、詳細は出典件数/台本字数も表示する。再生開始はsummaryのidを音声endpointへ渡す。互換性・更新順は[ADR-0100](adr/0100-separate-episode-summary-from-detail.md)、転送量/遅延budgetは[性能運用](episode-list-performance.md)を参照。
+
 ## 6. 配備トポロジー
 
 | 能力 | supported Node self-host構成 |
@@ -455,6 +457,8 @@ flowchart TD
 - [ADR-0094 RSS同期を有界な処理単位へ分割し永続的に順番を譲る](adr/0094-bound-and-yield-feed-sync-work.md)
 
 Backup targetの独立性は[ADR-0095](adr/0095-attest-backup-target-independence.md)の期限付き運用承認を必須とする。provider/account/bucket/backend/障害・管理ドメインを設定へ結び付け、同一の宣言や期限切れを拒否する。APIで自動検証済みとは扱わず、operator-attested metricと期限alertで監視する。詳細と権限・source喪失drillは[復旧runbook](operations/service-state-recovery.md)。
+
+- [ADR-0100 Episode一覧をsummaryに限定する](adr/0100-separate-episode-summary-from-detail.md)
 
 ## サービスのcredential境界
 

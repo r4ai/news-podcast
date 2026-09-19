@@ -78,6 +78,8 @@ export {
   GetEpisodeRequestSchema,
   LibraryEpisodePageSchema,
   LibraryEpisodeSchema,
+  LibraryEpisodeSummarySchema,
+  LibraryEpisodeDetailSchema,
   ListEpisodesReplySchema,
   ListEpisodesRequestSchema,
   parseCreateAudioAccessReply,

@@ -95,7 +95,27 @@ describe("episode-library RPC contracts", () => {
       code: "STORAGE_FAILURE",
     })
     if (listed._tag !== "Listed") throw new Error("Expected Listed reply")
-    expect(Object.isFrozen(listed.page.items[0]?.sources[0])).toBe(true)
+    expect(Object.isFrozen(listed.page.items[0])).toBe(true)
+    expect(listed.page.items[0]).toEqual({
+      id: episodeId,
+      title: "Daily news",
+      createdAt: "2026-08-12T00:00:00.000Z",
+    })
+  })
+
+  it("accepts summary-only lists without fetching or requiring detail", async () => {
+    const summary = {
+      id: episodeId,
+      title: "Daily news",
+      createdAt: "2026-08-12T00:00:00.000Z",
+    }
+    const reply = {
+      _tag: "Listed",
+      page: { items: [summary], page: { hasMore: true, nextCursor: "cursor" } },
+    }
+    expect(await Effect.runPromise(parseListEpisodesReply(reply))).toEqual(
+      reply
+    )
   })
 
   const invalidCases: ReadonlyArray<

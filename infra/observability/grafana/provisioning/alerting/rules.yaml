@@ -570,3 +570,76 @@ groups:
           summary: '{{ $labels.service_name }} synthesized a root span'
           description: The entry point lost its parent/link context. Fix instrumentation before relying on the affected service graph edge.
         labels: { severity: warning, team: platform }
+
+  - orgId: 1
+    name: episode-list-budgets
+    folder: News Podcast
+    interval: 1m
+    rules:
+      - uid: np-episode-list-payload
+        title: Episode list exceeded 40 KB payload budget
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              editorMode: code
+              expr: 'sum(increase(episode_list_payload_bytes_count[5m])) - sum(increase(episode_list_payload_bytes_bucket{le="40000"}[5m]))'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Episode list exceeded 40 KB payload budget
+          description: Inspect summary projection and contract. List must exclude scripts, sources and audio storage metadata; run the episode-list performance test.
+        labels: { severity: warning, team: platform }
+
+      - uid: np-episode-list-latency
+        title: Episode list p95 exceeded 500 ms handler budget
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              editorMode: code
+              expr: '(histogram_quantile(0.95, sum by (le) (rate(episode_list_duration_millis_bucket[5m]))) > bool 500) and (sum(increase(episode_list_duration_millis_count[5m])) >= 20)'
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: Episode list p95 exceeded 500 ms handler budget
+          description: Inspect gateway authentication, NATS list RPC and episode-library SQLite spans. Duration excludes client network transfer; compare the mobile performance fixture separately.
+        labels: { severity: warning, team: platform }

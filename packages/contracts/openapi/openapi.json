@@ -999,11 +999,11 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "Episode",
+            "description": "EpisodeDetail",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Episode"
+                  "$ref": "#/components/schemas/EpisodeDetail"
                 }
               }
             }
@@ -6296,6 +6296,92 @@
           }
         ]
       },
+      "EpisodeSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "format": "uuid"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "\\S"
+              },
+              {
+                "maxLength": 500
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "EpisodePage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EpisodeSummary"
+            }
+          },
+          "page": {
+            "type": "object",
+            "properties": {
+              "hasMore": {
+                "type": "boolean"
+              },
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      },
+                      {
+                        "pattern": "\\S"
+                      },
+                      {
+                        "maxLength": 1000
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "hasMore"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "additionalProperties": false
+      },
       "EpisodeSource": {
         "type": "object",
         "properties": {
@@ -6372,7 +6458,7 @@
         ],
         "additionalProperties": false
       },
-      "Episode": {
+      "EpisodeDetail": {
         "type": "object",
         "properties": {
           "id": {
@@ -6433,55 +6519,6 @@
           "script",
           "sources",
           "createdAt"
-        ],
-        "additionalProperties": false
-      },
-      "EpisodePage": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Episode"
-            }
-          },
-          "page": {
-            "type": "object",
-            "properties": {
-              "hasMore": {
-                "type": "boolean"
-              },
-              "nextCursor": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "allOf": [
-                      {
-                        "minLength": 1
-                      },
-                      {
-                        "pattern": "\\S"
-                      },
-                      {
-                        "maxLength": 1000
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": [
-              "hasMore"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "required": [
-          "items",
-          "page"
         ],
         "additionalProperties": false
       },

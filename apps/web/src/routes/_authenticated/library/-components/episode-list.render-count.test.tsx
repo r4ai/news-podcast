@@ -19,7 +19,7 @@ import {
   resetRenderCounts,
   waitForRenderQuiescence,
 } from "@/shared/test/render-count"
-import type { Episode } from "../-model"
+import type { EpisodeSummary } from "../-model"
 import { EpisodeList } from "./episode-list"
 
 // 実物の行をそのまま包んで数える。JSXのtypeは安定するので、親のメモ化に
@@ -35,13 +35,15 @@ vi.mock("./episode-row", async (importOriginal) => {
 
 const EPISODE_COUNT = 20
 
-const items: Episode[] = Array.from({ length: EPISODE_COUNT }, (_, index) => ({
-  id: `episode-${index}`,
-  title: `番組 ${index}`,
-  script: "台本",
-  sources: [{ url: `https://example.com/${index}`, title: "出典" }],
-  createdAt: "2026-08-19T00:00:00.000Z",
-}))
+const items: EpisodeSummary[] = Array.from(
+  { length: EPISODE_COUNT },
+  (_, index) => ({
+    id: `episode-${index}`,
+    title: `番組 ${index}`,
+
+    createdAt: "2026-08-19T00:00:00.000Z",
+  })
+)
 
 function fakeAudio() {
   return {

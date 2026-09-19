@@ -215,7 +215,7 @@ export const makeEpisodeLibraryRpcHandler = (
                     deepFreeze({
                       _tag: "Listed",
                       page: {
-                        items: page.items.map(wireEpisode),
+                        items: page.items,
                         page: {
                           hasMore: page.hasMore,
                           ...(page.next === undefined

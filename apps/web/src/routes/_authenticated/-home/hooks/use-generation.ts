@@ -245,7 +245,6 @@ export function useGeneration() {
           id: latestEpisode.id,
           title: latestEpisode.title,
           createdAt: latestEpisode.createdAt,
-          sourceCount: latestEpisode.sources.length,
         }
       : undefined,
     pending,

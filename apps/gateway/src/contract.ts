@@ -384,16 +384,25 @@ const EpisodeSourceSchema = Schema.Struct({
   sourceKind: Schema.optional(Schema.Literals(["rss", "web"])),
 }).annotate({ identifier: "EpisodeSource" })
 
-export const EpisodeSchema = Schema.Struct({
+export const EpisodeSummarySchema = Schema.Struct({
+  id: EpisodeIdSchema,
+  title: boundedText(500),
+  createdAt: UtcDateTimeStringSchema,
+}).annotate({ identifier: "EpisodeSummary" })
+
+export const EpisodeDetailSchema = Schema.Struct({
   id: EpisodeIdSchema,
   title: boundedText(500),
   script: boundedText(20_000),
   sources: Schema.Array(EpisodeSourceSchema).check(Schema.isMinLength(1)),
   createdAt: UtcDateTimeStringSchema,
-}).annotate({ identifier: "Episode" })
+}).annotate({ identifier: "EpisodeDetail" })
+
+/** Existing TypeScript import retained for detail consumers. */
+export const EpisodeSchema = EpisodeDetailSchema
 
 export const EpisodePageSchema = Schema.Struct({
-  items: Schema.Array(EpisodeSchema),
+  items: Schema.Array(EpisodeSummarySchema),
   page: Schema.Struct({
     hasMore: Schema.Boolean,
     nextCursor: Schema.optional(boundedText(1_000)),
