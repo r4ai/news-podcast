@@ -229,3 +229,58 @@ for (const theme of ["light", "dark"] as const) {
     })
   }
 }
+
+/*
+  支援する最も狭い幅 (`globals.css`の`min-width: 320px`) での再生バー。
+
+  ここは板の中で最も余裕が無い。実測では、展開した操作列が板を38px溢れて
+  開閉ボタンが外へ出ていた。ページ全体ではなくバーだけを撮るのは、他の
+  ページの絵を320px分増やさずに、崩れる唯一の場所を固定するため。
+*/
+test("最も狭い幅でも再生バーの操作列が収まる", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 })
+  await page.goto("/login")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByLabel("開発パスワード").press("Enter")
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+
+  await page.addInitScript((episodeId: string) => {
+    localStorage.setItem(
+      "player.track",
+      JSON.stringify({
+        episodeId,
+        title: "今日の開発ニュース: Durable ObjectsとTypeScript 6.0",
+        createdAt: "2026-08-18T21:00:00.000Z",
+      })
+    )
+    localStorage.setItem(
+      "player.progress",
+      JSON.stringify({
+        [episodeId]: { position: 12, duration: 30, updatedAt: 1 },
+      })
+    )
+  }, SEEDED_EPISODE_ID)
+  await page.goto(`/library?episode=${SEEDED_EPISODE_ID}`)
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await expect(bar).toBeVisible()
+  await expect(page.getByRole("slider", { name: "再生位置" })).toHaveAttribute(
+    "aria-valuetext",
+    "0:12 / 0:30"
+  )
+  await page.evaluate(() => document.fonts.ready)
+  await expect(bar).toHaveScreenshot("player-narrow-collapsed.png", {
+    animations: "disabled",
+    caret: "hide",
+  })
+
+  await page.getByRole("button", { name: "再生の詳細" }).click()
+  await expect(
+    page.getByRole("link", { name: "原稿と出典を読む" })
+  ).toBeVisible()
+  await expect(bar).toHaveScreenshot("player-narrow-expanded.png", {
+    animations: "disabled",
+    caret: "hide",
+  })
+})

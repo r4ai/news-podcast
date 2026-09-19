@@ -36,7 +36,7 @@ export function VolumeControl({ className }: { readonly className?: string }) {
         // 押して開くpopoverにしない。音量は「鳴らしながら合わせる」ものなので、
         // 開く操作を挟むと合わせている間ずっと本文が覆われる。
         className={cn(
-          "h-5 w-16 cursor-pointer appearance-none rounded-full bg-transparent outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-24",
+          "h-6 w-16 cursor-pointer appearance-none rounded-full bg-transparent outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-24",
           // 溝は`foreground/15`。glassの面の上では`border`は薄すぎて消える。
           "[&::-webkit-slider-runnable-track]:h-[4px] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,var(--color-foreground)_var(--level),color-mix(in_oklch,var(--color-foreground)_15%,transparent)_var(--level))]",
           "[&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-sm",

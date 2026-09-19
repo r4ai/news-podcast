@@ -125,6 +125,18 @@ describe("PlayerBar", () => {
     expect(edge?.className).toContain("top-0")
   })
 
+  it("折りたたみ時の目盛りにつまみを出さない。帯から浮いて見えない", () => {
+    renderBar()
+    const scrubber = screen.getByRole("slider", { name: "再生位置" })
+    /*
+      帯は板の上端の縁に密着しているが、UAのつまみは掴み代の中央へ置かれる
+      ので、帯の中心より5px下にぶら下がる。帯へ合わせて持ち上げるには掴み代の
+      外へ出すしかなく、そこは板の`overflow-hidden`が切る。幅を持たせない。
+    */
+    expect(scrubber.className).toContain("[&::-webkit-slider-thumb]:w-0")
+    expect(scrubber.className).toContain("[&::-moz-range-thumb]:w-0")
+  })
+
   it("目盛りの両端は角の丸みの内側に収める。先頭と末尾を掴める", () => {
     renderBar()
     const scrubber = screen.getByRole("slider", { name: "再生位置" })
@@ -238,6 +250,25 @@ describe("PlayerBar の読み込みと失敗", () => {
     expect(screen.queryByText("読み込み中…")).toBeNull()
   })
 
+  /*
+    待ちの表示と時刻は、**同じ1行を入れ替える**。
+
+    並べて置くと、320pxでは題名の列(102px)へ137px入れることになり、再生
+    ボタンへ重なる。待っている間は位置も動かないので、入れ替えて構わない。
+  */
+  it("待っている間は、時刻ではなく理由だけを出す。再生ボタンへ重ならない", async () => {
+    const { container, store } = renderBar({ playing: true })
+    expect(container.textContent).toContain("2:00 / 10:00")
+
+    await act(async () => store.set(handleWaitingAtom))
+
+    expect(screen.getByText("読み込み中…")).toBeDefined()
+    expect(container.textContent).not.toContain("2:00 / 10:00")
+
+    await act(async () => store.set(handlePlayingAtom))
+    expect(container.textContent).toContain("2:00 / 10:00")
+  })
+
   it("鳴らせなかったことを伝え、その場でやり直せる", async () => {
     const user = userEvent.setup()
     const { audio } = renderBar({ status: "error" })
@@ -287,6 +318,21 @@ describe("PlayerBar の展開", () => {
     expect(screen.getByRole("link", { name: "原稿と出典を読む" })).toBeDefined()
     // 残りは負の符号で右端に出る。経過と同じ書式で並べると読み分けられない。
     expect(screen.getByText("-8:00")).toBeDefined()
+  })
+
+  /*
+    320pxでは、おもり(72px)・操作列(156px)・開閉(74px)の合計が板を38px超える。
+    おもりは中央に据えるためだけのものなので、縮む余地を残して**収まることを
+    優先**する。`shrink-0`を付けると、そのぶんが板の外へ溢れる。
+  */
+  it("展開時の釣り合いのおもりは縮められる。狭い幅で操作列が溢れない", async () => {
+    const user = userEvent.setup()
+    const { container } = renderBar()
+    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
+
+    const weight = container.querySelector("span.w-18")
+    expect(weight).not.toBeNull()
+    expect(weight?.className).not.toContain("shrink-0")
   })
 
   it("展開しても題名と目盛りは1つずつ。段をまたいで重ならない", async () => {

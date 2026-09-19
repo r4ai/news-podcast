@@ -13,7 +13,7 @@ import {
 } from "../atoms"
 import { EpisodeArtwork } from "./episode-artwork"
 import { NowPlayingPanel } from "./now-playing-panel"
-import { PlaybackBusyLabel, PlaybackErrorBanner } from "./playback-notice"
+import { PlaybackErrorBanner } from "./playback-notice"
 import { PlaybackRateSelect } from "./playback-rate-select"
 import { PlaybackScrubber, PlaybackTimeReadout } from "./playback-scrubber"
 import { TransportControls } from "./transport-controls"
@@ -117,8 +117,15 @@ export function PlayerBar() {
           {expanded ? null : <PlaybackScrubber />}
 
           {expanded ? (
-            // 右端の開閉ボタンと釣り合うおもり。操作列を行の中央に据える。
-            <span aria-hidden="true" className="w-[4.5rem] shrink-0" />
+            /*
+              右端の開閉ボタンと釣り合うおもり。操作列を行の中央に据える。
+
+              `shrink-0`は付けない。320pxではおもり・操作列・開閉ボタンの合計が
+              板を38px超えるので、縮める余地が無いとここから溢れる。**中央に
+              据えることより、収まることを優先する**。空なので0まで縮められ、
+              幅が足りるところでは72pxのまま中央に戻る。
+            */
+            <span aria-hidden="true" className="w-18" />
           ) : (
             <>
               <EpisodeArtwork className="size-11" episodeId={track.episodeId} />
@@ -165,13 +172,13 @@ function TrackSummary({ track }: { readonly track: PlayerTrack }) {
         {track.title}
       </Link>
       {/*
-        2行目は「どこまで来たか」。読み込み待ちも同じ行へ収め、待つたびに
-        バーの高さが変わらないようにする。
+        2行目は「どこまで来たか」。待っている間は同じ場所が理由を言う。
+
+        並べて置くと、320pxでは題名の列(102px)に137px入れることになり、
+        再生ボタンへ重なる。待っている間は位置も動かないので、**同じ1行を
+        入れ替える**方が収まりも読みやすさも良い。
       */}
-      <div className="flex min-w-0 items-center gap-2">
-        <PlaybackBusyLabel />
-        <PlaybackTimeReadout className="truncate" />
-      </div>
+      <PlaybackTimeReadout />
     </div>
   )
 }

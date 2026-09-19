@@ -4,6 +4,7 @@ import type { CSSProperties } from "react"
 import { cn } from "@workspace/ui/lib/utils"
 
 import {
+  isBufferingAtom,
   playbackDurationAtom,
   playbackPositionAtom,
   seekToAtom,
@@ -78,8 +79,10 @@ export function PlaybackScrubber({
         // 「末尾へ飛ぶ」という**両端の操作が掴めなくなる**。
         //
         // 寄せた結果、目盛りの左端が値0、右端が総時間と1対1で対応する。
-        // 掴み代は14pxあり、見えている帯より広い。
-        "group absolute inset-x-0 top-0 z-10 h-3.5 px-6",
+        // 掴み代は20pxあり、見えている帯(3px)よりずっと広い。題名の行箱の
+        // 上端へ4px重なるが、字は行箱の上端までは伸びないので当たらない。
+        // 帯を掴む操作は聴いている間ずっと使うので、そちらを優先する。
+        "group absolute inset-x-0 top-0 z-10 h-5 px-6",
         className
       )}
     >
@@ -98,13 +101,20 @@ export function PlaybackScrubber({
           aria-label="再生位置"
           aria-valuetext={valueText}
           className={trackStyles(
-            // つまみは掴む位置を示すためだけのもの。常時出すと3pxの帯の上に丸が
-            // 居座り、帯そのものが掴む対象に見えなくなる。触れた時だけ出す。
+            /*
+              つまみは出さない。
+
+              帯は板の上端の縁に**密着**しているが、UAのつまみは掴み代の中央へ
+              置かれるので、帯の中心より5px下にぶら下がる。帯へ合わせて持ち上げ
+              るには掴み代の外へ出すしかなく、そこは板の`overflow-hidden`が切る。
+
+              掴めることは、触れると帯が3px→5pxへ太る動きが示す。つまみが実際に
+              出ていたのはhoverできる環境だけで、指で触る環境では元から出て
+              いなかった。掴んでいる位置は塗りの先端が示す。
+            */
             cn(
-              "[&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:opacity-0 [&::-webkit-slider-thumb]:transition-opacity",
-              "group-hover:[&::-webkit-slider-thumb]:opacity-100 focus-visible:[&::-webkit-slider-thumb]:opacity-100",
-              "[&::-moz-range-thumb]:size-3 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-foreground [&::-moz-range-thumb]:opacity-0",
-              "group-hover:[&::-moz-range-thumb]:opacity-100 focus-visible:[&::-moz-range-thumb]:opacity-100"
+              "[&::-webkit-slider-thumb]:h-full [&::-webkit-slider-thumb]:w-0 [&::-webkit-slider-thumb]:appearance-none",
+              "[&::-moz-range-thumb]:h-full [&::-moz-range-thumb]:w-0 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:border-0"
             )
           )}
           disabled={!seekable}
@@ -138,7 +148,8 @@ export function PlaybackScrubberFull({
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      <div className="group relative h-5">
+      {/* 掴み代は24px。指で触る環境では、ここが唯一の「大きい目盛り」になる。 */}
+      <div className="group relative h-6">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-1/2 h-[6px] -translate-y-1/2 overflow-hidden rounded-full bg-foreground/15 [contain:paint]"
@@ -188,6 +199,13 @@ export function PlaybackScrubberFull({
  * 折りたたみ時の1行。経過と総時間だけを添える。残りは展開したときに右端へ出る。
  *
  * 位置を購読するのは目盛りとここだけで、操作列は購読しない。
+ *
+ * 待っている間は、同じ1行がその理由を言う。時刻と並べて置くと、320pxでは
+ * 題名の列(102px)へ137px入れることになり、再生ボタンへ重なる。待っている間は
+ * 位置も動かないので、入れ替える方が収まりも読みやすさも良い。
+ *
+ * 待ち状態の購読をここへ足しても予算は増えない。この行は`timeupdate`で
+ * どのみち毎秒数回描き直されるし、待ち状態はまばらにしか動かない。
  */
 export function PlaybackTimeReadout({
   className,
@@ -196,13 +214,33 @@ export function PlaybackTimeReadout({
 }) {
   const position = useAtomValue(playbackPositionAtom)
   const duration = useAtomValue(playbackDurationAtom)
+  const buffering = useAtomValue(isBufferingAtom)
   const remaining =
     duration !== undefined && duration > 0 ? duration - position : undefined
+
+  if (buffering) {
+    /*
+      要素の型を変えて差し替える。同じ`<p>`のまま`aria-live`だけ付け外しすると、
+      待ちが明けた瞬間に時刻がlive regionの中身として読み上げられ、以降は
+      毎秒その行が更新され続けることになる。
+    */
+    return (
+      <output
+        aria-live="polite"
+        className={cn(
+          "block truncate text-xs text-muted-foreground",
+          className
+        )}
+      >
+        読み込み中…
+      </output>
+    )
+  }
 
   return (
     <p
       className={cn(
-        "shrink-0 text-xs tabular-nums text-muted-foreground",
+        "truncate text-xs tabular-nums text-muted-foreground",
         className
       )}
     >

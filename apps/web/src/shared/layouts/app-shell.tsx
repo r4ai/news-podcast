@@ -102,7 +102,7 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       板の上へ伸びる覆いなので、ここへは足さない。足すと、開閉のたびに本文が
       1段ぶん跳ねる。
     */
-    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:4.75rem]">
+    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:5rem]">
       {/*
         キーボードだけで使う場合、ページを開くたびに6本のナビゲーションを
         通り抜けないと本文へ入れない。最初のTabで本文へ飛べる出口を置く。
