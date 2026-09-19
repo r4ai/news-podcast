@@ -76,6 +76,33 @@ describe("single-writer SQLite episode repository", () => {
     expect(Object.isFrozen(loaded)).toBe(true)
   })
 
+  it("lists metadata without hydrating scripts, audio or source rows", async () => {
+    const repository = makeEpisodeRepository(":memory:")
+    const completed = episode()
+    const listed = await Effect.runPromise(
+      repository
+        .saveOnce(
+          messageId("7f52766d-3b0b-4ca9-b5e8-7bfd35dc3a80"),
+          completed,
+          receivedAt
+        )
+        .pipe(
+          Effect.andThen(
+            repository.listPageByOwner(completed.ownerId, { limit: 21 })
+          ),
+          Effect.ensuring(repository.close)
+        )
+    )
+    expect(listed).toEqual([
+      {
+        id: completed.id,
+        ownerId: completed.ownerId,
+        title: completed.title,
+        createdAt: completed.createdAt,
+      },
+    ])
+  })
+
   it("rejects reuse of a message ID for a different aggregate", async () => {
     const repository = makeEpisodeRepository(":memory:")
     const original = episode()

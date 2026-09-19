@@ -16,7 +16,7 @@ import { Spinner } from "@workspace/ui/components/spinner"
 
 import { Panel } from "@/shared/components/panel"
 import { useEpisodeItems } from "../-hooks/use-episode-library"
-import { siblingEpisodeId, type Episode } from "../-model"
+import { siblingEpisodeId, type EpisodeSummary } from "../-model"
 import { EpisodeRow } from "./episode-row"
 
 export type EpisodeListProps = {
@@ -79,7 +79,7 @@ function ConnectedEpisodeList({
                 episode={episode}
                 isSelected={episode.id === selectedEpisodeId}
                 key={episode.id}
-                onSelect={(selected: Episode) => onSelect(selected.id)}
+                onSelect={(selected: EpisodeSummary) => onSelect(selected.id)}
               />
             ))}
           </ul>

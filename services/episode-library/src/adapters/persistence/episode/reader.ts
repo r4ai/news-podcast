@@ -41,9 +41,14 @@ export const selectEpisodePage = (
   database: EpisodeLibraryDatabase,
   ownerId: OwnerId,
   query: EpisodePageQuery
-): readonly EpisodeRow[] =>
+): readonly Pick<EpisodeRow, "id" | "ownerId" | "title" | "createdAt">[] =>
   database
-    .select(episodeProjection)
+    .select({
+      id: episodes.id,
+      ownerId: episodes.ownerId,
+      title: episodes.title,
+      createdAt: episodes.createdAt,
+    })
     .from(episodes)
     .where(
       query.after === undefined

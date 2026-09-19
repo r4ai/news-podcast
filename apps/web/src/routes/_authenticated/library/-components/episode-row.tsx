@@ -3,13 +3,13 @@ import { useAtomValue } from "jotai"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { listeningLabel, progressEntryAtomFamily } from "@/features/player"
-import { episodeMetaLabel, type Episode } from "../-model"
+import { episodeMetaLabel, type EpisodeSummary } from "../-model"
 import { EpisodePlayButton } from "./episode-play-button"
 
 export type EpisodeRowProps = {
-  readonly episode: Episode
+  readonly episode: EpisodeSummary
   readonly isSelected: boolean
-  readonly onSelect: (episode: Episode) => void
+  readonly onSelect: (episode: EpisodeSummary) => void
 }
 
 /**

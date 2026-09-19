@@ -1,5 +1,5 @@
-import { parse } from "@news-podcast/kernel"
-import { Schema } from "effect"
+import { deepFreeze, parse } from "@news-podcast/kernel"
+import { Effect, Schema } from "effect"
 
 const uuid = <Name extends string>(name: Name) =>
   Schema.String.check(Schema.isUUID(4)).pipe(Schema.brand(name))
@@ -59,7 +59,13 @@ const WebEpisodeSourceSchema = Schema.Struct({
   title: boundedText(500),
 })
 
-export const LibraryEpisodeSchema = Schema.Struct({
+export const LibraryEpisodeSummarySchema = Schema.Struct({
+  id: EpisodeIdSchema,
+  title: boundedText(500),
+  createdAt: UtcInstantSchema,
+})
+
+export const LibraryEpisodeDetailSchema = Schema.Struct({
   id: EpisodeIdSchema,
   title: boundedText(500),
   script: boundedText(20_000),
@@ -69,8 +75,11 @@ export const LibraryEpisodeSchema = Schema.Struct({
   createdAt: UtcInstantSchema,
 })
 
+/** Backward-compatible detail schema export; list items are summaries. */
+export const LibraryEpisodeSchema = LibraryEpisodeDetailSchema
+
 export const LibraryEpisodePageSchema = Schema.Struct({
-  items: Schema.Array(LibraryEpisodeSchema),
+  items: Schema.Array(LibraryEpisodeSummarySchema),
   page: Schema.Struct({
     hasMore: Schema.Boolean,
     nextCursor: Schema.optional(boundedText(1_000)),
@@ -125,7 +134,36 @@ export const ListEpisodesReplySchema = Schema.Union([
 export type ListEpisodesReply = Schema.Schema.Type<
   typeof ListEpisodesReplySchema
 >
-export const parseListEpisodesReply = parse(ListEpisodesReplySchema)
+// During Web → Gateway → Library rollout, accept the prior fully validated
+// list reply, then remove its detail fields before exposing a trusted summary.
+// Emission continues to use the strict summary-only ListEpisodesReplySchema.
+const CompatibleListEpisodesReplySchema = Schema.Union([
+  ListEpisodesReplySchema,
+  Schema.TaggedStruct("Listed", {
+    page: Schema.Struct({
+      items: Schema.Array(LibraryEpisodeDetailSchema),
+      page: LibraryEpisodePageSchema.fields.page,
+    }),
+  }),
+])
+export const parseListEpisodesReply = (input: unknown) =>
+  parse(CompatibleListEpisodesReplySchema)(input).pipe(
+    Effect.map((reply): ListEpisodesReply =>
+      reply._tag === "Rejected"
+        ? reply
+        : deepFreeze({
+            _tag: "Listed",
+            page: {
+              items: reply.page.items.map(({ id, title, createdAt }) => ({
+                id,
+                title,
+                createdAt,
+              })),
+              page: reply.page.page,
+            },
+          })
+    )
+  )
 
 export const GetEpisodeReplySchema = Schema.Union([
   Schema.TaggedStruct("Found", { episode: LibraryEpisodeSchema }),

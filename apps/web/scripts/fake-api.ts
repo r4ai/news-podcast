@@ -659,7 +659,14 @@ export function createFakeApi(): FakeApi {
         : json({ error: "not found" }, 404)
     }
     if (path === "/v1/episodes") {
-      return json({ items: state.episodes, page: { hasMore: false } })
+      return json({
+        items: state.episodes.map(({ id, title, createdAt }) => ({
+          id,
+          title,
+          createdAt,
+        })),
+        page: { hasMore: false },
+      })
     }
     const episodeMatch = /^\/v1\/episodes\/([^/]+)$/.exec(path)
     if (episodeMatch && request.method === "GET") {

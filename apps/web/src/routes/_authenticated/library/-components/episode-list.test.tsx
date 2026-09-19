@@ -7,17 +7,16 @@ import {
   stubFetch,
   TestProviders,
 } from "@/shared/test/render"
-import type { Episode } from "../-model"
+import type { EpisodeSummary } from "../-model"
 import { EpisodeList } from "./episode-list"
 
 const PAGE_SIZE = 20
 
-function makeEpisode(index: number): Episode {
+function makeEpisode(index: number): EpisodeSummary {
   return {
     id: `episode-${index}`,
     title: `番組 ${index}`,
-    script: `台本 ${index}`,
-    sources: [{ url: `https://example.com/${index}`, title: `出典 ${index}` }],
+
     createdAt: new Date(Date.UTC(2026, 7, 19, 0, index)).toISOString(),
   }
 }

@@ -1201,9 +1201,7 @@ test("switching episodes shows the next script from its beginning", async ({
   ).toBeVisible()
 
   await page.getByRole("link", { name: "ライブラリ", exact: true }).click()
-  const rows = page
-    .getByRole("button", { name: /: / })
-    .filter({ hasText: "・" })
+  const rows = page.getByRole("button", { name: /: / })
 
   // 長い台本の番組を開いて、詳細を末尾まで送る。
   await rows.filter({ hasText: "先週の総まとめ" }).first().click()

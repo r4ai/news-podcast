@@ -3,4 +3,9 @@ export {
   episodesInfiniteQueryOptions,
   episodesQueryOptions,
 } from "./api/episode-queries"
-export { episodeSubtitle, type Episode, type EpisodePage } from "./model"
+export {
+  episodeSubtitle,
+  type Episode,
+  type EpisodeSummary,
+  type EpisodePage,
+} from "./model"

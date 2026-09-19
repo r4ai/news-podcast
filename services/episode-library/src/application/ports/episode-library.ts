@@ -3,6 +3,7 @@ import type { Effect } from "effect"
 import type {
   AudioObjectKey,
   CompletedEpisode,
+  OwnedEpisodeSummary,
   EpisodeId,
   HttpUrl,
   OwnerId,
@@ -28,7 +29,7 @@ export interface CompletedEpisodeReader {
   listPageByOwner(
     ownerId: OwnerId,
     query: EpisodePageQuery
-  ): Effect.Effect<readonly CompletedEpisode[], EpisodeLibraryStorageFailure>
+  ): Effect.Effect<readonly OwnedEpisodeSummary[], EpisodeLibraryStorageFailure>
   findByOwner(
     ownerId: OwnerId,
     episodeId: EpisodeId
