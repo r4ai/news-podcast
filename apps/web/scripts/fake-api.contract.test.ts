@@ -204,6 +204,39 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
     }
   })
 
+  it("seeds episode sources from archived RSS articles only", async () => {
+    const listing = await get("/v1/episodes")
+    const { items } = (await listing.json()) as { items: { id: string }[] }
+    expect(items.length).toBeGreaterThan(0)
+    for (const item of items) {
+      const response = await get(`/v1/episodes/${item.id}`)
+      const { sources } = (await response.json()) as {
+        sources: {
+          articleId: string
+          snapshotId: string
+          sourceKind: string
+          url: string
+          title: string
+        }[]
+      }
+      expect(sources.length).toBeGreaterThan(0)
+      for (const source of sources) {
+        expect(source.sourceKind).toBe("rss")
+        expect(source.articleId).toBeTruthy()
+        expect(source.snapshotId).toBeTruthy()
+        const articleResponse = await get(`/v1/me/articles/${source.articleId}`)
+        expect(articleResponse.status).toBe(200)
+        expect(await articleResponse.json()).toMatchObject({
+          id: source.articleId,
+          snapshotId: source.snapshotId,
+          url: source.url,
+          title: source.title,
+          archiveStatus: "succeeded",
+        })
+      }
+    }
+  })
+
   // 回帰の本体。本文はJSONに包まれて返るのであって、生Markdownではない。
   it("returns the article body as JSON rather than raw markdown", async () => {
     const response = await get(`/v1/me/articles/${articleId}/markdown`)
