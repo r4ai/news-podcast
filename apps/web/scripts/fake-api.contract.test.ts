@@ -247,35 +247,62 @@ describe("fake gateway conforms to the OpenAPI contract", () => {
     expect(body.markdown.startsWith("#")).toBe(true)
   })
 
-  it("serves a generated episode from the detail endpoint", async () => {
-    const api = createFakeApi()
-    const headers = {
-      cookie: await login(api),
-      "content-type": "application/json",
+  it.each([[articleId], [articleId, "00000000-0000-4000-8000-000000000012"]])(
+    "serves generated sources from the selected archived articles: %j",
+    async (...selectedArticleIds) => {
+      const api = createFakeApi()
+      const headers = {
+        cookie: await login(api),
+        "content-type": "application/json",
+      }
+      const created = await api.fetch(
+        new Request("http://127.0.0.1:4000/v1/episode-jobs", {
+          method: "POST",
+          headers: { ...headers, "idempotency-key": "fake-create-1" },
+          body: JSON.stringify({
+            trigger: "manual",
+            articleIds: selectedArticleIds,
+          }),
+        })
+      )
+      const job = (await created.json()) as { episodeId: string }
+
+      const response = await api.fetch(
+        new Request(`http://127.0.0.1:4000/v1/episodes/${job.episodeId}`, {
+          headers,
+        })
+      )
+
+      expect(response.status).toBe(200)
+      const media = successMediaTypes("/v1/episodes/{episodeId}", "GET")
+      const episode = await response.json()
+      assertMatches(
+        episode,
+        media["application/json"]!.schema!,
+        "/v1/episodes/{episodeId}"
+      )
+      const expectedSources = await Promise.all(
+        selectedArticleIds.map(async (id) => {
+          const articleResponse = await api.fetch(
+            new Request(`http://127.0.0.1:4000/v1/me/articles/${id}`, {
+              headers,
+            })
+          )
+          expect(articleResponse.status).toBe(200)
+          const article = await articleResponse.json()
+          return {
+            articleId: article.id,
+            snapshotId: article.snapshotId,
+            title: article.title,
+            url: article.url,
+            publishedAt: article.publishedAt,
+            sourceKind: "rss",
+          }
+        })
+      )
+      expect(episode.sources).toEqual(expectedSources)
     }
-    const created = await api.fetch(
-      new Request("http://127.0.0.1:4000/v1/episode-jobs", {
-        method: "POST",
-        headers: { ...headers, "idempotency-key": "fake-create-1" },
-        body: JSON.stringify({ trigger: "manual", articleIds: [articleId] }),
-      })
-    )
-    const job = (await created.json()) as { episodeId: string }
-
-    const response = await api.fetch(
-      new Request(`http://127.0.0.1:4000/v1/episodes/${job.episodeId}`, {
-        headers,
-      })
-    )
-
-    expect(response.status).toBe(200)
-    const media = successMediaTypes("/v1/episodes/{episodeId}", "GET")
-    assertMatches(
-      await response.json(),
-      media["application/json"]!.schema!,
-      "/v1/episodes/{episodeId}"
-    )
-  })
+  )
 
   it("converges an idempotent create replay to one job", async () => {
     const api = createFakeApi()

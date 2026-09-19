@@ -926,7 +926,9 @@ test("development login to generated episode playback completes", async ({
   await page.getByRole("link", { name: "今日" }).click()
   await page.getByRole("button", { name: "番組を生成" }).click()
   // 生成前に対象記事を選ぶ（選択フロー自体は専用テストで検証する）。
-  await page.getByRole("checkbox").first().click()
+  await page
+    .getByRole("checkbox", { name: /Durable Objectsが東京リージョンに対応/ })
+    .click()
   await page.getByRole("button", { name: "この記事で生成" }).click()
   await expect(page.getByText("完成", { exact: true })).toBeVisible({
     timeout: 15_000,
@@ -960,8 +962,10 @@ test("development login to generated episode playback completes", async ({
     page.getByText("ローカル環境の生成フローが正常に完了しました。")
   ).toBeVisible()
   await expect(
-    page.getByRole("link", { name: /ローカルE2Eニュース/ }).first()
-  ).toHaveAttribute("href", "https://example.com/local-news")
+    page
+      .getByRole("link", { name: /Durable Objectsが東京リージョンに対応/ })
+      .first()
+  ).toHaveAttribute("href", "https://zenn.dev/seed-1")
 
   // 再生バーはページを跨いで残り、音も止まらない (ADR-0064)。
   // バーに載った番組の題名もリンクなので、ナビゲーションは完全一致で選ぶ。

@@ -641,14 +641,16 @@ export function createFakeApi(): FakeApi {
           id: episodeId,
           title: "今日の開発ニュース",
           script: "ローカル環境の生成フローが正常に完了しました。",
-          sources: [
-            {
-              url: "https://example.com/local-news",
-              title: "ローカルE2Eニュース",
-              publishedAt: createdAt,
+          sources: ownerArticles
+            .filter((article) => body.articleIds.includes(article.id))
+            .map((article) => ({
+              articleId: article.id,
+              snapshotId: article.snapshotId,
+              url: article.url,
+              title: article.title,
+              publishedAt: article.publishedAt,
               sourceKind: "rss",
-            },
-          ],
+            })),
           createdAt: new Date().toISOString(),
         })
       return json(job, 202)
