@@ -268,3 +268,7 @@ queue滞留は`article.search_body.queue.depth`の推移を起点に、object st
 | SHA-256 | `<verified-sha256>` |
 
 `20260815135150_jittery_makkari`は`content_outbox`とそのindexだけを削除する。記事snapshot、購読、タグ候補の保持はmigration testで固定し、Content参照はNATS RPCを正本とする。
+
+## Credential の分離と更新
+
+Backup sourceは `BACKUP_SOURCE_S3_*` の専用read-only鍵を使い、archiveへの権限は `generations/*` へのGet/Put/retentionと状態確認に限定する。鍵を更新したらtarget attestationも再発行する。詳細は[service secrets runbook](service-secrets.md)を参照。

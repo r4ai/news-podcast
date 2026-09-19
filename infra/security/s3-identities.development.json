@@ -1,0 +1,70 @@
+{
+  "identities": [
+    {
+      "name": "content",
+      "credentials": [
+        {
+          "accessKey": "news-podcast-content",
+          "secretKey": "news-podcast-content-development-secret"
+        }
+      ],
+      "policyNames": [
+        "CONTENT"
+      ]
+    },
+    {
+      "name": "production",
+      "credentials": [
+        {
+          "accessKey": "news-podcast-production",
+          "secretKey": "news-podcast-production-development-secret"
+        }
+      ],
+      "policyNames": [
+        "PRODUCTION"
+      ]
+    },
+    {
+      "name": "library",
+      "credentials": [
+        {
+          "accessKey": "news-podcast-library",
+          "secretKey": "news-podcast-library-development-secret"
+        }
+      ],
+      "policyNames": [
+        "LIBRARY"
+      ]
+    },
+    {
+      "name": "backup-source",
+      "credentials": [
+        {
+          "accessKey": "news-podcast-backup-source",
+          "secretKey": "news-podcast-backup-source-development-secret"
+        }
+      ],
+      "policyNames": [
+        "BACKUP_SOURCE"
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "name": "CONTENT",
+      "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:PutObject\",\"s3:DeleteObject\"],\"Resource\":[\"arn:aws:s3:::news-podcast/articles/*\"]},{\"Effect\":\"Allow\",\"Action\":[\"s3:ListBucket\"],\"Resource\":[\"arn:aws:s3:::news-podcast\",\"arn:aws:s3:::news-podcast/*\"],\"Condition\":{\"StringLike\":{\"s3:prefix\":[\"articles/*\"]}}}]}"
+    },
+    {
+      "name": "PRODUCTION",
+      "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\",\"s3:DeleteObject\"],\"Resource\":[\"arn:aws:s3:::news-podcast/episodes/*\"]}]}"
+    },
+    {
+      "name": "LIBRARY",
+      "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::news-podcast/episodes/*\"]}]}"
+    },
+    {
+      "name": "BACKUP_SOURCE",
+      "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::news-podcast/articles/*\",\"arn:aws:s3:::news-podcast/episodes/*\"]},{\"Effect\":\"Allow\",\"Action\":[\"s3:ListBucket\"],\"Resource\":[\"arn:aws:s3:::news-podcast\",\"arn:aws:s3:::news-podcast/*\"]}]}"
+    }
+  ]
+}

@@ -455,3 +455,7 @@ flowchart TD
 - [ADR-0094 RSS同期を有界な処理単位へ分割し永続的に順番を譲る](adr/0094-bound-and-yield-feed-sync-work.md)
 
 Backup targetの独立性は[ADR-0095](adr/0095-attest-backup-target-independence.md)の期限付き運用承認を必須とする。provider/account/bucket/backend/障害・管理ドメインを設定へ結び付け、同一の宣言や期限切れを拒否する。APIで自動検証済みとは扱わず、operator-attested metricと期限alertで監視する。詳細と権限・source喪失drillは[復旧runbook](operations/service-state-recovery.md)。
+
+## サービスのcredential境界
+
+Composeはサービス別の環境変数allowlistだけを注入する。S3は記事・音声書込・音声読取・backup source読取の専用principalを分け、archiveは独立credentialを使う。ホスト `.env` を全量配布しない。詳細は[ADR-0101](adr/0101-isolate-service-environments-and-storage-permissions.md)と[secret移行runbook](operations/service-secrets.md)を参照。

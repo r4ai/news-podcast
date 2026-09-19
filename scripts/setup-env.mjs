@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto"
 import { chmodSync, lstatSync, readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
+import { generateLocalS3Identities } from "./s3-identities.mjs"
+
 const defaultTargetPath = fileURLToPath(new URL("../.env", import.meta.url))
 const defaultTemplatePath = fileURLToPath(
   new URL("../.env.example", import.meta.url)
@@ -31,6 +33,10 @@ export function createEnvironmentFile({
   }
 
   const content = readFileSync(templatePath, "utf8")
+    .replace(
+      /^(CONTENT|PRODUCTION|LIBRARY|BACKUP_SOURCE)_S3_SECRET_ACCESS_KEY=.*$/gm,
+      (_, scope) => `${scope}_S3_SECRET_ACCESS_KEY=${secret()}`
+    )
     .replace(/^BETTER_AUTH_SECRET=$/m, `BETTER_AUTH_SECRET=${secret()}`)
     .replace(/^DEV_AUTH_PASSWORD=$/m, `DEV_AUTH_PASSWORD=${secret()}`)
     .replace(/^TELEMETRY_PROXY_TOKEN=$/m, `TELEMETRY_PROXY_TOKEN=${secret()}`)
@@ -43,9 +49,10 @@ export function createEnvironmentFile({
 
 if (pathToFileURL(process.argv[1] ?? "").href === import.meta.url) {
   const result = createEnvironmentFile()
+  generateLocalS3Identities()
   console.log(
     result === "created"
-      ? "Created .env with local-only secrets. Add OPENAI_API_KEY and set PROVIDER_MODE=live for a live smoke test."
+      ? "Created .env with local-only secrets. Add CONTENT_OPENAI_API_KEY / PRODUCTION_OPENAI_API_KEY and set PROVIDER_MODE=live for a live smoke test."
       : ".env already exists; permissions were secured and no values were changed."
   )
 }
