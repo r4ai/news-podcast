@@ -25,7 +25,7 @@
     "provider-contract:refresh": "node scripts/refresh-provider-contracts.mjs",
     "provider-security-eval": "PROVIDER_SECURITY_EVAL=1 pnpm --filter @news-podcast/episode-production exec vitest run src/adapters/providers/openai-script-generator.eval.test.ts",
     "db:generate": "turbo db:generate",
-    "architecture:check": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs",
+    "architecture:check": "node --test scripts/check-architecture.test.mjs scripts/check-product-capabilities.test.mjs && node scripts/check-architecture.mjs",
     "mcp:check": "node --test scripts/check-mcp-config.test.mjs scripts/ensure-grafana-mcp-token.test.mjs && node scripts/check-mcp-config.mjs",
     "parser:check": "node --test scripts/check-parser-boundaries.test.mjs && node scripts/check-parser-boundaries.mjs",
     "test:e2e": "pnpm --filter web test:e2e",

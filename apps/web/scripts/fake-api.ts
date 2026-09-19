@@ -145,7 +145,7 @@ function seedSecondOwnerArticles(): ReturnType<typeof seedArticles> {
 
 /**
  * ライブラリは「原稿を読みながら出典を確かめる」画面なので、seedにも
- * 段落のある台本と、保存済み・未保存の両方の出典を持たせる。空に近いseedだと
+ * 段落のある台本と、本番生成と同じ保存済みRSS記事の出典を持たせる。空に近いseedだと
  * 2ペインの幅の使い方も右レールも絵に出ない。
  */
 function seedEpisodes(): Array<Record<string, unknown>> {
@@ -183,10 +183,12 @@ function seedEpisodes(): Array<Record<string, unknown>> {
           sourceKind: "rss",
         },
         {
-          url: "https://example.com/sqlite-wal",
+          articleId: "00000000-0000-4000-8000-000000000012",
+          url: "https://zenn.dev/seed-3",
           title: "SQLiteのWALモードと本番運用の勘所",
           publishedAt: createdAt,
-          sourceKind: "web",
+          snapshotId: "00000000-0000-4000-8000-000000000022",
+          sourceKind: "rss",
         },
       ],
       createdAt: "2026-08-18T21:00:00.000Z",
@@ -639,14 +641,16 @@ export function createFakeApi(): FakeApi {
           id: episodeId,
           title: "今日の開発ニュース",
           script: "ローカル環境の生成フローが正常に完了しました。",
-          sources: [
-            {
-              url: "https://example.com/local-news",
-              title: "ローカルE2Eニュース",
-              publishedAt: createdAt,
+          sources: ownerArticles
+            .filter((article) => body.articleIds.includes(article.id))
+            .map((article) => ({
+              articleId: article.id,
+              snapshotId: article.snapshotId,
+              url: article.url,
+              title: article.title,
+              publishedAt: article.publishedAt,
               sourceKind: "rss",
-            },
-          ],
+            })),
           createdAt: new Date().toISOString(),
         })
       return json(job, 202)
