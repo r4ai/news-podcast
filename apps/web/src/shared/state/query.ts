@@ -1,5 +1,5 @@
 import type { Atom } from "jotai"
-import { atomFamily } from "jotai/utils"
+import { atomFamily } from "jotai-family"
 
 /**
  * server stateをatomとして扱うための土台。

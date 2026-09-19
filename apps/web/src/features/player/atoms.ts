@@ -1,5 +1,6 @@
 import { atom } from "jotai"
-import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils"
+import { atomFamily } from "jotai-family"
+import { atomWithStorage, selectAtom } from "jotai/utils"
 
 import { recordBrowserEvent } from "@/shared/observability/events"
 import {

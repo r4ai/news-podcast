@@ -129,13 +129,20 @@ export function useReadingDictionary() {
   }
 
   function updateEntry(id: string, patch: ReadingDictionaryPatch) {
+    const normalizedPatch = {
+      ...patch,
+      ...(patch.reading !== undefined
+        ? { reading: normalizeReading(patch.reading) }
+        : {}),
+    }
+    // Keep every supplied field while narrowing the nonempty OpenAPI union.
     const body =
       patch.surface !== undefined
-        ? { surface: patch.surface }
+        ? { ...normalizedPatch, surface: patch.surface }
         : patch.reading !== undefined
-          ? { reading: normalizeReading(patch.reading) }
+          ? { ...normalizedPatch, reading: normalizeReading(patch.reading) }
           : patch.accentType !== undefined
-            ? { accentType: patch.accentType }
+            ? { ...normalizedPatch, accentType: patch.accentType }
             : undefined
     if (body === undefined) return
     run(
