@@ -149,6 +149,7 @@ export function useArticlePicker(
     selected,
     atLimit,
     isLoading: listQuery.isLoading,
+    isRefreshing: listQuery.isFetching,
     isError: listQuery.isError,
     hasNextPage: isSearching ? false : listQuery.hasNextPage,
     isFetchingNextPage: listQuery.isFetchingNextPage,

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { expect, fn, userEvent, within } from "storybook/test"
 
 import type { Article } from "@/features/articles"
+import { StubRouterProvider } from "@/shared/test/stub-router"
 
 import { MAX_SELECTED_ARTICLES } from "../model"
 import { ArticlePickerDialog } from "./article-picker-dialog"
@@ -37,6 +38,13 @@ const articles = [
 const meta = {
   title: "Foundation/Article picker dialog",
   component: ArticlePickerDialog,
+  decorators: [
+    (Story) => (
+      <StubRouterProvider>
+        <Story />
+      </StubRouterProvider>
+    ),
+  ],
   args: {
     open: true,
     articles,
@@ -108,6 +116,22 @@ export const NoCandidates: Story = {
     const body = within(canvasElement.ownerDocument.body)
     await expect(body.getByText("選べる記事がまだありません")).toBeVisible()
   },
+}
+
+export const NoSubscriptions: Story = {
+  args: { articles: [], emptyState: "no-subscriptions" },
+}
+
+export const Syncing: Story = {
+  args: { articles: [], emptyState: "syncing" },
+}
+
+export const SyncFailed: Story = {
+  args: { articles: [], emptyState: "sync-failed" },
+}
+
+export const SourceUnavailable: Story = {
+  args: { articles: [], emptyState: "source-error" },
 }
 
 export const LoadFailed: Story = {

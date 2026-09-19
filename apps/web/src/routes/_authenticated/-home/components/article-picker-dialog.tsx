@@ -1,4 +1,4 @@
-import { Inbox, ListMusic, Search, TriangleAlert } from "lucide-react"
+import { ListMusic, Search, TriangleAlert } from "lucide-react"
 
 import {
   Dialog,
@@ -32,6 +32,8 @@ import {
 } from "@/features/articles"
 
 import { MAX_SELECTED_ARTICLES, selectionLabel } from "../model"
+import type { PickerSourceState } from "../hooks/use-picker-sources"
+import { ArticlePickerEmpty } from "./article-picker-empty"
 
 export type ArticlePickerDialogProps = {
   readonly open: boolean
@@ -44,6 +46,8 @@ export type ArticlePickerDialogProps = {
   readonly hasNextPage?: boolean
   readonly isFetchingNextPage?: boolean
   readonly isSearching?: boolean
+  readonly emptyState?: PickerSourceState
+  readonly isRefreshing?: boolean
   readonly hasSearchQuery: boolean
   readonly searchQuery: string
   readonly pending?: boolean
@@ -119,6 +123,11 @@ function PickerBody({
   onToggle,
   selected,
   hasSearchQuery,
+  emptyState = "empty",
+  isRefreshing,
+  isSearching,
+  onSearchChange,
+  onOpenChange,
 }: Pick<
   ArticlePickerDialogProps,
   | "articles"
@@ -131,6 +140,11 @@ function PickerBody({
   | "onRetry"
   | "onToggle"
   | "selected"
+  | "emptyState"
+  | "isRefreshing"
+  | "isSearching"
+  | "onSearchChange"
+  | "onOpenChange"
 > & { readonly hasSearchQuery: boolean }) {
   if (isLoading) {
     return (
@@ -162,24 +176,18 @@ function PickerBody({
   }
 
   if (articles.length === 0) {
+    if (isSearching) return null
     return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Inbox aria-hidden="true" />
-          </EmptyMedia>
-          <EmptyTitle>
-            {hasSearchQuery
-              ? "検索に一致する記事がありません"
-              : "選べる記事がまだありません"}
-          </EmptyTitle>
-          <EmptyDescription>
-            {hasSearchQuery
-              ? "検索語を変えると、ほかの候補を表示できます。"
-              : "本文の取り込みが完了した記事だけを番組にできます。少し待ってからもう一度開いてください。"}
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <ArticlePickerEmpty
+        state={
+          hasNextPage ? "more-pages" : hasSearchQuery ? "search" : emptyState
+        }
+        busy={isFetchingNextPage || isRefreshing}
+        onClearSearch={() => onSearchChange("")}
+        onLoadMore={onLoadMore}
+        onNavigate={() => onOpenChange(false)}
+        onRetry={onRetry}
+      />
     )
   }
 
@@ -311,7 +319,12 @@ export function ArticlePickerDialog({
               検索中…
             </div>
           ) : null}
-          <PickerBody {...body} hasSearchQuery={body.hasSearchQuery} />
+          <PickerBody
+            {...body}
+            hasSearchQuery={body.hasSearchQuery}
+            onSearchChange={onSearchChange}
+            onOpenChange={onOpenChange}
+          />
         </div>
 
         <DialogFooter className="m-0 flex-col gap-3 rounded-none border-t p-4 sm:flex-row sm:items-center sm:justify-between">
