@@ -13,7 +13,7 @@
   "dependencies": {
     "@news-podcast/persistence": "workspace:*",
     "effect": "4.0.0-rc.109",
-    "nodemailer": "9.0.1"
+    "nodemailer": "9.1.1"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
