@@ -232,6 +232,7 @@ ProductionからLibraryへのcompletionは、LibraryのinboxとEpisodeを同一t
 - 派生値は読み取り専用の派生atomにし、冗長なstateを持たない。「URLが外から変われば下書きを捨てる」のような規則は、由来を値に含める（`{ base, value }`）ことで純粋な関数として書ける。前の値を覚えるstateやEffectは要らない。
 - OSの配色やキーボードショートカットのような外部への購読はatomの`onMount`へ置く。リスナの寿命が購読の有無と一致し、依存配列が消える。
 - 定期取得する応答は`select`で実際に描く分まで絞る。キュー状態のように明細を丸ごと含む応答をそのまま購読すると、無関係な進捗だけで参照が変わり、ポーリングのたびに描き直される。`select`の結果にも構造共有が掛かるので、絞れば値が動いた時だけ描き直る（設定のAI処理パネルは30秒ごとに1回 → 0回。`ai-enrich-panel.render-count.test.tsx`が予算にしている）。
+- query・player・辞書編集の `atomFamily` は `jotai-family` を使う。非推奨の `jotai/utils` 版は使わず、値によるキー同値判定・atom再利用・`remove` によるキャッシュ解放を維持する（#110）。Jotai本体のメジャー更新は別途判断する。
 - server stateはTanStack Queryのまま。ただし**suspendしない読み**（件数、同期状態）は`atomWithQuery`にして購読の単位を分ける。suspendする読みはTanStack Queryのsuspense hookを使う。`Panel`の表示・回復境界がそれに依存しており、`jotai-tanstack-query`のsuspense系atomはReact 19のSuspenseで解決しないことを実測している。
 - **流れ続ける外部イベントも同じ扱い**。生成中のAG-UIストリームは数分にわたり毎秒フレームを送るので、畳み込んだ結果をhookの返り値にすると購読が呼び出し位置に固定され、1フレームごとにダッシュボード全体（購読フィード、最新エピソード、記事選択ダイアログ）が描き直される。結果は`generationStreamAtom`が持ち、`selectAtom`で「実際に描く値」まで切り出して配る。段階と状態は文字列、採用記事は中身での同一性（`sameAdoptedArticles`）で比べ、値が動いた時だけ描き直す（実測: 3フレームで3回 → 0回。`generation-dashboard.render-count.test.tsx`が予算にしている）。
 - **表示境界は情報源ごとに割る**。1つのhookが画面全部のqueryを読むと、最も遅い1本が画面全体の初回表示を止める。ダッシュボードの右カラム（生成時刻・購読フィード）は設定/購読/フィードの3queryを自分で読み、自分の`Panel`を持つ。生成ステータスはジョブとエピソードだけを待って先に出る。

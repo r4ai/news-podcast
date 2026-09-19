@@ -47,6 +47,7 @@
     "hast-util-to-jsx-runtime": "2.3.6",
     "hast-util-to-string": "3.0.1",
     "jotai": "2.20.2",
+    "jotai-family": "1.1.0",
     "jotai-tanstack-query": "0.11.0",
     "katex": "0.18.3",
     "lucide-react": "1.30.0",
