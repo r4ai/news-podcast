@@ -79,6 +79,29 @@ describe("HTML structural budget state table", () => {
       validateHtmlBudget("<div></span>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1))
     ).toThrowError(expect.objectContaining(failure("ResourceLimit")))
   })
+
+  it("honors self-closing syntax inside SVG and MathML foreign content", () => {
+    expect(() =>
+      validateHtmlBudget("<svg/>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1))
+    ).not.toThrow()
+    expect(() =>
+      validateHtmlBudget("<math/>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1))
+    ).not.toThrow()
+    expect(() =>
+      validateHtmlBudget("<svg><circle r='1'/><path/></svg>")
+    ).not.toThrow()
+    expect(() =>
+      validateHtmlBudget(
+        "<svg><foreignObject><div></div></foreignObject></svg>"
+      )
+    ).not.toThrow()
+  })
+
+  it("still bounds deeply nested foreign content without self-closing tags", () => {
+    expect(() =>
+      validateHtmlBudget("<svg>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1))
+    ).toThrowError(expect.objectContaining(failure("ResourceLimit")))
+  })
 })
 
 describe("AST budgets", () => {
