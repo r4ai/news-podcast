@@ -275,30 +275,50 @@ const importString = (params: string): string | undefined => {
 const cssResourceUrls = (
   css: string,
   base: string,
+  maximumCount: number,
+  seen: ReadonlySet<string> | undefined,
   inline = false
 ): readonly string[] => {
   const root = parseCss(css, inline)
   if (root === undefined) return []
-  const values: string[] = []
-  const collect = (value: string) =>
-    transformCssUrls(value, (candidate) => {
-      values.push(candidate)
-      return candidate
-    })
-  root.walkDecls((declaration) => void collect(declaration.value))
-  root.walkAtRules("import", (rule) => {
-    const direct = importString(rule.params)
-    if (direct !== undefined) values.push(direct)
-    else collect(rule.params)
-  })
-  return [
-    ...new Set(
-      values.flatMap((value) => {
-        const url = resourceUrl(stripCssString(value), base)
-        return url === undefined ? [] : [url]
+  const discovered = new Set<string>()
+  const addUrl = (raw: string): void => {
+    const url = resourceUrl(stripCssString(raw), base)
+    if (url === undefined) return
+    if (discovered.has(url) || (seen?.has(url) ?? false)) return
+    discovered.add(url)
+    if ((seen?.size ?? 0) + discovered.size > maximumCount) {
+      // postcss は walk callback 内の例外へ postcssNode を追記するため、
+      // 凍結済みの failure を直接 throw せず、拡張可能なマーカーを投げる。
+      throw { _tag: "CssBudgetExceeded" }
+    }
+  }
+  try {
+    root.walkDecls((declaration) => {
+      transformCssUrls(declaration.value, (candidate) => {
+        addUrl(candidate)
+        return candidate
       })
-    ),
-  ]
+    })
+    root.walkAtRules("import", (rule) => {
+      const direct = importString(rule.params)
+      if (direct !== undefined) addUrl(direct)
+      else
+        transformCssUrls(rule.params, (candidate) => {
+          addUrl(candidate)
+          return candidate
+        })
+    })
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      (error as { _tag?: unknown })._tag === "CssBudgetExceeded"
+    )
+      throw failure("ResourceLimit")
+    throw error
+  }
+  return [...discovered]
 }
 
 const rewriteCss = (
@@ -452,15 +472,30 @@ const captureReplay = async (input: {
     ]
 
     const maximumCount = input.maximumAssetCount
+    const collectCssReferences = (
+      css: string,
+      base: string,
+      seen: ReadonlySet<string> | undefined,
+      inline = false
+    ): readonly string[] => {
+      try {
+        return cssResourceUrls(css, base, maximumCount, seen, inline)
+      } catch (error) {
+        if (isCaptureError(error) && error.reason === "ResourceLimit")
+          rejectLimit("count")
+        throw error
+      }
+    }
     const stylesheetUrls = references
       .filter(({ required }) => required)
       .map(({ url }) => url)
     const inlineCssUrls = inlineCss.flatMap(({ element, attribute }) =>
-      cssResourceUrls(
+      collectCssReferences(
         attribute === "style"
           ? (element.getAttribute(attribute) ?? "")
           : (element.textContent ?? ""),
         input.sourceUrl,
+        undefined,
         attribute === "style"
       )
     )
@@ -471,6 +506,7 @@ const captureReplay = async (input: {
     const queued = [
       ...new Set([...stylesheetUrls, ...inlineCssUrls, ...remainingUrls]),
     ]
+    const seen = new Set(queued)
     const fetched = new Map<string, FetchedAsset>()
     const bodies = new Map<string, Uint8Array>()
     let requiredFailure = false
@@ -515,9 +551,9 @@ const captureReplay = async (input: {
         if (mediaType === "text/css") {
           const css = new TextDecoder().decode(body)
           let insertionIndex = index + 1
-          for (const nested of cssResourceUrls(css, url)) {
-            if (!queued.includes(nested))
-              queued.splice(insertionIndex++, 0, nested)
+          for (const nested of collectCssReferences(css, url, seen)) {
+            seen.add(nested)
+            queued.splice(insertionIndex++, 0, nested)
           }
         }
       } catch (error) {
