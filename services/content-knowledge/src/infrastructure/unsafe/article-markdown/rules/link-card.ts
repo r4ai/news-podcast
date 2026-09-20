@@ -3,6 +3,7 @@ import type { Link, Root } from "mdast"
 export type LinkCardMetadata = Readonly<{
   title: string
   description?: string
+  favicon?: string
   image?: string
 }>
 export type LinkCardResolver = (

@@ -14,6 +14,7 @@ describe("link metadata", () => {
       )
     ).toEqual({
       title: "A & B",
+      favicon: "https://example.com/favicon.ico",
       description: "Summary",
       image: "https://example.com/og.png",
     })
@@ -26,7 +27,10 @@ describe("link metadata", () => {
           `<title>Fallback</title><meta property="og:image" content="${image}">`,
           base
         )
-      ).toEqual({ title: "Fallback" })
+      ).toEqual({
+        title: "Fallback",
+        favicon: "https://example.com/favicon.ico",
+      })
     }
   )
   it("falls back to Twitter metadata or hostname", () => {
@@ -36,7 +40,10 @@ describe("link metadata", () => {
         base
       ).title
     ).toBe("Tweet")
-    expect(parseLinkCardMetadata("", base)).toEqual({ title: "example.com" })
+    expect(parseLinkCardMetadata("", base)).toEqual({
+      title: "example.com",
+      favicon: "https://example.com/favicon.ico",
+    })
   })
   it("uses bounded text", () => {
     expect(
@@ -63,7 +70,9 @@ describe("link metadata", () => {
         observe: (o) => outcomes.push(o),
       })
       expect(await resolver(base.href)).toEqual(
-        status === 200 ? { title: "Title" } : undefined
+        status === 200
+          ? { title: "Title", favicon: "https://example.com/favicon.ico" }
+          : undefined
       )
       expect(calls).toEqual([base.href])
       expect(outcomes).toEqual([status === 200 ? "succeeded" : "unavailable"])
@@ -122,3 +131,21 @@ it.each(["non-html", "byte-limit"])(
     expect(read).toBe(kind === "byte-limit")
   }
 )
+
+it.each([
+  [
+    '<link rel="shortcut icon" href="../favicon.svg">',
+    "https://example.com/favicon.svg",
+  ],
+  [
+    '<link rel="apple-touch-icon" href="/apple.png"><link rel="icon" href="/icon.png">',
+    "https://example.com/icon.png",
+  ],
+  [
+    '<link rel="icon" href="javascript:x"><link rel="apple-touch-icon" href="/apple.png">',
+    "https://example.com/apple.png",
+  ],
+  ["", "https://example.com/favicon.ico"],
+])("resolves safe favicon candidates: %s", (html, favicon) => {
+  expect(parseLinkCardMetadata(html, base)).toMatchObject({ favicon })
+})

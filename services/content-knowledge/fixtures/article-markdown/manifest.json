@@ -83,7 +83,7 @@
     },
     {
       "file": "zenn-syntax.html",
-      "linkCards": {"https://example.com/guide?q=a&b=c#section": {"title": "Zenn card preview", "description": "Preserved article summary", "image": "https://example.com/preview.png"}},
+      "linkCards": {"https://example.com/guide?q=a&b=c#section": {"title": "Zenn card preview", "description": "Preserved article summary", "image": "https://example.com/preview.png", "favicon": "https://example.com/icon.svg"}},
       "sourceUrl": "https://zenn.dev/zenn/articles/markdown-guide",
       "sha256": "ce60078de1ecfb1d88437e39cee7585d3e2cec80e08dd782a26388481287595d",
       "includes": [

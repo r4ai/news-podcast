@@ -2,6 +2,7 @@ import { safeFallbackUrl } from "./embed"
 export type LinkCardMetadata = Readonly<{
   title?: string
   description?: string
+  favicon?: string
   image?: string
 }>
 const PREFIX = "link-card:v1:"
@@ -26,6 +27,7 @@ export const parseLinkCardMetadata = (
       title: text("title", 256),
       description: text("description", 512),
       image,
+      favicon: safeFallbackUrl(text("favicon", 2048) ?? ""),
     }
   } catch {
     return {}

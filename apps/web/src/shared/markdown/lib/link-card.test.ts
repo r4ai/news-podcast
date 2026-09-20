@@ -35,3 +35,13 @@ describe("archived card metadata", () => {
     ).toHaveLength(256)
   })
 })
+
+it.each(["javascript:x", "data:image/png,x"])(
+  "rejects unsafe favicon %s",
+  (favicon) => {
+    expect(
+      parseLinkCardMetadata("link-card:v1:" + JSON.stringify({ favicon }))
+        .favicon
+    ).toBeUndefined()
+  }
+)

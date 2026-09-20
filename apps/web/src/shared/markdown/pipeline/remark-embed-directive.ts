@@ -45,6 +45,7 @@ export const remarkEmbedDirective: Plugin<[], Root> = () => (tree: Root) => {
         dataCardTitle: card.title,
         dataCardDescription: card.description,
         dataCardImage: card.image,
+        dataCardFavicon: card.favicon,
         dataEmbedFallback: directive.link.title ?? directive.link.url,
       },
     }

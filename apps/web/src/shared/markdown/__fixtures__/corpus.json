@@ -102,8 +102,8 @@
       "sourceFile": "zenn-syntax.html",
       "sourceUrl": "https://zenn.dev/zenn/articles/markdown-guide",
       "sourceSha256": "ce60078de1ecfb1d88437e39cee7585d3e2cec80e08dd782a26388481287595d",
-      "markdownSha256": "624dc834ab4eb6289d87cdbdf47289c928022af96d42bf8de260a8c2fd118186",
-      "markdownBytes": 825,
+      "markdownSha256": "be6c2eaca1a70b5d7ec1c78358819a4eaf72decc8895020b1ef440530955808f",
+      "markdownBytes": 870,
       "profileId": "zenn",
       "appliedRules": [
         "callout",

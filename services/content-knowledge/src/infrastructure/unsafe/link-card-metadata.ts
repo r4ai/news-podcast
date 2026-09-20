@@ -31,23 +31,36 @@ export const parseLinkCardMetadata = (
       ["og:description", "description", "twitter:description"],
       512
     )
-    const candidate = meta(["og:image", "twitter:image"], 2048)
-    let image: string | undefined
-    try {
-      if (candidate) {
+    const safeAsset = (candidate: string | null | undefined) => {
+      try {
+        if (!candidate || candidate.length > 2048) return undefined
         const url = new URL(candidate, base)
-        if (
-          ["https:", "http:"].includes(url.protocol) &&
+        return ["https:", "http:"].includes(url.protocol) &&
           !url.username &&
-          !url.password
-        )
-          image = url.href
+          !url.password &&
+          url.href.length <= 2048
+          ? url.href
+          : undefined
+      } catch {
+        return undefined
       }
-    } catch {
-      /* Invalid images leave a text card. */
     }
+    const image = safeAsset(meta(["og:image", "twitter:image"], 2048))
+    const links = [...dom.document.querySelectorAll("link[rel][href]")]
+    const icon = (rel: string) =>
+      links
+        .filter((link) =>
+          link.getAttribute("rel")?.toLowerCase().split(/\s+/).includes(rel)
+        )
+        .map((link) => safeAsset(link.getAttribute("href")))
+        .find(Boolean)
+    const favicon =
+      icon("icon") ??
+      icon("apple-touch-icon") ??
+      new URL("/favicon.ico", base).href
     return {
       title,
+      favicon,
       ...(description ? { description } : {}),
       ...(image ? { image } : {}),
     }

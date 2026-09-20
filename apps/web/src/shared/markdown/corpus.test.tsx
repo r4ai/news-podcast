@@ -224,9 +224,12 @@ it("renders restored Zenn source through existing cards, details, math and Merma
   expect(card).not.toBeNull()
   expect(card.hasAttribute("data-link-card")).toBe(true)
   expect(card.textContent).toContain("Zenn card preview")
-  expect(card.querySelector("img")?.getAttribute("src")).toBe(
-    "https://example.com/preview.png"
+  expect(card.querySelector("[data-card-favicon]")?.getAttribute("src")).toBe(
+    "https://example.com/icon.svg"
   )
+  expect(
+    card.querySelector("img:not([data-card-favicon])")?.getAttribute("src")
+  ).toBe("https://example.com/preview.png")
   expect(
     container.querySelectorAll(
       'a[href="https://example.com/guide?q=a&b=c#section"]'

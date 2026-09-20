@@ -41,6 +41,7 @@ export const markdownSanitizeSchema: Schema = {
       "dataCardTitle",
       "dataCardDescription",
       "dataCardImage",
+      "dataCardFavicon",
     ],
     summary: [...(defaultSchema.attributes?.summary ?? []), "dataCalloutTitle"],
     code: [

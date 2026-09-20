@@ -31,20 +31,41 @@ function Thumbnail({ src }: { readonly src: string }) {
   )
 }
 
+function Favicon({ src }: { readonly src: string }) {
+  const [failed, setFailed] = useState(false)
+  return failed ? (
+    <Globe2 aria-hidden="true" className="size-3.5 shrink-0" />
+  ) : (
+    <img
+      alt=""
+      data-card-favicon=""
+      className="size-3.5 shrink-0 object-contain"
+      src={src}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
 export function LinkCard({
   "data-embed-url": value = "",
   "data-card-title": title,
   "data-card-description": description,
   "data-card-image": image,
+  "data-card-favicon": favicon,
 }: {
   readonly "data-embed-url"?: string
   readonly "data-card-title"?: string
   readonly "data-card-description"?: string
   readonly "data-card-image"?: string
+  readonly "data-card-favicon"?: string
 }) {
   const href = safeFallbackUrl(value)
   if (!href) return null
   const hostname = new URL(href).hostname
+  const icon =
+    safeFallbackUrl(favicon ?? "") || new URL("/favicon.ico", href).href
   const thumbnail = image ? safeFallbackUrl(image) : undefined
   return (
     <a
@@ -65,7 +86,7 @@ export function LinkCard({
             </CardDescription>
           ) : null}
           <div className="mt-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <Globe2 aria-hidden="true" className="size-3.5 shrink-0" />
+            <Favicon key={icon} src={icon} />
             <span className="truncate">{hostname}</span>
             <ArrowUpRight
               aria-hidden="true"
