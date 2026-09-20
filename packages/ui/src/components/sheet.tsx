@@ -81,6 +81,8 @@ function SheetContent({
   */
   const [offset, setOffset] = useState(0)
   const [dragging, setDragging] = useState(false)
+  /** 引き切った後、その位置から下へ送り出している最中か。 */
+  const [dismissing, setDismissing] = useState(false)
   const startY = useRef(0)
   /*
     引いた量は`ref`でも持つ。`state`だけだと、離した時点で最後の動きがまだ
@@ -89,26 +91,46 @@ function SheetContent({
   const moved = useRef(0)
   // 引いて戻したときに、続けて飛んでくる`click`を無視するための印。
   const dragged = useRef(false)
+  /** 引き始めた指。触れているのが1本とは限らない。 */
+  const pointer = useRef<number | null>(null)
 
   /*
     動きと終わりは**窓で受ける**。掴み代の上だけで受けると、指が要素の外へ
     出た瞬間や、ブラウザが自前の引きずりを始めて`pointercancel`を投げた
     瞬間に、引いた量を見失う。`setPointerCapture`でも同じことが起きた(実測:
     160px引いても閉じなかった)。
+
+    窓で受ける代わりに、**引き始めた指以外は無視する**。そうしないと、1本目
+    が掴み代を押さえたまま2本目を動かしただけで面が動き、2本目を離した拍子に
+    閉じてしまう。
   */
   useEffect(() => {
     if (!dragging) return
     const move = (event: PointerEvent) => {
+      if (event.pointerId !== pointer.current) return
       moved.current = Math.max(0, event.clientY - startY.current)
       setOffset(moved.current)
     }
-    const end = () => {
+    const end = (event: PointerEvent) => {
+      if (event.pointerId !== pointer.current) return
       const distance = moved.current
+      const canceled = event.type === "pointercancel"
+      pointer.current = null
       moved.current = 0
       setDragging(false)
+      /*
+        打ち切られた指の後には`click`が来ない。印を立てたままにすると、
+        次にキーボードや支援技術で閉じるボタンを押したとき、その印を
+        食べて何も起きない。
+      */
+      dragged.current = !canceled && distance > DRAG_SLOP_PX
+      if (!canceled && distance >= DISMISS_PX) {
+        // 離した位置から続けて下へ送り出す。0へ戻すと、一度跳ね上がる。
+        setDismissing(true)
+        onDismiss()
+        return
+      }
       setOffset(0)
-      dragged.current = distance > DRAG_SLOP_PX
-      if (distance >= DISMISS_PX) onDismiss()
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", end)
@@ -131,7 +153,12 @@ function SheetContent({
         style={
           dragging
             ? { transform: `translateY(${offset}px)`, transition: "none" }
-            : undefined
+            : dismissing
+              ? {
+                  transform: "translateY(100%)",
+                  transition: "transform 300ms var(--ease-apple)",
+                }
+              : undefined
         }
         className={cn(
           /*
@@ -142,6 +169,8 @@ function SheetContent({
           "fixed inset-x-0 bottom-0 z-50 flex max-h-[92svh] flex-col gap-4 overflow-y-auto overscroll-contain rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground outline-none",
           // 来た方向が見えるよう、下端から丸ごと滑り込ませる。
           "duration-350 ease-apple data-open:animate-in data-open:slide-in-from-bottom-[100%] data-closed:animate-out data-closed:slide-out-to-bottom-[100%] motion-reduce:duration-0",
+          // 引いて閉じるときは、上の出口の動きを止めて離した位置から続ける。
+          dismissing && "data-closed:animate-none",
           className
         )}
         {...props}
@@ -163,7 +192,14 @@ function SheetContent({
           }}
           draggable={false}
           onPointerDown={(event) => {
-            if (event.button !== 0) return
+            /*
+              印は**次に押し始めた時点で必ず消す**。同じ操作の`click`が来る
+              前提で消していると、指が要素の外で離れた場合や打ち切られた
+              場合に立ちっぱなしになり、その次の押下を食べて何も起きない。
+            */
+            dragged.current = false
+            if (event.button !== 0 || pointer.current !== null) return
+            pointer.current = event.pointerId
             startY.current = event.clientY
             moved.current = 0
             setDragging(true)

@@ -77,6 +77,8 @@ export function PlayerBar() {
   // 畳むときのfocusの行き先。開いた中身は畳んだ瞬間に消えるので、
   // 消えない場所へ先に移す必要がある。
   const titleRef = useRef<HTMLButtonElement>(null)
+  // 押し始めた場所が「押せないところ」だったか。開くのはそのときだけ。
+  const pressedSurface = useRef(false)
   if (track === null) return null
 
   /**
@@ -144,8 +146,23 @@ export function PlayerBar() {
             当たらず、速度を選んだだけで板が開き、しかもその拍子に候補を
             抱えた列ごと消えて選択まで失われていた。
           */
+          onPointerDown={(event) => {
+            /*
+              **押し始めた場所**を覚える。離した場所だけで決めると、再生や
+              閉じるを押してから指をずらして板の余白で離したとき、そちらの
+              `click`は取り消されるのにこちらだけが開く。操作はそれを始めた
+              ものに属する (docs/design.md §7.1)。
+            */
+            const target = event.target as Element
+            pressedSurface.current =
+              event.button === 0 &&
+              event.currentTarget.contains(target) &&
+              target.closest(INTERACTIVE) === null
+          }}
           onPointerUp={(event) => {
-            if (expanded || event.button !== 0) return
+            const started = pressedSurface.current
+            pressedSurface.current = false
+            if (!started || expanded) return
             const target = event.target as Element
             if (!event.currentTarget.contains(target)) return
             if (target.closest(INTERACTIVE) !== null) return

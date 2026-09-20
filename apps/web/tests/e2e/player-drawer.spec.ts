@@ -48,12 +48,12 @@ async function openDrawer(page: Page) {
     そこで座標を取ると、掴み代は読んだ場所からまだ動く。実測では126px下に
     居る最中の座標を掴み、押した先が背面になっていた。
   */
-  await page.getByRole("button", { name: "閉じる" }).hover()
+  await page.getByRole("button", { name: "閉じる", exact: true }).hover()
 }
 
 /** 掴み代を掴んで`distance`だけ引き下げ、離す。 */
 async function dragHandle(page: Page, distance: number) {
-  const handle = page.getByRole("button", { name: "閉じる" })
+  const handle = page.getByRole("button", { name: "閉じる", exact: true })
   // 動きが止まるまで待ってから座標を読む。
   await handle.hover()
   const box = await handle.boundingBox()
@@ -68,7 +68,9 @@ async function dragHandle(page: Page, distance: number) {
 
 test("掴み代は指で掴める広さを持つ", async ({ page }) => {
   await openDrawer(page)
-  const box = await page.getByRole("button", { name: "閉じる" }).boundingBox()
+  const box = await page
+    .getByRole("button", { name: "閉じる", exact: true })
+    .boundingBox()
   expect(box).not.toBeNull()
   // 見えている棒は9pxしかない。掴める広さは外側のボタンが持つ。
   expect(box!.width).toBeGreaterThanOrEqual(44)
@@ -89,7 +91,7 @@ test("引き下げると閉じる", async ({ page }) => {
 
 test("掴み代を押しても閉じる", async ({ page }) => {
   await openDrawer(page)
-  await page.getByRole("button", { name: "閉じる" }).click()
+  await page.getByRole("button", { name: "閉じる", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
 })
 
@@ -98,4 +100,20 @@ test("Escapeでも閉じる。音は止めない", async ({ page }) => {
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.getByRole("region", { name: "再生中の番組" })).toBeVisible()
+})
+
+test("指が掴み代の外で離れた後でも、押して閉じられる", async ({ page }) => {
+  await openDrawer(page)
+  const handle = page.getByRole("button", { name: "閉じる", exact: true })
+
+  /*
+    閾値には届かない幅だけ引いて、掴み代の**外**で離す。そこでは`click`が
+    来ないので、「引いて戻した」印を同じ操作の`click`が食べる前提で消して
+    いると立ちっぱなしになり、次に押したときその印を食べて何も起きない。
+  */
+  await dragHandle(page, 40)
+  await expect(page.getByRole("dialog")).toBeVisible()
+
+  await handle.click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
 })

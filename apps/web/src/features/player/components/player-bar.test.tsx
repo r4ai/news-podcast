@@ -1,5 +1,5 @@
 import { act } from "react"
-import { render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -295,6 +295,25 @@ describe("PlayerBar の開閉", () => {
 
     expect(store.get(playbackRateAtom)).toBe(1.5)
     expect(audio.playbackRate).toBe(1.5)
+    expect(store.get(playerExpandedAtom)).toBe(false)
+  })
+
+  /*
+    操作はそれを始めたものに属する。再生や閉じるを押してから指をずらして板の
+    余白で離すと、そちらの`click`は取り消されるのに、離した場所だけを見て
+    いると板だけが開く。
+  */
+  it("押せるものから指をずらして離しても開かない", async () => {
+    const { container, store } = renderBar()
+    const play = screen.getByRole("button", { name: "再生" })
+    const surface = container.querySelector(
+      '[aria-hidden="true"].rounded-xl'
+    ) as Element
+
+    // 再生ボタンの上で押し、板の余白の上で離す。
+    fireEvent.pointerDown(play, { button: 0 })
+    fireEvent.pointerUp(surface, { button: 0 })
+
     expect(store.get(playerExpandedAtom)).toBe(false)
   })
 
