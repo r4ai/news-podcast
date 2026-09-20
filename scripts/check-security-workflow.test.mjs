@@ -53,7 +53,8 @@ describe("security workflow trust boundary", () => {
     const auditSteps = commandStep(workflow, "pnpm audit")
     assert.ok(auditSteps.length > 0, "pnpm audit step must exist")
     for (const step of auditSteps) {
-      assert.match(step, /--ignore-pnpmfile/)
+      // audit は --ignore-pnpmfile を受け付けないため、config名前空間で無効化する。
+      assert.match(step, /--config\.ignore-pnpmfile=true/)
     }
   })
 
