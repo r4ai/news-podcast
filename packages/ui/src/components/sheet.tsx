@@ -1,6 +1,7 @@
 "use client"
 
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
+import { useEffect, useRef, useState } from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -50,11 +51,75 @@ function SheetDescription({
   )
 }
 
+/** ここまで引き下げたら閉じる。これ未満は「掴んで戻した」として元へ返す。 */
+const DISMISS_PX = 96
+
+/** 指が動いたと見なす幅。これ未満は押しただけなので、押した通りに閉じる。 */
+const DRAG_SLOP_PX = 4
+
 function SheetContent({
   children,
   className,
+  onDismiss,
   ...props
-}: SheetPrimitive.Popup.Props) {
+}: SheetPrimitive.Popup.Props & {
+  /**
+   * 掴み代から閉じるときに呼ぶ。
+   *
+   * 開いているかどうかを持っているのは`Root`を置いた側なので、面の中からは
+   * 直接閉じられない。`Close`を隠し持って押す手も試したが、`display:none`の
+   * 要素への`click()`は届かなかった(実測)。閉じる道は明示で受け取る。
+   */
+  readonly onDismiss: () => void
+}) {
+  /*
+    掴んで引き下げて閉じる。
+
+    掴み代を描くだけで手を付けないと、**引けそうに見えて引けない**面になる。
+    掴み代は同時に「閉じる」ボタンでもあるので、押しても閉じる。どちらも
+    効かない経路(キーボード)にはEscapeと背面の押下が残る。
+  */
+  const [offset, setOffset] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const startY = useRef(0)
+  /*
+    引いた量は`ref`でも持つ。`state`だけだと、離した時点で最後の動きがまだ
+    描き直されておらず、判断が1フレーム古い値になる。
+  */
+  const moved = useRef(0)
+  // 引いて戻したときに、続けて飛んでくる`click`を無視するための印。
+  const dragged = useRef(false)
+
+  /*
+    動きと終わりは**窓で受ける**。掴み代の上だけで受けると、指が要素の外へ
+    出た瞬間や、ブラウザが自前の引きずりを始めて`pointercancel`を投げた
+    瞬間に、引いた量を見失う。`setPointerCapture`でも同じことが起きた(実測:
+    160px引いても閉じなかった)。
+  */
+  useEffect(() => {
+    if (!dragging) return
+    const move = (event: PointerEvent) => {
+      moved.current = Math.max(0, event.clientY - startY.current)
+      setOffset(moved.current)
+    }
+    const end = () => {
+      const distance = moved.current
+      moved.current = 0
+      setDragging(false)
+      setOffset(0)
+      dragged.current = distance > DRAG_SLOP_PX
+      if (distance >= DISMISS_PX) onDismiss()
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", end)
+    window.addEventListener("pointercancel", end)
+    return () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", end)
+      window.removeEventListener("pointercancel", end)
+    }
+  }, [dragging, onDismiss])
+
   return (
     <SheetPrimitive.Portal>
       <SheetPrimitive.Backdrop
@@ -63,6 +128,11 @@ function SheetContent({
       />
       <SheetPrimitive.Popup
         data-slot="sheet-content"
+        style={
+          dragging
+            ? { transform: `translateY(${offset}px)`, transition: "none" }
+            : undefined
+        }
         className={cn(
           /*
             高さは画面の9割まで。超える分は**この面の中でスクロールさせる**。
@@ -76,11 +146,35 @@ function SheetContent({
         )}
         {...props}
       >
-        {/* 掴み代。押し下げて閉じられることを、字を使わずに示す。 */}
-        <div
-          aria-hidden="true"
-          className="sticky top-0 z-10 mx-auto h-1 w-9 shrink-0 rounded-full bg-foreground/20"
-        />
+        {/*
+          掴み代。引き下げても押しても閉じる。見た目の棒は9pxしかないので、
+          指で掴める広さは外側のボタンが持つ。
+        */}
+        <button
+          aria-label="閉じる"
+          className="sticky top-0 z-10 mx-auto flex w-24 shrink-0 cursor-grab touch-none items-center justify-center rounded-full py-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
+          onClick={() => {
+            // 引いて戻した直後の`click`は、押したことにしない。
+            if (dragged.current) {
+              dragged.current = false
+              return
+            }
+            onDismiss()
+          }}
+          draggable={false}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return
+            startY.current = event.clientY
+            moved.current = 0
+            setDragging(true)
+          }}
+          type="button"
+        >
+          <span
+            aria-hidden="true"
+            className="h-1 w-9 rounded-full bg-foreground/20"
+          />
+        </button>
         {children}
       </SheetPrimitive.Popup>
     </SheetPrimitive.Portal>

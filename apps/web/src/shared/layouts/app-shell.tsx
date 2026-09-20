@@ -107,7 +107,7 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       失敗は稀なので、出ている間だけ確保を厚くする。`:has()`を2つ重ねて、
       上の宣言より詳細度を高くしている(出力順に依存させない)。
     */
-    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:5rem] [&:has([data-slot=player-bar]):has([data-slot=player-error])]:[--player-h:7.75rem] [--player-notice-h:var(--player-h)] [&:has([data-slot=player-expanded])]:[--player-notice-h:18rem]">
+    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:5rem] [&:has([data-slot=player-bar]):has([data-slot=player-error])]:[--player-h:7.75rem] [--player-notice-h:var(--player-h)] [&:has([data-slot=player-expanded])]:[--player-notice-h:calc(var(--player-h)+13rem)]">
       {/*
         キーボードだけで使う場合、ページを開くたびに6本のナビゲーションを
         通り抜けないと本文へ入れない。最初のTabで本文へ飛べる出口を置く。
@@ -189,6 +189,10 @@ export function AppShell({ actions, children, player }: AppShellProps) {
         が、本文の確保(`--player-h`)は増やさない(増やすと開閉のたびに本文が
         跳ねる)。この案内は板より手前に浮くので、確保と同じ値で置くと開いた
         段の速度・音量の行をちょうど覆う(実測: 通知691..720が速度689..721)。
+
+        開いた分は確保へ**積む**(`calc(var(--player-h)+13rem)`)。定数で置くと、
+        失敗の行が出て`--player-h`が厚くなった分を取りこぼす。13remは開いた段の
+        高さの上限(`max-h-52`)で、段の側がそれを守る。
       */}
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--app-nav-h)+var(--player-notice-h))] z-40 md:bottom-[var(--player-notice-h)]">
         <OfflineNotice />

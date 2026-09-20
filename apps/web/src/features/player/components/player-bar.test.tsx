@@ -280,6 +280,24 @@ describe("PlayerBar の開閉", () => {
     expect(store.get(playerExpandedAtom)).toBe(false)
   })
 
+  /*
+    速度の候補はportalで板の外へ出る。Reactの出来事はportalを跨いで板まで
+    上がってくるので、名札(`role`)で切ると漏れる。候補は`option`で「押せる
+    もの」に当たらず、**速度を選んだだけで板が開き、しかもその拍子に候補を
+    抱えた列ごと消えて選択まで失われて**いた(実測: playbackRateが1のまま)。
+  */
+  it("速度を選んでも板は開かない。選択も失われない", async () => {
+    const user = userEvent.setup()
+    const { audio, store } = renderBar({ wide: true })
+
+    await user.click(screen.getByRole("combobox", { name: /再生速度/ }))
+    await user.click(await screen.findByRole("option", { name: "1.5×" }))
+
+    expect(store.get(playbackRateAtom)).toBe(1.5)
+    expect(audio.playbackRate).toBe(1.5)
+    expect(store.get(playerExpandedAtom)).toBe(false)
+  })
+
   it("狭い幅では、下端から立ち上がるDrawerで開く", async () => {
     const user = userEvent.setup()
     renderBar({ wide: false })

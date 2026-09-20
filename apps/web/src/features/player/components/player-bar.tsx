@@ -137,10 +137,18 @@ export function PlayerBar() {
           /*
             押せるものの上で始まった操作は、そちらのもの。それ以外は開く。
             文字を選んでいる最中も開かない (選択が消えて読めなくなる)。
+
+            速度の候補はportalで板の外へ出る。Reactの出来事はportalを跨いで
+            ここまで上がってくるので、**DOMの中に在るかどうか**で切る。
+            名札 (`role`) で切ると漏れる: 候補は`option`で`INTERACTIVE`に
+            当たらず、速度を選んだだけで板が開き、しかもその拍子に候補を
+            抱えた列ごと消えて選択まで失われていた。
           */
           onPointerUp={(event) => {
             if (expanded || event.button !== 0) return
-            if ((event.target as Element).closest(INTERACTIVE) !== null) return
+            const target = event.target as Element
+            if (!event.currentTarget.contains(target)) return
+            if (target.closest(INTERACTIVE) !== null) return
             if ((getSelection()?.toString().length ?? 0) > 0) return
             setExpanded(true)
           }}
@@ -222,6 +230,7 @@ export function PlayerBar() {
         open={!wide && expanded}
       >
         <SheetContent
+          onDismiss={collapse}
           className={cn(
             "glass-surface pointer-events-auto border-x-0 border-b-0",
             /*
