@@ -53,6 +53,13 @@ function usePlaybackRange() {
 function grabStyles(className?: string) {
   return cn(
     "absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent outline-none disabled:cursor-default",
+    /*
+      焦点の輪はここが持つ。UAの溝もつまみも透かしてあるので、既定の`outline`を
+      消したままだと、Tabで着いても**何も変わらない**。帯が太る・つまみが出る
+      といった変化は触れた時と同じ見た目で、しかも展開段はつまみを常に出して
+      いるので変化が起きない。掴み代そのものを輪で囲って、どこに居るかを示す。
+    */
+    "rounded-full focus-visible:ring-3 focus-visible:ring-ring/50",
     "[&::-webkit-slider-runnable-track]:h-full [&::-webkit-slider-runnable-track]:bg-transparent",
     "[&::-moz-range-track]:h-full [&::-moz-range-track]:bg-transparent",
     "[&::-moz-range-progress]:bg-transparent",
@@ -102,7 +109,7 @@ function ScrubberRail({
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground shadow-sm",
+            "pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground shadow-sm transition-transform group-has-focus-visible:scale-125 motion-reduce:transition-none",
             knob === "hover" &&
               "opacity-0 transition-opacity group-hover:opacity-100 group-has-focus-visible:opacity-100 motion-reduce:transition-none",
             knobClassName
