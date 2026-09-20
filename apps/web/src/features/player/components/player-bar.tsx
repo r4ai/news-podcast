@@ -1,6 +1,6 @@
 import { useAtomValue, useSetAtom } from "jotai"
 import { X } from "lucide-react"
-import { useRef } from "react"
+import { useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -88,6 +88,8 @@ export function PlayerBar() {
     題名へ引き戻すとその契約を破る。
   */
   const leaving = useRef(false)
+  /** Drawerが実際に立っているか。終了の動きが終わるまでtrueのまま。 */
+  const [drawerOpen, setDrawerOpen] = useState(false)
   if (track === null) return null
 
   /**
@@ -212,10 +214,11 @@ export function PlayerBar() {
           }}
         >
           {/*
-            Drawerで開いている間は出さない。覆われて触れないうえ、同じ
+            Drawerが出ている間は出さない。覆われて触れないうえ、同じ
             `role="alert"`が画面に2つ在ることになる。向こうが引き受ける。
+            閉じ切るまで待つので、終了の動きの最中も二重にならない。
           */}
-          {wide || !expanded ? <PlaybackErrorBanner /> : null}
+          {wide || !(expanded || drawerOpen) ? <PlaybackErrorBanner /> : null}
 
           {/* 広い幅では、板がその場で伸びる。 */}
           <CollapsibleContent
@@ -295,6 +298,12 @@ export function PlayerBar() {
         来た面なのかも判らない。
       */}
       <Sheet
+        /*
+          閉じ切ったかどうかまで持つ。`expanded`は終了の動きが始まった時点で
+          falseになるので、それだけで板側の失敗の行を戻すと、まだ残っている
+          Drawerの中の同じ`alert`と二重になり、読み上げも二度走る。
+        */
+        onOpenChangeComplete={setDrawerOpen}
         onOpenChange={(open) => (open ? setExpanded(true) : collapse())}
         open={!wide && expanded}
       >
@@ -343,7 +352,17 @@ export function PlayerBar() {
           <NowPlayingPanel
             id={PANEL_ID}
             onNavigate={() => {
-              leaving.current = true
+              /*
+                既にその原稿を開いているなら、移っても現在地は動かない
+                (`useSingleColumnFocus`は同じ番組では走らない)。そこで戻す
+                のをやめると、focusは題名にも詳細にも行かず`body`へ落ちる。
+                実際に移るときだけ、向こうへ譲る。
+              */
+              const { pathname, search } = globalThis.location
+              const shown =
+                pathname === "/library" &&
+                new URLSearchParams(search).get("episode") === track.episodeId
+              leaving.current = !shown
               collapse()
             }}
             track={track}

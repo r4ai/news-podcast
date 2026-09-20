@@ -14,7 +14,10 @@ test.use({ viewport: { width: 390, height: 800 } })
 
 async function openDrawer(
   page: Page,
-  { from = "title" }: { readonly from?: "title" | "surface" } = {}
+  {
+    at = `/library?episode=${SEEDED_EPISODE_ID}`,
+    from = "title",
+  }: { readonly at?: string; readonly from?: "title" | "surface" } = {}
 ) {
   await page.goto("/login")
   await page.getByLabel("開発パスワード").fill("e2e-password")
@@ -39,7 +42,7 @@ async function openDrawer(
       })
     )
   }, SEEDED_EPISODE_ID)
-  await page.goto(`/library?episode=${SEEDED_EPISODE_ID}`)
+  await page.goto(at)
 
   const bar = page.getByRole("region", { name: "再生中の番組" })
   await expect(bar).toBeVisible()
@@ -263,7 +266,8 @@ test("余白から開いたDrawerを閉じても、focusは題名へ戻る", asy
   引き戻すと、その契約を破って現在地が板まで飛ぶ。
 */
 test("原稿へ移って閉じたときは、題名へ引き戻さない", async ({ page }) => {
-  await openDrawer(page, { from: "surface" })
+  // 別のページから開く。ここから移ると、移った先が現在地を詳細へ移す。
+  await openDrawer(page, { at: "/", from: "surface" })
 
   await page
     .getByRole("dialog")
@@ -277,4 +281,47 @@ test("原稿へ移って閉じたときは、題名へ引き戻さない", async
       "now-playing-panel"
   )
   expect(onTitle).toBe(false)
+})
+
+/*
+  既にその原稿を開いている状態で、Drawerから同じ原稿へ移る場合。
+
+  移っても現在地は動かない(`useSingleColumnFocus`は同じ番組では走らない)ので、
+  向こうへ譲ると focus は題名にも詳細にも行かず`body`へ落ちる。
+*/
+test("同じ原稿へ移ったときは、題名へ戻す", async ({ page }) => {
+  await openDrawer(page, { from: "surface" })
+
+  await page
+    .getByRole("dialog")
+    .getByRole("link", { name: "原稿と出典を読む" })
+    .click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  const focused = await page.evaluate(
+    () => document.activeElement?.getAttribute("aria-controls") ?? "(なし)"
+  )
+  expect(focused).toBe("now-playing-panel")
+})
+
+/*
+  再生に失敗したままDrawerを閉じる間。
+
+  `expanded`は終了の動きが始まった時点でfalseになる。それだけで板側の失敗の
+  行を戻すと、まだ残っているDrawerの中の同じ`alert`と二重になる。
+*/
+test("Drawerを閉じている間、失敗の行が二重にならない", async ({ page }) => {
+  await openDrawer(page, { from: "surface" })
+  await page.evaluate(() => {
+    document.querySelector("audio")?.dispatchEvent(new Event("error"))
+  })
+  await expect(page.getByRole("alert")).toHaveCount(1)
+
+  await page.keyboard.press("Escape")
+  // 終了の動き(350ms)の最中を覗く。
+  await page.waitForTimeout(120)
+  expect(await page.getByRole("alert").count()).toBeLessThanOrEqual(1)
+
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByRole("alert")).toHaveCount(1)
 })

@@ -106,8 +106,17 @@ function SheetContent({
     引いていないのにタップ扱いで閉じてしまう。
   */
   const travelled = useRef(0)
-  // 引いて戻したときに、続けて飛んでくる`click`を無視するための印。
-  const dragged = useRef(false)
+  /*
+    「押しただけ」として閉じてよい指の控え。
+
+    真偽ひとつで持つと、複数の指が絡んだときに取り違える。1本目が少し引いて
+    いる間に2本目が触れ、1本目から先に離すと、1本目の`click`が印を食べて
+    しまい、続く2本目の`click`が素通りして閉じる。**どの指から来た`click`か**
+    まで見る。
+
+    キーボードからの起動は`detail`が0で届くので、この控えを通さない。
+  */
+  const taps = useRef(new Set<number>())
   /** 引き始めた指。触れているのが1本とは限らない。 */
   const pointer = useRef<number | null>(null)
   /** 掴み代そのもの。指がこの上で離れたかどうかを見る。 */
@@ -142,17 +151,18 @@ function SheetContent({
 
       setDragging(false)
       /*
-        印を立てるのは、**続けて`click`が来ると判っているときだけ**。
+        控えへ入れるのは「掴み代の上で、ほとんど動かさずに離した指」だけ。
 
-        打ち切られた指の後にも、掴み代の外で離れた指の後にも`click`は来ない。
-        そこで立てたままにすると、次にキーボードや支援技術で閉じるボタンを
-        押したとき、その印を食べて何も起きない。押し直しでは降ろせない
-        (押下を伴わないため)。
+        引いた指の`click`は閉じてはいけない。打ち切られた指や掴み代の外で
+        離れた指には、そもそも`click`が来ない。
       */
-      dragged.current =
+      if (
         !canceled &&
-        travelled.current > DRAG_SLOP_PX &&
+        travelled.current <= DRAG_SLOP_PX &&
         handleRef.current?.contains(event.target as Node) === true
+      ) {
+        taps.current.add(event.pointerId)
+      }
       if (!canceled && distance >= DISMISS_PX) {
         // 離した位置から続けて下へ送り出す。0へ戻すと、一度跳ね上がる。
         setDismissing(true)
@@ -235,11 +245,14 @@ function SheetContent({
         <button
           aria-label="閉じる"
           className="sticky top-0 z-10 mx-auto flex w-24 shrink-0 cursor-grab touch-none items-center justify-center rounded-full py-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
-          onClick={() => {
-            // 引いて戻した直後の`click`は、押したことにしない。
-            if (dragged.current) {
-              dragged.current = false
-              return
+          onClick={(event) => {
+            /*
+              指から来た`click`は、控えに在る指のものだけ通す。`detail`が0の
+              ものはキーボードや支援技術からの起動なので、そのまま通す。
+            */
+            if (event.detail > 0) {
+              const id = (event.nativeEvent as PointerEvent).pointerId
+              if (!taps.current.delete(id)) return
             }
             onDismiss()
           }}
@@ -252,22 +265,14 @@ function SheetContent({
               位置へ跳ね返る。しかも引いた距離は1本目のまま残るので、その後
               1本目を離すと、見た目は戻っているのに古い距離で閉じてしまう。
             */
-            if (pointer.current !== null) {
-              /*
-                既に1本が引いている最中の2本目。押下は拒否するが、その後に
-                飛んでくる`click`には所有者の区別が無く、素通りさせると
-                引いていないのに閉じてしまう。ここで飲むと決めておく。
-              */
-              dragged.current = true
-              return
-            }
+            // 既に1本が引いている最中の2本目は、控えへ入れない=閉じない。
+            if (pointer.current !== null) return
             if (event.button !== 0) return
             /*
               印は**次に押し始めた時点で必ず消す**。同じ操作の`click`が来る
               前提で消していると、指が要素の外で離れた場合や打ち切られた
               場合に立ちっぱなしになり、その次の押下を食べて何も起きない。
             */
-            dragged.current = false
             setDismissing(false)
             setOffset(0)
             pointer.current = event.pointerId
