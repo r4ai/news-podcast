@@ -11,7 +11,7 @@ import { safeFallbackUrl } from "../lib/embed"
 function Thumbnail({ src }: { readonly src: string }) {
   const [failed, setFailed] = useState(false)
   return (
-    <div className="flex w-24 shrink-0 items-center justify-center self-stretch overflow-hidden border-l border-border bg-muted/50 sm:w-40">
+    <div className="relative flex w-24 shrink-0 items-center justify-center self-stretch overflow-hidden border-l border-border bg-muted/50 sm:w-40">
       {failed ? (
         <ImageIcon
           aria-hidden="true"
@@ -20,7 +20,7 @@ function Thumbnail({ src }: { readonly src: string }) {
       ) : (
         <img
           alt=""
-          className="h-full min-h-32 w-full object-contain"
+          className="absolute inset-0 h-full w-full object-cover"
           loading="lazy"
           onError={() => setFailed(true)}
           referrerPolicy="no-referrer"
