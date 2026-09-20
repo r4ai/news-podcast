@@ -166,6 +166,41 @@ describe("SQLite content taxonomy", () => {
     )
   })
 
+  it("clears a stale suggestion whose tag already exists even at the limit", async () => {
+    const database = openTestDatabase()
+    databases.push(database)
+    const repository = await Effect.runPromise(
+      createContentTaxonomyRepository(database.db)
+    )
+    const operations = createContentTaxonomy({
+      repository,
+      newTagId: () => decode(TagIdSchema, crypto.randomUUID()),
+      now: () => now,
+    })
+
+    for (let index = 0; index < TAG_VOCABULARY_LIMIT; index++) {
+      await Effect.runPromise(
+        operations.createTag(ownerA, decode(TagNameSchema, `Tag${index}`))
+      )
+    }
+    const existing = await Effect.runPromise(
+      operations.createTag(ownerA, decode(TagNameSchema, "Tag0"))
+    )
+    if (existing._tag !== "Created") throw new Error("expected Created")
+    database.execSql(
+      `INSERT INTO content_tag_suggestions(owner_id, name, occurrences, last_seen_at) VALUES ('owner-a', 'Tag0', 1, '${now}');`
+    )
+
+    expect(
+      await Effect.runPromise(
+        operations.promoteSuggestion(ownerA, decode(TagNameSchema, "Tag0"))
+      )
+    ).toMatchObject({ _tag: "Promoted", tag: { tagId: existing.tag.tagId } })
+    expect(await Effect.runPromise(operations.listSuggestions(ownerA))).toEqual(
+      []
+    )
+  })
+
   it("keeps AI and manual assignments consistent and promotes suggestions atomically", async () => {
     const { repository, operations } = await setup()
     const created = await Effect.runPromise(

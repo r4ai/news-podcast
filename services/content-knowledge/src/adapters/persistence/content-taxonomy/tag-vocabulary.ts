@@ -169,13 +169,17 @@ export const makeTagVocabulary = (
             return deepFreeze({ kind: "not-found" as const })
           }
 
-          const { count } = tx
-            .select({ count: sql<number>`COUNT(*)`.as("count") })
-            .from(contentTags)
-            .where(eq(contentTags.ownerId, ownerId))
-            .get() ?? { count: 0 }
-          if (count >= TAG_VOCABULARY_LIMIT) {
-            return deepFreeze({ kind: "limit" as const })
+          // 既に語彙にある名前の候補は昇格で新規タグを作らないため、件数上限を
+          // 確認せず、残った候補の掃除だけを行う。
+          if (findTagByName(tx, ownerId, name) === undefined) {
+            const { count } = tx
+              .select({ count: sql<number>`COUNT(*)`.as("count") })
+              .from(contentTags)
+              .where(eq(contentTags.ownerId, ownerId))
+              .get() ?? { count: 0 }
+            if (count >= TAG_VOCABULARY_LIMIT) {
+              return deepFreeze({ kind: "limit" as const })
+            }
           }
 
           tx.insert(contentTags)
