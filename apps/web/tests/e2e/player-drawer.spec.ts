@@ -136,3 +136,30 @@ test("引いて閉じた後、もう一度開いても面はその場に立つ",
     drawer.getByRole("link", { name: "原稿と出典を読む" })
   ).toBeInViewport()
 })
+
+test("開き直して掴み代を押しても、前回の引き代で飛ばない", async ({ page }) => {
+  await openDrawer(page)
+  await dragHandle(page, 160)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await bar.getByRole("button", { name: /Durable Objects/ }).click()
+  const drawer = page.getByRole("dialog")
+  await expect(drawer).toBeVisible()
+  const handle = page.getByRole("button", { name: "閉じる", exact: true })
+  await handle.hover()
+  const before = (await drawer.boundingBox())!
+
+  /*
+    押しただけで、まだ指は動いていない。引き代を戻していないと、この瞬間に
+    前回引いた分だけ面が下へ飛ぶ。
+  */
+  const box = (await handle.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.waitForTimeout(150)
+  const after = (await drawer.boundingBox())!
+  await page.mouse.up()
+
+  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1)
+})

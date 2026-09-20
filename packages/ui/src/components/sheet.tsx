@@ -145,7 +145,15 @@ function SheetContent({
           (実測: 開き直した中身のviewport比が0)。
         */
         globalThis.setTimeout(
-          () => setDismissing(false),
+          () => {
+            setDismissing(false)
+            /*
+            引き代も戻す。残したままだと、開き直して掴み代を押した瞬間
+            (まだ指が動く前) に`dragging`が立ち、前回引いた分だけ面が
+            いきなり下へ飛ぶ。
+          */
+            setOffset(0)
+          },
           prefersReducedMotion() ? 0 : DISMISS_MS + 50
         )
         return
@@ -225,6 +233,7 @@ function SheetContent({
             */
             dragged.current = false
             setDismissing(false)
+            setOffset(0)
             if (event.button !== 0 || pointer.current !== null) return
             pointer.current = event.pointerId
             startY.current = event.clientY

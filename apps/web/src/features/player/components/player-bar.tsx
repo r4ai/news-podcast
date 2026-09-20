@@ -158,6 +158,23 @@ export function PlayerBar() {
               event.button === 0 &&
               event.currentTarget.contains(target) &&
               target.closest(INTERACTIVE) === null
+            if (!pressedSurface.current) return
+            /*
+              印は**指がどこで離れても降ろす**。板の上で離れなかった場合
+              (押したまま板の外へ出て離す) はこの要素の`pointerup`が呼ばれず、
+              印が立ちっぱなしになる。次に板の外で始まった操作が板の余白で
+              離れると、その印を食べて開いてしまう。
+
+              窓の`pointerup`はReactの`onPointerUp`より後に届くので、開くか
+              どうかの判断を先に済ませてから降ろせる。
+            */
+            const clear = () => {
+              pressedSurface.current = false
+              globalThis.removeEventListener("pointerup", clear)
+              globalThis.removeEventListener("pointercancel", clear)
+            }
+            globalThis.addEventListener("pointerup", clear)
+            globalThis.addEventListener("pointercancel", clear)
           }}
           onPointerUp={(event) => {
             const started = pressedSurface.current

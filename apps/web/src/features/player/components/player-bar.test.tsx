@@ -317,6 +317,28 @@ describe("PlayerBar の開閉", () => {
     expect(store.get(playerExpandedAtom)).toBe(false)
   })
 
+  /*
+    押したまま板の外へ出て離すと、この要素の`pointerup`は呼ばれない。印を
+    立てたままにすると、次に板の外で始まった操作が板の余白で離れたときに
+    その印を食べて開いてしまう。
+  */
+  it("板の外で離れた押下の印を持ち越さない", () => {
+    const { container, store } = renderBar()
+    const surface = container.querySelector(
+      '[aria-hidden="true"].rounded-xl'
+    ) as Element
+
+    // 板の余白で押し、板の外で離す。
+    fireEvent.pointerDown(surface, { button: 0 })
+    fireEvent.pointerUp(document.body, { button: 0 })
+    expect(store.get(playerExpandedAtom)).toBe(false)
+
+    // 次は板の外で始まった操作。板の余白で離れても開かない。
+    fireEvent.pointerUp(surface, { button: 0 })
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
+  })
+
   it("狭い幅では、下端から立ち上がるDrawerで開く", async () => {
     const user = userEvent.setup()
     renderBar({ wide: false })
