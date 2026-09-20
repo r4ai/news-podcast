@@ -15,7 +15,7 @@ import { EpisodeArtwork } from "./episode-artwork"
 import { NowPlayingPanel } from "./now-playing-panel"
 import { PlaybackErrorBanner } from "./playback-notice"
 import { PlaybackRateSelect } from "./playback-rate-select"
-import { PlaybackScrubber, PlaybackTimeReadout } from "./playback-scrubber"
+import { PlaybackScrubber } from "./playback-scrubber"
 import { TransportControls } from "./transport-controls"
 import { VolumeControl } from "./volume-control"
 
@@ -109,13 +109,13 @@ export function PlayerBar() {
             "relative flex items-center",
             expanded
               ? "justify-between gap-2 px-3 pb-3"
-              : // 目盛りの掴み代(14px)が題名へ食い込まないよう、上だけ厚く取る。
-                "gap-2 px-2 pt-3 pb-2 sm:px-3"
+              : /*
+                  目盛りが縁に居る狭い幅だけ、掴み代(20px)が題名へ食い込まない
+                  よう上を厚く取る。smからは目盛りが行の中へ入るので要らない。
+                */
+                "gap-2 px-2 pt-3 pb-2 sm:px-3 sm:pt-2"
           )}
         >
-          {/* 折りたたみ時は、板の上端の縁そのものが目盛りになる。 */}
-          {expanded ? null : <PlaybackScrubber />}
-
           {expanded ? (
             /*
               右端の開閉ボタンと釣り合うおもり。操作列を行の中央に据える。
@@ -172,13 +172,11 @@ function TrackSummary({ track }: { readonly track: PlayerTrack }) {
         {track.title}
       </Link>
       {/*
-        2行目は「どこまで来たか」。待っている間は同じ場所が理由を言う。
-
-        並べて置くと、320pxでは題名の列(102px)に137px入れることになり、
-        再生ボタンへ重なる。待っている間は位置も動かないので、**同じ1行を
-        入れ替える**方が収まりも読みやすさも良い。
+        2行目は「どこまで来たか」。`sm`からはこの行がそのまま実目盛りになり、
+        それ未満では目盛りだけが板の上端の縁へ逃げて、ここは時刻の文字を担う。
+        置き場所の切り替えは`PlaybackScrubber`の中に閉じている。
       */}
-      <PlaybackTimeReadout />
+      <PlaybackScrubber />
     </div>
   )
 }

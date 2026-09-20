@@ -111,9 +111,25 @@ describe("PlayerBar", () => {
     expect(screen.getByRole("link", { name: track.title })).toBeDefined()
   })
 
-  it("経過・総時間・残りを1行に並べる", () => {
+  /*
+    題名の下の1行は、幅で姿を変える。
+
+    `sm`からは時刻の文字だった行がそのまま実目盛りへ格上げされ、経過が左端・
+    残りが右端に座る。それ未満では目盛りだけが板の上端の縁へ逃げ、この行は
+    文字で経過と総時間を示す。要素は同じ1つで、CSSが置き場所を切り替える。
+  */
+  it("smからは経過と残りを目盛りの両端へ置く", () => {
+    renderBar()
+    const rail = screen.getByRole("slider", { name: "再生位置" }).parentElement
+      ?.parentElement
+    expect(rail?.textContent).toBe("2:00-8:00")
+  })
+
+  it("狭い幅では、同じ行が経過と総時間を文字で示す", () => {
     const { container } = renderBar()
-    expect(container.textContent).toContain("2:00 / 10:00 (残り 8:00)")
+    expect(container.querySelector("p.sm\\:hidden")?.textContent).toBe(
+      "2:00 / 10:00"
+    )
   })
 
   it("目盛りは板の上端の縁いっぱいに置く。狭い幅で数十pxまで縮まない", () => {
@@ -125,13 +141,14 @@ describe("PlayerBar", () => {
     expect(edge?.className).toContain("top-0")
   })
 
-  it("折りたたみ時の目盛りにつまみを出さない。帯から浮いて見えない", () => {
+  it("UAのつまみは幅を持たない。塗りの先端と掴んだ位置がずれない", () => {
     renderBar()
     const scrubber = screen.getByRole("slider", { name: "再生位置" })
     /*
-      帯は板の上端の縁に密着しているが、UAのつまみは掴み代の中央へ置かれる
-      ので、帯の中心より5px下にぶら下がる。帯へ合わせて持ち上げるには掴み代の
-      外へ出すしかなく、そこは板の`overflow-hidden`が切る。幅を持たせない。
+      幅を持たせると、UAはつまみが端から食み出さないよう`幅 − つまみ幅`の
+      範囲でしか動かさない。塗りは全幅に対する`scaleX`なので、両端で
+      「つまみ幅の半分」ずれる(実測: 14pxのつまみで7px)。幅を0にすると、
+      値と位置の対応が全幅で1対1になり、見えるつまみは自前で置ける。
     */
     expect(scrubber.className).toContain("[&::-webkit-slider-thumb]:w-0")
     expect(scrubber.className).toContain("[&::-moz-range-thumb]:w-0")
@@ -244,10 +261,10 @@ describe("PlayerBar の読み込みと失敗", () => {
     expect(
       screen.getByRole("button", { name: "一時停止" }).getAttribute("aria-busy")
     ).toBe("true")
-    expect(screen.getByText("読み込み中…")).toBeDefined()
+    expect(screen.getAllByText("読み込み中…").length).toBeGreaterThan(0)
 
     await act(async () => store.set(handlePlayingAtom))
-    expect(screen.queryByText("読み込み中…")).toBeNull()
+    expect(screen.queryAllByText("読み込み中…")).toHaveLength(0)
   })
 
   /*
@@ -258,15 +275,17 @@ describe("PlayerBar の読み込みと失敗", () => {
   */
   it("待っている間は、時刻ではなく理由だけを出す。再生ボタンへ重ならない", async () => {
     const { container, store } = renderBar({ playing: true })
-    expect(container.textContent).toContain("2:00 / 10:00")
+    const narrowLine = () => container.querySelector("p.sm\\:hidden")
+    expect(narrowLine()?.textContent).toBe("2:00 / 10:00")
 
     await act(async () => store.set(handleWaitingAtom))
 
-    expect(screen.getByText("読み込み中…")).toBeDefined()
-    expect(container.textContent).not.toContain("2:00 / 10:00")
+    expect(narrowLine()?.textContent).toBe("読み込み中…")
+    // 待ちは「押したのに聞こえない」の最中に起きる。読み上げへも届ける。
+    expect(narrowLine()?.getAttribute("aria-live")).toBe("polite")
 
     await act(async () => store.set(handlePlayingAtom))
-    expect(container.textContent).toContain("2:00 / 10:00")
+    expect(narrowLine()?.textContent).toBe("2:00 / 10:00")
   })
 
   it("鳴らせなかったことを伝え、その場でやり直せる", async () => {

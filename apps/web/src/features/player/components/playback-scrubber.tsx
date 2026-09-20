@@ -13,7 +13,7 @@ import { formatPlaybackTime, progressRatio } from "../model"
 
 /**
  * 目盛りが要る値をまとめて読む。`timeupdate`を購読するのは、この関数を呼ぶ
- * componentと時刻表示だけに閉じる。
+ * componentだけに閉じる。
  *
  * 現在位置は毎秒数回動く。バーの見出しや操作ボタンと同じ購読単位に置くと、
  * 鳴っている間ずっと画面下端が描き直され続ける (docs/design.md §7.2)。
@@ -33,105 +33,214 @@ function usePlaybackRange() {
     seekable,
     seekTo,
     ratio: progressRatio(position, duration),
+    remaining: seekable ? duration - position : undefined,
     value: Math.min(position, seekable ? duration : position),
     valueText: `${formatPlaybackTime(position)} / ${formatPlaybackTime(duration)}`,
   }
 }
 
 /**
- * `<input type=range>`はUAが溝とつまみを描く。見えている帯は別の箱が描くので、
- * 要素自身は透かして「掴む面」だけを担う。
+ * 掴む面。UAが描く溝とつまみは透かし、要素自身は「どこを掴んだか」だけを担う。
  *
- * 進んだ量を`scaleX`で示すのは、塗り分けを背景のgradientで描くと位置が動く
- * たびに帯そのものを描き直すことになるため。glassの面はこの帯より**後ろ**に
- * あるので、前面の`transform`は滲みの再計算を呼ばない。
+ * **つまみの幅を0にするのが要**。幅を持たせると、UAはつまみが端から食み出さ
+ * ないよう`幅 − つまみ幅`の範囲でしか動かさない。塗りは全幅に対する`scaleX`で
+ * 描いているので、両端で最大「つまみ幅の半分」ずれる (実測: 14pxのつまみで
+ * 0%のとき点だけが7px右に浮き、100%のとき塗りが点を7px追い越す)。
+ *
+ * 幅を0にすると、値と位置の対応が**全幅にわたって1対1**になり、塗りの先端・
+ * 自前のつまみ・指の位置が完全に一致する。見えるつまみは`ScrubberRail`が描く。
  */
-function trackStyles(thumb: string) {
+function grabStyles(className?: string) {
   return cn(
     "absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent outline-none disabled:cursor-default",
     "[&::-webkit-slider-runnable-track]:h-full [&::-webkit-slider-runnable-track]:bg-transparent",
     "[&::-moz-range-track]:h-full [&::-moz-range-track]:bg-transparent",
     "[&::-moz-range-progress]:bg-transparent",
-    thumb
+    "[&::-webkit-slider-thumb]:h-full [&::-webkit-slider-thumb]:w-0 [&::-webkit-slider-thumb]:appearance-none",
+    "[&::-moz-range-thumb]:h-full [&::-moz-range-thumb]:w-0 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:border-0",
+    className
   )
 }
 
 /**
- * 折りたたみ時の目盛り。バーの上端の縁そのものが進捗になる。
+ * 見えている帯とつまみ。
  *
- * 幅いっぱいを掴めるので、幅に関係なく同じ操作性になる。操作列の中へ入れると、
- * 狭い幅では数十pxまで縮んで実質使えない。
+ * 進んだ量は`scaleX`で示す。塗り分けを背景のgradientで描くと、位置が動くたびに
+ * 帯そのものを描き直すことになる。glassの面はこの帯より**後ろ**にあるので、
+ * 前面の`transform`は滲みの再計算を呼ばない。
+ *
+ * つまみは`left`で置く。`ratio`の位置に中心が来るので、塗りの先端と必ず揃う。
+ */
+function ScrubberRail({
+  knob,
+  knobClassName,
+  ratio,
+  trackClassName,
+}: {
+  /** つまみの出し方。`"hover"`は触れた時だけ、`"always"`は常に。 */
+  readonly knob: "none" | "hover" | "always"
+  readonly knobClassName?: string
+  readonly ratio: number
+  readonly trackClassName: string
+}) {
+  return (
+    <>
+      {/* `contain`で描き直しをこの箱の中に閉じる。 */}
+      <div
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute overflow-hidden bg-foreground/15 [contain:paint]",
+          trackClassName
+        )}
+      >
+        <div
+          className="h-full w-full origin-left rounded-full bg-foreground"
+          style={{ transform: `scaleX(${ratio})` } as CSSProperties}
+        />
+      </div>
+      {knob === "none" ? null : (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground shadow-sm",
+            knob === "hover" &&
+              "opacity-0 transition-opacity group-hover:opacity-100 group-has-focus-visible:opacity-100 motion-reduce:transition-none",
+            knobClassName
+          )}
+          style={{ left: `${ratio * 100}%` } as CSSProperties}
+        />
+      )}
+    </>
+  )
+}
+
+/**
+ * 折りたたみ時の目盛りと時刻。題名の**下の1行**を丸ごと担う。
+ *
+ * ## 置き場所が幅で変わる
+ *
+ * `sm`以上では、それまで時刻の文字だけが座っていた行を**そのまま実目盛りへ
+ * 格上げ**する。経過を左端・残りを右端に置いた、プレイヤーらしい目盛りになる。
+ * 行を増やさないので板の高さは変わらない。
+ *
+ * `sm`未満では同じ要素を板の上端の縁へ逃がす。狭い幅の題名の列は100px前後
+ * しかなく、両端に時刻を置くと帯が30pxまで縮んで実質掴めない。縁へ出せば
+ * 板の幅いっぱいを掴めて、時刻は下の行が文字で引き受ける。
+ *
+ * 要素はどちらも**同じ1つ**で、`absolute`か否かだけをCSSが切り替える。2つ
+ * 置くと、位置の購読も目盛りも二重になる。
  */
 export function PlaybackScrubber({
   className,
 }: {
   readonly className?: string
 }) {
-  const { ratio, seekable, seekTo, value, duration, valueText } =
-    usePlaybackRange()
+  const {
+    duration,
+    position,
+    ratio,
+    remaining,
+    seekable,
+    seekTo,
+    value,
+    valueText,
+  } = usePlaybackRange()
+  const buffering = useAtomValue(isBufferingAtom)
+
+  const trailing = buffering
+    ? "読み込み中…"
+    : remaining === undefined
+      ? "--:--"
+      : `-${formatPlaybackTime(remaining)}`
 
   return (
-    <div
-      className={cn(
-        // 板の角の丸み(1.5rem)ぶん内側へ寄せる。端まで伸ばすと、両端が角の
-        // カーブで切り落とされる。切られるのは見た目だけではない:
-        // `overflow-hidden`の丸めはヒットテストにも効くので、「先頭へ戻す」
-        // 「末尾へ飛ぶ」という**両端の操作が掴めなくなる**。
-        //
-        // 寄せた結果、目盛りの左端が値0、右端が総時間と1対1で対応する。
-        // 掴み代は20pxあり、見えている帯(3px)よりずっと広い。題名の行箱の
-        // 上端へ4px重なるが、字は行箱の上端までは伸びないので当たらない。
-        // 帯を掴む操作は聴いている間ずっと使うので、そちらを優先する。
-        "group absolute inset-x-0 top-0 z-10 h-5 px-6",
-        className
-      )}
-    >
-      <div className="relative h-full">
-        {/* 見えている帯。`contain`で描き直しをこの箱の中に閉じる。 */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-[3px] overflow-hidden rounded-full bg-foreground/15 transition-[height] duration-150 ease-out group-hover:h-[5px] group-has-focus-visible:h-[5px] motion-reduce:transition-none [contain:paint]"
-        >
-          <div
-            className="h-full w-full origin-left rounded-full bg-foreground"
-            style={{ transform: `scaleX(${ratio})` } as CSSProperties}
+    <>
+      <div
+        className={cn(
+          "group z-10",
+          /*
+            狭い幅: 板の上端の縁。両端は角の丸み(1.5rem)の内側へ収める。
+            `overflow-hidden`の丸めはヒットテストにも効くので、端まで伸ばすと
+            「先頭へ戻す」「末尾へ飛ぶ」が掴めない。
+          */
+          "absolute inset-x-0 top-0 h-5 px-6",
+          // sm以上: 題名の下の行。角の丸みから離れるので余白も要らない。
+          "sm:static sm:flex sm:h-5 sm:items-center sm:gap-3 sm:px-0",
+          className
+        )}
+      >
+        <span className="hidden shrink-0 text-xs tabular-nums text-foreground sm:block">
+          {formatPlaybackTime(position)}
+        </span>
+        <div className="relative h-full sm:min-w-0 sm:flex-1">
+          <ScrubberRail
+            knob="hover"
+            /*
+              狭い幅では出さない。帯は板の縁に密着していて、つまみは掴み代の
+              上下中央に来るので、帯から5px下にぶら下がる。smからは帯が行の
+              中央へ移るので、位置が合う。
+            */
+            knobClassName="hidden sm:block"
+            ratio={ratio}
+            trackClassName={cn(
+              // 縁に密着した3pxの帯。触れると太って掴めることを示す。
+              "inset-x-0 top-0 h-[3px] transition-[height] duration-150 ease-out group-hover:h-[5px] group-has-focus-visible:h-[5px] motion-reduce:transition-none",
+              // smからは行の中で上下中央に置き、角を丸める。
+              "sm:inset-x-0 sm:top-1/2 sm:h-1 sm:-translate-y-1/2 sm:rounded-full sm:group-hover:h-1.5"
+            )}
+          />
+          <input
+            aria-label="再生位置"
+            aria-valuetext={valueText}
+            className={grabStyles()}
+            disabled={!seekable}
+            max={seekable ? duration : 1}
+            min={0}
+            onChange={(event) => seekTo(Number(event.target.value))}
+            step={1}
+            type="range"
+            value={value}
           />
         </div>
-        <input
-          aria-label="再生位置"
-          aria-valuetext={valueText}
-          className={trackStyles(
-            /*
-              つまみは出さない。
-
-              帯は板の上端の縁に**密着**しているが、UAのつまみは掴み代の中央へ
-              置かれるので、帯の中心より5px下にぶら下がる。帯へ合わせて持ち上げ
-              るには掴み代の外へ出すしかなく、そこは板の`overflow-hidden`が切る。
-
-              掴めることは、触れると帯が3px→5pxへ太る動きが示す。つまみが実際に
-              出ていたのはhoverできる環境だけで、指で触る環境では元から出て
-              いなかった。掴んでいる位置は塗りの先端が示す。
-            */
-            cn(
-              "[&::-webkit-slider-thumb]:h-full [&::-webkit-slider-thumb]:w-0 [&::-webkit-slider-thumb]:appearance-none",
-              "[&::-moz-range-thumb]:h-full [&::-moz-range-thumb]:w-0 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:border-0"
-            )
-          )}
-          disabled={!seekable}
-          max={seekable ? duration : 1}
-          min={0}
-          onChange={(event) => seekTo(Number(event.target.value))}
-          step={1}
-          type="range"
-          value={value}
-        />
+        {/*
+          残りは負の符号を付けて右端へ。経過と同じ書式で左右に並べると、
+          どちらがどちらか読むまで判らない。待っている間はここが理由を言う。
+        */}
+        <span
+          aria-live={buffering ? "polite" : undefined}
+          className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block"
+        >
+          {trailing}
+        </span>
       </div>
-    </div>
+
+      {/*
+        狭い幅の時刻。目盛りは縁へ出ているので、この行は文字だけを担う。
+        待っている間は同じ場所が理由を言う。並べて置くと、320pxでは題名の列
+        (102px)へ137px入れることになり、再生ボタンへ重なる。
+      */}
+      <p
+        aria-live={buffering ? "polite" : undefined}
+        className="truncate text-xs tabular-nums text-muted-foreground sm:hidden"
+      >
+        {buffering ? (
+          "読み込み中…"
+        ) : (
+          <>
+            <span className="text-foreground">
+              {formatPlaybackTime(position)}
+            </span>
+            {" / "}
+            {formatPlaybackTime(duration)}
+          </>
+        )}
+      </p>
+    </>
   )
 }
 
 /**
- * 展開時の目盛り。経過と残りを左右の端に置き、帯そのものを太くする。
+ * 展開時の目盛り。帯を太くし、経過と残りを左右の端へ置く。
  *
  * 時刻を**同じcomponentの中**で描くのは、位置を読む購読を1つに保つため。
  * 帯と時刻を別々のcomponentにすると、1回の`timeupdate`で2つが動く。
@@ -141,35 +250,31 @@ export function PlaybackScrubberFull({
 }: {
   readonly className?: string
 }) {
-  const { duration, position, ratio, seekable, seekTo, value, valueText } =
-    usePlaybackRange()
-  const remaining =
-    duration !== undefined && duration > 0 ? duration - position : undefined
+  const {
+    duration,
+    position,
+    ratio,
+    remaining,
+    seekable,
+    seekTo,
+    value,
+    valueText,
+  } = usePlaybackRange()
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
       {/* 掴み代は24px。指で触る環境では、ここが唯一の「大きい目盛り」になる。 */}
       <div className="group relative h-6">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-1/2 h-[6px] -translate-y-1/2 overflow-hidden rounded-full bg-foreground/15 [contain:paint]"
-        >
-          <div
-            className="h-full w-full origin-left rounded-full bg-foreground"
-            style={{ transform: `scaleX(${ratio})` } as CSSProperties}
-          />
-        </div>
+        <ScrubberRail
+          // 展開段は縁から離れているので、つまみを常に出して掴み所を示せる。
+          knob={seekable ? "always" : "none"}
+          ratio={ratio}
+          trackClassName="inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full"
+        />
         <input
           aria-label="再生位置"
           aria-valuetext={valueText}
-          className={trackStyles(
-            cn(
-              // 展開中は「掴んで動かすもの」であることを常に見せる。
-              "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:transition-transform hover:[&::-webkit-slider-thumb]:scale-125 motion-reduce:[&::-webkit-slider-thumb]:transition-none",
-              "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-foreground",
-              "disabled:[&::-webkit-slider-thumb]:opacity-0 disabled:[&::-moz-range-thumb]:opacity-0"
-            )
-          )}
+          className={grabStyles()}
           disabled={!seekable}
           max={seekable ? duration : 1}
           min={0}
@@ -179,10 +284,6 @@ export function PlaybackScrubberFull({
           value={value}
         />
       </div>
-      {/*
-        残りは負の符号を付けて右端に置く。経過と同じ書式で左右に並べると、
-        どちらがどちらか読むまで判らない。
-      */}
       <p className="flex justify-between text-xs tabular-nums text-muted-foreground">
         <span className="text-foreground">{formatPlaybackTime(position)}</span>
         <span>
@@ -192,66 +293,5 @@ export function PlaybackScrubberFull({
         </span>
       </p>
     </div>
-  )
-}
-
-/**
- * 折りたたみ時の1行。経過と総時間だけを添える。残りは展開したときに右端へ出る。
- *
- * 位置を購読するのは目盛りとここだけで、操作列は購読しない。
- *
- * 待っている間は、同じ1行がその理由を言う。時刻と並べて置くと、320pxでは
- * 題名の列(102px)へ137px入れることになり、再生ボタンへ重なる。待っている間は
- * 位置も動かないので、入れ替える方が収まりも読みやすさも良い。
- *
- * 待ち状態の購読をここへ足しても予算は増えない。この行は`timeupdate`で
- * どのみち毎秒数回描き直されるし、待ち状態はまばらにしか動かない。
- */
-export function PlaybackTimeReadout({
-  className,
-}: {
-  readonly className?: string
-}) {
-  const position = useAtomValue(playbackPositionAtom)
-  const duration = useAtomValue(playbackDurationAtom)
-  const buffering = useAtomValue(isBufferingAtom)
-  const remaining =
-    duration !== undefined && duration > 0 ? duration - position : undefined
-
-  if (buffering) {
-    /*
-      要素の型を変えて差し替える。同じ`<p>`のまま`aria-live`だけ付け外しすると、
-      待ちが明けた瞬間に時刻がlive regionの中身として読み上げられ、以降は
-      毎秒その行が更新され続けることになる。
-    */
-    return (
-      <output
-        aria-live="polite"
-        className={cn(
-          "block truncate text-xs text-muted-foreground",
-          className
-        )}
-      >
-        読み込み中…
-      </output>
-    )
-  }
-
-  return (
-    <p
-      className={cn(
-        "truncate text-xs tabular-nums text-muted-foreground",
-        className
-      )}
-    >
-      <span className="text-foreground">{formatPlaybackTime(position)}</span>
-      {" / "}
-      {formatPlaybackTime(duration)}
-      <span className="hidden sm:inline">
-        {remaining === undefined
-          ? ""
-          : ` (残り ${formatPlaybackTime(remaining)})`}
-      </span>
-    </p>
   )
 }
