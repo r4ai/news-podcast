@@ -1,6 +1,6 @@
 import { useAtomValue, useSetAtom } from "jotai"
 import { X } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -44,6 +44,12 @@ const PANEL_ID = "now-playing-panel"
 const WIDE_QUERY = "(min-width: 40rem)"
 
 /**
+ * 速度と音量を常設の行へ並べられる幅。ここもCSSでは選べない。`display`で
+ * 隠すだけだと、開いたままのpopoverやselectがportalの側に取り残される。
+ */
+const ROOMY_QUERY = "(min-width: 64rem)"
+
+/**
  * 「押せるもの」の見分け。ここに当たらない場所を押したら開く。
  */
 const INTERACTIVE = "a,button,input,select,textarea,[role='slider']"
@@ -74,6 +80,7 @@ export function PlayerBar() {
   const expanded = useAtomValue(playerExpandedAtom)
   const setExpanded = useSetAtom(playerExpandedAtom)
   const wide = useMediaQuery(WIDE_QUERY)
+  const roomy = useMediaQuery(ROOMY_QUERY)
   // 畳むときのfocusの行き先。開いた中身は畳んだ瞬間に消えるので、
   // 消えない場所へ先に移す必要がある。
   const titleRef = useRef<HTMLButtonElement>(null)
@@ -89,14 +96,37 @@ export function PlayerBar() {
   */
   const leaving = useRef(false)
   /**
-   * Drawerが画面に在るか。
+   * Drawerが閉じ切ったか。
    *
-   * **開くと決めた時点で立て、閉じ切った時だけ降ろす**。立ち上がりの動きが
-   * 終わるのを待って立てると、その途中で閉じたときに「まだ立っていない」
-   * ことになり、板側の失敗の行が戻ってDrawerの中の同じ`alert`と二重になる。
+   * 「開いているか」は`!wide && expanded`から判る。持つ必要があるのは
+   * **閉じ切ったかどうか**だけで、終了の動きが終わるまでは画面に在る。
+   * 開いた側を記録する作りにすると、幅が変わって開いた場合のように
+   * 「開く操作を通らずに開く」経路を取りこぼす。
    */
-  const [drawerPresent, setDrawerPresent] = useState(false)
+  const [drawerClosed, setDrawerClosed] = useState(true)
+  /**
+   * 板の中の段が、畳む動きの最中か。
+   *
+   * `Collapsible`は閉じ切りを教えてくれないので、高さの遷移の終わりを自分で
+   * 拾う。終わるまでは段が残っているので、常設の行は同じ操作を出さない。
+   */
+  const [panelClosing, setPanelClosing] = useState(false)
+  /*
+    Drawerが立ったことを記録する。
+
+    開く経路は押下だけではない。展開したまま幅を縮めると、`open`が真に
+    なってDrawerが立つが、開く処理はどこも通らない。外から来る開閉に
+    追従する必要があるので、ここだけは効果で拾う。
+  */
+  useEffect(() => {
+    if (!wide && expanded) setDrawerClosed(false)
+  }, [wide, expanded])
   if (track === null) return null
+
+  /** Drawerが画面に在る (立ち上がり中・表示中・終了の動きの最中を含む)。 */
+  const drawerPresent = (!wide && expanded) || !drawerClosed
+  /** 開いた中身が画面に在る。常設の行は、この間 同じ操作を出さない。 */
+  const panelPresent = expanded || panelClosing
 
   /**
    * 畳む。**畳む前にfocusを題名へ移す**。
@@ -105,19 +135,22 @@ export function PlayerBar() {
    * 消えると、行き先を失ったfocusは`body`へ落ちる。キーボードだけで使う
    * 利用者は、そこからページの先頭を辿り直すことになる。
    */
-  /** 開く。狭い幅ではDrawerが立つので、在ることをここで記録する。 */
-  const open = () => {
-    if (!wide) setDrawerPresent(true)
-    setExpanded(true)
-  }
-
   const collapse = () => {
     /*
       板がその場で伸びる幅では、消える中身からfocusを先に逃がす。Drawerの
       幅では効かない(modalが背面をinertにしている)ので、行き先は
       `finalFocus`へ預けてある。
     */
-    if (wide) titleRef.current?.focus()
+    if (wide) {
+      titleRef.current?.focus()
+      setPanelClosing(true)
+      /*
+        遷移の終わりが届かないことがある(動きを止める設定、途中で開き直した
+        場合)。届かないまま印が立ち続けると、常設の行の目盛りが戻らない。
+        動きより少し長い時間で必ず降ろす。
+      */
+      globalThis.setTimeout(() => setPanelClosing(false), 400)
+    }
     setExpanded(false)
   }
 
@@ -222,7 +255,7 @@ export function PlayerBar() {
             if (!event.currentTarget.contains(target)) return
             if (target.closest(INTERACTIVE) !== null) return
             if ((getSelection()?.toString().length ?? 0) > 0) return
-            open()
+            setExpanded(true)
           }}
         >
           {/*
@@ -241,6 +274,14 @@ export function PlayerBar() {
               "h-[var(--collapsible-panel-height)] transition-[height] duration-300 ease-apple",
               "data-starting-style:h-0 data-ending-style:h-0 motion-reduce:transition-none"
             )}
+            /*
+              畳む動きの終わり。`Collapsible`は閉じ切りを教えてくれないので、
+              高さの遷移が終わったところで自分で降ろす。動きを止める設定では
+              遷移が起きないので、そのときは畳んだ次の描画で降りる。
+            */
+            onTransitionEnd={(event) => {
+              if (event.propertyName === "height") setPanelClosing(false)
+            }}
           >
             {/*
               `expanded`では切らない。畳んだ描画で中身が先に消えると、外側が
@@ -282,7 +323,8 @@ export function PlayerBar() {
             <EpisodeArtwork className="size-11" episodeId={track.episodeId} />
             <TrackSummary
               expanded={expanded}
-              onToggle={() => (expanded ? collapse() : open())}
+              panelPresent={panelPresent}
+              onToggle={() => (expanded ? collapse() : setExpanded(true))}
               ref={titleRef}
               track={track}
             />
@@ -293,10 +335,15 @@ export function PlayerBar() {
               最も長く取りたい題名から80px以上を奪う。
 
               開いている間は出さない。開いた中身が同じものを帯として持つので、
-              残すと同じ名前の操作が画面に2つ並ぶ。
+              残すと同じ名前の操作が画面に2つ並ぶ。**畳む動きが終わるまで**
+              待つのは、その間も中身が残っているため。
+
+              幅の判定はCSSではなくJSで行う。`display`で隠すだけだと、開いた
+              ままのpopoverやselectはportalで外に描かれているので、入口だけが
+              消えて面が取り残される。幅を跨いだら外して、面ごと閉じる。
             */}
-            {expanded ? null : (
-              <div className="hidden items-center gap-1 lg:flex">
+            {panelPresent || !roomy ? null : (
+              <div className="flex items-center gap-1">
                 <PlaybackRateSelect />
                 <VolumeControl variant="popover" />
               </div>
@@ -317,10 +364,8 @@ export function PlayerBar() {
           時点でfalseになるので、それだけで板側の失敗の行を戻すと、まだ
           残っているDrawerの中の同じ`alert`と二重になり、読み上げも二度走る。
         */
-        onOpenChangeComplete={(done) => {
-          if (!done) setDrawerPresent(false)
-        }}
-        onOpenChange={(next) => (next ? open() : collapse())}
+        onOpenChangeComplete={(done) => setDrawerClosed(!done)}
+        onOpenChange={(next) => (next ? setExpanded(true) : collapse())}
         open={!wide && expanded}
       >
         <SheetContent
@@ -400,10 +445,13 @@ export function PlayerBar() {
 function TrackSummary({
   expanded,
   onToggle,
+  panelPresent,
   ref,
   track,
 }: {
   readonly expanded: boolean
+  /** 開いた中身が画面に在るか。在る間は同じ目盛りを二重に出さない。 */
+  readonly panelPresent: boolean
   readonly onToggle: () => void
   readonly ref: React.Ref<HTMLButtonElement>
   readonly track: PlayerTrack
@@ -428,7 +476,7 @@ function TrackSummary({
         開いている間は出さない。開いた中身が大きい目盛りを持つので、残すと
         同じ名前の目盛りが2つ並ぶ。
       */}
-      {expanded ? null : <PlaybackScrubber />}
+      {panelPresent ? null : <PlaybackScrubber />}
     </div>
   )
 }

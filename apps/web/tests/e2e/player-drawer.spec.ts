@@ -382,3 +382,94 @@ test("別タブで開くクリックではDrawerを畳まない", async ({ page 
 
   await expect(page.getByRole("dialog")).toBeVisible()
 })
+
+/*
+  広い幅で畳む途中。
+
+  `expanded`は終了の動きの開始時点でfalseになる。それだけで常設の行の操作を
+  戻すと、まだ残っている段の中の同じ目盛り・速度・音量と二重になる。
+*/
+test("畳む動きの最中に、同じ操作が二重に出ない", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await page.goto("/login")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByLabel("開発パスワード").press("Enter")
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  await page.addInitScript((episodeId: string) => {
+    localStorage.setItem(
+      "player.track",
+      JSON.stringify({
+        episodeId,
+        title: "今日の開発ニュース: Durable ObjectsとTypeScript 6.0",
+        createdAt: "2026-08-18T21:00:00.000Z",
+      })
+    )
+  }, SEEDED_EPISODE_ID)
+  await page.goto(`/library?episode=${SEEDED_EPISODE_ID}`)
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await bar.getByRole("button", { name: /Durable Objects/ }).click()
+  await expect(page.locator('[data-slot="player-expanded"]')).toBeVisible()
+
+  /*
+    畳む動き(300ms)の最中を、何度も覗いて最大値を取る。1点だけ見ると、
+    重なっている一瞬を跨いでしまう。
+  */
+  await page.keyboard.press("Escape")
+  let mostSliders = 0
+  let mostRates = 0
+  for (let sample = 0; sample < 12; sample += 1) {
+    mostSliders = Math.max(
+      mostSliders,
+      await bar.getByRole("slider", { name: "再生位置" }).count()
+    )
+    mostRates = Math.max(
+      mostRates,
+      await bar.getByRole("combobox", { name: /再生速度/ }).count()
+    )
+    await page.waitForTimeout(25)
+  }
+  expect(mostSliders).toBeLessThanOrEqual(1)
+  expect(mostRates).toBeLessThanOrEqual(1)
+
+  await expect(page.locator('[data-slot="player-expanded"]')).toHaveCount(0)
+  await expect(bar.getByRole("slider", { name: "再生位置" })).toHaveCount(1)
+})
+
+/*
+  速度の候補を開いたまま幅を縮める。
+
+  `display`で隠すだけだと、候補はportalで外に描かれているので入口だけが消え、
+  開いた面が前の位置に取り残される。
+*/
+test("速度の候補を開いたまま幅を縮めても、面が取り残されない", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await page.goto("/login")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByLabel("開発パスワード").press("Enter")
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  await page.addInitScript((episodeId: string) => {
+    localStorage.setItem(
+      "player.track",
+      JSON.stringify({
+        episodeId,
+        title: "今日の開発ニュース: Durable ObjectsとTypeScript 6.0",
+        createdAt: "2026-08-18T21:00:00.000Z",
+      })
+    )
+  }, SEEDED_EPISODE_ID)
+  await page.goto(`/library?episode=${SEEDED_EPISODE_ID}`)
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await bar.getByRole("combobox", { name: /再生速度/ }).click()
+  await expect(page.getByRole("option", { name: "1.5×" })).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 800 })
+  await page.waitForTimeout(300)
+
+  await expect(page.getByRole("option", { name: "1.5×" })).toHaveCount(0)
+})
