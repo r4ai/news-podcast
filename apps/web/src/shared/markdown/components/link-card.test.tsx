@@ -53,3 +53,23 @@ it("renders the favicon and falls back after a loading error", () => {
   expect(container.querySelector("img[data-card-favicon]")).toBeNull()
   expect(container.textContent).toContain("example.com")
 })
+
+it("keeps image failures independent and retries when the source changes", () => {
+  const { container, rerender } = render(
+    <LinkCard
+      data-embed-url="https://example.com/article"
+      data-card-image="https://example.com/old.png"
+    />
+  )
+  fireEvent.error(container.querySelector("img:not([data-card-favicon])")!)
+  expect(container.querySelector("img[data-card-favicon]")).not.toBeNull()
+  rerender(
+    <LinkCard
+      data-embed-url="https://example.com/article"
+      data-card-image="https://example.com/new.png"
+    />
+  )
+  expect(
+    container.querySelector("img:not([data-card-favicon])")?.getAttribute("src")
+  ).toBe("https://example.com/new.png")
+})

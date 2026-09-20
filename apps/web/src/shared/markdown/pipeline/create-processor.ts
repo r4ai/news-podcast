@@ -22,10 +22,8 @@ import { rehypeHeadingOutline } from "./rehype-heading-outline"
 import { rehypeMarkBlockImages } from "./rehype-mark-block-images"
 import { rehypeMarkCodeBlocks } from "./rehype-mark-code-blocks"
 
-import {
-  rehypeCalloutContent,
-  remarkMarkUntitledCallouts,
-} from "./rehype-callout-content"
+import { rehypeCalloutContent } from "./rehype-callout-content"
+import { remarkMarkUntitledCallouts } from "./remark-mark-untitled-callouts"
 import { rehypeMermaid } from "./rehype-mermaid"
 import { rehypeResolveUrls } from "./rehype-resolve-urls"
 import { rehypeSourceFooter } from "./rehype-source-footer"

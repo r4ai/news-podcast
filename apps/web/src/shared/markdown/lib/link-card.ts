@@ -1,4 +1,3 @@
-import { safeFallbackUrl } from "./embed"
 export type LinkCardMetadata = Readonly<{
   title?: string
   description?: string
@@ -24,10 +23,17 @@ export const parseLinkCardMetadata = (
     const asset = (key: string) => {
       const candidate = typeof data[key] === "string" ? data[key].trim() : ""
       if (!candidate || candidate.length > 2048) return undefined
-      const url = safeFallbackUrl(candidate)
-      if (!url || url.length > 2048) return undefined
-      const parsed = new URL(url)
-      return parsed.username || parsed.password ? undefined : url
+      try {
+        const url = new URL(candidate)
+        return ["http:", "https:"].includes(url.protocol) &&
+          !url.username &&
+          !url.password &&
+          url.href.length <= 2048
+          ? url.href
+          : undefined
+      } catch {
+        return undefined
+      }
     }
     return {
       title: text("title", 256),

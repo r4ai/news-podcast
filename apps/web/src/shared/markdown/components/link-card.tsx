@@ -8,38 +8,36 @@ import {
 } from "@workspace/ui/components/card"
 import { safeFallbackUrl } from "../lib/embed"
 
-function Thumbnail({ src }: { readonly src: string }) {
-  const [failed, setFailed] = useState(false)
-  return (
-    <div className="flex min-w-0 max-w-[45%] shrink-0 items-center justify-center self-stretch overflow-hidden border-l border-border bg-muted/50">
-      {failed ? (
-        <ImageIcon
-          aria-hidden="true"
-          className="mx-8 size-6 text-muted-foreground"
-        />
-      ) : (
-        <img
-          alt=""
-          className="h-32 w-auto max-w-full object-contain"
-          loading="lazy"
-          onError={() => setFailed(true)}
-          referrerPolicy="no-referrer"
-          src={src}
-        />
-      )}
-    </div>
-  )
-}
+const CARD_IMAGES = {
+  thumbnail: {
+    className: "h-32 w-auto max-w-full object-contain",
+    fallbackClassName: "mx-8 size-6 text-muted-foreground",
+    icon: ImageIcon,
+  },
+  favicon: {
+    className: "size-3.5 shrink-0 object-contain",
+    fallbackClassName: "size-3.5 shrink-0",
+    icon: Globe2,
+  },
+} as const
 
-function Favicon({ src }: { readonly src: string }) {
+/** Each URL is keyed by the caller so a new image starts with a fresh load state. */
+function CardImage({
+  src,
+  variant,
+}: {
+  readonly src: string
+  readonly variant: keyof typeof CARD_IMAGES
+}) {
   const [failed, setFailed] = useState(false)
+  const { className, fallbackClassName, icon: Icon } = CARD_IMAGES[variant]
   return failed ? (
-    <Globe2 aria-hidden="true" className="size-3.5 shrink-0" />
+    <Icon aria-hidden="true" className={fallbackClassName} />
   ) : (
     <img
       alt=""
-      data-card-favicon=""
-      className="size-3.5 shrink-0 object-contain"
+      data-card-favicon={variant === "favicon" ? "" : undefined}
+      className={className}
       src={src}
       loading="lazy"
       referrerPolicy="no-referrer"
@@ -86,7 +84,7 @@ export function LinkCard({
             </CardDescription>
           ) : null}
           <div className="mt-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <Favicon key={icon} src={icon} />
+            <CardImage key={icon} src={icon} variant="favicon" />
             <span className="truncate">{hostname}</span>
             <ArrowUpRight
               aria-hidden="true"
@@ -94,7 +92,11 @@ export function LinkCard({
             />
           </div>
         </CardHeader>
-        {thumbnail ? <Thumbnail key={thumbnail} src={thumbnail} /> : null}
+        {thumbnail ? (
+          <div className="flex min-w-0 max-w-[45%] shrink-0 items-center justify-center self-stretch overflow-hidden border-l border-border bg-muted/50">
+            <CardImage key={thumbnail} src={thumbnail} variant="thumbnail" />
+          </div>
+        ) : null}
       </Card>
     </a>
   )
