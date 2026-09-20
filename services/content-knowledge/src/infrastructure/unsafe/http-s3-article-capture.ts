@@ -276,16 +276,18 @@ const cssResourceUrls = (
   css: string,
   base: string,
   maximumCount: number,
+  seen: ReadonlySet<string> | undefined,
   inline = false
 ): readonly string[] => {
   const root = parseCss(css, inline)
   if (root === undefined) return []
-  const urls = new Set<string>()
+  const discovered = new Set<string>()
   const addUrl = (raw: string): void => {
     const url = resourceUrl(stripCssString(raw), base)
     if (url === undefined) return
-    urls.add(url)
-    if (urls.size > maximumCount) {
+    if (discovered.has(url) || (seen?.has(url) ?? false)) return
+    discovered.add(url)
+    if ((seen?.size ?? 0) + discovered.size > maximumCount) {
       // postcss は walk callback 内の例外へ postcssNode を追記するため、
       // 凍結済みの failure を直接 throw せず、拡張可能なマーカーを投げる。
       throw { _tag: "CssBudgetExceeded" }
@@ -316,7 +318,7 @@ const cssResourceUrls = (
       throw failure("ResourceLimit")
     throw error
   }
-  return [...urls]
+  return [...discovered]
 }
 
 const rewriteCss = (
@@ -473,10 +475,11 @@ const captureReplay = async (input: {
     const collectCssReferences = (
       css: string,
       base: string,
+      seen: ReadonlySet<string> | undefined,
       inline = false
     ): readonly string[] => {
       try {
-        return cssResourceUrls(css, base, maximumCount, inline)
+        return cssResourceUrls(css, base, maximumCount, seen, inline)
       } catch (error) {
         if (isCaptureError(error) && error.reason === "ResourceLimit")
           rejectLimit("count")
@@ -492,6 +495,7 @@ const captureReplay = async (input: {
           ? (element.getAttribute(attribute) ?? "")
           : (element.textContent ?? ""),
         input.sourceUrl,
+        undefined,
         attribute === "style"
       )
     )
@@ -547,9 +551,7 @@ const captureReplay = async (input: {
         if (mediaType === "text/css") {
           const css = new TextDecoder().decode(body)
           let insertionIndex = index + 1
-          for (const nested of collectCssReferences(css, url)) {
-            if (seen.has(nested)) continue
-            if (seen.size >= maximumCount) rejectLimit("count")
+          for (const nested of collectCssReferences(css, url, seen)) {
             seen.add(nested)
             queued.splice(insertionIndex++, 0, nested)
           }
