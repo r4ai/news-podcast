@@ -203,7 +203,7 @@ pnpm test:e2e
 pnpm test:e2e:functional
 pnpm test:visual
 pnpm observability:validate
-pnpm audit --audit-level=high
+pnpm audit --config.ignore-pnpmfile=true --audit-level=high
 ```
 
 `CI / security`は別workflowで、ActionのSHA固定、workflow lint、zizmor、Gitleaks、依存脆弱性を検査する。PRコードを実行しないため、ローカルのセキュリティ検査結果と通常CIの結果を混同しない。運用、pinactの更新、GitHub settingsは[CIとサプライチェーン防御](ci.md)を参照する。
@@ -211,7 +211,7 @@ pnpm audit --audit-level=high
 | コマンド | 検証内容 |
 | --- | --- |
 | `pnpm format:check` | oxfmt差分 |
-| `pnpm lint` | oxlint、Spectral、architecture gate、structured parser gate |
+| `pnpm lint` | oxlint、Spectral、architecture gate、structured parser gate、security workflow gate |
 | `pnpm typecheck` | workspace型検査 |
 | `pnpm test` | unit/integration tests |
 | `pnpm test:coverage:functional` | 8 functional packagesのlines 75% / branches 60% |
