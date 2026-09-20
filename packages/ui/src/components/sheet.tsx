@@ -93,12 +93,19 @@ function SheetContent({
   const [dragging, setDragging] = useState(false)
   /** 引き切った後、その位置から下へ送り出している最中か。 */
   const [dismissing, setDismissing] = useState(false)
+  const startX = useRef(0)
   const startY = useRef(0)
   /*
     引いた量は`ref`でも持つ。`state`だけだと、離した時点で最後の動きがまだ
     描き直されておらず、判断が1フレーム古い値になる。
   */
   const moved = useRef(0)
+  /*
+    向きを問わず指が動いた量。引き代(`moved`)は下向きだけを見るので、横や
+    上へ払った操作は0のままになる。それで続く`click`を素通りさせると、
+    引いていないのにタップ扱いで閉じてしまう。
+  */
+  const travelled = useRef(0)
   // 引いて戻したときに、続けて飛んでくる`click`を無視するための印。
   const dragged = useRef(false)
   /** 引き始めた指。触れているのが1本とは限らない。 */
@@ -120,7 +127,10 @@ function SheetContent({
     if (!dragging) return
     const move = (event: PointerEvent) => {
       if (event.pointerId !== pointer.current) return
-      moved.current = Math.max(0, event.clientY - startY.current)
+      const dx = event.clientX - startX.current
+      const dy = event.clientY - startY.current
+      travelled.current = Math.max(travelled.current, Math.hypot(dx, dy))
+      moved.current = Math.max(0, dy)
       setOffset(moved.current)
     }
     const end = (event: PointerEvent) => {
@@ -129,6 +139,7 @@ function SheetContent({
       const canceled = event.type === "pointercancel"
       pointer.current = null
       moved.current = 0
+
       setDragging(false)
       /*
         印を立てるのは、**続けて`click`が来ると判っているときだけ**。
@@ -140,7 +151,7 @@ function SheetContent({
       */
       dragged.current =
         !canceled &&
-        distance > DRAG_SLOP_PX &&
+        travelled.current > DRAG_SLOP_PX &&
         handleRef.current?.contains(event.target as Node) === true
       if (!canceled && distance >= DISMISS_PX) {
         // 離した位置から続けて下へ送り出す。0へ戻すと、一度跳ね上がる。
@@ -251,8 +262,10 @@ function SheetContent({
             setDismissing(false)
             setOffset(0)
             pointer.current = event.pointerId
+            startX.current = event.clientX
             startY.current = event.clientY
             moved.current = 0
+            travelled.current = 0
             setDragging(true)
           }}
           type="button"

@@ -93,7 +93,12 @@ export function PlayerBar() {
    * 利用者は、そこからページの先頭を辿り直すことになる。
    */
   const collapse = () => {
-    titleRef.current?.focus()
+    /*
+      板がその場で伸びる幅では、消える中身からfocusを先に逃がす。Drawerの
+      幅では効かない(modalが背面をinertにしている)ので、行き先は
+      `finalFocus`へ預けてある。
+    */
+    if (wide) titleRef.current?.focus()
     setExpanded(false)
   }
 
@@ -284,6 +289,12 @@ export function PlayerBar() {
         open={!wide && expanded}
       >
         <SheetContent
+          /*
+            閉じた後のfocusの行き先。Drawerが立っている間、背面の板はmodalが
+            inertにしているので、こちらから`focus()`しても効かない。行き先を
+            預けて、**modalが閉じ切ってから**戻してもらう。
+          */
+          finalFocus={titleRef}
           onDismiss={collapse}
           className={cn(
             "glass-surface pointer-events-auto border-x-0 border-b-0",

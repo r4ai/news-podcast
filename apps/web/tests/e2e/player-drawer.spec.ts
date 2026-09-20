@@ -12,7 +12,10 @@ const SEEDED_EPISODE_ID = "00000000-0000-4000-8000-000000000030"
  */
 test.use({ viewport: { width: 390, height: 800 } })
 
-async function openDrawer(page: Page) {
+async function openDrawer(
+  page: Page,
+  { from = "title" }: { readonly from?: "title" | "surface" } = {}
+) {
   await page.goto("/login")
   await page.getByLabel("開発パスワード").fill("e2e-password")
   await page.getByLabel("開発パスワード").press("Enter")
@@ -40,8 +43,15 @@ async function openDrawer(page: Page) {
 
   const bar = page.getByRole("region", { name: "再生中の番組" })
   await expect(bar).toBeVisible()
-  // 開くのは題名。開くための専用ボタンは置いていない。
-  await bar.getByRole("button", { name: /Durable Objects/ }).click()
+  /*
+    開くのは題名か、板の押せないところ。後者はfocusを持たないので、閉じた
+    ときに戻る先が無い。`finalFocus`が効いているかは、そちらでしか見えない。
+  */
+  if (from === "title") {
+    await bar.getByRole("button", { name: /Durable Objects/ }).click()
+  } else {
+    await bar.locator('[aria-hidden="true"].rounded-xl').first().click()
+  }
   await expect(page.getByRole("dialog")).toBeVisible()
   /*
     滑り込みが終わるまで待つ。`toBeVisible`は動き始めた時点で真になるので、
@@ -208,4 +218,39 @@ test("目盛りが再生や閉じるの上端を覆わない", async ({ page }) 
   })
 
   expect(covered).toEqual([])
+})
+
+/*
+  掴み代の上で横や上へ払った操作は、引き代(下向き)としては0になる。それで
+  続く`click`を素通りさせると、引いていないのにタップ扱いで閉じてしまう。
+*/
+test("掴み代を横へ払っても閉じない", async ({ page }) => {
+  await openDrawer(page)
+  const handle = page.getByRole("button", { name: "閉じる", exact: true })
+  await handle.hover()
+  const box = (await handle.boundingBox())!
+  const y = box.y + box.height / 2
+
+  await page.mouse.move(box.x + box.width / 2, y)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 - 20, y, { steps: 5 })
+  await page.mouse.up()
+
+  await expect(page.getByRole("dialog")).toBeVisible()
+})
+
+/*
+  余白からDrawerを開き、中からEscapeで閉じる。Drawerが立っている間、背面の
+  板はmodalがinertにしているので、こちらから`focus()`しても効かない。行き先は
+  `finalFocus`へ預け、閉じ切ってから戻してもらう。
+*/
+test("余白から開いたDrawerを閉じても、focusは題名へ戻る", async ({ page }) => {
+  await openDrawer(page, { from: "surface" })
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  const focused = await page.evaluate(
+    () => document.activeElement?.getAttribute("aria-controls") ?? "(なし)"
+  )
+  expect(focused).toBe("now-playing-panel")
 })
