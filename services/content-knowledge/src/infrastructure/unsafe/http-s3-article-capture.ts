@@ -471,6 +471,7 @@ const captureReplay = async (input: {
     const queued = [
       ...new Set([...stylesheetUrls, ...inlineCssUrls, ...remainingUrls]),
     ]
+    const seen = new Set(queued)
     const fetched = new Map<string, FetchedAsset>()
     const bodies = new Map<string, Uint8Array>()
     let requiredFailure = false
@@ -516,8 +517,10 @@ const captureReplay = async (input: {
           const css = new TextDecoder().decode(body)
           let insertionIndex = index + 1
           for (const nested of cssResourceUrls(css, url)) {
-            if (!queued.includes(nested))
-              queued.splice(insertionIndex++, 0, nested)
+            if (seen.has(nested)) continue
+            if (seen.size >= maximumCount) rejectLimit("count")
+            seen.add(nested)
+            queued.splice(insertionIndex++, 0, nested)
           }
         }
       } catch (error) {
