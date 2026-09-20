@@ -117,3 +117,22 @@ test("指が掴み代の外で離れた後でも、押して閉じられる", as
   await handle.click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
 })
+
+test("引いて閉じた後、もう一度開いても面はその場に立つ", async ({ page }) => {
+  await openDrawer(page)
+  await dragHandle(page, 160)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  /*
+    引いて閉じるときは「離した位置から続けて下へ送り出す」ため、面を画面外へ
+    寄せたままにする。その印を降ろさないと、**次に開いたときも寄ったまま**
+    立ち上がり、背面だけを塞ぐ見えない面になる。
+  */
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await bar.getByRole("button", { name: /Durable Objects/ }).click()
+  const drawer = page.getByRole("dialog")
+  await expect(drawer).toBeVisible()
+  await expect(
+    drawer.getByRole("link", { name: "原稿と出典を読む" })
+  ).toBeInViewport()
+})

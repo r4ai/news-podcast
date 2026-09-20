@@ -57,6 +57,16 @@ const DISMISS_PX = 96
 /** 指が動いたと見なす幅。これ未満は押しただけなので、押した通りに閉じる。 */
 const DRAG_SLOP_PX = 4
 
+/** 引き切った後、離した位置から下へ送り出すのにかける時間。 */
+const DISMISS_MS = 300
+
+/** 動きを止める設定か。設定は読み取り専用なので、必要なときに読めばよい。 */
+function prefersReducedMotion(): boolean {
+  return (
+    globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+  )
+}
+
 function SheetContent({
   children,
   className,
@@ -128,6 +138,16 @@ function SheetContent({
         // 離した位置から続けて下へ送り出す。0へ戻すと、一度跳ね上がる。
         setDismissing(true)
         onDismiss()
+        /*
+          送り出しが終わったら印を降ろす。この面は閉じても**component
+          としては残る**ので、降ろさないと次に開いたときも画面外へ寄った
+          まま立ち上がり、背面だけを塞ぐ見えない面になる
+          (実測: 開き直した中身のviewport比が0)。
+        */
+        globalThis.setTimeout(
+          () => setDismissing(false),
+          prefersReducedMotion() ? 0 : DISMISS_MS + 50
+        )
         return
       }
       setOffset(0)
@@ -156,7 +176,13 @@ function SheetContent({
             : dismissing
               ? {
                   transform: "translateY(100%)",
-                  transition: "transform 300ms var(--ease-apple)",
+                  /*
+                    動きを止める設定では送り出しも止める。`class`側の
+                    `motion-reduce:duration-0`はこのinline styleに勝てない。
+                  */
+                  transition: prefersReducedMotion()
+                    ? "none"
+                    : `transform ${DISMISS_MS}ms var(--ease-apple)`,
                 }
               : undefined
         }
@@ -198,6 +224,7 @@ function SheetContent({
               場合に立ちっぱなしになり、その次の押下を食べて何も起きない。
             */
             dragged.current = false
+            setDismissing(false)
             if (event.button !== 0 || pointer.current !== null) return
             pointer.current = event.pointerId
             startY.current = event.clientY
