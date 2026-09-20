@@ -236,6 +236,13 @@ function SheetContent({
           ref={handleRef}
           onPointerDown={(event) => {
             /*
+              **所有者の検査を先に済ませる**。引いている最中に2本目が触れた
+              とき、先に状態を戻してしまうと、面が1本目の指から離れて元の
+              位置へ跳ね返る。しかも引いた距離は1本目のまま残るので、その後
+              1本目を離すと、見た目は戻っているのに古い距離で閉じてしまう。
+            */
+            if (event.button !== 0 || pointer.current !== null) return
+            /*
               印は**次に押し始めた時点で必ず消す**。同じ操作の`click`が来る
               前提で消していると、指が要素の外で離れた場合や打ち切られた
               場合に立ちっぱなしになり、その次の押下を食べて何も起きない。
@@ -243,7 +250,6 @@ function SheetContent({
             dragged.current = false
             setDismissing(false)
             setOffset(0)
-            if (event.button !== 0 || pointer.current !== null) return
             pointer.current = event.pointerId
             startY.current = event.clientY
             moved.current = 0

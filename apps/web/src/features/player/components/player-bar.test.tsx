@@ -339,6 +339,26 @@ describe("PlayerBar の開閉", () => {
     expect(store.get(playerExpandedAtom)).toBe(false)
   })
 
+  /*
+    2本の指が順に板の余白を押し、先に押した方から離す場合。
+
+    後から触れた指が所有権を奪うと、先に離した1本目は所有者でないので開かず、
+    その直後に1本目の後始末が印を降ろすので2本目も開かない。どちらも押せない
+    ところから始まったのに、両方の操作が失われる。
+  */
+  it("後から触れた指が、先に押した指の所有権を奪わない", () => {
+    const { container, store } = renderBar()
+    const surface = container.querySelector(
+      '[aria-hidden="true"].rounded-xl'
+    ) as Element
+
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1 })
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 2 })
+    fireEvent.pointerUp(surface, { button: 0, pointerId: 1 })
+
+    expect(store.get(playerExpandedAtom)).toBe(true)
+  })
+
   it("狭い幅では、下端から立ち上がるDrawerで開く", async () => {
     const user = userEvent.setup()
     renderBar({ wide: false })

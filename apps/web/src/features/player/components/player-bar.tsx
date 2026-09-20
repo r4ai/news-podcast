@@ -157,6 +157,13 @@ export function PlayerBar() {
               `click`は取り消されるのにこちらだけが開く。操作はそれを始めた
               ものに属する (docs/design.md §7.1)。
             */
+            /*
+              既に1本が押さえているなら、後から触れた指は数えない。上書き
+              すると、先に離した1本目は所有者でないので開かず、その直後に
+              1本目の後始末が印を降ろすので2本目も開かない。どちらの操作も
+              押せないところから始まったのに、両方とも失われる。
+            */
+            if (pressedPointer.current !== null) return
             const target = event.target as Element
             const onSurface =
               event.button === 0 &&
