@@ -161,7 +161,14 @@ export function PlayerBar() {
           >
             {wide && expanded ? (
               <NowPlayingPanel
-                className="px-5 pt-4 pb-1"
+                /*
+                  高さに上限を置く。板の上へ伸びるこの段は、下端に浮く他の
+                  案内(回線切れ・生成キュー)が避ける先を決めるので、
+                  **どこまで伸びうるかが判っている**必要がある。超えた分は
+                  この中でスクロールさせる。
+                */
+                className="max-h-52 overflow-y-auto overscroll-contain px-5 pt-4 pb-1"
+                data-slot="player-expanded"
                 id={PANEL_ID}
                 track={track}
                 withHeader={false}

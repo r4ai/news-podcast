@@ -81,13 +81,21 @@ async function startPlayback(store: Store) {
     value: 0,
     writable: true,
   })
-  store.set(currentTrackAtom, {
-    episodeId: "episode-a",
-    title: "今日のニュース",
-    createdAt: "2026-08-19T00:00:00.000Z",
+  /*
+    書き込みは`act`の中で行う。外で書くと、Reactはこの後の任意の時点で
+    描き直しをまとめて流す。`waitFor`は目盛りが現れた時点で戻るので、
+    **まだ流れていない描き直しが残ったまま**基準を数えることがある。
+    それが後から届くと、位置の更新で描き直したように見えて予算が落ちる。
+  */
+  await act(async () => {
+    store.set(currentTrackAtom, {
+      episodeId: "episode-a",
+      title: "今日のニュース",
+      createdAt: "2026-08-19T00:00:00.000Z",
+    })
+    store.set(attachAudioElementAtom, audio)
+    store.set(playbackDurationAtom, 600)
   })
-  store.set(attachAudioElementAtom, audio)
-  store.set(playbackDurationAtom, 600)
   // バーは動的importで来る。他のpackageと並列に走ると取り込みが遅れるので、
   // 既定の1秒では足りないことがある。
   await waitFor(
@@ -95,6 +103,8 @@ async function startPlayback(store: Store) {
       expect(screen.getByRole("slider", { name: "再生位置" })).toBeDefined(),
     { timeout: 5_000 }
   )
+  // 取り込み後に積まれた描き直しも、数え始める前に出し切る。
+  await act(async () => {})
   return audio!
 }
 

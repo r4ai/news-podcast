@@ -251,4 +251,53 @@ test.describe("アクセシビリティ", () => {
     )
     await expect(page.getByRole("button", { name: "再試行" })).toBeVisible()
   })
+
+  /*
+    板を開いたまま回線が切れたとき。
+
+    板は開くと上へ伸びるが、本文の確保(`--player-h`)は増やさない(増やすと
+    開閉のたびに本文が跳ねる)。回線切れの案内を確保と同じ値で置くと、開いた
+    段の速度・音量の行をちょうど覆う(実測: 通知691..720が速度select689..721)。
+    逃げ先は`--player-notice-h`が別に持つ。`:has()`はjsdomが評価しないので、
+    実ブラウザの寸法でしか確かめられない。
+  */
+  test("回線切れの案内が、開いた再生バーの操作に重ならない", async ({
+    page,
+  }) => {
+    await login(page)
+    await page.goto("/library")
+    await page
+      .getByRole("button", { name: /今日の開発ニュース.*を再生/ })
+      .first()
+      .click()
+    const bar = page.getByRole("region", { name: "再生中の番組" })
+    await expect(bar).toBeVisible()
+
+    await bar.getByRole("button", { name: /今日の開発ニュース/ }).click()
+    const surface = page.locator('[data-slot="player-expanded"]')
+    await expect(surface).toBeVisible()
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "onLine", {
+        configurable: true,
+        get: () => false,
+      })
+      window.dispatchEvent(new Event("offline"))
+    })
+    const offline = page.getByText("オフラインです。", { exact: false })
+    await expect(offline).toBeVisible()
+
+    const surfaceBox = await surface.boundingBox()
+    const offlineBox = await offline.boundingBox()
+    expect(surfaceBox).not.toBeNull()
+    expect(offlineBox).not.toBeNull()
+    // 案内の下端が、開いた段の上端より上に居ること。
+    expect(offlineBox!.y + offlineBox!.height).toBeLessThanOrEqual(
+      surfaceBox!.y + 0.5
+    )
+    // 覆われていた速度の選択が、押せる状態で残っていること。
+    await expect(
+      surface.getByRole("combobox", { name: /再生速度/ })
+    ).toBeVisible()
+  })
 })

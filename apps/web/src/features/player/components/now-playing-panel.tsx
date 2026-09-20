@@ -21,6 +21,7 @@ import { VolumeControl } from "./volume-control"
  */
 export function NowPlayingPanel({
   className,
+  "data-slot": dataSlot,
   id,
   /**
    * 原稿へ移るときに呼ぶ。
@@ -43,6 +44,7 @@ export function NowPlayingPanel({
   track,
 }: {
   readonly className?: string
+  readonly "data-slot"?: string
   readonly id?: string
   readonly onNavigate?: () => void
   readonly withHeader?: boolean
@@ -69,7 +71,11 @@ export function NowPlayingPanel({
   )
 
   return (
-    <div className={cn("flex flex-col gap-4", className)} id={id}>
+    <div
+      className={cn("flex flex-col gap-4", className)}
+      data-slot={dataSlot}
+      id={id}
+    >
       {/*
         鳴らせなかったことと、やり直す道。板にも同じ行があるが、Drawerで
         開いている間は板ごと覆われて触れない。覆う側にも置く。
