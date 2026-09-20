@@ -29,15 +29,19 @@ const preHandler: Handle = (state, element) => {
   return result
 }
 
-const codeHandler: Handle = (state, element, _parent) => {
-  const classes = Array.isArray(element.properties.className)
-    ? element.properties.className.map(String)
-    : []
-  if (classes.includes("language-math"))
-    return { type: "math", value: textContent(element) }
-  if (classes.includes("language-math-inline"))
-    return { type: "inlineMath", value: textContent(element) }
-  return defaultHandlers.code(state, element)
+const mathKindOf = (element: Element): "math" | "inlineMath" | undefined => {
+  const classes = element.properties.className
+  if (!Array.isArray(classes)) return undefined
+  if (classes.includes("language-math")) return "math"
+  if (classes.includes("language-math-inline")) return "inlineMath"
+  return undefined
+}
+
+const codeHandler: Handle = (state, element) => {
+  const type = mathKindOf(element)
+  return type
+    ? { type, value: textContent(element) }
+    : defaultHandlers.code(state, element)
 }
 
 const anchorHandler: Handle = (state, element) => {
@@ -60,10 +64,25 @@ const detailsHandler: Handle = (state, element) => [
   ...state.all(element),
   { type: "html", value: "</details>" },
 ]
-const summaryHandler: Handle = (_state, element) => ({
-  type: "html",
-  value: toHtml(element),
-})
+const summaryHandler: Handle = (_state, element) => {
+  // Raw HTML bypasses codeHandler. Translate the same math source markers to
+  // the renderer's math HTML vocabulary, including math nested in emphasis.
+  const summary = structuredClone(element)
+  const stack = [summary]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    const math = node.tagName === "code" ? mathKindOf(node) : undefined
+    if (math) {
+      node.tagName = math === "math" ? "div" : "span"
+      node.properties = {
+        className: [math === "math" ? "math-display" : "math-inline"],
+      }
+    }
+    for (const child of node.children)
+      if (child.type === "element") stack.push(child)
+  }
+  return { type: "html", value: toHtml(summary) }
+}
 
 const defaultAttributes = defaultSchema.attributes!
 

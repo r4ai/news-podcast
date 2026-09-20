@@ -62,6 +62,7 @@ const preserveEncodedEmbeds = (
         const fallback = container.nextElementSibling
         if (
           fallback?.matches("a[href]") &&
+          (fallback as HTMLAnchorElement).style.display === "none" &&
           normalizeUrl(fallback.getAttribute("href")!, context.sourceUrl) ===
             url
         )

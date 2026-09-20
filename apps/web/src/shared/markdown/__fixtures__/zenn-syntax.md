@@ -2,6 +2,10 @@
 
 @[card](https://example.com/guide?q=a\&b=c#section)
 
+@[card](https://example.com/authored)
+
+[Authored explanation](https://example.com/authored)
+
 @[embed](https://github.com/octocat/Hello-World/blob/master/README#L1-L3 "https://github.com/octocat/Hello-World/blob/master/README#L1-L3")
 
 ```mermaid showLineNumbers=false
@@ -15,7 +19,7 @@ graph LR
 
 <details>
 
-<summary>More <strong>details</strong></summary>
+<summary>More <strong>details</strong> for <span class="math-inline">x^2</span></summary>
 
 > [!warning]
 >

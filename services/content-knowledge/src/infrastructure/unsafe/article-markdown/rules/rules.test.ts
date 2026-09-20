@@ -189,7 +189,8 @@ describe("embed, math, and URL rules", () => {
 })
 
 // Input state                         → preserved output
-// Matching profile + valid URL        → card/embed + matching fallback removed
+// Matching profile + valid URL        → card/embed + hidden matching fallback removed
+// Visible same-URL link after a card   → authored text retained
 // Matching profile + Mermaid/TeX      → code/math source, never executable HTML
 // Invalid/empty/missing URI payload   → existing iframe fallback or unchanged DOM
 // No matching profile                 → generic rules only
@@ -207,7 +208,7 @@ describe("profile source payloads", () => {
     "restores %s URLs once and removes only the matching fallback",
     (kind, url, directive) => {
       const document = documentOf(
-        `<span class="embed-block zenn-embedded-${kind}"><iframe src="https://embed.zenn.studio/${kind}" data-content="${encodeURIComponent(url)}"></iframe></span><a href="${url}">fallback</a><a href="/keep">keep</a>`
+        `<span class="embed-block zenn-embedded-${kind}"><iframe src="https://embed.zenn.studio/${kind}" data-content="${encodeURIComponent(url)}"></iframe></span><a href="${url}" style="display: none">fallback</a><a href="/keep">keep</a>`
       )
       expect(embedRule.transform(zennContext, document)).toBe(1)
       expect(
@@ -218,6 +219,19 @@ describe("profile source payloads", () => {
       expect(link.textContent).toBe(directive)
       expect(document.body.textContent).not.toContain("fallback")
       expect(document.body.textContent).toContain("keep")
+    }
+  )
+
+  it.each(["", 'style="display: inline"', 'hidden="until-found"'])(
+    "keeps an authored link after a card (%s)",
+    (attributes) => {
+      const document = documentOf(
+        `<span class="zenn-embedded-card"><iframe data-content="https%3A%2F%2Fexample.com%2Fguide"></iframe></span><a href="https://example.com/guide" ${attributes}>Read the detailed explanation</a>`
+      )
+      embedRule.transform(zennContext, document)
+      expect(document.body.textContent).toContain(
+        "Read the detailed explanation"
+      )
     }
   )
 

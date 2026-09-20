@@ -63,7 +63,7 @@ describe("HAST to Markdown serialization", () => {
 
 it("preserves nested details with sanitized summaries and Markdown bodies", () => {
   const markdown = convert(
-    '<details onclick="evil()"><summary>Outer <strong>title</strong><img src="/x" onerror="evil()"></summary><p><em>body</em></p><details open><summary>Inner</summary><pre><code>code</code></pre></details></details>'
+    '<details onclick="evil()"><summary>Outer <code class="language-ts">plain</code><strong>title</strong><img src="/x" onerror="evil()"></summary><p><em>body</em></p><details open><summary>Inner</summary><pre><code>code</code></pre></details></details>'
   )
   expect(markdown).toContain("<details>\n\n<summary>")
   expect(markdown).toContain("<strong>title</strong>")
@@ -73,3 +73,17 @@ it("preserves nested details with sanitized summaries and Markdown bodies", () =
   expect(markdown.match(/<\/details>/g)).toHaveLength(2)
   expect(markdown).not.toContain("evil")
 })
+
+it.each([
+  ["language-math-inline", "span", "math-inline"],
+  ["language-math", "div", "math-display"],
+])(
+  "keeps %s in summaries recognizable to the HTML renderer",
+  (sourceClass, tag, mathClass) => {
+    const markdown = convert(
+      `<details><summary>For <em><code class="${sourceClass}">x^2</code></em></summary><p>body</p></details>`
+    )
+    expect(markdown).toContain(`<${tag} class="${mathClass}">x^2</${tag}>`)
+    expect(markdown).not.toContain("language-math-inline")
+  }
+)

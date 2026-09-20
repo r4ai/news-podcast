@@ -245,7 +245,14 @@ it("renders restored Zenn source through existing cards, details, math and Merma
   expect(
     container.querySelector('details [role="note"]')?.textContent
   ).toContain("Nested warning")
-  expect(container.querySelectorAll(".katex")).toHaveLength(2)
+  expect(container.querySelectorAll(".katex")).toHaveLength(3)
+  expect(container.querySelector("summary .katex")).not.toBeNull()
+  expect(
+    container.querySelector(
+      'a[href="https://example.com/authored"]:last-of-type'
+    )
+  ).not.toBeNull()
+  expect(container.textContent).toContain("Authored explanation")
   expect(container.querySelectorAll(".katex-display")).toHaveLength(1)
   await waitFor(() =>
     expect(mermaid.render).toHaveBeenCalledWith(
