@@ -85,9 +85,10 @@ test("掴み代は指で掴める広さを持つ", async ({ page }) => {
     .getByRole("button", { name: "閉じる", exact: true })
     .boundingBox()
   expect(box).not.toBeNull()
-  // 見えている棒は9pxしかない。掴める広さは外側のボタンが持つ。
+  // 見えている棒は4pxしかない。掴める広さは外側のボタンが持つ。
+  // 下限はdocs/design.md §7.1のタップ対象(モバイルで44px以上)。
   expect(box!.width).toBeGreaterThanOrEqual(44)
-  expect(box!.height).toBeGreaterThanOrEqual(20)
+  expect(box!.height).toBeGreaterThanOrEqual(44)
 })
 
 test("少し引いて離しただけでは閉じない。元の位置へ戻る", async ({ page }) => {
@@ -324,4 +325,60 @@ test("Drawerを閉じている間、失敗の行が二重にならない", async
 
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.getByRole("alert")).toHaveCount(1)
+})
+
+/*
+  開き切る前に閉じた場合。
+
+  `onOpenChangeComplete(true)`がまだ来ていないので、立ち上がりの動きの完了を
+  待って「在る」と記録していると、この経路で取りこぼす。
+*/
+test("開き切る前に閉じても、失敗の行が二重にならない", async ({ page }) => {
+  await page.goto("/login")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByLabel("開発パスワード").press("Enter")
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  await page.addInitScript((episodeId: string) => {
+    localStorage.setItem(
+      "player.track",
+      JSON.stringify({
+        episodeId,
+        title: "今日の開発ニュース: Durable ObjectsとTypeScript 6.0",
+        createdAt: "2026-08-18T21:00:00.000Z",
+      })
+    )
+  }, SEEDED_EPISODE_ID)
+  await page.goto(`/library?episode=${SEEDED_EPISODE_ID}`)
+  const bar = page.getByRole("region", { name: "再生中の番組" })
+  await expect(bar).toBeVisible()
+  await page.evaluate(() => {
+    document.querySelector("audio")?.dispatchEvent(new Event("error"))
+  })
+  await expect(page.getByRole("alert")).toHaveCount(1)
+
+  // 開いた直後、立ち上がりの動き(350ms)が終わる前に閉じる。
+  await bar.getByRole("button", { name: /Durable Objects/ }).click()
+  await page.waitForTimeout(80)
+  await page.keyboard.press("Escape")
+  await page.waitForTimeout(120)
+
+  expect(await page.getByRole("alert").count()).toBeLessThanOrEqual(1)
+})
+
+/*
+  修飾キー付きのクリックは別のタブで開く。この画面は動かないので、畳むと
+  見ていた面が理由もなく消える。
+*/
+test("別タブで開くクリックではDrawerを畳まない", async ({ page }) => {
+  await openDrawer(page, { at: "/", from: "surface" })
+
+  await page
+    .getByRole("dialog")
+    .getByRole("link", { name: "原稿と出典を読む" })
+    .click({ modifiers: ["ControlOrMeta"] })
+  await page.waitForTimeout(400)
+
+  await expect(page.getByRole("dialog")).toBeVisible()
 })

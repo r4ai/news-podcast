@@ -88,8 +88,14 @@ export function PlayerBar() {
     題名へ引き戻すとその契約を破る。
   */
   const leaving = useRef(false)
-  /** Drawerが実際に立っているか。終了の動きが終わるまでtrueのまま。 */
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  /**
+   * Drawerが画面に在るか。
+   *
+   * **開くと決めた時点で立て、閉じ切った時だけ降ろす**。立ち上がりの動きが
+   * 終わるのを待って立てると、その途中で閉じたときに「まだ立っていない」
+   * ことになり、板側の失敗の行が戻ってDrawerの中の同じ`alert`と二重になる。
+   */
+  const [drawerPresent, setDrawerPresent] = useState(false)
   if (track === null) return null
 
   /**
@@ -99,6 +105,12 @@ export function PlayerBar() {
    * 消えると、行き先を失ったfocusは`body`へ落ちる。キーボードだけで使う
    * 利用者は、そこからページの先頭を辿り直すことになる。
    */
+  /** 開く。狭い幅ではDrawerが立つので、在ることをここで記録する。 */
+  const open = () => {
+    if (!wide) setDrawerPresent(true)
+    setExpanded(true)
+  }
+
   const collapse = () => {
     /*
       板がその場で伸びる幅では、消える中身からfocusを先に逃がす。Drawerの
@@ -210,7 +222,7 @@ export function PlayerBar() {
             if (!event.currentTarget.contains(target)) return
             if (target.closest(INTERACTIVE) !== null) return
             if ((getSelection()?.toString().length ?? 0) > 0) return
-            setExpanded(true)
+            open()
           }}
         >
           {/*
@@ -218,7 +230,9 @@ export function PlayerBar() {
             `role="alert"`が画面に2つ在ることになる。向こうが引き受ける。
             閉じ切るまで待つので、終了の動きの最中も二重にならない。
           */}
-          {wide || !(expanded || drawerOpen) ? <PlaybackErrorBanner /> : null}
+          {wide || !(expanded || drawerPresent) ? (
+            <PlaybackErrorBanner />
+          ) : null}
 
           {/* 広い幅では、板がその場で伸びる。 */}
           <CollapsibleContent
@@ -268,7 +282,7 @@ export function PlayerBar() {
             <EpisodeArtwork className="size-11" episodeId={track.episodeId} />
             <TrackSummary
               expanded={expanded}
-              onToggle={() => (expanded ? collapse() : setExpanded(true))}
+              onToggle={() => (expanded ? collapse() : open())}
               ref={titleRef}
               track={track}
             />
@@ -299,12 +313,14 @@ export function PlayerBar() {
       */}
       <Sheet
         /*
-          閉じ切ったかどうかまで持つ。`expanded`は終了の動きが始まった時点で
-          falseになるので、それだけで板側の失敗の行を戻すと、まだ残っている
-          Drawerの中の同じ`alert`と二重になり、読み上げも二度走る。
+          降ろすのは**閉じ切った時だけ**。`expanded`は終了の動きが始まった
+          時点でfalseになるので、それだけで板側の失敗の行を戻すと、まだ
+          残っているDrawerの中の同じ`alert`と二重になり、読み上げも二度走る。
         */
-        onOpenChangeComplete={setDrawerOpen}
-        onOpenChange={(open) => (open ? setExpanded(true) : collapse())}
+        onOpenChangeComplete={(done) => {
+          if (!done) setDrawerPresent(false)
+        }}
+        onOpenChange={(next) => (next ? open() : collapse())}
         open={!wide && expanded}
       >
         <SheetContent

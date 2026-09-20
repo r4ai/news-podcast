@@ -244,7 +244,13 @@ function SheetContent({
         */}
         <button
           aria-label="閉じる"
-          className="sticky top-0 z-10 mx-auto flex w-24 shrink-0 cursor-grab touch-none items-center justify-center rounded-full py-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
+          /*
+            見えている棒は4pxだが、当たり判定は44px取る(docs/design.md §7.1の
+            タップ対象の下限)。Drawerを閉じる・引く主な入口がここなので、
+            狭いと指で外しやすい。上下の余白は負のmarginで吸わせ、中身との
+            間隔は変えない。
+          */
+          className="sticky top-0 z-10 mx-auto -mt-2 -mb-3 flex h-11 w-24 shrink-0 cursor-grab touch-none items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
           onClick={(event) => {
             /*
               指から来た`click`は、控えに在る指のものだけ通す。`detail`が0の

@@ -61,7 +61,24 @@ export function NowPlayingPanel({
       <span aria-hidden="true">·</span>
       <Link
         className="rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-        onClick={onNavigate}
+        /*
+          畳むのは**この場で移るクリックだけ**。修飾キー付きや中ボタンの
+          クリックは別のタブで開くので、この画面は動かない。それで畳むと、
+          見ていた面が理由もなく消える。
+        */
+        onClick={(event) => {
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey ||
+            event.defaultPrevented
+          ) {
+            return
+          }
+          onNavigate?.()
+        }}
         search={{ episode: track.episodeId }}
         to="/library"
       >
