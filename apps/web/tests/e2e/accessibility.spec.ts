@@ -208,4 +208,47 @@ test.describe("アクセシビリティ", () => {
 
     expect(await collectViolations(page)).toEqual([])
   })
+
+  /*
+    回線が切れたまま再生に失敗したとき。
+
+    失敗の行は板の高さそのものを変える。`--player-h`が板1枚ぶんのままだと、
+    板より手前(z-40)に浮く回線切れの案内がちょうどその行へ重なり、理由も
+    やり直す道も読めなくなる。`:has()`はjsdomが評価しないので、実ブラウザの
+    寸法でしか確かめられない。
+  */
+  test("回線切れの案内が、再生失敗の行に重ならない", async ({ page }) => {
+    await login(page)
+    await page.goto("/library")
+    await page
+      .getByRole("button", { name: /今日の開発ニュース.*を再生/ })
+      .first()
+      .click()
+    const bar = page.getByRole("region", { name: "再生中の番組" })
+    await expect(bar).toBeVisible()
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "onLine", {
+        configurable: true,
+        get: () => false,
+      })
+      window.dispatchEvent(new Event("offline"))
+      document.querySelector("audio")?.dispatchEvent(new Event("error"))
+    })
+
+    const failure = bar.getByRole("alert")
+    await expect(failure).toBeVisible()
+    const offline = page.getByText("オフラインです。", { exact: false })
+    await expect(offline).toBeVisible()
+
+    const failureBox = await failure.boundingBox()
+    const offlineBox = await offline.boundingBox()
+    expect(failureBox).not.toBeNull()
+    expect(offlineBox).not.toBeNull()
+    // 案内の下端が、失敗の行の上端より上に居ること。
+    expect(offlineBox!.y + offlineBox!.height).toBeLessThanOrEqual(
+      failureBox!.y + 0.5
+    )
+    await expect(page.getByRole("button", { name: "再試行" })).toBeVisible()
+  })
 })

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router"
 import { useAtomValue, useSetAtom } from "jotai"
 import { ChevronDown, ChevronUp, X } from "lucide-react"
+import { useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -49,7 +50,22 @@ export function PlayerBar() {
   const track = useAtomValue(currentTrackAtom)
   const expanded = useAtomValue(playerExpandedAtom)
   const setExpanded = useSetAtom(playerExpandedAtom)
+  // 畳むときのfocusの行き先。段の中の要素は畳んだ瞬間に消えるので、
+  // 消えない場所へ先に移す必要がある。
+  const toggleRef = useRef<HTMLButtonElement>(null)
   if (track === null) return null
+
+  /**
+   * 段を畳む。**畳む前にfocusを開閉ボタンへ移す**。
+   *
+   * 音量・速度・原稿へのリンクはいずれも段の中にある。focusを持ったまま
+   * 消えると、行き先を失ったfocusは`body`へ落ちる。キーボードだけで使う
+   * 利用者は、そこからページの先頭を辿り直すことになる。
+   */
+  const collapse = () => {
+    toggleRef.current?.focus()
+    setExpanded(false)
+  }
 
   return (
     <div
@@ -92,7 +108,7 @@ export function PlayerBar() {
         onKeyDown={(event) => {
           if (event.key !== "Escape" || !expanded) return
           event.stopPropagation()
-          setExpanded(false)
+          collapse()
         }}
       >
         <PlaybackErrorBanner />
@@ -147,7 +163,11 @@ export function PlayerBar() {
           )}
 
           <div className="flex shrink-0 items-center gap-0.5">
-            <ExpandToggle expanded={expanded} onToggle={setExpanded} />
+            <ExpandToggle
+              expanded={expanded}
+              onToggle={(next) => (next ? setExpanded(true) : collapse())}
+              ref={toggleRef}
+            />
             <CloseButton />
           </div>
         </div>
@@ -191,9 +211,11 @@ function TrackSummary({ track }: { readonly track: PlayerTrack }) {
 function ExpandToggle({
   expanded,
   onToggle,
+  ref,
 }: {
   readonly expanded: boolean
   readonly onToggle: (next: boolean) => void
+  readonly ref: React.Ref<HTMLButtonElement>
 }) {
   const Icon = expanded ? ChevronDown : ChevronUp
 
@@ -204,6 +226,7 @@ function ExpandToggle({
       aria-label="再生の詳細"
       className="size-9 shrink-0 rounded-full"
       onClick={() => onToggle(!expanded)}
+      ref={ref}
       size="icon-lg"
       variant="ghost"
     >

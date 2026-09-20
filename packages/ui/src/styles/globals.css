@@ -196,10 +196,10 @@
 @utility glass-surface {
   background-color: var(--glass-bg-opaque);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  /* 縁の内側に1本、面の厚みを示す白。`box-shadow`のinsetで重ねる。 */
-  --tw-glass-highlight-shadow: inset 0 1px 0 0 var(--glass-highlight);
-  box-shadow: var(--tw-glass-highlight-shadow), var(--glass-shadow);
+  /* 内側の1本が面の厚み、外側が浮きを示す。 */
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    var(--glass-shadow);
 
   @supports (backdrop-filter: blur(1px)) {
     background-color: var(--glass-bg);

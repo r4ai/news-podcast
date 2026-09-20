@@ -101,8 +101,13 @@ export function AppShell({ actions, children, player }: AppShellProps) {
       確保するのは**折りたたんだ板と、その下の浮きしろ**だけ。展開した段は
       板の上へ伸びる覆いなので、ここへは足さない。足すと、開閉のたびに本文が
       1段ぶん跳ねる。
+
+      例外は再生の失敗を告げる行(`player-error`)。これは板の高さそのものを
+      変え、しかも**この直後に置く回線切れの案内がちょうどその行へ重なる**。
+      失敗は稀なので、出ている間だけ確保を厚くする。`:has()`を2つ重ねて、
+      上の宣言より詳細度を高くしている(出力順に依存させない)。
     */
-    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:5rem]">
+    <div className="min-h-svh bg-background text-foreground [--app-nav-h:calc(3rem+max(0.5rem,env(safe-area-inset-bottom)))] [--player-h:0rem] [&:has([data-slot=player-bar])]:[--player-h:5rem] [&:has([data-slot=player-bar]):has([data-slot=player-error])]:[--player-h:7.75rem]">
       {/*
         キーボードだけで使う場合、ページを開くたびに6本のナビゲーションを
         通り抜けないと本文へ入れない。最初のTabで本文へ飛べる出口を置く。

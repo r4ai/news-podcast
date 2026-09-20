@@ -58,6 +58,12 @@ export function PlaybackErrorBanner() {
   return (
     <p
       className="flex items-center gap-2 border-b border-[var(--glass-border)] bg-destructive/10 px-3 py-2 text-xs text-destructive"
+      /*
+        `AppShell`がこの印を`:has()`で見て、板1枚ぶんに加えてこの行の高さまで
+        確保する。確保しないと、板より手前に浮く回線切れの案内がちょうどこの
+        行へ重なり、理由もやり直す道も読めなくなる。
+      */
+      data-slot="player-error"
       role="alert"
     >
       <AlertTriangle aria-hidden="true" className="size-3.5 shrink-0" />

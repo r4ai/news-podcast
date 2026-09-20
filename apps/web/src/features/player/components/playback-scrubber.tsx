@@ -147,11 +147,8 @@ export function PlaybackScrubber({
   } = usePlaybackRange()
   const buffering = useAtomValue(isBufferingAtom)
 
-  const trailing = buffering
-    ? "読み込み中…"
-    : remaining === undefined
-      ? "--:--"
-      : `-${formatPlaybackTime(remaining)}`
+  const trailing =
+    remaining === undefined ? "--:--" : `-${formatPlaybackTime(remaining)}`
 
   return (
     <>
@@ -174,7 +171,7 @@ export function PlaybackScrubber({
         </span>
         <div className="relative h-full sm:min-w-0 sm:flex-1">
           <ScrubberRail
-            knob="hover"
+            knob={seekable ? "hover" : "none"}
             /*
               狭い幅では出さない。帯は板の縁に密着していて、つまみは掴み代の
               上下中央に来るので、帯から5px下にぶら下がる。smからは帯が行の
@@ -205,13 +202,27 @@ export function PlaybackScrubber({
         {/*
           残りは負の符号を付けて右端へ。経過と同じ書式で左右に並べると、
           どちらがどちらか読むまで判らない。待っている間はここが理由を言う。
+
+          `key`で要素ごと差し替える。同じ要素の属性だけを`aria-live`へ変えると、
+          読み上げは「中身が変わった生きた領域」として扱わず、何も言わない。
         */}
-        <span
-          aria-live={buffering ? "polite" : undefined}
-          className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block"
-        >
-          {trailing}
-        </span>
+        {buffering ? (
+          <span
+            aria-live="polite"
+            className="hidden shrink-0 text-xs text-muted-foreground sm:block"
+            key="busy"
+            role="status"
+          >
+            読み込み中…
+          </span>
+        ) : (
+          <span
+            className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block"
+            key="time"
+          >
+            {trailing}
+          </span>
+        )}
       </div>
 
       {/*
@@ -219,22 +230,27 @@ export function PlaybackScrubber({
         待っている間は同じ場所が理由を言う。並べて置くと、320pxでは題名の列
         (102px)へ137px入れることになり、再生ボタンへ重なる。
       */}
-      <p
-        aria-live={buffering ? "polite" : undefined}
-        className="truncate text-xs tabular-nums text-muted-foreground sm:hidden"
-      >
-        {buffering ? (
-          "読み込み中…"
-        ) : (
-          <>
-            <span className="text-foreground">
-              {formatPlaybackTime(position)}
-            </span>
-            {" / "}
-            {formatPlaybackTime(duration)}
-          </>
-        )}
-      </p>
+      {buffering ? (
+        <p
+          aria-live="polite"
+          className="truncate text-xs text-muted-foreground sm:hidden"
+          key="busy"
+          role="status"
+        >
+          読み込み中…
+        </p>
+      ) : (
+        <p
+          className="truncate text-xs tabular-nums text-muted-foreground sm:hidden"
+          key="time"
+        >
+          <span className="text-foreground">
+            {formatPlaybackTime(position)}
+          </span>
+          {" / "}
+          {formatPlaybackTime(duration)}
+        </p>
+      )}
     </>
   )
 }

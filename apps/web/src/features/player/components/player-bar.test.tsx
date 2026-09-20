@@ -288,6 +288,18 @@ describe("PlayerBar の読み込みと失敗", () => {
     expect(narrowLine()?.textContent).toBe("2:00 / 10:00")
   })
 
+  /*
+    失敗の行は板の高さそのものを変える。`AppShell`が確保を厚くしないと、
+    板より手前に浮く回線切れの案内がちょうどこの行へ重なり、理由もやり直す
+    道も読めなくなる(実測: 390pxで通知615..644が失敗バナー606..651を覆う)。
+  */
+  it("失敗の行は、確保する高さを増やす印を持つ", () => {
+    renderBar({ status: "error" })
+    expect(screen.getByRole("alert").getAttribute("data-slot")).toBe(
+      "player-error"
+    )
+  })
+
   it("鳴らせなかったことを伝え、その場でやり直せる", async () => {
     const user = userEvent.setup()
     const { audio } = renderBar({ status: "error" })
@@ -375,6 +387,37 @@ describe("PlayerBar の展開", () => {
     scrubber.dispatchEvent(new Event("change", { bubbles: true }))
 
     expect(audio.currentTime).toBe(420)
+  })
+
+  /*
+    段の中の要素は畳んだ瞬間に消える。focusを持ったまま消えると、行き先を
+    失ったfocusは`body`へ落ち、キーボードだけで使う利用者はページの先頭から
+    辿り直すことになる。消えない開閉ボタンへ先に移す。
+  */
+  it("段の中からEscapeで畳んでも、focusは開閉ボタンに残る", async () => {
+    const user = userEvent.setup()
+    renderBar()
+    const toggle = screen.getByRole("button", { name: "再生の詳細" })
+    await user.click(toggle)
+
+    const volume = screen.getByRole("slider", { name: "音量" })
+    volume.focus()
+    expect(document.activeElement).toBe(volume)
+
+    await user.keyboard("{Escape}")
+
+    expect(document.activeElement).toBe(toggle)
+  })
+
+  it("開閉ボタンで畳んだときも、focusはそのボタンに残る", async () => {
+    const user = userEvent.setup()
+    renderBar()
+    const toggle = screen.getByRole("button", { name: "再生の詳細" })
+
+    await user.click(toggle)
+    await user.click(toggle)
+
+    expect(document.activeElement).toBe(toggle)
   })
 
   it("Escapeは畳むだけ。音は止めない", async () => {
