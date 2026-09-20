@@ -159,9 +159,13 @@ export function AppShell({ actions, children, player }: AppShellProps) {
         */
         className={cn(
           "md:ml-56",
-          isWide
-            ? "pb-[calc(var(--app-nav-h)+var(--player-h)+1rem)] md:pb-0"
-            : "pb-[calc(var(--app-nav-h)+var(--player-h)+1rem)] md:pb-[calc(var(--player-h)+1rem)]"
+          "pb-[calc(var(--app-nav-h)+var(--player-h)+1rem)] md:pb-[calc(var(--player-h)+1rem)]",
+          /*
+            外すのは**2ペインが立ち上がる`lg`から**。`md`〜`lg`ではあちらも
+            まだ1カラムで、画面の高さいっぱいの枠も枠内の余白も持たない。
+            ここで先に外すと、その幅だけ最後の行が板の下から出てこない。
+          */
+          isWide && "lg:pb-0"
         )}
         id="main-content"
         tabIndex={-1}

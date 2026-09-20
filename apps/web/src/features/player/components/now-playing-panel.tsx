@@ -4,7 +4,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 import type { PlayerTrack } from "../atoms"
 import { EpisodeArtwork } from "./episode-artwork"
-import { PlaybackBusyLabel } from "./playback-notice"
+import { PlaybackBusyLabel, PlaybackErrorBanner } from "./playback-notice"
 import { PlaybackRateSelect } from "./playback-rate-select"
 import { PlaybackScrubberFull } from "./playback-scrubber"
 import { TransportControls } from "./transport-controls"
@@ -23,6 +23,14 @@ export function NowPlayingPanel({
   className,
   id,
   /**
+   * 原稿へ移るときに呼ぶ。
+   *
+   * Drawerで開いているとき、このリンクを押しても移るだけでは覆いが残る。
+   * 再生バーはrouteの外に立っているので、ページが変わってもDrawerは畳まれず、
+   * 着いた先の原稿を覆ったまま触れない状態になる。
+   */
+  onNavigate,
+  /**
    * 絵と題名をここでも出すか。
    *
    * Drawerでは出す。板は背面へ退いて見えないので、何を鳴らしているかが
@@ -36,6 +44,7 @@ export function NowPlayingPanel({
 }: {
   readonly className?: string
   readonly id?: string
+  readonly onNavigate?: () => void
   readonly withHeader?: boolean
   readonly withTransport?: boolean
   readonly track: PlayerTrack
@@ -50,6 +59,7 @@ export function NowPlayingPanel({
       <span aria-hidden="true">·</span>
       <Link
         className="rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={onNavigate}
         search={{ episode: track.episodeId }}
         to="/library"
       >
@@ -60,6 +70,11 @@ export function NowPlayingPanel({
 
   return (
     <div className={cn("flex flex-col gap-4", className)} id={id}>
+      {/*
+        鳴らせなかったことと、やり直す道。板にも同じ行があるが、Drawerで
+        開いている間は板ごと覆われて触れない。覆う側にも置く。
+      */}
+      {withHeader ? <PlaybackErrorBanner className="-mx-4 -mt-1" /> : null}
       {withHeader ? (
         <div className="flex items-start gap-3 sm:gap-4">
           <EpisodeArtwork className="size-20" episodeId={track.episodeId} />

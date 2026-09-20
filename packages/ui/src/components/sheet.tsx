@@ -64,7 +64,12 @@ function SheetContent({
       <SheetPrimitive.Popup
         data-slot="sheet-content"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex max-h-[92svh] flex-col gap-4 rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground outline-none",
+          /*
+            高さは画面の9割まで。超える分は**この面の中でスクロールさせる**。
+            背面はmodalが固めているので、溢れた分は行き場が無くなる。字を
+            大きくした環境や、極端に低いviewportで起きる。
+          */
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[92svh] flex-col gap-4 overflow-y-auto overscroll-contain rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground outline-none",
           // 来た方向が見えるよう、下端から丸ごと滑り込ませる。
           "duration-350 ease-apple data-open:animate-in data-open:slide-in-from-bottom-[100%] data-closed:animate-out data-closed:slide-out-to-bottom-[100%] motion-reduce:duration-0",
           className
@@ -74,7 +79,7 @@ function SheetContent({
         {/* 掴み代。押し下げて閉じられることを、字を使わずに示す。 */}
         <div
           aria-hidden="true"
-          className="mx-auto h-1 w-9 shrink-0 rounded-full bg-foreground/20"
+          className="sticky top-0 z-10 mx-auto h-1 w-9 shrink-0 rounded-full bg-foreground/20"
         />
         {children}
       </SheetPrimitive.Popup>

@@ -395,6 +395,63 @@ describe("PlayerBar の開閉", () => {
     expect(store.get(playbackStatusAtom)).toBe("playing")
   })
 
+  /*
+    `aria-controls`の指す先は、開いている間は**必ず在る**必要がある。
+    器が幅で変わるので、板の中の段にだけidを付けると、狭い幅で開いたときに
+    `aria-expanded="true"`なのに指す先が無い状態になる。
+  */
+  it.for([true, false])(
+    "開いている間は、題名が指す先が実在する (wide=%s)",
+    (wide) => {
+      renderBar({ wide })
+      const title = screen.getByRole("button", { name: track.title })
+      const id = title.getAttribute("aria-controls")
+      expect(id).not.toBeNull()
+      expect(document.getElementById(id as string)).toBeNull()
+
+      act(() => {
+        title.click()
+      })
+
+      expect(title.getAttribute("aria-expanded")).toBe("true")
+      expect(document.getElementById(id as string)).not.toBeNull()
+    }
+  )
+
+  /*
+    Drawerは板ごと覆う。再生バーはrouteの外に立っているので、原稿へ移っても
+    Drawerは畳まれず、着いた先の原稿を覆ったまま触れない状態になる。
+  */
+  it("Drawerから原稿へ移ると、覆いも畳む", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar({ wide: false })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    await user.click(screen.getByRole("link", { name: "原稿と出典を読む" }))
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
+  })
+
+  /*
+    Drawerで開いている間、板は覆われて触れない。鳴らせなかったことと
+    やり直す道は、覆う側にも無いと辿り着けない。
+  */
+  it("Drawerで開いている間に失敗しても、その場でやり直せる", async () => {
+    const user = userEvent.setup()
+    const { audio } = renderBar({ status: "error", wide: false })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    const drawer = screen.getByRole("dialog")
+    expect(within(drawer).getByRole("alert").textContent).toContain(
+      "音声を再生できませんでした"
+    )
+    // 板の側には出さない。覆われて触れないうえ、alertが画面に2つ在ることになる。
+    expect(screen.getAllByRole("alert")).toHaveLength(1)
+
+    await user.click(within(drawer).getByRole("button", { name: "再試行" }))
+    expect(audio.load).toHaveBeenCalledTimes(1)
+  })
+
   it("閉じると展開も畳む。次に載せた番組が開いた状態で始まらない", async () => {
     const user = userEvent.setup()
     const { store } = renderBar({ wide: true })

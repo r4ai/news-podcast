@@ -51,7 +51,11 @@ export function PlaybackBusyLabel() {
  * 要素からは判らないので、言い分けずにやり直す道だけを同じ行へ置く。
  * 高さが変わることは許容する。失敗は稀で、そのとき最も読ませたいものだから。
  */
-export function PlaybackErrorBanner() {
+export function PlaybackErrorBanner({
+  className,
+}: {
+  readonly className?: string
+}) {
   const failed = useAtomValue(hasPlaybackErrorAtom)
   const retry = useSetAtom(retryPlaybackAtom)
   if (!failed) return null
@@ -62,7 +66,8 @@ export function PlaybackErrorBanner() {
         // 板は`overflow`を切らないので、この行が自分で板の角に合わせる。
         "flex items-center gap-2 rounded-t-3xl border-b border-[var(--glass-border)] bg-destructive/10 px-3 py-2 text-xs text-destructive",
         // 出入りは滑らせる。稀な行が唐突に現れると、板ごと跳ねて見える。
-        "animate-in duration-200 ease-apple fade-in slide-in-from-top-2 motion-reduce:animate-none"
+        "animate-in duration-200 ease-apple fade-in slide-in-from-top-2 motion-reduce:animate-none",
+        className
       )}
       /*
         `AppShell`がこの印を`:has()`で見て、板1枚ぶんに加えてこの行の高さまで

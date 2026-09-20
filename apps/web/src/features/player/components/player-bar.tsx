@@ -145,7 +145,11 @@ export function PlayerBar() {
             setExpanded(true)
           }}
         >
-          <PlaybackErrorBanner />
+          {/*
+            Drawerで開いている間は出さない。覆われて触れないうえ、同じ
+            `role="alert"`が画面に2つ在ることになる。向こうが引き受ける。
+          */}
+          {wide || !expanded ? <PlaybackErrorBanner /> : null}
 
           {/* 広い幅では、板がその場で伸びる。 */}
           <CollapsibleContent
@@ -233,7 +237,12 @@ export function PlayerBar() {
           <SheetDescription className="sr-only">
             再生位置・速度・音量を変えられます。
           </SheetDescription>
-          <NowPlayingPanel track={track} withTransport />
+          <NowPlayingPanel
+            id={PANEL_ID}
+            onNavigate={collapse}
+            track={track}
+            withTransport
+          />
         </SheetContent>
       </Sheet>
     </div>
