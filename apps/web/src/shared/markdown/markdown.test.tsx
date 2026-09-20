@@ -412,3 +412,12 @@ it("retains authored callout titles and punctuation", async () => {
     "!"
   )
 })
+
+it("preserves an inline-formatted title immediately after a callout marker", async () => {
+  const { container } = await renderMarkdown(
+    "> [!note]**Important**\n>\n> Body"
+  )
+  expect(
+    container.querySelector("[data-callout-title] strong")?.textContent
+  ).toBe("Important")
+})

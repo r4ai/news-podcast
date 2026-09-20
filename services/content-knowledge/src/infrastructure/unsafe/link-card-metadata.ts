@@ -14,7 +14,7 @@ export const parseLinkCardMetadata = (
   validateHtmlBudget(html)
   const dom = openArticleDom(html, base)
   try {
-    const meta = (names: string[], limit: number) => {
+    const meta = (names: string[], limit?: number) => {
       for (const name of names) {
         const value = dom.document
           .querySelector(`meta[property="${name}"], meta[name="${name}"]`)
@@ -45,7 +45,7 @@ export const parseLinkCardMetadata = (
         return undefined
       }
     }
-    const image = safeAsset(meta(["og:image", "twitter:image"], 2048))
+    const image = safeAsset(meta(["og:image", "twitter:image"]))
     const links = [...dom.document.querySelectorAll("link[rel][href]")]
     const icon = (rel: string) =>
       links

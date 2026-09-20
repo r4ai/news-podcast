@@ -27,7 +27,7 @@ flowchart LR
 - 既存`@[card](URL)`のlink titleに`link-card:v1:`とJSON `{title, description?, image?, favicon?}`を格納する。remark-stringify/parseのエスケープを利用し、Webは版・型・文字数・画像URLを検証する。既存のmetadataなしカードとembed fallback契約は維持する。
 - titleはOGP→Twitter→HTML title→hostname、description/imageはOGPを優先。画像はHTTP(S)のみ、取得先の最終URLで相対解決する。
 - 本文の先頭側から最大12種類のカード、同時3件、補完全体4秒、各HTML最大1 MiB（archive設定が小さければその値）で制限する。重複URLは1回だけ取得する。失敗しても記事は保存する。
-- タイトル256文字、説明512文字、画像URL2048文字。スクリプト・外部リソースを実行しない既存DOM境界を使う。画像は既存の本文画像と同様にブラウザでlazy loadし、no-referrerを指定する。
+- タイトル256文字、説明512文字、画像URL2048文字。画像・faviconのURLが上限を超える場合は切り詰めず除外する。スクリプト・外部リソースを実行しない既存DOM境界を使う。画像は既存の本文画像と同様にブラウザでlazy loadし、no-referrerを指定する。
 - 成否を`archive.link_card{result}`で観測し、URLをlabelに含めない。
 - Webは横長カード、2行のタイトル・説明、ドメイン、右側のサムネイルを表示する。サムネイルは高さ128pxを基準に縦横比から幅を決め、カード幅の45%を上限に全体を表示する。狭い画面でも本文幅を確保し、画像を切り抜かずカード内に収める。取得失敗時はドメイン・URL、画像失敗時は代替アイコンを表示する。
 

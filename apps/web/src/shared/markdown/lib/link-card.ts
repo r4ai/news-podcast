@@ -21,13 +21,19 @@ export const parseLinkCardMetadata = (
       typeof data[key] === "string"
         ? data[key].trim().slice(0, limit) || undefined
         : undefined
-    const candidate = text("image", 2048)
-    const image = candidate ? safeFallbackUrl(candidate) : undefined
+    const asset = (key: string) => {
+      const candidate = typeof data[key] === "string" ? data[key].trim() : ""
+      if (!candidate || candidate.length > 2048) return undefined
+      const url = safeFallbackUrl(candidate)
+      if (!url || url.length > 2048) return undefined
+      const parsed = new URL(url)
+      return parsed.username || parsed.password ? undefined : url
+    }
     return {
       title: text("title", 256),
       description: text("description", 512),
-      image,
-      favicon: safeFallbackUrl(text("favicon", 2048) ?? ""),
+      image: asset("image"),
+      favicon: asset("favicon"),
     }
   } catch {
     return {}

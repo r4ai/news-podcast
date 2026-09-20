@@ -45,3 +45,24 @@ it.each(["javascript:x", "data:image/png,x"])(
     ).toBeUndefined()
   }
 )
+
+it.each(["image", "favicon"])(
+  "rejects oversized %s URLs instead of requesting a truncated URL",
+  (key) => {
+    const url = "https://example.com/" + "a".repeat(2100)
+    expect(
+      parseLinkCardMetadata("link-card:v1:" + JSON.stringify({ [key]: url }))[
+        key as "image" | "favicon"
+      ]
+    ).toBeUndefined()
+  }
+)
+
+it.each(["image", "favicon"])("rejects credential-bearing %s URLs", (key) => {
+  expect(
+    parseLinkCardMetadata(
+      "link-card:v1:" +
+        JSON.stringify({ [key]: "https://user:pass@example.com/icon.png" })
+    )[key as "image" | "favicon"]
+  ).toBeUndefined()
+})

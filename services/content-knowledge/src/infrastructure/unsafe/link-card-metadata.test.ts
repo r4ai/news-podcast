@@ -149,3 +149,13 @@ it.each([
 ])("resolves safe favicon candidates: %s", (html, favicon) => {
   expect(parseLinkCardMetadata(html, base)).toMatchObject({ favicon })
 })
+
+it("does not truncate long OGP image URLs into different destinations", () => {
+  const image = "https://example.com/" + "a".repeat(2100)
+  expect(
+    parseLinkCardMetadata(
+      '<meta property="og:image" content="' + image + '">',
+      base
+    ).image
+  ).toBeUndefined()
+})
