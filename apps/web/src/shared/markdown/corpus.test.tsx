@@ -1,8 +1,18 @@
 import { render, waitFor } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { markdownComponents } from "./components"
 import { Markdown } from "./markdown"
+import mermaid from "mermaid"
+
+// jsdom has no SVG layout APIs. Keep the real pipeline/component/hook and
+// substitute only Mermaid's browser-dependent SVG drawing boundary.
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async () => ({ svg: '<svg data-mermaid="true"></svg>' })),
+  },
+}))
 
 /**
  * Content Knowledgeの変換器が実際に出力したMarkdown(golden corpus)を、実際の
@@ -35,6 +45,15 @@ const corpus = Object.entries(
  * 入れ物」のどちらかだという宣言であり、増える時は意図的でなければならない。
  */
 const EXPECTED_UNMAPPED_TAGS = [
+  "annotation", // KaTeX MathML accessibility tree
+  "math",
+  "mi",
+  "mn",
+  "mo",
+  "mrow",
+  "msup",
+  "semantics",
+  "strong", // native inline emphasis, including summaries
   "button", // CodeBlockのコピーボタン
   "circle", // lucideアイコン
   "div", // <Markdown>のmin-w-0ラッパと、各componentの入れ物
@@ -107,10 +126,12 @@ describe.each(corpus)("$name", ({ markdown }) => {
   it("turns every fenced block into a code block or a diagram", async () => {
     const { container } = await renderCorpus(markdown)
     const fences = (markdown.match(/^```/gm)?.length ?? 0) / 2
-    const blocks =
-      container.querySelectorAll("pre").length +
-      container.querySelectorAll("[data-mermaid]").length
-    expect(blocks).toBe(fences)
+    await waitFor(() => {
+      const blocks =
+        container.querySelectorAll("pre").length +
+        container.querySelectorAll("[data-mermaid]").length
+      expect(blocks).toBe(fences)
+    })
   })
 
   it("turns every callout marker into a callout", async () => {
@@ -192,4 +213,44 @@ describe.each(corpus)("$name", ({ markdown }) => {
       ).not.toBe(image?.getAttribute("alt"))
     }
   })
+})
+
+it("renders restored Zenn source through existing cards, details, math and Mermaid", async () => {
+  const markdown = corpus.find(({ name }) => name === "zenn-syntax")!.markdown
+  const { container } = await renderCorpus(markdown)
+  const card = container.querySelector(
+    'a[href="https://example.com/guide?q=a&b=c#section"]'
+  )!
+  expect(card).not.toBeNull()
+  expect(card.className).toContain("border")
+  expect(
+    container.querySelectorAll(
+      'a[href="https://example.com/guide?q=a&b=c#section"]'
+    )
+  ).toHaveLength(1)
+  expect(
+    container.querySelector(
+      'a[href="https://github.com/octocat/Hello-World/blob/master/README#L1-L3"]'
+    )
+  ).not.toBeNull()
+  expect(container.querySelector('iframe[src*="embed.zenn.studio"]')).toBeNull()
+  expect(container.querySelectorAll("details")).toHaveLength(2)
+  expect(container.querySelector("details")?.hasAttribute("open")).toBe(false)
+  expect(container.querySelector("details details")?.hasAttribute("open")).toBe(
+    true
+  )
+  expect(container.querySelector("details > summary strong")?.textContent).toBe(
+    "details"
+  )
+  expect(
+    container.querySelector('details [role="note"]')?.textContent
+  ).toContain("Nested warning")
+  expect(container.querySelectorAll(".katex")).toHaveLength(2)
+  expect(container.querySelectorAll(".katex-display")).toHaveLength(1)
+  await waitFor(() =>
+    expect(mermaid.render).toHaveBeenCalledWith(
+      expect.any(String),
+      "graph LR\n  A --> B\n"
+    )
+  )
 })

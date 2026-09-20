@@ -26,6 +26,14 @@ export type SiteProfile = Readonly<{
   readonly remove: readonly string[]
   readonly filenameSelectors: readonly string[]
   readonly callouts: readonly CalloutHint[]
+  readonly encodedEmbeds?: readonly Readonly<{
+    selector: string
+    kind: "card" | "embed" | "mermaid"
+  }>[]
+  readonly mathSources?: readonly Readonly<{
+    selector: string
+    display: boolean
+  }>[]
 }>
 
 export type RuleContext = Readonly<{

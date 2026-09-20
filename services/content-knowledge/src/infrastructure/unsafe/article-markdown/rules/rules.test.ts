@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom"
 import { describe, expect, it } from "vitest"
 
 import type { FeatureRule, SiteProfile } from "../core/contracts.js"
+import { zennProfile } from "../profiles/zenn.js"
 import { calloutRule } from "./callout/rule.js"
 import { serializeCodeMetadata } from "./code/metadata.js"
 import { createCodeRule } from "./code/rule.js"
@@ -184,5 +185,107 @@ describe("embed, math, and URL rules", () => {
         a.getAttribute("href")
       )
     ).toEqual(["/ok", "http://public.example/x", "mailto:a@b.test", "", ""])
+  })
+})
+
+// Input state                         → preserved output
+// Matching profile + valid URL        → card/embed + matching fallback removed
+// Matching profile + Mermaid/TeX      → code/math source, never executable HTML
+// Invalid/empty/missing URI payload   → existing iframe fallback or unchanged DOM
+// No matching profile                 → generic rules only
+// Nested rendered KaTeX               → outer display mode retained
+describe("profile source payloads", () => {
+  const zennContext = {
+    sourceUrl: new URL("https://zenn.dev/a/articles/b"),
+    profile: zennProfile,
+  }
+
+  it.each([
+    ["card", "https://example.com/a?q=1&b=2#c", "card"],
+    ["github", "https://github.com/a/b/blob/main/a.ts#L1-L3", "embed"],
+  ])(
+    "restores %s URLs once and removes only the matching fallback",
+    (kind, url, directive) => {
+      const document = documentOf(
+        `<span class="embed-block zenn-embedded-${kind}"><iframe src="https://embed.zenn.studio/${kind}" data-content="${encodeURIComponent(url)}"></iframe></span><a href="${url}">fallback</a><a href="/keep">keep</a>`
+      )
+      expect(embedRule.transform(zennContext, document)).toBe(1)
+      expect(
+        document.querySelectorAll("[data-article-directive]")
+      ).toHaveLength(1)
+      const link = document.querySelector("[data-article-directive]")!
+      expect(link.getAttribute("href")).toBe(url)
+      expect(link.textContent).toBe(directive)
+      expect(document.body.textContent).not.toContain("fallback")
+      expect(document.body.textContent).toContain("keep")
+    }
+  )
+
+  it.each(["%ZZ", "", "%20", "javascript%3Aalert(1)", "http%3A%2F%2F%5B"])(
+    "falls back for unusable encoded URL %s",
+    (payload) => {
+      const document = documentOf(
+        `<span class="zenn-embedded-card"><iframe src="https://embed.zenn.studio/card" data-content="${payload}"></iframe></span>`
+      )
+      expect(embedRule.transform(zennContext, document)).toBe(1)
+      expect(
+        document.querySelector("[data-article-directive]")?.textContent
+      ).toBe("embed")
+      expect(document.querySelector("a")?.getAttribute("href")).toBe(
+        "https://embed.zenn.studio/card"
+      )
+    }
+  )
+
+  it("leaves incomplete payloads and unrelated siblings intact", () => {
+    const document = documentOf(
+      '<span class="zenn-embedded-card"></span><span class="zenn-embedded-github"><iframe data-content="https%3A%2F%2Fgithub.com%2Fa"></iframe></span><a href="/other">other</a>'
+    )
+    expect(embedRule.transform(zennContext, document)).toBe(1)
+    expect(document.querySelector('a[href="/other"]')).not.toBeNull()
+  })
+
+  it("does not interpret site-specific payloads without a matching profile", () => {
+    const document = documentOf(
+      '<span class="zenn-embedded-card"><iframe data-content="https%3A%2F%2Fexample.com"></iframe></span>'
+    )
+    expect(embedRule.transform(context, document)).toBe(0)
+    expect(document.querySelector("iframe")).not.toBeNull()
+  })
+
+  it("keeps Mermaid source as text, including HTML-shaped labels", () => {
+    const source = 'graph LR\n A["<script>alert(1)</script>"] --> B'
+    const document = documentOf(
+      `<span class="zenn-embedded-mermaid"><iframe data-content="${encodeURIComponent(source)}"></iframe></span>`
+    )
+    expect(embedRule.transform(zennContext, document)).toBe(1)
+    expect(
+      document.querySelector("pre > code.language-mermaid")?.textContent
+    ).toBe(source)
+    expect(document.querySelector("script")).toBeNull()
+  })
+
+  it("restores lazy math and keeps empty sources inert", () => {
+    const document = documentOf(
+      '<embed-katex display-mode="1">x^2</embed-katex><embed-katex>a+b</embed-katex><embed-katex> </embed-katex>'
+    )
+    expect(mathRule.transform(zennContext, document)).toBe(2)
+    expect(document.querySelector("code.language-math")?.textContent).toBe(
+      "x^2"
+    )
+    expect(
+      document.querySelector("code.language-math-inline")?.textContent
+    ).toBe("a+b")
+    expect(document.querySelectorAll("embed-katex")).toHaveLength(1)
+  })
+
+  it("preserves display mode when KaTeX nests an inline container", () => {
+    const document = documentOf(
+      '<span class="katex-display"><span class="katex"><annotation encoding="application/x-tex">x^2</annotation></span></span>'
+    )
+    mathRule.transform(context, document)
+    expect(document.querySelector("code.language-math")?.textContent).toBe(
+      "x^2"
+    )
   })
 })

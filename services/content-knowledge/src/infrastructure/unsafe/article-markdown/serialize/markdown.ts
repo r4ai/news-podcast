@@ -1,3 +1,4 @@
+import { toHtml } from "hast-util-to-html"
 import { defaultHandlers, type Handle } from "hast-util-to-mdast"
 import rehypeParse from "rehype-parse"
 import rehypeRemark from "rehype-remark"
@@ -49,6 +50,21 @@ const anchorHandler: Handle = (state, element) => {
   return defaultHandlers.a(state, element)
 }
 
+// Only structural tags are emitted as HTML; body content still uses the shared
+// Markdown handlers, preserving nested callouts, code, math and embeds.
+const detailsHandler: Handle = (state, element) => [
+  {
+    type: "html",
+    value: element.properties.open ? "<details open>" : "<details>",
+  },
+  ...state.all(element),
+  { type: "html", value: "</details>" },
+]
+const summaryHandler: Handle = (_state, element) => ({
+  type: "html",
+  value: toHtml(element),
+})
+
 const defaultAttributes = defaultSchema.attributes!
 
 const sanitizeSchema: Schema = {
@@ -68,7 +84,13 @@ const htmlParser = unified().use(rehypeParse, { fragment: true })
 const sanitizer = unified().use(rehypeSanitize, sanitizeSchema)
 const markdownProcessor = unified()
   .use(rehypeRemark, {
-    handlers: { a: anchorHandler, pre: preHandler, code: codeHandler },
+    handlers: {
+      a: anchorHandler,
+      pre: preHandler,
+      code: codeHandler,
+      details: detailsHandler,
+      summary: summaryHandler,
+    },
   })
   .use(remarkGfm)
   .use(remarkMath)

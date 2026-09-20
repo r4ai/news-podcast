@@ -60,3 +60,16 @@ describe("HAST to Markdown serialization", () => {
     expect(markdown).toContain("\\[ordinary]")
   })
 })
+
+it("preserves nested details with sanitized summaries and Markdown bodies", () => {
+  const markdown = convert(
+    '<details onclick="evil()"><summary>Outer <strong>title</strong><img src="/x" onerror="evil()"></summary><p><em>body</em></p><details open><summary>Inner</summary><pre><code>code</code></pre></details></details>'
+  )
+  expect(markdown).toContain("<details>\n\n<summary>")
+  expect(markdown).toContain("<strong>title</strong>")
+  expect(markdown).toContain("*body*")
+  expect(markdown).toContain("<details open>")
+  expect(markdown).toContain("```\ncode\n```")
+  expect(markdown.match(/<\/details>/g)).toHaveLength(2)
+  expect(markdown).not.toContain("evil")
+})

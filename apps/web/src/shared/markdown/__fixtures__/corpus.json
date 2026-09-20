@@ -96,6 +96,21 @@
         "embed",
         "code-block"
       ]
+    },
+    {
+      "name": "zenn-syntax",
+      "sourceFile": "zenn-syntax.html",
+      "sourceUrl": "https://zenn.dev/zenn/articles/markdown-guide",
+      "sourceSha256": "3b06aca121d3c4a37678b19641bbbf974c1df670a1cdf6442823827b8a3792b5",
+      "markdownSha256": "b0d427f60b519f1bd5a7318eb041441049d6c785db5177da34c19e100e5f04b5",
+      "markdownBytes": 550,
+      "profileId": "zenn",
+      "appliedRules": [
+        "callout",
+        "embed",
+        "math",
+        "code-block"
+      ]
     }
   ]
 }

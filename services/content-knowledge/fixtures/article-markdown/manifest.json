@@ -80,6 +80,28 @@
         "> 設計の意図を保ったまま実装される。"
       ],
       "excludes": ["Back to blog", "azukiazusa.dev footer"]
+    },
+    {
+      "file": "zenn-syntax.html",
+      "sourceUrl": "https://zenn.dev/zenn/articles/markdown-guide",
+      "sha256": "3b06aca121d3c4a37678b19641bbbf974c1df670a1cdf6442823827b8a3792b5",
+      "includes": [
+        "@[card](https://example.com/guide?q=a\\&b=c#section)",
+        "@[embed](https://github.com/octocat/Hello-World/blob/master/README#L1-L3",
+        "```mermaid showLineNumbers=false\ngraph LR\n  A --> B",
+        "<details>",
+        "<summary>More <strong>details</strong></summary>",
+        "<details open>",
+        "> [!note]\n>\n> Useful message",
+        "> [!warning]",
+        "$$\nx^2\n$$",
+        "$a+b$"
+      ],
+      "excludes": [
+        "embed.zenn.studio",
+        "data-content",
+        "msg-symbol"
+      ]
     }
   ]
 }

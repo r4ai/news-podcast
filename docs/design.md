@@ -333,6 +333,8 @@ flowchart LR
 
 保存MarkdownはGFM、math、Mermaid、Obsidian/GitHub型callout、`@[card]`、`@[embed]`、code fence metadataを扱う。code言語は明示属性、filename、shebang/modeline、閾値付きoffline検出の順に決める。Webはcalloutを`@r4ai/remark-callout`で描画し、embedはHTTPS provider allowlist、sandbox、`no-referrer`を満たす場合だけ自動ロードする。sandboxの権限はprovider単位で宣言し、必要な物だけを与える。動画プレイヤーやスライドはJavaScriptなしでは何も描けないため`allow-scripts`を与えるが、`allow-same-origin`は型で表現できないようにして決して与えない（両方揃うとiframeが自分でsandbox属性を外せる）。許可リストに載らないhostnameは、URLがどれだけ安全に見えてもiframeにせずリンクへ落とす。
 
+Zennの遅延埋め込みはProfileのselector/意味対応を使い、共有Ruleが`iframe[data-content]`のURI符号化されたリンク先・Mermaidソースと`embed-katex`のTeXを復元する。リンクカードは既存の`@[card]`、GitHub埋め込みは元URLへのfallbackを持つ`@[embed]`へ変換する。`details/summary`はsanitize済みの構造を残し、内部の本文は共通Markdownへ変換するため、入れ子のcallout・code・mathも保持する。カード表示は既存のURLカードで、外部OGP取得は追加しない。
+
 この方言は、変換器が実際に出力したMarkdownを描画して検証する。`pnpm markdown:corpus`が`services/content-knowledge/fixtures/article-markdown/`のfixtureを変換して`apps/web/src/shared/markdown/__fixtures__/`へ書き出し（`apps/web`は`services/**`をimportできないので、橋渡しは生成物のcommitで行う）、`corpus.test.tsx`がそれを実際のパイプラインで描画する。CIは`pnpm markdown:corpus:check`でdriftを検出する。e2eと視覚回帰が使う偽Gatewayの応答形もOpenAPIとの一致を検査する — テストダブルが実装のバグへ合わせると、どの層も嘘を検知できなくなる（[ADR-0053](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)）。
 
 保存するMarkdownは「取得元ページの断片」であり、埋め込み先の見出し階層は保存時点では決まらない。そこで変換時に見出しを**最も浅いものがlevel 1になる正規形**へ畳み、相対関係だけを残す（`<h2>`から始まるサイトと`<h1>`から始まるサイトの差を吸収する）。実際の見出しレベルは、埋め込み文脈を知っている表示側が決める。

@@ -276,6 +276,8 @@ flowchart LR
 
 現在のContent境界は、RSS/Atomに`fast-xml-parser`、記事HTML→Markdownにscript/resource無効の`jsdom`、Readability、rehype/remarkを使う。Site Profileはroot/selector/意味対応だけを宣言し、code/callout/embed/mathは共有Ruleで変換する。記事変換には入力1 MiB、ASTノード5万、深さ128、Markdown出力1 MiBの上限を設け、上限超過は`ResourceLimit`として保存前に拒否する。正規表現はURL・固定語彙などの字句検証に限定し、構造解釈へ戻さない。詳細は[ADR-0042](adr/0042-structured-input-parser-boundaries.md)と[ADR-0051](adr/0051-extensible-article-markdown-conversion.md)を参照する。
 
+Zennの独自記法を変更する際は、公式[Markdownガイド](https://zenn.dev/zenn/articles/markdown-guide)のHTML構造と`zenn-syntax.html`を照合する。`data-content`のURI復号、カードの重複fallback除去、Mermaid、遅延KaTeX、入れ子のdetails/calloutをこのfixtureで検証する。既存アーカイブのMarkdownは自動更新されないため、修正適用には再取得が必要。
+
 記事変換の固定corpusと100% scoped coverageは`pnpm --filter @news-podcast/content-knowledge test:article-markdown:coverage`、renderer純粋関数は`pnpm --filter web test:markdown:coverage`で検証する。実サイトの任意smokeは通常CIから分離し、`pnpm --filter @news-podcast/content-knowledge test:article-markdown:live`で実行する。
 
 変換器が実際に出力したMarkdownは、`pnpm markdown:corpus`で`apps/web/src/shared/markdown/__fixtures__/`へ書き出してcommitする（`apps/web`は`services/**`をimportできないため、橋渡しは生成物で行う）。変換器やfixtureを触ったらこれを再実行すること。CIは`pnpm markdown:corpus:check`で同期を検査し、描画結果は`corpus.test.tsx`とStorybookの`Markdown/Corpus`で確認する（[ADR-0053](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)）。
