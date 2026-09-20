@@ -3,6 +3,9 @@ import { Schema } from "effect"
 import { ArticleIdSchema } from "./article.js"
 import { CapturedAtSchema } from "./article.js"
 
+/** 所有者ごとのタグ語彙の件数上限。AI入力・作成・昇格で同じ値を共有する。 */
+export const TAG_VOCABULARY_LIMIT = 100
+
 const uuid = <Brand extends string>(brand: Brand) =>
   Schema.String.check(Schema.isUUID(4)).pipe(Schema.brand(brand))
 

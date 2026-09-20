@@ -412,6 +412,7 @@ export type GatewayPorts = Readonly<{
   }) => Effect.Effect<
     TypeOf<typeof TagSchema>,
     | TypeOf<typeof UnauthorizedProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
   deleteTag: (input: {
@@ -437,6 +438,7 @@ export type GatewayPorts = Readonly<{
     TypeOf<typeof TagSchema>,
     | TypeOf<typeof UnauthorizedProblemSchema>
     | TypeOf<typeof NotFoundProblemSchema>
+    | TypeOf<typeof ConflictProblemSchema>
     | TypeOf<typeof UnavailableProblemSchema>
   >
   listReadingDictionary: (

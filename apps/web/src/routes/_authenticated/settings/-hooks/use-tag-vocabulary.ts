@@ -8,6 +8,7 @@ import { api } from "@/shared/api"
 import { tagNameDraftAtom } from "../-atoms"
 import {
   applyTagVocabularyDraft,
+  problemStatus,
   type TagVocabularyDraft,
   type TagVocabulary,
 } from "../-model"
@@ -82,7 +83,7 @@ export function useTagVocabulary() {
     draft: TagVocabularyDraft<Tag>,
     request: () => Promise<unknown>,
     onSuccess: (result: unknown) => void,
-    onError: () => void
+    onError: (error: unknown) => void
   ) {
     startTransition(async () => {
       addDraft(draft)
@@ -90,8 +91,8 @@ export function useTagVocabulary() {
         const result = await request()
         await invalidate()
         onSuccess(result)
-      } catch {
-        onError()
+      } catch (error) {
+        onError(error)
       }
     })
   }
@@ -115,11 +116,15 @@ export function useTagVocabulary() {
             : `タグ「${trimmed}」を追加しました`
         )
       },
-      () => {
+      (error) => {
         // 失敗したら打った内容を戻す。楽観的に出した語彙はReactが巻き戻すが、
         // 入力欄は別の持ち主なので、ここで戻さないと打ち直しになる。
         store.set(tagNameDraftAtom, trimmed)
-        toast.error("タグを追加できませんでした")
+        toast.error(
+          problemStatus(error) === 409
+            ? "タグの件数が上限に達しています"
+            : "タグを追加できませんでした"
+        )
       }
     )
   }
@@ -138,7 +143,12 @@ export function useTagVocabulary() {
       { kind: "promote", tag: provisionalTag(suggestionName) },
       () => promoteMutation.mutateAsync({ body: { name: suggestionName } }),
       () => toast.success(`「${suggestionName}」をタグにしました`),
-      () => toast.error("タグを作成できませんでした")
+      (error) =>
+        toast.error(
+          problemStatus(error) === 409
+            ? "タグの件数が上限に達しています"
+            : "タグを作成できませんでした"
+        )
     )
   }
 

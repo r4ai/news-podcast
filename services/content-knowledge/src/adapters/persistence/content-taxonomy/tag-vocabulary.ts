@@ -1,5 +1,5 @@
 import { deepFreeze, parse } from "@news-podcast/kernel"
-import { and, asc, desc, eq } from "drizzle-orm"
+import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 
 import {
@@ -9,9 +9,13 @@ import {
 import type {
   ContentTaxonomyError,
   ContentTaxonomyRepository,
+  CreateTagResult,
   PromoteSuggestionResult,
 } from "../../../application/content-taxonomy.js"
-import { TagNameSchema } from "../../../domain/content-taxonomy.js"
+import {
+  TAG_VOCABULARY_LIMIT,
+  TagNameSchema,
+} from "../../../domain/content-taxonomy.js"
 import type {
   ContentKnowledgeDatabase,
   QueryRunner,
@@ -59,25 +63,49 @@ export const makeTagVocabulary = (
     ),
 
   // 同名タグの再作成は既存を壊さず、いまある1件を読み直して返す。
+  // 新規タグは語彙の件数上限を超えて作れない。
   createTag: (ownerId, tag) =>
     Effect.try({
-      try: () => {
-        database
-          .insert(contentTags)
-          .values({
-            tagId: tag.tagId,
-            ownerId,
-            name: tag.name,
-            createdAt: tag.createdAt,
+      try: () =>
+        database.transaction((tx) => {
+          const existing = findTagByName(tx, ownerId, tag.name)
+          if (existing !== undefined) {
+            return deepFreeze({ kind: "existing" as const, row: existing })
+          }
+          const { count } = tx
+            .select({ count: sql<number>`COUNT(*)`.as("count") })
+            .from(contentTags)
+            .where(eq(contentTags.ownerId, ownerId))
+            .get() ?? { count: 0 }
+          if (count >= TAG_VOCABULARY_LIMIT) {
+            return deepFreeze({ kind: "limit" as const })
+          }
+          tx.insert(contentTags)
+            .values({
+              tagId: tag.tagId,
+              ownerId,
+              name: tag.name,
+              createdAt: tag.createdAt,
+            })
+            .run()
+          return deepFreeze({
+            kind: "created" as const,
+            row: findTagByName(tx, ownerId, tag.name),
           })
-          .onConflictDoNothing({
-            target: [contentTags.ownerId, contentTags.name],
-          })
-          .run()
-        return findTagByName(database, ownerId, tag.name)
-      },
+        }),
       catch: () => failure("CreateTag"),
-    }).pipe(Effect.flatMap((row) => decodeTag(row, "CreateTag"))),
+    }).pipe(
+      Effect.flatMap(
+        (result): Effect.Effect<CreateTagResult, ContentTaxonomyError> =>
+          result.kind === "limit"
+            ? Effect.succeed(deepFreeze({ _tag: "LimitExceeded" as const }))
+            : decodeTag(result.row, "CreateTag").pipe(
+                Effect.map((tag) =>
+                  deepFreeze({ _tag: "Created" as const, tag })
+                )
+              )
+      )
+    ),
 
   deleteTag: (ownerId, tagId) =>
     Effect.try({
@@ -122,6 +150,7 @@ export const makeTagVocabulary = (
     ),
 
   // 候補の登録と削除を一度に行い、途中で落ちても候補が二重に残らないようにする。
+  // 語彙の件数上限に達している候補は昇格させず、候補も保持する。
   promoteSuggestion: (ownerId, name, tag) =>
     Effect.try({
       try: () =>
@@ -136,7 +165,18 @@ export const makeTagVocabulary = (
               )
             )
             .get()
-          if (suggestion === undefined) return undefined
+          if (suggestion === undefined) {
+            return deepFreeze({ kind: "not-found" as const })
+          }
+
+          const { count } = tx
+            .select({ count: sql<number>`COUNT(*)`.as("count") })
+            .from(contentTags)
+            .where(eq(contentTags.ownerId, ownerId))
+            .get() ?? { count: 0 }
+          if (count >= TAG_VOCABULARY_LIMIT) {
+            return deepFreeze({ kind: "limit" as const })
+          }
 
           tx.insert(contentTags)
             .values({
@@ -159,19 +199,26 @@ export const makeTagVocabulary = (
             )
             .run()
 
-          return findTagByName(tx, ownerId, name)
+          return deepFreeze({
+            kind: "promoted" as const,
+            row: findTagByName(tx, ownerId, name),
+          })
         }),
       catch: () => failure("PromoteSuggestion"),
     }).pipe(
       Effect.flatMap(
-        (row): Effect.Effect<PromoteSuggestionResult, ContentTaxonomyError> =>
-          row === undefined
-            ? Effect.succeed(deepFreeze({ _tag: "NotFound" }))
-            : decodeTag(row, "PromoteSuggestion").pipe(
-                Effect.map((promoted) =>
-                  deepFreeze({ _tag: "Promoted" as const, tag: promoted })
+        (
+          result
+        ): Effect.Effect<PromoteSuggestionResult, ContentTaxonomyError> =>
+          result.kind === "not-found"
+            ? Effect.succeed(deepFreeze({ _tag: "NotFound" as const }))
+            : result.kind === "limit"
+              ? Effect.succeed(deepFreeze({ _tag: "LimitExceeded" as const }))
+              : decodeTag(result.row, "PromoteSuggestion").pipe(
+                  Effect.map((promoted) =>
+                    deepFreeze({ _tag: "Promoted" as const, tag: promoted })
+                  )
                 )
-              )
       )
     ),
 
