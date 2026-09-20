@@ -60,3 +60,15 @@ describe("archive cleanup observability", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain("articles/")
   })
 })
+
+it("counts card metadata outcomes without destination labels", () => {
+  const count = vi.fn()
+  const log = vi.fn()
+  const observer = makeArchiveCleanupObserver({ count, log })
+  observer.linkCard?.("succeeded")
+  observer.linkCard?.("unavailable")
+  expect(count.mock.calls).toEqual([
+    ["archive.link_card", 1, { result: "succeeded" }],
+    ["archive.link_card", 1, { result: "unavailable" }],
+  ])
+})

@@ -2,6 +2,8 @@ import type { Link, Paragraph, Root, Text } from "mdast"
 import type { Plugin } from "unified"
 import { visit } from "unist-util-visit"
 
+import { parseLinkCardMetadata } from "../lib/link-card"
+
 type EmbedKind = "card" | "embed"
 
 const directiveOf = (
@@ -29,6 +31,10 @@ export const remarkEmbedDirective: Plugin<[], Root> = () => (tree: Root) => {
   visit(tree, "paragraph", (paragraph: Paragraph) => {
     const directive = directiveOf(paragraph)
     if (!directive) return
+    const card =
+      directive.kind === "card"
+        ? parseLinkCardMetadata(directive.link.title)
+        : {}
     paragraph.children = []
     paragraph.data = {
       ...paragraph.data,
@@ -36,6 +42,9 @@ export const remarkEmbedDirective: Plugin<[], Root> = () => (tree: Root) => {
         directive.kind === "embed" ? "markdown-embed" : "markdown-link-card",
       hProperties: {
         dataEmbedUrl: directive.link.url,
+        dataCardTitle: card.title,
+        dataCardDescription: card.description,
+        dataCardImage: card.image,
         dataEmbedFallback: directive.link.title ?? directive.link.url,
       },
     }

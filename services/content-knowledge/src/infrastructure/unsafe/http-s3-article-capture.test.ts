@@ -973,3 +973,50 @@ describe("HTTP to S3 article capture", () => {
     ).resolves.toEqual({ _tag: "CaptureFailed", reason: "Unavailable" })
   })
 })
+
+it("archives card metadata with the existing safe fetch boundary", async () => {
+  const stored: Array<{ Key: string; Body: Uint8Array }> = []
+  const requests: string[] = []
+  const resource = openHttpS3ArticleCaptureUnsafe(config, {
+    createS3: () => ({
+      client: {
+        send: async (command: PutObjectCommand) => {
+          stored.push(command.input as never)
+        },
+      } as never,
+      close: () => undefined,
+    }),
+    createSafeFetch: () => ({
+      fetch: (async (input) => {
+        const url = String(input)
+        requests.push(url)
+        return new Response(
+          url.endsWith("/article")
+            ? '<article><a class="link-card" href="https://example.com/card">Link</a></article>'
+            : '<title>Fetched title</title><meta property="og:image" content="/thumbnail.png">',
+          { headers: { "content-type": "text/html" } }
+        )
+      }) as typeof fetch,
+      close: async () => undefined,
+    }),
+  })
+  try {
+    await Effect.runPromise(
+      resource.capture({
+        sourceUrl: "https://example.com/article" as never,
+        snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
+      })
+    )
+    expect(requests).toEqual([
+      "https://example.com/article",
+      "https://example.com/card",
+    ])
+    const markdown = new TextDecoder().decode(
+      stored.find((value) => value.Key.endsWith("/markdown/article.md"))!.Body
+    )
+    expect(markdown).toContain("Fetched title")
+    expect(markdown).toContain("https://example.com/thumbnail.png")
+  } finally {
+    await Effect.runPromise(resource.close)
+  }
+})

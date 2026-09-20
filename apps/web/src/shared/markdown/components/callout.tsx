@@ -96,7 +96,7 @@ export function Callout({
   const content = (
     <>
       <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <div className="min-w-0 flex-1 [&_[data-callout-title]]:font-semibold [&_p]:my-0 [&_p:not(:last-child)]:mb-2">
+      <div className="min-w-0 flex-1 [&_[data-callout-title]]:font-semibold [&_[data-callout-body]>p]:my-0 [&_[data-callout-body]>p]:leading-relaxed [&_[data-callout-body]>p+p]:mt-2 [&_[data-callout-title]]:mb-1">
         {children}
       </div>
     </>

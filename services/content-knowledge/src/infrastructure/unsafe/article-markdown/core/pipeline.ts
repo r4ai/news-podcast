@@ -2,6 +2,7 @@ import type { Root as MdastRoot } from "mdast"
 
 import { extractArticleRoot } from "../extract/article-root.js"
 import { openArticleDom } from "../extract/dom.js"
+import { enrichLinkCards, type LinkCardResolver } from "../rules/link-card.js"
 import { selectSiteProfile } from "../profiles/registry.js"
 import {
   normalizeHeadingDepths,
@@ -61,7 +62,8 @@ const appendSource = (tree: MdastRoot, sourceUrl: URL): void => {
 
 export const convertArticleHtml = async (
   raw: Uint8Array | string,
-  source: URL | string
+  source: URL | string,
+  options: Readonly<{ resolveLinkCard?: LinkCardResolver }> = {}
 ): Promise<ArticleArchiveArtifacts> => {
   const startedAt = performance.now()
   try {
@@ -88,6 +90,11 @@ export const convertArticleHtml = async (
     const sanitized = sanitizeArticleHast(parsed)
     resolveArticleUrls(sanitized, sourceUrl)
     const tree = toMarkdownTree(sanitized)
+    if (
+      options.resolveLinkCard &&
+      (await enrichLinkCards(tree, options.resolveLinkCard)) > 0
+    )
+      appliedRules = [...appliedRules, "link-card-metadata"]
     validateMarkdownTree(tree)
     normalizeHeadingDepths(tree)
     appendSource(tree, sourceUrl)

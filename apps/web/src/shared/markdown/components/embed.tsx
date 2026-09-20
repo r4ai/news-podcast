@@ -36,17 +36,3 @@ export function Embed({
     />
   )
 }
-
-export function LinkCard({ "data-embed-url": value = "" }: EmbedProps) {
-  const href = safeFallbackUrl(value)
-  return href ? (
-    <a
-      className="my-4 block rounded-md border border-border px-4 py-3 font-medium hover:bg-muted/60"
-      href={href}
-      rel="noreferrer"
-      target="_blank"
-    >
-      {href}
-    </a>
-  ) : null
-}

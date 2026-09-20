@@ -21,6 +21,10 @@ import { createArticleArchiveArtifacts } from "../services/content-knowledge/src
 type Fixture = Readonly<{
   readonly file: string
   readonly sourceUrl: string
+  readonly linkCards?: Record<
+    string,
+    { title: string; description?: string; image?: string }
+  >
   readonly sha256: string
 }>
 
@@ -77,7 +81,12 @@ async function buildCorpus(): Promise<{
 
     const artifacts = await createArticleArchiveArtifacts(
       html,
-      fixture.sourceUrl
+      fixture.sourceUrl,
+      {
+        resolveLinkCard: fixture.linkCards
+          ? async (url) => fixture.linkCards![url]
+          : undefined,
+      }
     )
     const markdown = new TextDecoder().decode(artifacts.markdown)
     const name = fixture.file.replace(/\.html$/, "")

@@ -28,10 +28,20 @@ export const markdownSanitizeSchema: Schema = {
   ],
   attributes: {
     ...defaultSchema.attributes,
-    "markdown-callout": ["dataCalloutType", "dataCalloutFolded"],
+    "markdown-callout": [
+      "dataCalloutType",
+      "dataCalloutFolded",
+      "dataCalloutUntitled",
+    ],
     "markdown-callout-foldable": ["dataCalloutType", "dataCalloutFolded"],
     "markdown-embed": ["dataEmbedUrl", "dataEmbedFallback"],
-    "markdown-link-card": ["dataEmbedUrl", "dataEmbedFallback"],
+    "markdown-link-card": [
+      "dataEmbedUrl",
+      "dataEmbedFallback",
+      "dataCardTitle",
+      "dataCardDescription",
+      "dataCardImage",
+    ],
     summary: [...(defaultSchema.attributes?.summary ?? []), "dataCalloutTitle"],
     code: [
       ...(defaultSchema.attributes?.code ?? []),

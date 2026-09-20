@@ -222,7 +222,11 @@ it("renders restored Zenn source through existing cards, details, math and Merma
     'a[href="https://example.com/guide?q=a&b=c#section"]'
   )!
   expect(card).not.toBeNull()
-  expect(card.className).toContain("border")
+  expect(card.hasAttribute("data-link-card")).toBe(true)
+  expect(card.textContent).toContain("Zenn card preview")
+  expect(card.querySelector("img")?.getAttribute("src")).toBe(
+    "https://example.com/preview.png"
+  )
   expect(
     container.querySelectorAll(
       'a[href="https://example.com/guide?q=a&b=c#section"]'

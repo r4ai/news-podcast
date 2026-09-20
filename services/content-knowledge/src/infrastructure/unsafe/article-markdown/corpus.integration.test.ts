@@ -8,6 +8,10 @@ import { createArticleArchiveArtifacts } from "./index.js"
 type Fixture = Readonly<{
   readonly file: string
   readonly sourceUrl: string
+  readonly linkCards?: Record<
+    string,
+    { title: string; description?: string; image?: string }
+  >
   readonly sha256: string
   readonly includes: readonly string[]
   readonly excludes: readonly string[]
@@ -35,7 +39,12 @@ describe(`real-world minimized article corpus (${manifest.capturedAt})`, () => {
       )
       const artifacts = await createArticleArchiveArtifacts(
         new Uint8Array(html),
-        fixture.sourceUrl
+        fixture.sourceUrl,
+        {
+          resolveLinkCard: fixture.linkCards
+            ? async (url) => fixture.linkCards![url]
+            : undefined,
+        }
       )
       const markdown = new TextDecoder().decode(artifacts.markdown)
       for (const expected of fixture.includes)

@@ -10,6 +10,8 @@ type ArchiveCleanupTelemetry = Pick<Observability, "count" | "log">
 export const makeArchiveCleanupObserver = (
   observability: ArchiveCleanupTelemetry
 ): HttpS3ArticleCaptureObserver => ({
+  linkCard: (outcome) =>
+    observability.count("archive.link_card", 1, { result: outcome }),
   assets: (outcome) => {
     observability.count("archive.assets.attempted", outcome.attempted)
     observability.count(

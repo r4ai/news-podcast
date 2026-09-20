@@ -17,6 +17,10 @@ import type {
 } from "../../application/ports/archive.js"
 import { ArchiveCaptureSchema, SnapshotIdSchema } from "../../domain/article.js"
 import { createArticleArchiveArtifacts } from "./article-markdown-parser.js"
+import {
+  createLinkCardResolver,
+  type LinkCardFetchOutcome,
+} from "./link-card-metadata.js"
 import { createNodeSafeFetcher } from "./safe-fetch.js"
 
 export type HttpS3ArticleCaptureConfig = DeepReadonly<{
@@ -65,6 +69,7 @@ export type ArchiveObjectCleanupOutcome = DeepReadonly<{
 }>
 
 export type HttpS3ArticleCaptureObserver = Readonly<{
+  readonly linkCard?: (outcome: LinkCardFetchOutcome) => void
   readonly assets?: (outcome: ArchiveAssetOutcome) => void
   readonly cleanup: (outcome: ArchiveObjectCleanupOutcome) => void
 }>
@@ -138,10 +143,6 @@ const readBounded = async (
     offset += chunk.byteLength
   }
   return body
-}
-
-const captureArtifacts = async (raw: Uint8Array, sourceUrl: string) => {
-  return createArticleArchiveArtifacts(raw, sourceUrl)
 }
 
 type CapturedAsset = Readonly<{
@@ -757,7 +758,22 @@ export const openHttpS3ArticleCaptureUnsafe = (
           if (!contentType.includes("text/html"))
             throw failure("MalformedResponse")
           const raw = await readBounded(response, config.maximumHtmlBytes)
-          const artifacts = await captureArtifacts(raw, sourceUrl)
+          const artifacts = await createArticleArchiveArtifacts(
+            raw,
+            sourceUrl,
+            {
+              resolveLinkCard: createLinkCardResolver({
+                fetcher: safe.fetch,
+                signal,
+                readResponse: (response) =>
+                  readBounded(
+                    response,
+                    Math.min(config.maximumHtmlBytes, 1_048_576)
+                  ),
+                observe: observer.linkCard,
+              }),
+            }
+          )
           const prefix = `articles/${snapshotId}`
           const replayCapture = await captureReplay({
             raw,

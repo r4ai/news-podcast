@@ -1,6 +1,6 @@
 # Zenn syntax
 
-@[card](https://example.com/guide?q=a\&b=c#section)
+@[card](https://example.com/guide?q=a\&b=c#section "link-card:v1:{\"title\":\"Zenn card preview\",\"description\":\"Preserved article summary\",\"image\":\"https://example.com/preview.png\"}")
 
 @[card](https://example.com/authored)
 

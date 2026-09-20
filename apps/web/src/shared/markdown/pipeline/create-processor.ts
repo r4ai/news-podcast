@@ -22,6 +22,10 @@ import { rehypeHeadingOutline } from "./rehype-heading-outline"
 import { rehypeMarkBlockImages } from "./rehype-mark-block-images"
 import { rehypeMarkCodeBlocks } from "./rehype-mark-code-blocks"
 
+import {
+  rehypeCalloutContent,
+  remarkMarkUntitledCallouts,
+} from "./rehype-callout-content"
 import { rehypeMermaid } from "./rehype-mermaid"
 import { rehypeResolveUrls } from "./rehype-resolve-urls"
 import { rehypeSourceFooter } from "./rehype-source-footer"
@@ -58,6 +62,7 @@ export function createMarkdownProcessor({
   return unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkMarkUntitledCallouts)
     .use(remarkCallout, {
       root: (callout: ParsedCallout) => ({
         tagName: callout.isFoldable
@@ -72,7 +77,9 @@ export function createMarkdownProcessor({
       }),
       title: (callout: ParsedCallout) => ({
         tagName: callout.isFoldable ? "summary" : "div",
-        properties: { dataCalloutTitle: true },
+        properties: {
+          dataCalloutTitle: true,
+        },
       }),
       body: { tagName: "div", properties: { dataCalloutBody: true } },
     })
@@ -82,6 +89,7 @@ export function createMarkdownProcessor({
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeSanitize, markdownSanitizeSchema)
+    .use(rehypeCalloutContent)
     .use(rehypeDropLeadingTitle(omitLeadingTitle))
     .use(rehypeHeadingLevels(headingBaseLevel))
     .use(rehypeHeadingOutline)

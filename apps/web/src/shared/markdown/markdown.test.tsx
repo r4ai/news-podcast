@@ -389,3 +389,26 @@ describe("source footer", () => {
     expect(container.querySelector("footer")).toBeNull()
   })
 })
+
+it("renders untitled callouts without a generated heading or empty paragraph", async () => {
+  const { container } = await renderMarkdown(
+    "> [!note]\n>\n> 本文です。\n>\n> 次の段落です。"
+  )
+  const note = container.querySelector('[role="note"]')!
+  expect(note.querySelector("[data-callout-title]")).toBeNull()
+  expect(
+    Array.from(note.querySelectorAll("p")).map((p) => p.textContent)
+  ).toEqual(["本文です。", "次の段落です。"])
+})
+
+it("retains authored callout titles and punctuation", async () => {
+  const { container } = await renderMarkdown(
+    "> [!note] Custom title\n>\n> !\n>\n> Body"
+  )
+  expect(container.querySelector("[data-callout-title]")?.textContent).toBe(
+    "Custom title"
+  )
+  expect(container.querySelector("[data-callout-body]")?.textContent).toContain(
+    "!"
+  )
+})

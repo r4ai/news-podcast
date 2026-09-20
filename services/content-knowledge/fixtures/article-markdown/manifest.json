@@ -83,10 +83,11 @@
     },
     {
       "file": "zenn-syntax.html",
+      "linkCards": {"https://example.com/guide?q=a&b=c#section": {"title": "Zenn card preview", "description": "Preserved article summary", "image": "https://example.com/preview.png"}},
       "sourceUrl": "https://zenn.dev/zenn/articles/markdown-guide",
       "sha256": "ce60078de1ecfb1d88437e39cee7585d3e2cec80e08dd782a26388481287595d",
       "includes": [
-        "@[card](https://example.com/guide?q=a\\&b=c#section)",
+        "@[card](https://example.com/guide?q=a\\&b=c#section \"link-card:v1:",
         "@[embed](https://github.com/octocat/Hello-World/blob/master/README#L1-L3",
         "```mermaid showLineNumbers=false\ngraph LR\n  A --> B",
         "<details>",

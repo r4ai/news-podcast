@@ -278,6 +278,8 @@ flowchart LR
 
 Zennの独自記法を変更する際は、公式[Markdownガイド](https://zenn.dev/zenn/articles/markdown-guide)のHTML構造と`zenn-syntax.html`を照合する。`data-content`のURI復号、カードの重複fallback除去、Mermaid、遅延KaTeX、入れ子のdetails/callout、summary内の数式、カード直後の通常リンク保持をこのfixtureで検証する。既存アーカイブのMarkdownは自動更新されないため、修正適用には再取得が必要。
 
+リンクカードのOGP補完は記事再取得時に行う（[ADR-0104](adr/0104-archive-link-card-metadata.md)）。`archive.link_card{result}`で取得成否を確認する。既存Markdownの`@[card]`に`link-card:v1:`が無いもの、Zenn calloutに旧`> !`が残るものは再取得対象となる。既存の`POST /v1/me/articles/{articleId}/archive`とjob status pollingを使い、新snapshot作成後にブラウザを再読み込みする。corpusのmetadataはmanifestの`linkCards`で固定し、外部通信せず再生成する。
+
 記事変換の固定corpusと100% scoped coverageは`pnpm --filter @news-podcast/content-knowledge test:article-markdown:coverage`、renderer純粋関数は`pnpm --filter web test:markdown:coverage`で検証する。実サイトの任意smokeは通常CIから分離し、`pnpm --filter @news-podcast/content-knowledge test:article-markdown:live`で実行する。
 
 変換器が実際に出力したMarkdownは、`pnpm markdown:corpus`で`apps/web/src/shared/markdown/__fixtures__/`へ書き出してcommitする（`apps/web`は`services/**`をimportできないため、橋渡しは生成物で行う）。変換器やfixtureを触ったらこれを再実行すること。CIは`pnpm markdown:corpus:check`で同期を検査し、描画結果は`corpus.test.tsx`とStorybookの`Markdown/Corpus`で確認する（[ADR-0053](adr/0053-markdown-corpus-bridges-converter-and-renderer.md)）。
