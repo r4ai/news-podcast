@@ -76,6 +76,7 @@ snapshot比較ではフォントのアンチエイリアスによる小さな差
 - `ci.yml`と`security.yml`がPRから削除されていれば検査を失敗させる
 - pinactとzizmorの設定はベースブランチのファイルを使用する
 - PR依存関係を調べる場合も`pnpm install --ignore-pnpmfile --ignore-scripts --frozen-lockfile`だけを実行する
+- 依存監査も`pnpm audit --ignore-pnpmfile --audit-level=high`でPR由来のpnpmfileを実行しない
 - Secrets、書き込み可能なGITHUB_TOKEN、`security-events: write`を使わない
 
 ## Action固定と更新
@@ -112,7 +113,7 @@ pnpm test:e2e
 pnpm test:e2e:functional
 pnpm test:visual
 pnpm observability:validate
-pnpm audit --audit-level=high
+pnpm audit --ignore-pnpmfile --audit-level=high
 ```
 
 `pnpm test:visual`はPlaywright公式コンテナの中で実行するためDockerを必要とする。CIも同じイメージ(digest固定)をjobのcontainerとして使い、スナップショットの環境差を無くしている。イメージのversionは`apps/web`の`@playwright/test`と揃えること。

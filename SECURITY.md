@@ -6,7 +6,7 @@
 
 ## CIでの検査
 
-GitHub Actionsのworkflowは、完全SHA固定、7日間のminimum release age、actionlint、zizmor、Gitleaks、`pnpm audit --audit-level=high`で検査する。PR用のセキュリティworkflowはPRコードをcheckout・実行しない。
+GitHub Actionsのworkflowは、完全SHA固定、7日間のminimum release age、actionlint、zizmor、Gitleaks、`pnpm audit --ignore-pnpmfile --audit-level=high`で検査する。PR用のセキュリティworkflowはPRコードをcheckout・実行しない（pnpmfile・package lifecycle scriptも実行しない）。
 
 ## 秘密情報を見つけた場合
 
