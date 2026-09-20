@@ -31,9 +31,15 @@ export type SetArticleTagsResult = DeepReadonly<
   | { readonly _tag: "UnknownTags"; readonly tagIds: readonly TagId[] }
 >
 
+export type CreateTagResult = DeepReadonly<
+  | { readonly _tag: "Created"; readonly tag: Tag }
+  | { readonly _tag: "LimitExceeded" }
+>
+
 export type PromoteSuggestionResult = DeepReadonly<
   | { readonly _tag: "Promoted"; readonly tag: Tag }
   | { readonly _tag: "NotFound" }
+  | { readonly _tag: "LimitExceeded" }
 >
 
 export type ContentTaxonomyRepository = DeepReadonly<{
@@ -43,7 +49,7 @@ export type ContentTaxonomyRepository = DeepReadonly<{
   readonly createTag: (
     ownerId: OwnerId,
     tag: Tag
-  ) => Effect.Effect<Tag, ContentTaxonomyError>
+  ) => Effect.Effect<CreateTagResult, ContentTaxonomyError>
   readonly deleteTag: (
     ownerId: OwnerId,
     tagId: TagId

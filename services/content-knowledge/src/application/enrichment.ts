@@ -15,6 +15,7 @@ import {
 } from "../domain/enrichment.js"
 import type { OwnerId } from "../domain/subscription.js"
 import type { InterestProfile } from "../domain/interest-profile.js"
+import { TAG_VOCABULARY_LIMIT } from "../domain/content-taxonomy.js"
 import type {
   ContentTaxonomyError,
   ContentTaxonomyRepository,
@@ -163,6 +164,9 @@ export const createEnrichmentOperations = (input: {
   readonly now: () => CapturedAt
   readonly newLeaseToken: () => string
   readonly observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
+  readonly observeInputRejected?: (
+    reason: "TagVocabularyLimit" | "InvalidInput"
+  ) => void
 }) => {
   const processTarget = Effect.fn("contentKnowledge.enrichment.processTarget")(
     function* (ownerId: OwnerId, target: EnrichmentTarget) {
@@ -199,13 +203,28 @@ export const createEnrichmentOperations = (input: {
       }
       const vocabulary = yield* input.taxonomy.vocabulary(ownerId)
       const interestProfile = yield* input.interestProfiles.get(ownerId)
-      const providerInput = yield* parse(EnrichmentProviderInputSchema)({
-        articleId: target.articleId,
-        title: target.title,
-        markdown: markdownResult.value,
-        interestProfile,
-        tagVocabulary: vocabulary,
-      }).pipe(Effect.orDie)
+      if (vocabulary.length > TAG_VOCABULARY_LIMIT) {
+        input.observeInputRejected?.("TagVocabularyLimit")
+        yield* completeFailure(
+          `tag vocabulary exceeds the ${TAG_VOCABULARY_LIMIT}-item limit`,
+          false
+        )
+        return { attempted: false, succeeded: false } as const
+      }
+      const providerInput = yield* Effect.option(
+        parse(EnrichmentProviderInputSchema)({
+          articleId: target.articleId,
+          title: target.title,
+          markdown: markdownResult.value,
+          interestProfile,
+          tagVocabulary: vocabulary,
+        })
+      )
+      if (providerInput._tag === "None") {
+        input.observeInputRejected?.("InvalidInput")
+        yield* completeFailure("invalid enrichment input", false)
+        return { attempted: false, succeeded: false } as const
+      }
       const attemptedAt = input.now()
       const reserved = yield* input.queue.reserveAttempt(
         ownerId,
@@ -216,16 +235,18 @@ export const createEnrichmentOperations = (input: {
       )
       input.observeAttempt?.(reserved ? "Reserved" : "BudgetExhausted")
       if (!reserved) return { attempted: false, succeeded: false } as const
-      const providerResult = yield* input.provider.enrich(providerInput).pipe(
-        Effect.matchEffect({
-          onFailure: (providerFailure) =>
-            Effect.succeed(
-              deepFreeze({ _tag: "Failure" as const, providerFailure })
-            ),
-          onSuccess: (value) =>
-            Effect.succeed(deepFreeze({ _tag: "Success" as const, value })),
-        })
-      )
+      const providerResult = yield* input.provider
+        .enrich(providerInput.value)
+        .pipe(
+          Effect.matchEffect({
+            onFailure: (providerFailure) =>
+              Effect.succeed(
+                deepFreeze({ _tag: "Failure" as const, providerFailure })
+              ),
+            onSuccess: (value) =>
+              Effect.succeed(deepFreeze({ _tag: "Success" as const, value })),
+          })
+        )
       if (providerResult._tag === "Failure") {
         const typed = providerResult.providerFailure
         yield* completeFailure(typed.message, typed.reason !== "Permanent")

@@ -3456,6 +3456,15 @@ export interface operations {
                     "application/json": components["schemas"]["UnauthorizedProblem"];
                 };
             };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
+                };
+            };
             /** @description UnavailableProblem */
             503: {
                 headers: {
@@ -3602,6 +3611,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotFoundProblem"];
+                };
+            };
+            /** @description ConflictProblem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictProblem"];
                 };
             };
             /** @description UnavailableProblem */

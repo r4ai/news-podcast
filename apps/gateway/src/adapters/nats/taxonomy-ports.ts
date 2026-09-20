@@ -11,7 +11,12 @@ import {
   TagSuggestionPageSchema,
 } from "../../contract.js"
 import type { GatewayPorts } from "../../application/ports.js"
-import { normalizeProblem, resourceNotFound, unavailable } from "./problems.js"
+import {
+  normalizeProblem,
+  resourceConflict,
+  resourceNotFound,
+  unavailable,
+} from "./problems.js"
 import type { Transport } from "./transport.js"
 
 /**
@@ -71,12 +76,20 @@ export const makeTaxonomyPorts = (transport: Transport): TaxonomyPorts => {
         operation: "CreateTag",
         name: payload.name,
       }).pipe(
-        Effect.flatMap((reply): Effect.Effect<Tag, UnavailableProblem> =>
-          reply._tag === "Tag"
-            ? parse(TagSchema)(toPublicTag(reply.tag)).pipe(
-                Effect.mapError(unavailable)
-              )
-            : Effect.fail(unavailable())
+        Effect.flatMap(
+          (
+            reply
+          ): Effect.Effect<
+            Tag,
+            ReturnType<typeof resourceConflict> | UnavailableProblem
+          > =>
+            reply._tag === "Tag"
+              ? parse(TagSchema)(toPublicTag(reply.tag)).pipe(
+                  Effect.mapError(unavailable)
+                )
+              : reply._tag === "Conflict"
+                ? Effect.fail(resourceConflict())
+                : Effect.fail(unavailable())
         ),
         Effect.mapError(normalizeProblem)
       ),
@@ -115,14 +128,21 @@ export const makeTaxonomyPorts = (transport: Transport): TaxonomyPorts => {
         Effect.flatMap(
           (
             reply: PersonalizationReply
-          ): Effect.Effect<Tag, NotFoundProblem | UnavailableProblem> =>
+          ): Effect.Effect<
+            Tag,
+            | NotFoundProblem
+            | ReturnType<typeof resourceConflict>
+            | UnavailableProblem
+          > =>
             reply._tag === "Tag"
               ? parse(TagSchema)(toPublicTag(reply.tag)).pipe(
                   Effect.mapError(unavailable)
                 )
               : reply._tag === "NotFound"
                 ? Effect.fail(resourceNotFound())
-                : Effect.fail(unavailable())
+                : reply._tag === "Conflict"
+                  ? Effect.fail(resourceConflict())
+                  : Effect.fail(unavailable())
         ),
         Effect.mapError(normalizeProblem)
       ),

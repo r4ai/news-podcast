@@ -5,7 +5,7 @@ import {
   CapturedAtSchema,
   ObjectKeySchema,
 } from "./article.js"
-import { TagNameSchema } from "./content-taxonomy.js"
+import { TAG_VOCABULARY_LIMIT, TagNameSchema } from "./content-taxonomy.js"
 import { InterestProfileSchema } from "./interest-profile.js"
 
 export const ENRICHMENT_MAX_ATTEMPTS = 4
@@ -69,7 +69,7 @@ export const EnrichmentProviderInputSchema = Schema.Struct({
   ),
   interestProfile: InterestProfileSchema,
   tagVocabulary: Schema.Array(TagNameSchema).check(
-    Schema.isMaxLength(100),
+    Schema.isMaxLength(TAG_VOCABULARY_LIMIT),
     Schema.makeFilter((names: readonly string[]) =>
       new Set(names).size === names.length
         ? true

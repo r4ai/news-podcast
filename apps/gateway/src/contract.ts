@@ -1544,7 +1544,11 @@ export const createTagEndpoint = HttpApiEndpoint.post(
     headers: SessionHeadersSchema,
     payload: CreateTagSchema,
     success: CreatedTagSchema,
-    error: [UnauthorizedProblemSchema, UnavailableProblemSchema],
+    error: [
+      UnauthorizedProblemSchema,
+      ConflictProblemSchema,
+      UnavailableProblemSchema,
+    ],
   }
 )
 export const deleteTagEndpoint = HttpApiEndpoint.delete(
@@ -1579,6 +1583,7 @@ export const promoteTagSuggestionEndpoint = HttpApiEndpoint.post(
     error: [
       UnauthorizedProblemSchema,
       NotFoundProblemSchema,
+      ConflictProblemSchema,
       UnavailableProblemSchema,
     ],
   }
