@@ -1,7 +1,8 @@
 import { useAtomValue, useSetAtom } from "jotai"
-import { AlertTriangle, LoaderCircle } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
 
 import {
   hasPlaybackErrorAtom,
@@ -10,7 +11,7 @@ import {
 } from "../atoms"
 
 /**
- * 「音が出ていない理由」だけを言う一行。
+ * 「音が出ていない理由」を言う2つ。待ちと失敗では置き場所を変える。
  *
  * 押したのに何も聞こえないとき、利用者は押せていないのか回線が遅いのかを
  * 見分けられない。番組の音声はGateway経由でS3からstreamされるので、鳴り始める
@@ -19,43 +20,69 @@ import {
  * 購読するのは待ち状態と失敗だけ。位置や再生状態は見ないので、鳴っている間
  * ここが描き直されることはない (docs/design.md §7.2)。
  */
-export function PlaybackNotice() {
+
+/**
+ * 読み込み待ち。**題名の下の1行に収まる長さ**に留め、バーの高さを変えない。
+ *
+ * 待ちは鳴らすたびに起きる。行を1本増やす作りにすると、押すたびにバーが
+ * 伸び縮みして本文が揺れる。回っていることは再生ボタンの外周が示すので、
+ * ここは字だけを担う。
+ */
+export function PlaybackBusyLabel() {
   const buffering = useAtomValue(isBufferingAtom)
   const failed = useAtomValue(hasPlaybackErrorAtom)
-
-  if (failed) return <PlaybackError />
-  if (!buffering) return null
+  if (!buffering || failed) return null
 
   return (
     <p
       aria-live="polite"
-      className="flex items-center gap-1.5 text-xs text-muted-foreground"
+      className="shrink-0 truncate text-xs text-muted-foreground"
       role="status"
     >
-      <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
       読み込み中…
     </p>
   )
 }
 
 /**
- * 失敗は`alert`で割り込む。読み込み待ちと違って、待っていても解消しない。
+ * 失敗は`alert`で割り込み、バーの上端へ1行を足して伝える。
  *
- * 原因 (期限切れURL、回線、S3) は要素からは判らないので、言い分けずに
- * やり直す道だけを同じ行へ置く。
+ * 待ちと違って、待っていても解消しない。原因 (期限切れURL、回線、S3) は
+ * 要素からは判らないので、言い分けずにやり直す道だけを同じ行へ置く。
+ * 高さが変わることは許容する。失敗は稀で、そのとき最も読ませたいものだから。
  */
-function PlaybackError() {
+export function PlaybackErrorBanner({
+  className,
+}: {
+  readonly className?: string
+}) {
+  const failed = useAtomValue(hasPlaybackErrorAtom)
   const retry = useSetAtom(retryPlaybackAtom)
+  if (!failed) return null
 
   return (
     <p
-      className="flex items-center gap-1.5 text-xs text-destructive"
+      className={cn(
+        // 板は`overflow`を切らないので、この行が自分で板の角に合わせる。
+        "flex items-center gap-2 rounded-t-3xl border-b border-[var(--glass-border)] bg-destructive/10 px-3 py-2 text-xs text-destructive",
+        // 出入りは滑らせる。稀な行が唐突に現れると、板ごと跳ねて見える。
+        "animate-in duration-200 ease-apple fade-in slide-in-from-top-2 motion-reduce:animate-none",
+        className
+      )}
+      /*
+        `AppShell`がこの印を`:has()`で見て、板1枚ぶんに加えてこの行の高さまで
+        確保する。確保しないと、板より手前に浮く回線切れの案内がちょうどこの
+        行へ重なり、理由もやり直す道も読めなくなる。
+      */
+      data-slot="player-error"
       role="alert"
     >
       <AlertTriangle aria-hidden="true" className="size-3.5 shrink-0" />
-      音声を再生できませんでした
+      <span className="min-w-0 flex-1 truncate">
+        音声を再生できませんでした
+      </span>
       <Button
-        className="h-6 px-2 text-xs"
+        className="h-7 shrink-0 rounded-full px-3 text-xs"
         onClick={() => retry()}
         size="sm"
         variant="outline"

@@ -44,7 +44,7 @@ export function EnrichQueueDialogHost() {
 function DialogLoadingStatus() {
   return (
     <p
-      className="pointer-events-none fixed right-4 bottom-[calc(var(--app-nav-h)+var(--player-h)+1rem)] z-50 rounded-lg border bg-background px-3 py-2 text-sm shadow-lg md:bottom-[calc(var(--player-h)+1rem)]"
+      className="pointer-events-none fixed right-4 bottom-[calc(var(--app-nav-h)+var(--player-notice-h)+1rem)] z-50 rounded-lg border bg-background px-3 py-2 text-sm shadow-lg md:bottom-[calc(var(--player-notice-h)+1rem)]"
       role="status"
     >
       AI処理キューを読み込み中…
@@ -55,7 +55,7 @@ function DialogLoadingStatus() {
 function DialogLoadError() {
   return (
     <section
-      className="fixed right-4 bottom-[calc(var(--app-nav-h)+var(--player-h)+1rem)] z-50 flex max-w-sm flex-col gap-3 rounded-lg border border-destructive/40 bg-background p-4 shadow-lg md:bottom-[calc(var(--player-h)+1rem)]"
+      className="fixed right-4 bottom-[calc(var(--app-nav-h)+var(--player-notice-h)+1rem)] z-50 flex max-w-sm flex-col gap-3 rounded-lg border border-destructive/40 bg-background p-4 shadow-lg md:bottom-[calc(var(--player-notice-h)+1rem)]"
       role="alert"
     >
       <div>

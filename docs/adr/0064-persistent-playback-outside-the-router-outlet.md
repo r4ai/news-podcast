@@ -4,8 +4,8 @@
 - Date: 2026-08-19
 - Decision owners: Product owner / Web
 - Supersedes: N/A
-- Superseded by: N/A
-- Related: ADR-0018、ADR-0047、ADR-0055、ADR-0060、ADR-0078、`docs/design.md` §7.1 / §7.3
+- Superseded by: 一部（再生バーの段構成・不透明な帯・`backdrop-filter`の扱い）は[ADR-0099](0099-layered-glass-player-surface.md)
+- Related: ADR-0018、ADR-0047、ADR-0055、ADR-0060、ADR-0078、[ADR-0099](0099-layered-glass-player-surface.md)、`docs/design.md` §7.1 / §7.3
 
 ## コンテキストと変更契機
 

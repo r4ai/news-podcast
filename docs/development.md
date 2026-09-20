@@ -235,8 +235,8 @@ bug修正は再現testを先に追加する。LLM接続ではsuccessだけでな
 スナップショットの比較はピクセル単位なので、フォントとラスタライザが1つでも違えば同じページでも別の絵になる。**VRTは常にPlaywright公式コンテナの中で実行する**。`pnpm test:visual`も`pnpm --filter web test:visual`も`scripts/run-visual.sh`を通り、CIは同じイメージをjobのcontainerとして使う。イメージはdigestで固定し、`apps/web`の`@playwright/test`と同じversionを指す。
 
 ```bash
-pnpm test:visual                            # 比較する
-pnpm test:visual -- --update-snapshots=all  # 基準画像を作り直す
+pnpm test:visual                         # 比較する
+pnpm test:visual --update-snapshots=all  # 基準画像を作り直す（`--`は挟まない）
 ```
 
 dockerが無い環境では実行できない。撮り方を変えるより、環境を揃える方が壊れにくいという判断である。
