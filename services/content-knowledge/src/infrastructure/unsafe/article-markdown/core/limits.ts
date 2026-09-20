@@ -72,7 +72,7 @@ const VOID_TAGS = new Set([
 /** Applies structural budgets before constructing a DOM from untrusted HTML. */
 export const validateHtmlBudget = (html: string): void => {
   let nodeCount = 1
-  let depth = 0
+  const openElements: string[] = []
   let index = 0
 
   while (index < html.length) {
@@ -123,19 +123,17 @@ export const validateHtmlBudget = (html: string): void => {
     if (nodeCount > MAXIMUM_ARTICLE_AST_NODES)
       throw parserFailure("ResourceLimit")
     if (closing) {
-      depth = Math.max(0, depth - 1)
-    } else {
-      let beforeEnd = end - 1
-      while (
-        beforeEnd >= nameEnd &&
-        [0x20, 0x09, 0x0a, 0x0d].includes(html.charCodeAt(beforeEnd))
-      )
-        beforeEnd -= 1
-      const selfClosing = html.charCodeAt(beforeEnd) === 0x2f
+      // 対応する開始タグがない終了タグでは深さを減らさない。単純な
+      // depth カウンターは不一致の終了タグで実DOMより浅く見積もるため、
+      // 開始タグのスタックで照合する。
       const tagName = html.slice(nameStart, nameEnd).toLowerCase()
-      if (!selfClosing && !VOID_TAGS.has(tagName)) {
-        depth += 1
-        if (depth > MAXIMUM_ARTICLE_AST_DEPTH)
+      const matchIndex = openElements.lastIndexOf(tagName)
+      if (matchIndex !== -1) openElements.length = matchIndex
+    } else {
+      const tagName = html.slice(nameStart, nameEnd).toLowerCase()
+      if (!VOID_TAGS.has(tagName)) {
+        openElements.push(tagName)
+        if (openElements.length > MAXIMUM_ARTICLE_AST_DEPTH)
           throw parserFailure("ResourceLimit")
       }
     }

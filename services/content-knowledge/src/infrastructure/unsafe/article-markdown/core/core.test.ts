@@ -67,6 +67,18 @@ describe("HTML structural budget state table", () => {
       validateHtmlBudget("<![CDATA[x]]>".repeat(MAXIMUM_ARTICLE_AST_NODES + 1))
     ).toThrowError(expect.objectContaining(failure("ResourceLimit")))
   })
+
+  it("rejects non-void elements whose trailing slash would bypass the depth budget", () => {
+    expect(() =>
+      validateHtmlBudget("<div/>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1))
+    ).toThrowError(expect.objectContaining(failure("ResourceLimit")))
+  })
+
+  it("does not let mismatched closing tags understate the depth", () => {
+    expect(() =>
+      validateHtmlBudget("<div></span>".repeat(MAXIMUM_ARTICLE_AST_DEPTH + 1))
+    ).toThrowError(expect.objectContaining(failure("ResourceLimit")))
+  })
 })
 
 describe("AST budgets", () => {
