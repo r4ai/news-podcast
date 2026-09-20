@@ -130,7 +130,14 @@ export const makePersonalizationRpcHandler =
                       Effect.flatMap((name) =>
                         operations.taxonomy.createTag(ownerId, name)
                       ),
-                      Effect.map((tag) => ({ _tag: "Tag" as const, tag }))
+                      Effect.map((result) =>
+                        result._tag === "Created"
+                          ? { _tag: "Tag" as const, tag: result.tag }
+                          : {
+                              _tag: "Conflict" as const,
+                              code: "TAG_LIMIT_REACHED" as const,
+                            }
+                      )
                     )
                   case "DeleteTag":
                     return parse(TagIdSchema)(command.tagId).pipe(
@@ -158,7 +165,12 @@ export const makePersonalizationRpcHandler =
                       Effect.map((result) =>
                         result._tag === "Promoted"
                           ? { _tag: "Tag" as const, tag: result.tag }
-                          : { _tag: "NotFound" as const }
+                          : result._tag === "LimitExceeded"
+                            ? {
+                                _tag: "Conflict" as const,
+                                code: "TAG_LIMIT_REACHED" as const,
+                              }
+                            : { _tag: "NotFound" as const }
                       )
                     )
                   case "SetArticleTags":

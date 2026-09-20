@@ -280,6 +280,124 @@ describe("enrichment operations", () => {
     expect(repository.claim).not.toHaveBeenCalled()
   })
 
+  it("terminalizes a target whose vocabulary exceeds the limit instead of dying", async () => {
+    const repository = queue()
+    const vocabulary = Array.from({ length: 101 }, (_, index) =>
+      Schema.decodeUnknownSync(TagNameSchema)(`Tag${index}`)
+    )
+    const enrich = vi.fn(() => Effect.die("must not run"))
+
+    const operation = createEnrichmentOperations({
+      queue: repository,
+      taxonomy: { vocabulary: () => Effect.succeed(vocabulary) },
+      interestProfiles: {
+        get: () => Effect.succeed({ include: "AI", exclude: "sports" }),
+      },
+      source: {
+        read: () => Effect.succeed("markdown"),
+      },
+      provider: { enrich },
+      dailyLimit: 200,
+      now: () => now,
+      newLeaseToken: () => "lease-token-0001",
+    })
+
+    expect(await Effect.runPromise(operation.runCycle())).toEqual({
+      processed: 0,
+    })
+    expect(enrich).not.toHaveBeenCalled()
+    expect(repository.completeFailure).toHaveBeenCalledWith(
+      ownerId,
+      target,
+      expect.any(String),
+      false,
+      now
+    )
+  })
+
+  it("observes pre-provider input rejection for observability", async () => {
+    const repository = queue()
+    const vocabulary = Array.from({ length: 101 }, (_, index) =>
+      Schema.decodeUnknownSync(TagNameSchema)(`Tag${index}`)
+    )
+    const observeInputRejected = vi.fn()
+
+    const operation = createEnrichmentOperations({
+      queue: repository,
+      taxonomy: { vocabulary: () => Effect.succeed(vocabulary) },
+      interestProfiles: {
+        get: () => Effect.succeed({ include: "AI", exclude: "sports" }),
+      },
+      source: {
+        read: () => Effect.succeed("markdown"),
+      },
+      provider: { enrich: () => Effect.die("must not run") },
+      dailyLimit: 200,
+      now: () => now,
+      newLeaseToken: () => "lease-token-0001",
+      observeInputRejected,
+    })
+
+    await Effect.runPromise(operation.runCycle())
+    expect(observeInputRejected).toHaveBeenCalledWith("TagVocabularyLimit")
+  })
+
+  it("continues with another owner when one owner's vocabulary exceeds the limit", async () => {
+    const ownerB = Schema.decodeUnknownSync(OwnerIdSchema)("owner-b")
+    const vocabulary = Array.from({ length: 101 }, (_, index) =>
+      Schema.decodeUnknownSync(TagNameSchema)(`Tag${index}`)
+    )
+    const repository = {
+      ...queue(),
+      listOwners: vi.fn(() => Effect.succeed([ownerId, ownerB])),
+      claim: vi.fn(() => Effect.succeed([target])),
+    } as EnrichmentQueueRepository
+
+    const operation = createEnrichmentOperations({
+      queue: repository,
+      taxonomy: {
+        vocabulary: (owner: string) =>
+          Effect.succeed(
+            owner === ownerId
+              ? vocabulary
+              : [Schema.decodeUnknownSync(TagNameSchema)("Known")]
+          ),
+      },
+      interestProfiles: {
+        get: () => Effect.succeed({ include: "AI", exclude: "sports" }),
+      },
+      source: {
+        read: () => Effect.succeed("markdown"),
+      },
+      provider: {
+        enrich: () =>
+          Effect.succeed({
+            summary: "summary",
+            score: 90,
+            reason: "matches",
+            tags: ["Known"],
+            suggestedTags: [],
+            tokensIn: 10,
+            tokensOut: 5,
+          }),
+      },
+      dailyLimit: 200,
+      now: () => now,
+      newLeaseToken: () => "lease-token-0001",
+    })
+
+    expect(await Effect.runPromise(operation.runCycle())).toEqual({
+      processed: 1,
+    })
+    expect(repository.completeFailure).toHaveBeenCalledWith(
+      ownerId,
+      target,
+      expect.any(String),
+      false,
+      now
+    )
+  })
+
   it("continues with another owner when one owner's daily budget is exhausted", async () => {
     const ownerB = Schema.decodeUnknownSync(OwnerIdSchema)("owner-b")
     const repository = {

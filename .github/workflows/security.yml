@@ -189,7 +189,7 @@ jobs:
 
       - name: Audit JavaScript dependencies
         working-directory: ${{ steps.prepare.outputs.scan_root }}
-        run: pnpm audit --audit-level=high
+        run: pnpm audit --config.ignore-pnpmfile=true --audit-level=high
 
       - name: Scan the PR tree or complete repository history for secrets
         env:

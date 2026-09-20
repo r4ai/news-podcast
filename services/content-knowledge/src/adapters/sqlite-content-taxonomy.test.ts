@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import { createContentTaxonomy } from "../application/content-taxonomy.js"
 import { CapturedAtSchema, type ArticleId } from "../domain/article.js"
-import { TagIdSchema, TagNameSchema } from "../domain/content-taxonomy.js"
+import {
+  TAG_VOCABULARY_LIMIT,
+  TagIdSchema,
+  TagNameSchema,
+} from "../domain/content-taxonomy.js"
 import { OwnerIdSchema } from "../domain/subscription.js"
 import { openTestDatabase, type TestDatabase } from "./persistence/testing.js"
 import { createContentTaxonomy as createContentTaxonomyRepository } from "./persistence/content-taxonomy/repository.js"
@@ -57,13 +61,17 @@ describe("SQLite content taxonomy", () => {
     const repeated = await Effect.runPromise(operations.createTag(ownerA, ai))
     const other = await Effect.runPromise(operations.createTag(ownerB, ai))
 
+    expect(first).toMatchObject({ _tag: "Created" })
     expect(repeated).toEqual(first)
-    expect(other.tagId).not.toBe(first.tagId)
+    if (first._tag !== "Created" || other._tag !== "Created") {
+      throw new Error("expected Created")
+    }
+    expect(other.tag.tagId).not.toBe(first.tag.tagId)
     expect(await Effect.runPromise(operations.listTags(ownerA))).toEqual([
-      first,
+      first.tag,
     ])
     expect(await Effect.runPromise(operations.listTags(ownerB))).toEqual([
-      other,
+      other.tag,
     ])
   })
 
@@ -75,40 +83,138 @@ describe("SQLite content taxonomy", () => {
     const other = await Effect.runPromise(
       operations.createTag(ownerB, decode(TagNameSchema, "Other"))
     )
+    if (ai._tag !== "Created" || other._tag !== "Created") {
+      throw new Error("expected Created")
+    }
 
     expect(
       await Effect.runPromise(
-        operations.setArticleTags(ownerA, articleA, [ai.tagId])
+        operations.setArticleTags(ownerA, articleA, [ai.tag.tagId])
       )
     ).toMatchObject({ _tag: "Updated" })
     expect(
       await Effect.runPromise(
-        operations.setArticleTags(ownerA, articleA, [other.tagId])
+        operations.setArticleTags(ownerA, articleA, [other.tag.tagId])
       )
-    ).toEqual({ _tag: "UnknownTags", tagIds: [other.tagId] })
+    ).toEqual({ _tag: "UnknownTags", tagIds: [other.tag.tagId] })
     expect(
       await Effect.runPromise(operations.listArticleTags(ownerA, articleA))
-    ).toEqual([expect.objectContaining({ tagId: ai.tagId, source: "Manual" })])
+    ).toEqual([
+      expect.objectContaining({ tagId: ai.tag.tagId, source: "Manual" }),
+    ])
     expect(
       await Effect.runPromise(
-        operations.setArticleTags(ownerB, articleA, [other.tagId])
+        operations.setArticleTags(ownerB, articleA, [other.tag.tagId])
       )
     ).toEqual({ _tag: "ArticleNotFound" })
   })
 
+  it("rejects creating a tag beyond the vocabulary limit", async () => {
+    const database = openTestDatabase()
+    databases.push(database)
+    const repository = await Effect.runPromise(
+      createContentTaxonomyRepository(database.db)
+    )
+    const operations = createContentTaxonomy({
+      repository,
+      newTagId: () => decode(TagIdSchema, crypto.randomUUID()),
+      now: () => now,
+    })
+
+    for (let index = 0; index < TAG_VOCABULARY_LIMIT; index++) {
+      const created = await Effect.runPromise(
+        operations.createTag(ownerA, decode(TagNameSchema, `Tag${index}`))
+      )
+      expect(created).toMatchObject({ _tag: "Created" })
+    }
+
+    expect(
+      await Effect.runPromise(
+        operations.createTag(ownerA, decode(TagNameSchema, "overflow"))
+      )
+    ).toEqual({ _tag: "LimitExceeded" })
+  })
+
+  it("rejects promoting a suggestion beyond the vocabulary limit", async () => {
+    const database = openTestDatabase()
+    databases.push(database)
+    const repository = await Effect.runPromise(
+      createContentTaxonomyRepository(database.db)
+    )
+    const operations = createContentTaxonomy({
+      repository,
+      newTagId: () => decode(TagIdSchema, crypto.randomUUID()),
+      now: () => now,
+    })
+
+    for (let index = 0; index < TAG_VOCABULARY_LIMIT; index++) {
+      await Effect.runPromise(
+        operations.createTag(ownerA, decode(TagNameSchema, `Tag${index}`))
+      )
+    }
+    database.execSql(
+      `INSERT INTO content_tag_suggestions(owner_id, name, occurrences, last_seen_at) VALUES ('owner-a', 'Overflow', 1, '${now}');`
+    )
+
+    expect(
+      await Effect.runPromise(
+        operations.promoteSuggestion(ownerA, decode(TagNameSchema, "Overflow"))
+      )
+    ).toEqual({ _tag: "LimitExceeded" })
+    expect(await Effect.runPromise(operations.listSuggestions(ownerA))).toEqual(
+      [{ name: "Overflow", occurrences: 1, lastSeenAt: now }]
+    )
+  })
+
+  it("clears a stale suggestion whose tag already exists even at the limit", async () => {
+    const database = openTestDatabase()
+    databases.push(database)
+    const repository = await Effect.runPromise(
+      createContentTaxonomyRepository(database.db)
+    )
+    const operations = createContentTaxonomy({
+      repository,
+      newTagId: () => decode(TagIdSchema, crypto.randomUUID()),
+      now: () => now,
+    })
+
+    for (let index = 0; index < TAG_VOCABULARY_LIMIT; index++) {
+      await Effect.runPromise(
+        operations.createTag(ownerA, decode(TagNameSchema, `Tag${index}`))
+      )
+    }
+    const existing = await Effect.runPromise(
+      operations.createTag(ownerA, decode(TagNameSchema, "Tag0"))
+    )
+    if (existing._tag !== "Created") throw new Error("expected Created")
+    database.execSql(
+      `INSERT INTO content_tag_suggestions(owner_id, name, occurrences, last_seen_at) VALUES ('owner-a', 'Tag0', 1, '${now}');`
+    )
+
+    expect(
+      await Effect.runPromise(
+        operations.promoteSuggestion(ownerA, decode(TagNameSchema, "Tag0"))
+      )
+    ).toMatchObject({ _tag: "Promoted", tag: { tagId: existing.tag.tagId } })
+    expect(await Effect.runPromise(operations.listSuggestions(ownerA))).toEqual(
+      []
+    )
+  })
+
   it("keeps AI and manual assignments consistent and promotes suggestions atomically", async () => {
     const { repository, operations } = await setup()
-    const tag = await Effect.runPromise(
+    const created = await Effect.runPromise(
       operations.createTag(ownerA, decode(TagNameSchema, "Known"))
     )
+    if (created._tag !== "Created") throw new Error("expected Created")
     await Effect.runPromise(
-      operations.setArticleTags(ownerA, articleA, [tag.tagId])
+      operations.setArticleTags(ownerA, articleA, [created.tag.tagId])
     )
     await Effect.runPromise(
       repository.applyAiTags(
         ownerA,
         articleA,
-        [{ name: tag.name, confidence: 0.8 }],
+        [{ name: created.tag.name, confidence: 0.8 }],
         [
           decode(TagNameSchema, "New topic"),
           decode(TagNameSchema, "New topic"),

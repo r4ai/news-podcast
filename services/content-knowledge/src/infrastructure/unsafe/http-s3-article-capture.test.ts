@@ -210,6 +210,108 @@ describe("HTTP to S3 article capture", () => {
     }
   )
 
+  it("rejects a stylesheet with excessive references during discovery", async () => {
+    const css = Array.from(
+      { length: 10 },
+      (_, index) => `.a${index}{background:url("/r/${index}.png")}`
+    ).join("")
+    let requests = 0
+    const assets = vi.fn()
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      { ...config, maximumAssetCount: 3, maximumAssetTotalBytes: 100_000 },
+      {
+        createS3: () => ({
+          client: { send: async () => undefined } as never,
+          close: () => undefined,
+        }),
+        createSafeFetch: () => ({
+          fetch: (async (url: string) => {
+            if (url.endsWith("/article"))
+              return new Response(
+                '<article><h1>Article</h1><p>Content</p><link rel="stylesheet" href="/a/style.css"></article>',
+                { headers: { "content-type": "text/html" } }
+              )
+            requests += 1
+            return new Response(css, {
+              headers: { "content-type": "text/css" },
+            })
+          }) as typeof fetch,
+          close: async () => undefined,
+        }),
+      },
+      { cleanup: () => undefined, assets }
+    )
+    try {
+      const error = await Effect.runPromise(
+        Effect.flip(
+          resource.capture({
+            sourceUrl: "https://news.example.com/article" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
+          })
+        )
+      )
+      expect(error).toEqual({ _tag: "CaptureFailed", reason: "ResourceLimit" })
+      expect(assets).toHaveBeenCalledWith(
+        expect.objectContaining({ attempted: 1, limit: "count" })
+      )
+      expect(requests).toBe(1)
+    } finally {
+      await Effect.runPromise(resource.close)
+    }
+  })
+
+  it("rejects a stylesheet whose first new reference exhausts the shared budget", async () => {
+    const css =
+      '@import "new.css";' + '.a{background:url("/dup.png")}'.repeat(100)
+    let requests = 0
+    const assets = vi.fn()
+    const resource = openHttpS3ArticleCaptureUnsafe(
+      { ...config, maximumAssetCount: 3, maximumAssetTotalBytes: 100_000 },
+      {
+        createS3: () => ({
+          client: { send: async () => undefined } as never,
+          close: () => undefined,
+        }),
+        createSafeFetch: () => ({
+          fetch: (async (url: string) => {
+            if (url.endsWith("/article"))
+              return new Response(
+                '<article><h1>Article</h1><p>Content</p><link rel="stylesheet" href="/a/style.css"><img src="/i1.png"><img src="/i2.png"></article>',
+                { headers: { "content-type": "text/html" } }
+              )
+            requests += 1
+            if (url.endsWith(".css"))
+              return new Response(css, {
+                headers: { "content-type": "text/css" },
+              })
+            return new Response("abc", {
+              headers: { "content-type": "image/png" },
+            })
+          }) as typeof fetch,
+          close: async () => undefined,
+        }),
+      },
+      { cleanup: () => undefined, assets }
+    )
+    try {
+      const error = await Effect.runPromise(
+        Effect.flip(
+          resource.capture({
+            sourceUrl: "https://news.example.com/article" as never,
+            snapshotId: "46c2eef5-a205-4526-8640-dc3ea84d88b4" as never,
+          })
+        )
+      )
+      expect(error).toEqual({ _tag: "CaptureFailed", reason: "ResourceLimit" })
+      expect(assets).toHaveBeenCalledWith(
+        expect.objectContaining({ attempted: 1, limit: "count" })
+      )
+      expect(requests).toBe(1)
+    } finally {
+      await Effect.runPromise(resource.close)
+    }
+  })
+
   it("charges decompressed bytes instead of compressed content-length", async () => {
     const compressed = gzipSync("a".repeat(2048))
     const server = createServer((request, response) => {

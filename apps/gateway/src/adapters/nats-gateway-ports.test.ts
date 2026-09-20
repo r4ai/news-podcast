@@ -826,6 +826,37 @@ describe("NATS GatewayPorts adapter", () => {
     expect(partialSettings).toHaveLength(2)
   })
 
+  it("maps a tag vocabulary limit conflict to the public resource conflict", async () => {
+    const client = fakeClient(async (request) => {
+      if (request.subject === subjects.identity.resolveSession)
+        return userSessionReply(request)
+      return encodedReply(
+        request.envelope,
+        "content-knowledge",
+        Schema.Unknown,
+        { _tag: "Conflict", code: "TAG_LIMIT_REACHED" }
+      )
+    })
+    const ports = makeNatsGatewayPorts(client, dependencies())
+
+    const createProblem = await Effect.runPromise(
+      ports
+        .createTag({ headers: sessionHeaders, payload: { name: "AI" } })
+        .pipe(Effect.flip)
+    )
+    const promoteProblem = await Effect.runPromise(
+      ports
+        .promoteTagSuggestion({
+          headers: sessionHeaders,
+          payload: { name: "AI" },
+        })
+        .pipe(Effect.flip)
+    )
+
+    expect(createProblem.status).toBe(409)
+    expect(promoteProblem.status).toBe(409)
+  })
+
   it("maps a disabled enrichment reset to the public forbidden problem", async () => {
     const client = fakeClient(async (request) => {
       if (request.subject === subjects.identity.resolveSession)

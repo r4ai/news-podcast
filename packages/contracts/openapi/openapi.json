@@ -4127,6 +4127,16 @@
               }
             }
           },
+          "409": {
+            "description": "ConflictProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictProblem"
+                }
+              }
+            }
+          },
           "503": {
             "description": "UnavailableProblem",
             "content": {
@@ -4367,6 +4377,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictProblem",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictProblem"
                 }
               }
             }

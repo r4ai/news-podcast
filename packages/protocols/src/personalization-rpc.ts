@@ -211,7 +211,11 @@ export const ContentPersonalizationReplySchema = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("NotFound") }),
   Schema.Struct({
     _tag: Schema.Literal("Conflict"),
-    code: Schema.Literals(["ARTICLE_NOT_ARCHIVED", "UNKNOWN_TAGS"]),
+    code: Schema.Literals([
+      "ARTICLE_NOT_ARCHIVED",
+      "UNKNOWN_TAGS",
+      "TAG_LIMIT_REACHED",
+    ]),
   }),
   Schema.Struct({
     _tag: Schema.Literal("Rejected"),

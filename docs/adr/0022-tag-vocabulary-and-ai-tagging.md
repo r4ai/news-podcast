@@ -4,7 +4,7 @@
 - Date: 2026-08-11
 - Decision owners: Platform
 - Supersedes: N/A
-- Superseded by: [ADR-0098](0098-align-manual-picker-with-supported-order.md)（記事一覧の推薦順・スコア表示と手動生成候補の順序に限る）
+- Superseded by: [ADR-0098](0098-align-manual-picker-with-supported-order.md)（記事一覧の推薦順・スコア表示と手動生成候補の順序に限る）、[ADR-0102](0102-bound-tag-vocabulary-count.md)（語彙の件数上限に限る）
 - Related: ADR-0021（AI補助の日次バッチ・プロンプト版管理・profile_hash設計を継承）、ADR-0019（keysetページネーション）、ADR-0020（FTS5・述語ビルダー方式）、ADR-0018（hookが状態・viewはprops）
 
 ## コンテキストと変更契機
