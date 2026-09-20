@@ -103,6 +103,8 @@ function SheetContent({
   const dragged = useRef(false)
   /** 引き始めた指。触れているのが1本とは限らない。 */
   const pointer = useRef<number | null>(null)
+  /** 掴み代そのもの。指がこの上で離れたかどうかを見る。 */
+  const handleRef = useRef<HTMLButtonElement>(null)
 
   /*
     動きと終わりは**窓で受ける**。掴み代の上だけで受けると、指が要素の外へ
@@ -129,11 +131,17 @@ function SheetContent({
       moved.current = 0
       setDragging(false)
       /*
-        打ち切られた指の後には`click`が来ない。印を立てたままにすると、
-        次にキーボードや支援技術で閉じるボタンを押したとき、その印を
-        食べて何も起きない。
+        印を立てるのは、**続けて`click`が来ると判っているときだけ**。
+
+        打ち切られた指の後にも、掴み代の外で離れた指の後にも`click`は来ない。
+        そこで立てたままにすると、次にキーボードや支援技術で閉じるボタンを
+        押したとき、その印を食べて何も起きない。押し直しでは降ろせない
+        (押下を伴わないため)。
       */
-      dragged.current = !canceled && distance > DRAG_SLOP_PX
+      dragged.current =
+        !canceled &&
+        distance > DRAG_SLOP_PX &&
+        handleRef.current?.contains(event.target as Node) === true
       if (!canceled && distance >= DISMISS_PX) {
         // 離した位置から続けて下へ送り出す。0へ戻すと、一度跳ね上がる。
         setDismissing(true)
@@ -225,6 +233,7 @@ function SheetContent({
             onDismiss()
           }}
           draggable={false}
+          ref={handleRef}
           onPointerDown={(event) => {
             /*
               印は**次に押し始めた時点で必ず消す**。同じ操作の`click`が来る

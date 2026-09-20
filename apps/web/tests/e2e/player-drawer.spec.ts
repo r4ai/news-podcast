@@ -163,3 +163,49 @@ test("開き直して掴み代を押しても、前回の引き代で飛ばな�
 
   expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1)
 })
+
+/*
+  折りたたみ時の目盛りは、板の幅いっぱいに広がる。掴み代が常設の行の上余白
+  より厚いと、そのぶん再生や閉じるの上端を覆い、そこを押すとシークしてしまう
+  (実測: 再生ボタンの上8px)。
+*/
+test("目盛りが再生や閉じるの上端を覆わない", async ({ page }) => {
+  await page.goto("/login")
+  await page.getByLabel("開発パスワード").fill("e2e-password")
+  await page.getByLabel("開発パスワード").press("Enter")
+  await expect(
+    page.getByRole("heading", { name: "今日のニュース番組" })
+  ).toBeVisible()
+  await page.addInitScript((episodeId: string) => {
+    localStorage.setItem(
+      "player.track",
+      JSON.stringify({
+        episodeId,
+        title: "今日の開発ニュース: Durable ObjectsとTypeScript 6.0",
+        createdAt: "2026-08-18T21:00:00.000Z",
+      })
+    )
+  }, SEEDED_EPISODE_ID)
+  await page.goto(`/library?episode=${SEEDED_EPISODE_ID}`)
+  await expect(page.getByRole("region", { name: "再生中の番組" })).toBeVisible()
+
+  const covered = await page.evaluate(() => {
+    const bar = document.querySelector('[data-slot="player-bar"]')!
+    const hidden: string[] = []
+    for (const label of ["再生", "再生を終了してバーを閉じる"]) {
+      const control = bar.querySelector(`[aria-label="${label}"]`)
+      if (control === null) continue
+      const box = control.getBoundingClientRect()
+      // 上端から1pxずつ、その点を押したときに当たるのが操作そのものか見る。
+      for (const dy of [1, 3, 5, 7]) {
+        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + dy)
+        if (hit?.closest(`[aria-label="${label}"]`) === null) {
+          hidden.push(`${label}+${dy}px`)
+        }
+      }
+    }
+    return hidden
+  })
+
+  expect(covered).toEqual([])
+})

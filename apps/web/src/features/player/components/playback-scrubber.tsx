@@ -169,7 +169,12 @@ export function PlaybackScrubber({
             切る。板と同じ半径の角丸で切るので、帯は縁の曲がりまで辿って
             消える。掴み代は切らないので、角の位置を押しても先頭・末尾へ着く。
           */
-          "absolute inset-x-0 top-0 h-5",
+          /*
+            掴み代は16px。常設の行の上余白(`pt-4`)と**ちょうど同じ**にする。
+            これより厚いと、幅いっぱいに広がるこの帯が再生や閉じるの上端を
+            覆い、そこを押すとシークしてしまう(実測: 再生ボタンの上8px)。
+          */
+          "absolute inset-x-0 top-0 h-4",
           // sm以上: 題名の下の行。縁から離れるので切る必要が無い。
           "sm:static sm:flex sm:h-5 sm:items-center sm:gap-3",
           className

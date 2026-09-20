@@ -77,8 +77,12 @@ export function PlayerBar() {
   // 畳むときのfocusの行き先。開いた中身は畳んだ瞬間に消えるので、
   // 消えない場所へ先に移す必要がある。
   const titleRef = useRef<HTMLButtonElement>(null)
-  // 押し始めた場所が「押せないところ」だったか。開くのはそのときだけ。
-  const pressedSurface = useRef(false)
+  /*
+    押し始めた指。**どの指が**押せないところから始めたかまで持つ。真偽だけ
+    だと、1本目が板の余白を押さえたまま2本目が板の外から入って余白で離れた
+    とき、2本目が1本目の印を食べて開いてしまう。
+  */
+  const pressedPointer = useRef<number | null>(null)
   if (track === null) return null
 
   /**
@@ -154,11 +158,12 @@ export function PlayerBar() {
               ものに属する (docs/design.md §7.1)。
             */
             const target = event.target as Element
-            pressedSurface.current =
+            const onSurface =
               event.button === 0 &&
               event.currentTarget.contains(target) &&
               target.closest(INTERACTIVE) === null
-            if (!pressedSurface.current) return
+            if (!onSurface) return
+            pressedPointer.current = event.pointerId
             /*
               印は**指がどこで離れても降ろす**。板の上で離れなかった場合
               (押したまま板の外へ出て離す) はこの要素の`pointerup`が呼ばれず、
@@ -168,8 +173,10 @@ export function PlayerBar() {
               窓の`pointerup`はReactの`onPointerUp`より後に届くので、開くか
               どうかの判断を先に済ませてから降ろせる。
             */
-            const clear = () => {
-              pressedSurface.current = false
+            const id = event.pointerId
+            const clear = (ended: PointerEvent) => {
+              if (ended.pointerId !== id) return
+              pressedPointer.current = null
               globalThis.removeEventListener("pointerup", clear)
               globalThis.removeEventListener("pointercancel", clear)
             }
@@ -177,8 +184,8 @@ export function PlayerBar() {
             globalThis.addEventListener("pointercancel", clear)
           }}
           onPointerUp={(event) => {
-            const started = pressedSurface.current
-            pressedSurface.current = false
+            const started = pressedPointer.current === event.pointerId
+            if (started) pressedPointer.current = null
             if (!started || expanded) return
             const target = event.target as Element
             if (!event.currentTarget.contains(target)) return
@@ -224,7 +231,13 @@ export function PlayerBar() {
           */}
           <div
             className={cn(
-              "relative flex items-center gap-2 px-2 pt-3 pb-2 sm:px-3 sm:pt-2"
+              /*
+                目盛りが縁に居る狭い幅だけ、掴み代(16px)のぶん上を空ける。
+                空けないと、幅いっぱいに広がる帯が再生や閉じるの上端を覆い、
+                そこを押すとシークする(実測: 再生ボタンの上8px)。smからは
+                目盛りが行の中へ入るので要らない。
+              */
+              "relative flex items-center gap-2 px-2 pt-4 pb-2 sm:px-3 sm:pt-2"
             )}
           >
             <EpisodeArtwork className="size-11" episodeId={track.episodeId} />
