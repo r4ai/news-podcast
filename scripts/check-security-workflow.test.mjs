@@ -16,10 +16,7 @@ const readWorkflow = async () =>
   )
 
 const commandStep = (workflow, command) => {
-  const pattern = new RegExp(
-    `run:\\s*([^\\n]*${command}[^\\n]*)`,
-    "g"
-  )
+  const pattern = new RegExp(`run:\\s*([^\\n]*${command}[^\\n]*)`, "g")
   const matches = [...workflow.matchAll(pattern)]
   return matches.map((match) => match[1].trim())
 }
@@ -40,10 +37,7 @@ describe("security workflow trust boundary", () => {
     const workflow = await readWorkflow()
 
     const installSteps = commandStep(workflow, "pnpm install")
-    assert.ok(
-      installSteps.length > 0,
-      "pnpm install step must exist"
-    )
+    assert.ok(installSteps.length > 0, "pnpm install step must exist")
     for (const step of installSteps) {
       assert.match(step, /--ignore-pnpmfile/)
       assert.match(step, /--ignore-scripts/)
