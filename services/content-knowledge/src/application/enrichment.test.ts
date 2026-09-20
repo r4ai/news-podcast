@@ -315,6 +315,33 @@ describe("enrichment operations", () => {
     )
   })
 
+  it("observes pre-provider input rejection for observability", async () => {
+    const repository = queue()
+    const vocabulary = Array.from({ length: 101 }, (_, index) =>
+      Schema.decodeUnknownSync(TagNameSchema)(`Tag${index}`)
+    )
+    const observeInputRejected = vi.fn()
+
+    const operation = createEnrichmentOperations({
+      queue: repository,
+      taxonomy: { vocabulary: () => Effect.succeed(vocabulary) },
+      interestProfiles: {
+        get: () => Effect.succeed({ include: "AI", exclude: "sports" }),
+      },
+      source: {
+        read: () => Effect.succeed("markdown"),
+      },
+      provider: { enrich: () => Effect.die("must not run") },
+      dailyLimit: 200,
+      now: () => now,
+      newLeaseToken: () => "lease-token-0001",
+      observeInputRejected,
+    })
+
+    await Effect.runPromise(operation.runCycle())
+    expect(observeInputRejected).toHaveBeenCalledWith("TagVocabularyLimit")
+  })
+
   it("continues with another owner when one owner's vocabulary exceeds the limit", async () => {
     const ownerB = Schema.decodeUnknownSync(OwnerIdSchema)("owner-b")
     const vocabulary = Array.from({ length: 101 }, (_, index) =>

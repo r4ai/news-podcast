@@ -27,7 +27,7 @@ flowchart LR
 - 所有者ごとのタグ語彙の件数上限を `TAG_VOCABULARY_LIMIT = 100` とし、**タグ作成・候補昇格・AI入力**の3箇所で同じ定数を共有する。
 - タグ作成・候補昇格は上限到達時に `LimitExceeded` を返し、RPCで `409 Conflict`（`TAG_LIMIT_REACHED`）へ変換する。既に語彙にある名前の候補昇格は新規タグを作らないため、上限確認をせず残った候補の掃除だけを行う。
 - AI入力検証は `Effect.orDie` を廃止し、語彙超過・入力検証失敗を `completeFailure`（非再試行）で項目単位に終端する。別ownerの処理とRPCを継続する。
-- 失敗理由・件数はsanitizedなメッセージと `article.enrich.attempt` metricで観測し、語彙・記事本文をログへ含めない。
+- 失敗理由・件数はsanitizedなメッセージと `article.enrich.input_rejected` metric（`tag_vocabulary_limit`/`invalid_input`）で観測し、語彙・記事本文をログへ含めない。
 
 ## 判断要因
 

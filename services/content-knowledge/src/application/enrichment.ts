@@ -164,6 +164,9 @@ export const createEnrichmentOperations = (input: {
   readonly now: () => CapturedAt
   readonly newLeaseToken: () => string
   readonly observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
+  readonly observeInputRejected?: (
+    reason: "TagVocabularyLimit" | "InvalidInput"
+  ) => void
 }) => {
   const processTarget = Effect.fn("contentKnowledge.enrichment.processTarget")(
     function* (ownerId: OwnerId, target: EnrichmentTarget) {
@@ -201,6 +204,7 @@ export const createEnrichmentOperations = (input: {
       const vocabulary = yield* input.taxonomy.vocabulary(ownerId)
       const interestProfile = yield* input.interestProfiles.get(ownerId)
       if (vocabulary.length > TAG_VOCABULARY_LIMIT) {
+        input.observeInputRejected?.("TagVocabularyLimit")
         yield* completeFailure(
           `tag vocabulary exceeds the ${TAG_VOCABULARY_LIMIT}-item limit`,
           false
@@ -217,6 +221,7 @@ export const createEnrichmentOperations = (input: {
         })
       )
       if (providerInput._tag === "None") {
+        input.observeInputRejected?.("InvalidInput")
         yield* completeFailure("invalid enrichment input", false)
         return { attempted: false, succeeded: false } as const
       }

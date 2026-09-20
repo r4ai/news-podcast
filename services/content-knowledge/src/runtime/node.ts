@@ -252,6 +252,9 @@ export type NodeContentKnowledgeRuntime = DeepReadonly<{
     readonly provider: EnrichmentProvider
     readonly dailyLimit: number
     readonly observeAttempt?: (outcome: "Reserved" | "BudgetExhausted") => void
+    readonly observeInputRejected?: (
+      reason: "TagVocabularyLimit" | "InvalidInput"
+    ) => void
   }) => ReturnType<typeof createEnrichmentOperations>
   readonly close: () => Effect.Effect<void, NodeRuntimeError>
 }>
@@ -364,6 +367,9 @@ export const startNodeRuntime = (
                       readonly observeAttempt?: (
                         outcome: "Reserved" | "BudgetExhausted"
                       ) => void
+                      readonly observeInputRejected?: (
+                        reason: "TagVocabularyLimit" | "InvalidInput"
+                      ) => void
                     }) =>
                       createEnrichmentOperations({
                         queue: enrichmentQueue,
@@ -375,6 +381,7 @@ export const startNodeRuntime = (
                         now: dependencies.now,
                         newLeaseToken: dependencies.newEnrichmentLeaseToken,
                         observeAttempt: input.observeAttempt,
+                        observeInputRejected: input.observeInputRejected,
                       })
                     const close = () => closeDatabase(handle)
 
@@ -493,6 +500,17 @@ export const runNodeService = (
                               ? "reserved"
                               : "budget_exhausted",
                         }),
+                      observeInputRejected: (reason) =>
+                        observability.count(
+                          "article.enrich.input_rejected",
+                          1,
+                          {
+                            reason:
+                              reason === "TagVocabularyLimit"
+                                ? "tag_vocabulary_limit"
+                                : "invalid_input",
+                          }
+                        ),
                     })
                     const generationPlanning = createGenerationPlanning({
                       catalog: runtime.articles,
