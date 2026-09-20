@@ -252,7 +252,16 @@ function SheetContent({
               位置へ跳ね返る。しかも引いた距離は1本目のまま残るので、その後
               1本目を離すと、見た目は戻っているのに古い距離で閉じてしまう。
             */
-            if (event.button !== 0 || pointer.current !== null) return
+            if (pointer.current !== null) {
+              /*
+                既に1本が引いている最中の2本目。押下は拒否するが、その後に
+                飛んでくる`click`には所有者の区別が無く、素通りさせると
+                引いていないのに閉じてしまう。ここで飲むと決めておく。
+              */
+              dragged.current = true
+              return
+            }
+            if (event.button !== 0) return
             /*
               印は**次に押し始めた時点で必ず消す**。同じ操作の`click`が来る
               前提で消していると、指が要素の外で離れた場合や打ち切られた

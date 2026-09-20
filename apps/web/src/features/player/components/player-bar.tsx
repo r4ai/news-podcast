@@ -83,6 +83,11 @@ export function PlayerBar() {
     とき、2本目が1本目の印を食べて開いてしまう。
   */
   const pressedPointer = useRef<number | null>(null)
+  /*
+    原稿へ移って閉じたか。移った先は自分で見出しへfocusを移すので、こちらが
+    題名へ引き戻すとその契約を破る。
+  */
+  const leaving = useRef(false)
   if (track === null) return null
 
   /**
@@ -220,7 +225,12 @@ export function PlayerBar() {
               "data-starting-style:h-0 data-ending-style:h-0 motion-reduce:transition-none"
             )}
           >
-            {wide && expanded ? (
+            {/*
+              `expanded`では切らない。畳んだ描画で中身が先に消えると、外側が
+              300msかけて縮む間、空の枠だけが残る。出し入れは`Collapsible`が
+              終了の遷移まで面倒を見るので、ここは幅だけで決める。
+            */}
+            {wide ? (
               <NowPlayingPanel
                 /*
                   高さに上限を置く。板の上へ伸びるこの段は、下端に浮く他の
@@ -294,7 +304,19 @@ export function PlayerBar() {
             inertにしているので、こちらから`focus()`しても効かない。行き先を
             預けて、**modalが閉じ切ってから**戻してもらう。
           */
-          finalFocus={titleRef}
+          /*
+            閉じた後のfocusの行き先。Drawerが立っている間、背面の板はmodalが
+            inertにしているので、こちらから`focus()`しても効かない。行き先を
+            預けて、**modalが閉じ切ってから**戻してもらう。
+
+            ただし原稿へ移って閉じた場合は戻さない。移った先が自分で現在地を
+            詳細へ移すので、そこから奪い返すことになる。
+          */
+          finalFocus={() => {
+            if (!leaving.current) return titleRef.current
+            leaving.current = false
+            return false
+          }}
           onDismiss={collapse}
           className={cn(
             "glass-surface pointer-events-auto border-x-0 border-b-0",
@@ -320,7 +342,10 @@ export function PlayerBar() {
           </SheetDescription>
           <NowPlayingPanel
             id={PANEL_ID}
-            onNavigate={collapse}
+            onNavigate={() => {
+              leaving.current = true
+              collapse()
+            }}
             track={track}
             withTransport
           />

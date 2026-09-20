@@ -254,3 +254,27 @@ test("余白から開いたDrawerを閉じても、focusは題名へ戻る", asy
   )
   expect(focused).toBe("now-playing-panel")
 })
+
+/*
+  Drawerから原稿へ移る場合。
+
+  移った先は1カラムで自分から現在地を詳細へ移す
+  (`episode-detail.tsx`の`useSingleColumnFocus`)。閉じたDrawerが題名へ
+  引き戻すと、その契約を破って現在地が板まで飛ぶ。
+*/
+test("原稿へ移って閉じたときは、題名へ引き戻さない", async ({ page }) => {
+  await openDrawer(page, { from: "surface" })
+
+  await page
+    .getByRole("dialog")
+    .getByRole("link", { name: "原稿と出典を読む" })
+    .click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  const onTitle = await page.evaluate(
+    () =>
+      document.activeElement?.getAttribute("aria-controls") ===
+      "now-playing-panel"
+  )
+  expect(onTitle).toBe(false)
+})

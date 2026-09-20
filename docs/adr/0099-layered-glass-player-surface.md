@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-09-20
 - Decision owners: Product owner / Web
-- Supersedes: N/A
+- Supersedes: 一部（再生バーの段構成・不透明な帯・`backdrop-filter`の扱い）は[ADR-0064](0064-persistent-playback-outside-the-router-outlet.md)
 - Superseded by: N/A
 - Related: ADR-0060、ADR-0064、`docs/design.md` §7.1 / §7.2
 

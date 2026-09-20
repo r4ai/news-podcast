@@ -118,6 +118,20 @@ async function advance(store: Store, audio: Element) {
   }
 }
 
+/**
+ * 幅の判定を差し替える。開いた中身の器は幅で変わるので、JSが幅を読む。
+ */
+function setWide(wide: boolean) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: wide,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }))
+}
+
 function renderApp() {
   const queryClient = createTestQueryClient()
   const store = createTestStore(queryClient)
@@ -193,6 +207,31 @@ describe("再生中の描画範囲", () => {
    * 予算が一段で壊れる。**開いたまま聴き続ける**のは普通の使い方なので、
    * 畳んでいる時と同じ範囲に収まることを別に固定する。
    */
+  /*
+    広い幅では、開いた中身の出し入れを`Collapsible`に任せている。畳み切った
+    後もそれが残っていると、そこに居る大きい目盛りが位置を購読し続け、
+    聴いている間ずっと描き直される。
+  */
+  it("広い幅で畳んでいる間、開いた中身は居ない", async () => {
+    setWide(true)
+    const { store } = renderApp()
+    await waitFor(() => expect(screen.getByText("本文")).toBeDefined())
+    const audio = await startPlayback(store)
+
+    const before = renderCount("NowPlayingPanel")
+    await advance(store, audio)
+
+    expect(
+      screen.queryByRole("link", { name: "原稿と出典を読む" }),
+      "畳んでいるのに開いた中身が残っている"
+    ).toBeNull()
+    const panel = renderCount("NowPlayingPanel") - before
+    expect(
+      panel,
+      `${TICKS}回の位置更新で開いた中身が${panel}回描き直された`
+    ).toBe(0)
+  })
+
   it("展開したままでも、位置の更新は操作列と音量へ届かない", async () => {
     const { store } = renderApp()
     await waitFor(() => expect(screen.getByText("本文")).toBeDefined())
