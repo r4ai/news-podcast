@@ -1,5 +1,5 @@
 import { act } from "react"
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -69,9 +69,30 @@ function fakeAudio() {
   }
 }
 
+/**
+ * 幅の判定を差し替える。開いた中身の**器**は幅で変わり(板がその場で伸びるか、
+ * 下端からDrawerが立ち上がるか)、CSSでは選べないのでJSが幅を読む。jsdomは
+ * `matchMedia`を実装しないので、ここで答えを決める。
+ */
+function setWide(wide: boolean) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: wide,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }))
+}
+
 function renderBar(
-  patch: { readonly playing?: boolean; readonly status?: PlaybackStatus } = {}
+  patch: {
+    readonly playing?: boolean
+    readonly status?: PlaybackStatus
+    readonly wide?: boolean
+  } = {}
 ) {
+  setWide(patch.wide ?? false)
   const queryClient = createTestQueryClient()
   const store = createTestStore(queryClient)
   const audio = fakeAudio()
@@ -98,6 +119,7 @@ describe("PlayerBar", () => {
 
   it("番組が載っていなければ何も描かない。空の枠が居座らない", () => {
     const queryClient = createTestQueryClient()
+    setWide(false)
     render(
       <TestProviders queryClient={queryClient}>
         <PlayerBar />
@@ -106,18 +128,6 @@ describe("PlayerBar", () => {
     expect(screen.queryByRole("region", { name: "再生中の番組" })).toBeNull()
   })
 
-  it("題名からライブラリの該当番組へ辿れる", () => {
-    renderBar()
-    expect(screen.getByRole("link", { name: track.title })).toBeDefined()
-  })
-
-  /*
-    題名の下の1行は、幅で姿を変える。
-
-    `sm`からは時刻の文字だった行がそのまま実目盛りへ格上げされ、経過が左端・
-    残りが右端に座る。それ未満では目盛りだけが板の上端の縁へ逃げ、この行は
-    文字で経過と総時間を示す。要素は同じ1つで、CSSが置き場所を切り替える。
-  */
   it("smからは経過と残りを目盛りの両端へ置く", () => {
     renderBar()
     const rail = screen.getByRole("slider", { name: "再生位置" }).parentElement
@@ -135,10 +145,23 @@ describe("PlayerBar", () => {
   it("目盛りは板の上端の縁いっぱいに置く。狭い幅で数十pxまで縮まない", () => {
     renderBar()
     const scrubber = screen.getByRole("slider", { name: "再生位置" })
-    // 掴み代は帯より広く、板の上端の縁に重ねる。
     const edge = scrubber.parentElement?.parentElement
     expect(edge?.className).toContain("inset-x-0")
     expect(edge?.className).toContain("top-0")
+  })
+
+  /*
+    帯は板の縁の曲がりまで辿って消えるが、**掴み代は切らない**。見えるものだけ
+    を`clip-path`で切り、当たり判定を持つ`input`は全幅のまま残す。切ってしまう
+    と、角の位置を押しても先頭・末尾へ着かない。
+  */
+  it("見えるものだけを板の形に切り、掴み代は全幅のまま残す", () => {
+    renderBar()
+    const scrubber = screen.getByRole("slider", { name: "再生位置" })
+    const box = scrubber.parentElement
+    expect(box?.className).not.toContain("clip-path")
+    const painted = box?.querySelector("div")
+    expect(painted?.className).toContain("clip-path:inset")
   })
 
   it("UAのつまみは幅を持たない。塗りの先端と掴んだ位置がずれない", () => {
@@ -147,22 +170,10 @@ describe("PlayerBar", () => {
     /*
       幅を持たせると、UAはつまみが端から食み出さないよう`幅 − つまみ幅`の
       範囲でしか動かさない。塗りは全幅に対する`scaleX`なので、両端で
-      「つまみ幅の半分」ずれる(実測: 14pxのつまみで7px)。幅を0にすると、
-      値と位置の対応が全幅で1対1になり、見えるつまみは自前で置ける。
+      「つまみ幅の半分」ずれる(実測: 14pxのつまみで7px)。
     */
     expect(scrubber.className).toContain("[&::-webkit-slider-thumb]:w-0")
     expect(scrubber.className).toContain("[&::-moz-range-thumb]:w-0")
-  })
-
-  it("目盛りの両端は角の丸みの内側に収める。先頭と末尾を掴める", () => {
-    renderBar()
-    const scrubber = screen.getByRole("slider", { name: "再生位置" })
-    /*
-      板は`rounded-3xl`(1.5rem)で、`overflow-hidden`の丸めはヒットテストにも
-      効く。端まで伸ばすと両端が角のカーブの外に出て、「先頭へ戻す」
-      「末尾へ飛ぶ」が掴めなくなる。角の半径ぶんの余白でそれを防ぐ。
-    */
-    expect(scrubber.parentElement?.parentElement?.className).toContain("px-6")
   })
 
   it("再生中は一時停止として押せる", async () => {
@@ -205,39 +216,6 @@ describe("PlayerBar", () => {
     expect(audio.currentTime).toBe(300)
   })
 
-  it("速度は候補から選ぶ。狙った速度へ1操作で着く", async () => {
-    const user = userEvent.setup()
-    const { audio, store } = renderBar()
-
-    await user.click(screen.getByRole("combobox", { name: /再生速度/ }))
-    await user.click(await screen.findByRole("option", { name: "1.5×" }))
-
-    expect(store.get(playbackRateAtom)).toBe(1.5)
-    expect(audio.playbackRate).toBe(1.5)
-  })
-
-  it("音量は開く操作を挟まずに触れる", async () => {
-    const { audio, store } = renderBar()
-    const volume = screen.getByRole("slider", { name: "音量" })
-
-    Object.defineProperty(volume, "value", { value: "0.4", writable: true })
-    volume.dispatchEvent(new Event("change", { bubbles: true }))
-
-    expect(store.get(volumeAtom)).toBe(0.4)
-    expect(audio.volume).toBe(0.4)
-  })
-
-  it("消音は押して切り替える。音量の記憶は残る", async () => {
-    const user = userEvent.setup()
-    const { audio, store } = renderBar()
-
-    await user.click(screen.getByRole("button", { name: "消音にする" }))
-
-    expect(store.get(mutedAtom)).toBe(true)
-    expect(audio.muted).toBe(true)
-    expect(store.get(volumeAtom)).toBe(1)
-  })
-
   it("閉じると音は止まり、バーも消える", async () => {
     const user = userEvent.setup()
     const { audio, store } = renderBar({ playing: true })
@@ -248,6 +226,185 @@ describe("PlayerBar", () => {
     expect(audio.pause).toHaveBeenCalled()
     expect(store.get(currentTrackAtom)).toBeNull()
     expect(screen.queryByRole("region", { name: "再生中の番組" })).toBeNull()
+  })
+})
+
+/**
+ * 開き方。
+ *
+ * 開くための専用ボタンは置かない。板の押せない場所はどこでも開き、キーボード
+ * からは題名がその役を兼ねる。常設の行は幅が足りず、ボタンを1つ足すだけで
+ * 題名が数文字ぶん削れる。
+ */
+describe("PlayerBar の開閉", () => {
+  beforeEach(() => localStorage.clear())
+
+  it("初めは畳んでいる。聴いていない間まで本文を削らない", () => {
+    renderBar()
+    expect(
+      screen
+        .getByRole("button", { name: track.title })
+        .getAttribute("aria-expanded")
+    ).toBe("false")
+    expect(screen.queryByRole("link", { name: "原稿と出典を読む" })).toBeNull()
+  })
+
+  it("題名を押すと開く。キーボードだけでも辿り着ける", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar()
+
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    expect(store.get(playerExpandedAtom)).toBe(true)
+    expect(screen.getByRole("link", { name: "原稿と出典を読む" })).toBeDefined()
+  })
+
+  it("板の押せない場所を押しても開く", async () => {
+    const user = userEvent.setup()
+    const { container, store } = renderBar()
+
+    // 絵は押せるものではない。ここを押しても開く。
+    const artwork = container.querySelector('[aria-hidden="true"].rounded-xl')
+    expect(artwork).not.toBeNull()
+    await user.click(artwork as Element)
+
+    expect(store.get(playerExpandedAtom)).toBe(true)
+  })
+
+  it("押せるものを押したときは開かない。操作が二重に起きない", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar()
+
+    await user.click(screen.getByRole("button", { name: "再生" }))
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
+  })
+
+  it("狭い幅では、下端から立ち上がるDrawerで開く", async () => {
+    const user = userEvent.setup()
+    renderBar({ wide: false })
+
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    const drawer = screen.getByRole("dialog")
+    // Drawerは操作列も連れて出る。板は背面へ退いて触れなくなるので、
+    // 押し所がここにしか無い。
+    expect(within(drawer).getByRole("button", { name: "再生" })).toBeDefined()
+    expect(
+      within(drawer).getByRole("slider", { name: "再生位置" })
+    ).toBeDefined()
+  })
+
+  it("広い幅では、板がその場で伸びる。画面を覆わない", async () => {
+    const user = userEvent.setup()
+    renderBar({ wide: true })
+
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(screen.getByRole("link", { name: "原稿と出典を読む" })).toBeDefined()
+  })
+
+  it("開いても題名と目盛りは1つずつ。器をまたいで重ならない", async () => {
+    const user = userEvent.setup()
+    renderBar({ wide: true })
+
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    expect(screen.getAllByRole("slider", { name: "再生位置" })).toHaveLength(1)
+  })
+
+  it("開いた先の目盛りも、掴んだ位置へ飛ばせる", async () => {
+    const user = userEvent.setup()
+    const { audio } = renderBar({ wide: true })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    const scrubber = screen.getByRole("slider", { name: "再生位置" })
+    Object.defineProperty(scrubber, "value", { value: "420", writable: true })
+    scrubber.dispatchEvent(new Event("change", { bubbles: true }))
+
+    expect(audio.currentTime).toBe(420)
+  })
+
+  it("開いた先で速度を選べる。狙った速度へ1操作で着く", async () => {
+    const user = userEvent.setup()
+    const { audio, store } = renderBar({ wide: true })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    await user.click(screen.getByRole("combobox", { name: /再生速度/ }))
+    await user.click(await screen.findByRole("option", { name: "1.5×" }))
+
+    expect(store.get(playbackRateAtom)).toBe(1.5)
+    expect(audio.playbackRate).toBe(1.5)
+  })
+
+  it("開いた先の音量は、さらに開く操作を挟まずに触れる", async () => {
+    const user = userEvent.setup()
+    const { audio, store } = renderBar({ wide: true })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    const volume = screen.getByRole("slider", { name: "音量" })
+    Object.defineProperty(volume, "value", { value: "0.4", writable: true })
+    volume.dispatchEvent(new Event("change", { bubbles: true }))
+
+    expect(store.get(volumeAtom)).toBe(0.4)
+    expect(audio.volume).toBe(0.4)
+  })
+
+  it("消音は押して切り替える。音量の記憶は残る", async () => {
+    const user = userEvent.setup()
+    const { audio, store } = renderBar({ wide: true })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    await user.click(screen.getByRole("button", { name: "消音にする" }))
+
+    expect(store.get(mutedAtom)).toBe(true)
+    expect(audio.muted).toBe(true)
+    expect(store.get(volumeAtom)).toBe(1)
+  })
+
+  /*
+    開いた中身は畳んだ瞬間に消える。focusを持ったまま消えると、行き先を失った
+    focusは`body`へ落ち、キーボードだけで使う利用者はページの先頭から辿り直す
+    ことになる。消えない題名へ先に移す。
+  */
+  it("中身からEscapeで畳んでも、focusは題名に残る", async () => {
+    const user = userEvent.setup()
+    renderBar({ wide: true })
+    const title = screen.getByRole("button", { name: track.title })
+    await user.click(title)
+
+    const volume = screen.getByRole("slider", { name: "音量" })
+    volume.focus()
+    expect(document.activeElement).toBe(volume)
+
+    await user.keyboard("{Escape}")
+
+    expect(document.activeElement).toBe(title)
+  })
+
+  it("Escapeは畳むだけ。音は止めない", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar({ playing: true, wide: true })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    await user.keyboard("{Escape}")
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
+    expect(store.get(currentTrackAtom)).not.toBeNull()
+    expect(store.get(playbackStatusAtom)).toBe("playing")
+  })
+
+  it("閉じると展開も畳む。次に載せた番組が開いた状態で始まらない", async () => {
+    const user = userEvent.setup()
+    const { store } = renderBar({ wide: true })
+    await user.click(screen.getByRole("button", { name: track.title }))
+
+    await user.click(
+      screen.getByRole("button", { name: "再生を終了してバーを閉じる" })
+    )
+
+    expect(store.get(playerExpandedAtom)).toBe(false)
   })
 })
 
@@ -312,146 +469,5 @@ describe("PlayerBar の読み込みと失敗", () => {
     expect(audio.load).toHaveBeenCalledTimes(1)
     expect(audio.play).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole("alert")).toBeNull()
-  })
-})
-
-/**
- * 段の開閉。
- *
- * 常設の1行には題名と再生しか入らない。入り切らないもの (大きい目盛り・
- * 速度・音量・原稿への道) へ**必ず辿り着ける**ことと、辿り着いた先で同じ
- * ものが二重に並ばないことを固定する。
- */
-describe("PlayerBar の展開", () => {
-  beforeEach(() => localStorage.clear())
-
-  it("初めは畳んでいる。聴いていない間まで本文を削らない", () => {
-    renderBar()
-    expect(
-      screen
-        .getByRole("button", { name: "再生の詳細" })
-        .getAttribute("aria-expanded")
-    ).toBe("false")
-    expect(screen.queryByRole("link", { name: "原稿と出典を読む" })).toBeNull()
-  })
-
-  it("展開すると、常設の行に入らないものが出る", async () => {
-    const user = userEvent.setup()
-    renderBar()
-
-    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
-
-    expect(
-      screen
-        .getByRole("button", { name: "再生の詳細" })
-        .getAttribute("aria-expanded")
-    ).toBe("true")
-    expect(screen.getByRole("link", { name: "原稿と出典を読む" })).toBeDefined()
-    // 残りは負の符号で右端に出る。経過と同じ書式で並べると読み分けられない。
-    expect(screen.getByText("-8:00")).toBeDefined()
-  })
-
-  /*
-    320pxでは、おもり(72px)・操作列(156px)・開閉(74px)の合計が板を38px超える。
-    おもりは中央に据えるためだけのものなので、縮む余地を残して**収まることを
-    優先**する。`shrink-0`を付けると、そのぶんが板の外へ溢れる。
-  */
-  it("展開時の釣り合いのおもりは縮められる。狭い幅で操作列が溢れない", async () => {
-    const user = userEvent.setup()
-    const { container } = renderBar()
-    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
-
-    const weight = container.querySelector("span.w-18")
-    expect(weight).not.toBeNull()
-    expect(weight?.className).not.toContain("shrink-0")
-  })
-
-  it("展開しても題名と目盛りは1つずつ。段をまたいで重ならない", async () => {
-    const user = userEvent.setup()
-    renderBar()
-
-    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
-
-    expect(screen.getAllByRole("link", { name: track.title })).toHaveLength(1)
-    expect(screen.getAllByRole("slider", { name: "再生位置" })).toHaveLength(1)
-    expect(screen.getAllByRole("slider", { name: "音量" })).toHaveLength(1)
-  })
-
-  it("展開中の目盛りも、掴んだ位置へ飛ばせる", async () => {
-    const user = userEvent.setup()
-    const { audio } = renderBar()
-    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
-
-    const scrubber = screen.getByRole("slider", { name: "再生位置" })
-    Object.defineProperty(scrubber, "value", { value: "420", writable: true })
-    scrubber.dispatchEvent(new Event("change", { bubbles: true }))
-
-    expect(audio.currentTime).toBe(420)
-  })
-
-  /*
-    段の中の要素は畳んだ瞬間に消える。focusを持ったまま消えると、行き先を
-    失ったfocusは`body`へ落ち、キーボードだけで使う利用者はページの先頭から
-    辿り直すことになる。消えない開閉ボタンへ先に移す。
-  */
-  it("段の中からEscapeで畳んでも、focusは開閉ボタンに残る", async () => {
-    const user = userEvent.setup()
-    renderBar()
-    const toggle = screen.getByRole("button", { name: "再生の詳細" })
-    await user.click(toggle)
-
-    const volume = screen.getByRole("slider", { name: "音量" })
-    volume.focus()
-    expect(document.activeElement).toBe(volume)
-
-    await user.keyboard("{Escape}")
-
-    expect(document.activeElement).toBe(toggle)
-  })
-
-  it("開閉ボタンで畳んだときも、focusはそのボタンに残る", async () => {
-    const user = userEvent.setup()
-    renderBar()
-    const toggle = screen.getByRole("button", { name: "再生の詳細" })
-
-    await user.click(toggle)
-    await user.click(toggle)
-
-    expect(document.activeElement).toBe(toggle)
-  })
-
-  it("Escapeは畳むだけ。音は止めない", async () => {
-    const user = userEvent.setup()
-    const { store } = renderBar({ playing: true })
-    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
-
-    await user.keyboard("{Escape}")
-
-    expect(store.get(playerExpandedAtom)).toBe(false)
-    expect(store.get(currentTrackAtom)).not.toBeNull()
-    expect(store.get(playbackStatusAtom)).toBe("playing")
-  })
-
-  it("畳んでいる間のEscapeは何も畳まない。他の画面の解除を奪わない", async () => {
-    const user = userEvent.setup()
-    const { store } = renderBar()
-
-    await user.click(screen.getByRole("link", { name: track.title }))
-    await user.keyboard("{Escape}")
-
-    expect(store.get(playerExpandedAtom)).toBe(false)
-    expect(store.get(currentTrackAtom)).not.toBeNull()
-  })
-
-  it("閉じると展開も畳む。次に載せた番組が開いた状態で始まらない", async () => {
-    const user = userEvent.setup()
-    const { store } = renderBar()
-    await user.click(screen.getByRole("button", { name: "再生の詳細" }))
-
-    await user.click(
-      screen.getByRole("button", { name: "再生を終了してバーを閉じる" })
-    )
-
-    expect(store.get(playerExpandedAtom)).toBe(false)
   })
 })

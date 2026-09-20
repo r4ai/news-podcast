@@ -2,6 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai"
 import { AlertTriangle } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
 
 import {
   hasPlaybackErrorAtom,
@@ -57,7 +58,12 @@ export function PlaybackErrorBanner() {
 
   return (
     <p
-      className="flex items-center gap-2 border-b border-[var(--glass-border)] bg-destructive/10 px-3 py-2 text-xs text-destructive"
+      className={cn(
+        // 板は`overflow`を切らないので、この行が自分で板の角に合わせる。
+        "flex items-center gap-2 rounded-t-3xl border-b border-[var(--glass-border)] bg-destructive/10 px-3 py-2 text-xs text-destructive",
+        // 出入りは滑らせる。稀な行が唐突に現れると、板ごと跳ねて見える。
+        "animate-in duration-200 ease-apple fade-in slide-in-from-top-2 motion-reduce:animate-none"
+      )}
       /*
         `AppShell`がこの印を`:has()`で見て、板1枚ぶんに加えてこの行の高さまで
         確保する。確保しないと、板より手前に浮く回線切れの案内がちょうどこの

@@ -148,8 +148,21 @@ export function AppShell({ actions, children, player }: AppShellProps) {
         以降のTabが本文からではなくページ先頭から再開してしまう。
       */}
       <main
-        // 下端に居座るもの (モバイルのナビ・再生バー) の分だけ本文の末尾を空ける。
-        className="pb-[calc(var(--app-nav-h)+var(--player-h)+1rem)] md:ml-56 md:pb-[calc(var(--player-h)+1rem)]"
+        /*
+          下端に居座るもの (モバイルのナビ・再生バー) の分だけ本文の末尾を空ける。
+
+          ただし2ペインのページは別。あちらは自分で画面の高さいっぱいの枠を
+          組み、その中で独立にスクロールする。ここで末尾を空けると、枠の下に
+          板1枚ぶんの何も無い帯ができて、内容が画面の下まで届かなくなる。
+          板は透ける面として**内容の上に浮く**ので、退ける必要がない。
+          最後の行が板の下に隠れないよう、余白はスクロールする側が持つ。
+        */
+        className={cn(
+          "md:ml-56",
+          isWide
+            ? "pb-[calc(var(--app-nav-h)+var(--player-h)+1rem)] md:pb-0"
+            : "pb-[calc(var(--app-nav-h)+var(--player-h)+1rem)] md:pb-[calc(var(--player-h)+1rem)]"
+        )}
         id="main-content"
         tabIndex={-1}
       >

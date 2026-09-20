@@ -1,10 +1,21 @@
-import { Link } from "@tanstack/react-router"
 import { useAtomValue, useSetAtom } from "jotai"
-import { ChevronDown, ChevronUp, X } from "lucide-react"
+import { X } from "lucide-react"
 import { useRef } from "react"
 
 import { Button } from "@workspace/ui/components/button"
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "@workspace/ui/components/collapsible"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@workspace/ui/components/sheet"
 import { cn } from "@workspace/ui/lib/utils"
+
+import { useMediaQuery } from "@/shared/lib/use-media-query"
 
 import {
   closePlayerAtom,
@@ -21,6 +32,23 @@ import { TransportControls } from "./transport-controls"
 import { VolumeControl } from "./volume-control"
 
 /**
+ * 展開した中身のid。畳んでいる間は指す先が無いが、`aria-expanded="false"`が
+ * 併記されていれば「今は無い」と読める。
+ */
+const PANEL_ID = "now-playing-panel"
+
+/**
+ * 広い幅の境目。ここを境に**器の形そのもの**が変わるので、CSSでは選べない。
+ * 板がその場で伸びるか、下端からDrawerが立ち上がるか。
+ */
+const WIDE_QUERY = "(min-width: 40rem)"
+
+/**
+ * 「押せるもの」の見分け。ここに当たらない場所を押したら開く。
+ */
+const INTERACTIVE = "a,button,input,select,textarea,[role='slider']"
+
+/**
  * 画面下端に浮かぶ再生バー。
  *
  * routeの外 (`AppShell`) に立っているので、ページを移っても音は途切れない。
@@ -35,35 +63,31 @@ import { VolumeControl } from "./volume-control"
  * **前面** に描く。`backdrop-filter`が読むのは後ろに描かれたものだけなので、
  * 毎秒数回動く目盛りは滲みの計算を呼ばない (docs/design.md §7.2)。
  *
- * ## 段の作り
+ * ## 開き方
  *
- * 常設は1行だけ。速度・音量・大きい目盛り・原稿への道は展開した段に置く。
- * 常時2段にすると、聴いていない時間まで本文が2行ぶん削られる。
+ * 開くための専用ボタンは置かない。**板の押せない場所はどこでも開く**。
+ * 常設の行は幅が足りず、ボタンを1つ足すだけで題名が数文字ぶん削れる。
+ * キーボードからは題名が開く役を兼ねる。
  */
-/**
- * 展開した段のid。畳んでいる間は指す先が無いが、`aria-expanded="false"`が
- * 併記されていれば「今は無い」と読める。
- */
-const PANEL_ID = "now-playing-panel"
-
 export function PlayerBar() {
   const track = useAtomValue(currentTrackAtom)
   const expanded = useAtomValue(playerExpandedAtom)
   const setExpanded = useSetAtom(playerExpandedAtom)
-  // 畳むときのfocusの行き先。段の中の要素は畳んだ瞬間に消えるので、
+  const wide = useMediaQuery(WIDE_QUERY)
+  // 畳むときのfocusの行き先。開いた中身は畳んだ瞬間に消えるので、
   // 消えない場所へ先に移す必要がある。
-  const toggleRef = useRef<HTMLButtonElement>(null)
+  const titleRef = useRef<HTMLButtonElement>(null)
   if (track === null) return null
 
   /**
-   * 段を畳む。**畳む前にfocusを開閉ボタンへ移す**。
+   * 畳む。**畳む前にfocusを題名へ移す**。
    *
-   * 音量・速度・原稿へのリンクはいずれも段の中にある。focusを持ったまま
+   * 音量・速度・原稿へのリンクはいずれも開いた中身にある。focusを持ったまま
    * 消えると、行き先を失ったfocusは`body`へ落ちる。キーボードだけで使う
    * 利用者は、そこからページの先頭を辿り直すことになる。
    */
   const collapse = () => {
-    toggleRef.current?.focus()
+    titleRef.current?.focus()
     setExpanded(false)
   }
 
@@ -95,143 +119,167 @@ export function PlayerBar() {
       data-slot="player-bar"
       role="region"
     >
-      <div
-        className={cn(
-          "glass-surface pointer-events-auto overflow-hidden rounded-3xl",
-          // 幅を本文と同じ尺で止める。画面幅いっぱいに伸ばすと、広い画面ほど
-          // 題名と操作の間が開き、目を左右に往復させないと今の状態が読めない。
-          "mx-auto w-full max-w-3xl"
-        )}
-        // 展開中のEscapeは畳むだけ。閉じる(音を止める)とは別の操作なので
-        // 重ねない。板の外へ伝えないのは、記事一覧などの選択解除まで
-        // 巻き添えにしないため。
-        onKeyDown={(event) => {
-          if (event.key !== "Escape" || !expanded) return
-          event.stopPropagation()
-          collapse()
-        }}
-      >
-        <PlaybackErrorBanner />
-
-        {expanded ? <NowPlayingPanel id={PANEL_ID} track={track} /> : null}
-
-        {/*
-          常設の行。**子の位置は開閉で変えない**。開閉ボタンの位置が段の間で
-          動くと、押した瞬間にその要素ごと作り直されてfocusが本文の先頭へ
-          落ちる。位置を固定して、押した指とfocusの両方をその場に留める。
-        */}
+      <Collapsible onOpenChange={setExpanded} open={wide && expanded}>
         <div
           className={cn(
-            "relative flex items-center",
-            expanded
-              ? "justify-between gap-2 px-3 pb-3"
-              : /*
-                  目盛りが縁に居る狭い幅だけ、掴み代(20px)が題名へ食い込まない
-                  よう上を厚く取る。smからは目盛りが行の中へ入るので要らない。
-                */
-                "gap-2 px-2 pt-3 pb-2 sm:px-3 sm:pt-2"
+            "group/bar glass-surface pointer-events-auto mx-auto w-full max-w-3xl rounded-3xl",
+            // 押せない場所はどこでも開く。開いている間は押し所ではない。
+            !expanded && "cursor-pointer"
           )}
+          // 展開中のEscapeは畳むだけ。閉じる(音を止める)とは別の操作なので
+          // 重ねない。板の外へ伝えないのは、記事一覧などの選択解除まで
+          // 巻き添えにしないため。
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !expanded) return
+            event.stopPropagation()
+            collapse()
+          }}
+          /*
+            押せるものの上で始まった操作は、そちらのもの。それ以外は開く。
+            文字を選んでいる最中も開かない (選択が消えて読めなくなる)。
+          */
+          onPointerUp={(event) => {
+            if (expanded || event.button !== 0) return
+            if ((event.target as Element).closest(INTERACTIVE) !== null) return
+            if ((getSelection()?.toString().length ?? 0) > 0) return
+            setExpanded(true)
+          }}
         >
-          {expanded ? (
-            /*
-              右端の開閉ボタンと釣り合うおもり。操作列を行の中央に据える。
+          <PlaybackErrorBanner />
 
-              `shrink-0`は付けない。320pxではおもり・操作列・開閉ボタンの合計が
-              板を38px超えるので、縮める余地が無いとここから溢れる。**中央に
-              据えることより、収まることを優先する**。空なので0まで縮められ、
-              幅が足りるところでは72pxのまま中央に戻る。
-            */
-            <span aria-hidden="true" className="w-18" />
-          ) : (
-            <>
-              <EpisodeArtwork className="size-11" episodeId={track.episodeId} />
-              <TrackSummary track={track} />
-            </>
-          )}
-
-          <TransportControls expanded={expanded} />
+          {/* 広い幅では、板がその場で伸びる。 */}
+          <CollapsibleContent
+            className={cn(
+              "overflow-hidden",
+              "h-[var(--collapsible-panel-height)] transition-[height] duration-300 ease-apple",
+              "data-starting-style:h-0 data-ending-style:h-0 motion-reduce:transition-none"
+            )}
+          >
+            {wide && expanded ? (
+              <NowPlayingPanel
+                className="px-5 pt-4 pb-1"
+                id={PANEL_ID}
+                track={track}
+                withHeader={false}
+              />
+            ) : null}
+          </CollapsibleContent>
 
           {/*
-            広い幅では、速度と音量を展開せずに触れる。狭い幅で同じことを
-            すると題名が潰れるので、そちらは展開した段が引き受ける。
+            常設の行。**子の位置は開閉で変えない**。押し所が段の間で動くと、
+            押した瞬間にその要素ごと作り直されてfocusが本文の先頭へ落ちる。
           */}
-          {expanded ? null : (
-            <div className="hidden items-center gap-1 lg:flex">
-              <PlaybackRateSelect />
-              <VolumeControl />
-            </div>
-          )}
-
-          <div className="flex shrink-0 items-center gap-0.5">
-            <ExpandToggle
+          <div
+            className={cn(
+              "relative flex items-center gap-2 px-2 pt-3 pb-2 sm:px-3 sm:pt-2"
+            )}
+          >
+            <EpisodeArtwork className="size-11" episodeId={track.episodeId} />
+            <TrackSummary
               expanded={expanded}
-              onToggle={(next) => (next ? setExpanded(true) : collapse())}
-              ref={toggleRef}
+              onToggle={() => (expanded ? collapse() : setExpanded(true))}
+              ref={titleRef}
+              track={track}
             />
+            <TransportControls />
+            {/*
+              広い幅では、速度と音量を開かずに触れる。音量はアイコンだけを置き、
+              押すとその場へ帯が重なって開く。帯を常に並べると、常設の行で
+              最も長く取りたい題名から80px以上を奪う。
+
+              開いている間は出さない。開いた中身が同じものを帯として持つので、
+              残すと同じ名前の操作が画面に2つ並ぶ。
+            */}
+            {expanded ? null : (
+              <div className="hidden items-center gap-1 lg:flex">
+                <PlaybackRateSelect />
+                <VolumeControl variant="popover" />
+              </div>
+            )}
             <CloseButton />
           </div>
         </div>
-      </div>
+      </Collapsible>
+
+      {/*
+        狭い幅では、下端から立ち上がるDrawerにする。板の中でその場に伸ばすと、
+        画面の半分近くを占める中身が下部ナビと本文の隙間へ押し込まれ、どこから
+        来た面なのかも判らない。
+      */}
+      <Sheet
+        onOpenChange={(open) => (open ? setExpanded(true) : collapse())}
+        open={!wide && expanded}
+      >
+        <SheetContent
+          className={cn(
+            "glass-surface pointer-events-auto border-x-0 border-b-0",
+            /*
+              Drawerだけ面を濃くする。板は本文の「上に少し載る」帯なので薄くて
+              良いが、こちらは画面の3割を覆って補助文まで載せる。薄いままだと、
+              後ろの本文が透けて文字のコントラストが基準(4.5:1)を割る
+              (実測: 日付・原稿への道・残り時間の3か所でaxeが落ちた)。
+            */
+            "[--glass-bg:oklch(1_0_0_/_90%)] dark:[--glass-bg:oklch(0.24_0_0_/_92%)]",
+            /*
+              補助文も、この面の上に立つ値へ引き上げる。`--muted-foreground`は
+              白の上でちょうど4.6:1で、透過が少しでも入ると基準の4.5:1を割る
+              (実測: 90%の面で4.42)。面の濃さだけで詰めると、今度は透ける意味が
+              無くなる。**この面の上でだけ**余裕のある値にする。
+            */
+            "[--muted-foreground:oklch(0.47_0_0)] dark:[--muted-foreground:oklch(0.72_0_0)]"
+          )}
+        >
+          <SheetTitle className="sr-only">再生中の番組</SheetTitle>
+          <SheetDescription className="sr-only">
+            再生位置・速度・音量を変えられます。
+          </SheetDescription>
+          <NowPlayingPanel track={track} withTransport />
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
 
 /**
- * 何を鳴らしているか。題名はライブラリの該当番組へのリンクにする。
- * 「今聴いているものの原稿を見たい」が最短で叶う。
+ * 何を鳴らしていて、どこまで来たか。
+ *
+ * 題名は**開く役を兼ねる**。専用のボタンを置くと、常設の行で最も長く取り
+ * たい題名からそのぶんの幅が削れる。キーボードからはここがその入口になる。
+ * 原稿への道は開いた先にある。
  */
-function TrackSummary({ track }: { readonly track: PlayerTrack }) {
+function TrackSummary({
+  expanded,
+  onToggle,
+  ref,
+  track,
+}: {
+  readonly expanded: boolean
+  readonly onToggle: () => void
+  readonly ref: React.Ref<HTMLButtonElement>
+  readonly track: PlayerTrack
+}) {
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <Link
-        className="truncate rounded-sm text-sm font-medium outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-        search={{ episode: track.episodeId }}
+      <button
+        aria-controls={PANEL_ID}
+        aria-expanded={expanded}
+        className="truncate rounded-sm text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={onToggle}
+        ref={ref}
         title={track.title}
-        to="/library"
+        type="button"
       >
         {track.title}
-      </Link>
+      </button>
       {/*
         2行目は「どこまで来たか」。`sm`からはこの行がそのまま実目盛りになり、
         それ未満では目盛りだけが板の上端の縁へ逃げて、ここは時刻の文字を担う。
         置き場所の切り替えは`PlaybackScrubber`の中に閉じている。
+        開いている間は出さない。開いた中身が大きい目盛りを持つので、残すと
+        同じ名前の目盛りが2つ並ぶ。
       */}
-      <PlaybackScrubber />
+      {expanded ? null : <PlaybackScrubber />}
     </div>
-  )
-}
-
-/**
- * 段の開閉。
- *
- * `aria-expanded`と`aria-controls`で「押すと何が増えるか」を先に伝える。
- * 名札を状態で変えない (常に「再生の詳細」) のは、読み上げが状態を
- * `aria-expanded`から読むので、名札にも入れると二重に読まれるため。
- */
-function ExpandToggle({
-  expanded,
-  onToggle,
-  ref,
-}: {
-  readonly expanded: boolean
-  readonly onToggle: (next: boolean) => void
-  readonly ref: React.Ref<HTMLButtonElement>
-}) {
-  const Icon = expanded ? ChevronDown : ChevronUp
-
-  return (
-    <Button
-      aria-controls={PANEL_ID}
-      aria-expanded={expanded}
-      aria-label="再生の詳細"
-      className="size-9 shrink-0 rounded-full"
-      onClick={() => onToggle(!expanded)}
-      ref={ref}
-      size="icon-lg"
-      variant="ghost"
-    >
-      <Icon aria-hidden="true" />
-    </Button>
   )
 }
 

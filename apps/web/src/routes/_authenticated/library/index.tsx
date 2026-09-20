@@ -54,7 +54,7 @@ function LibraryRoute() {
       `--app-bar-h`はAppShellのモバイルapp barの実高で、日付見出しの吸着位置に
       使う。高さから引く`--player-h`は、鳴らしている間だけ値を持つ。
     */
-    <div className="flex flex-col [--app-bar-h:3.75rem] lg:h-[calc(100dvh-4rem-var(--player-h))] lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-6">
+    <div className="flex flex-col [--app-bar-h:3.75rem] lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:flex-row lg:items-stretch lg:gap-6">
       {/*
         desktopではページヘッダーを置かない設計 (docs/design.md §7.1) だが、
         ページには必ずlevel-1見出しが要る。視覚には出さず、支援技術へだけ渡す。
@@ -62,7 +62,7 @@ function LibraryRoute() {
       <h1 className="sr-only">ライブラリ</h1>
       <div
         className={cn(
-          "lg:min-h-0 lg:w-[360px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-[400px]",
+          "lg:min-h-0 lg:w-[360px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-[var(--player-h)] xl:w-[400px]",
           hasSelection && "hidden lg:block"
         )}
       >
@@ -73,7 +73,7 @@ function LibraryRoute() {
       </div>
       <div
         className={cn(
-          "flex flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain",
+          "flex flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pb-[var(--player-h)]",
           !hasSelection && "hidden lg:flex"
         )}
         // 位置が戻ることをe2eで確かめるための目印。スクロールしているのは

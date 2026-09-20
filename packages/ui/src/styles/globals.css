@@ -51,6 +51,14 @@
   --radius-4xl: calc(var(--radius) * 2.6);
   --font-sans: "Geist Variable", "Noto Sans JP Variable", sans-serif;
   --animate-player-eq: player-eq 900ms ease-in-out infinite;
+  /*
+    面が出入りするときの緩急。
+
+    既定の`ease-out`は終わり際が緩すぎて、指を離した後もしばらく動いて
+    見える。立ち上がりを速くし、終わりを一気に止めると、面が「重さを
+    持って置かれた」ように読める。Appleのsheetが使う比率に合わせる。
+  */
+  --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 :root {

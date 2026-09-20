@@ -53,6 +53,8 @@ export function TransportControls({
         aria-label={playing ? "一時停止" : "再生"}
         className={cn(
           "relative shrink-0 rounded-full shadow-sm",
+          // 押した手応え。縮んで戻る幅は小さく、戻りは速く。
+          "transition-transform duration-150 ease-apple active:scale-90 motion-reduce:transition-none",
           expanded ? "size-13" : "size-11 md:size-10"
         )}
         onClick={() => toggle()}
@@ -117,6 +119,7 @@ function SkipButton({
       aria-label={label}
       className={cn(
         "relative shrink-0 rounded-full",
+        "transition-transform duration-150 ease-apple active:scale-90 motion-reduce:transition-none",
         expanded ? "size-11" : "hidden size-10 sm:inline-flex"
       )}
       onClick={onSkip}

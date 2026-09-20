@@ -216,10 +216,18 @@ for (const theme of ["light", "dark"] as const) {
         fullPage: false,
       })
 
-      // 展開した段は、常設の1行に入らないもの (大きい目盛り・速度・音量・
-      // 原稿への道) を全部抱える。畳んだ絵だけでは、glassの面の上でそれらが
-      // 読めるかどうかが判らない。
-      await page.getByRole("button", { name: "再生の詳細" }).click()
+      /*
+        開いた姿。常設の1行に入らないもの (大きい目盛り・速度・音量・原稿への道)
+        を全部抱える。畳んだ絵だけでは、glassの面の上でそれらが読めるかどうかが
+        判らない。
+
+        開くのは題名。開くための専用ボタンは置いていない (板の押せない場所は
+        どこでも開く)。器は幅で変わり、狭い幅では下端からDrawerが立ち上がる。
+      */
+      await page
+        .getByRole("region", { name: "再生中の番組" })
+        .getByRole("button", { name: /Durable Objects/ })
+        .click()
       await expect(
         page.getByRole("link", { name: "原稿と出典を読む" })
       ).toBeVisible()
@@ -275,11 +283,13 @@ test("最も狭い幅でも再生バーの操作列が収まる", async ({ page 
     caret: "hide",
   })
 
-  await page.getByRole("button", { name: "再生の詳細" }).click()
+  // 狭い幅で開くと、板ではなく下端から立ち上がるDrawerになる。
+  await bar.getByRole("button", { name: /Durable Objects/ }).click()
+  const drawer = page.getByRole("dialog")
   await expect(
-    page.getByRole("link", { name: "原稿と出典を読む" })
+    drawer.getByRole("link", { name: "原稿と出典を読む" })
   ).toBeVisible()
-  await expect(bar).toHaveScreenshot("player-narrow-expanded.png", {
+  await expect(drawer).toHaveScreenshot("player-narrow-expanded.png", {
     animations: "disabled",
     caret: "hide",
   })

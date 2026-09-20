@@ -108,7 +108,7 @@ function ArticlesRoute() {
       `--app-bar-h`はAppShellのモバイルapp barの実高 (py-2 + min-h-11)。
       一覧ヘッダーがapp barの下へ潜らないよう、吸着の基準をここで一度だけ決める。
     */
-    <div className="-m-4 flex flex-col [--app-bar-h:3.75rem] sm:-m-6 lg:-m-8 lg:h-[calc(100dvh-var(--player-h)-1rem)] lg:min-h-0 lg:flex-row lg:items-stretch">
+    <div className="-m-4 flex flex-col [--app-bar-h:3.75rem] sm:-m-6 lg:-m-8 lg:h-dvh lg:min-h-0 lg:flex-row lg:items-stretch">
       {/*
         desktopではページヘッダーを置かない設計 (docs/design.md §7.1) だが、
         ページには必ずlevel-1見出しが要る。視覚には出さず、支援技術へだけ渡す。
@@ -116,7 +116,7 @@ function ArticlesRoute() {
       <h1 className="sr-only">記事</h1>
       <div
         className={cn(
-          "lg:min-h-0 lg:w-[380px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:border-r xl:w-[420px]",
+          "lg:min-h-0 lg:w-[380px] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:pb-[var(--player-h)] xl:w-[420px]",
           hasSelection && "hidden lg:block"
         )}
       >
@@ -134,7 +134,7 @@ function ArticlesRoute() {
       </div>
       <div
         className={cn(
-          "flex flex-1 flex-col p-4 sm:p-6 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:p-8",
+          "flex flex-1 flex-col p-4 sm:p-6 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:p-8 lg:pb-[calc(var(--player-h)+2rem)]",
           !hasSelection && "hidden lg:flex"
         )}
         // 位置が戻ることをe2eで確かめるための目印。スクロールしているのは

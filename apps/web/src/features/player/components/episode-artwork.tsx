@@ -30,6 +30,8 @@ export function EpisodeArtwork({
       aria-hidden="true"
       className={cn(
         "relative shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-black/10 dark:ring-white/10",
+        // 板ごと押せるので、押した手応えは絵にも返す。
+        "transition-transform duration-200 ease-apple group-active/bar:scale-95 motion-reduce:transition-none",
         className
       )}
       style={

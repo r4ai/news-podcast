@@ -163,13 +163,15 @@ export function PlaybackScrubber({
         className={cn(
           "group z-10",
           /*
-            狭い幅: 板の上端の縁。両端は角の丸み(1.5rem)の内側へ収める。
-            `overflow-hidden`の丸めはヒットテストにも効くので、端まで伸ばすと
-            「先頭へ戻す」「末尾へ飛ぶ」が掴めない。
+            狭い幅: 板の上端の縁いっぱい。**内側へ寄せない**。
+
+            板は`overflow`を切らず、代わりにこの帯が自分の形を`clip-path`で
+            切る。板と同じ半径の角丸で切るので、帯は縁の曲がりまで辿って
+            消える。掴み代は切らないので、角の位置を押しても先頭・末尾へ着く。
           */
-          "absolute inset-x-0 top-0 h-5 px-6",
-          // sm以上: 題名の下の行。角の丸みから離れるので余白も要らない。
-          "sm:static sm:flex sm:h-5 sm:items-center sm:gap-3 sm:px-0",
+          "absolute inset-x-0 top-0 h-5",
+          // sm以上: 題名の下の行。縁から離れるので切る必要が無い。
+          "sm:static sm:flex sm:h-5 sm:items-center sm:gap-3",
           className
         )}
       >
@@ -177,22 +179,30 @@ export function PlaybackScrubber({
           {formatPlaybackTime(position)}
         </span>
         <div className="relative h-full sm:min-w-0 sm:flex-1">
-          <ScrubberRail
-            knob={seekable ? "hover" : "none"}
-            /*
+          {/*
+            **見えるものだけ**を板の形に切る。`inset()`の下を大きく外へ出すと、
+            切る枠の上の角だけが板と同じ半径で丸まり、帯は縁の曲がりまで辿って
+            消える。掴み代を持つのは下の`input`で、そちらは切らない。だから
+            角の位置を押しても先頭・末尾へ着く。
+          */}
+          <div className="pointer-events-none absolute inset-0 [clip-path:inset(0_0_-200px_0_round_var(--radius-3xl))] sm:[clip-path:none]">
+            <ScrubberRail
+              knob={seekable ? "hover" : "none"}
+              /*
               狭い幅では出さない。帯は板の縁に密着していて、つまみは掴み代の
               上下中央に来るので、帯から5px下にぶら下がる。smからは帯が行の
               中央へ移るので、位置が合う。
             */
-            knobClassName="hidden sm:block"
-            ratio={ratio}
-            trackClassName={cn(
-              // 縁に密着した3pxの帯。触れると太って掴めることを示す。
-              "inset-x-0 top-0 h-[3px] transition-[height] duration-150 ease-out group-hover:h-[5px] group-has-focus-visible:h-[5px] motion-reduce:transition-none",
-              // smからは行の中で上下中央に置き、角を丸める。
-              "sm:inset-x-0 sm:top-1/2 sm:h-1 sm:-translate-y-1/2 sm:rounded-full sm:group-hover:h-1.5"
-            )}
-          />
+              knobClassName="hidden sm:block"
+              ratio={ratio}
+              trackClassName={cn(
+                // 縁に密着した3pxの帯。触れると太って掴めることを示す。
+                "inset-x-0 top-0 h-[3px] transition-[height] duration-150 ease-out group-hover:h-[5px] group-has-focus-visible:h-[5px] motion-reduce:transition-none",
+                // smからは行の中で上下中央に置き、角を丸める。
+                "sm:inset-x-0 sm:top-1/2 sm:h-1 sm:-translate-y-1/2 sm:rounded-full sm:group-hover:h-1.5"
+              )}
+            />
+          </div>
           <input
             aria-label="再生位置"
             aria-valuetext={valueText}

@@ -197,11 +197,11 @@ test.describe("アクセシビリティ", () => {
       .getByRole("button", { name: /今日の開発ニュース.*を再生/ })
       .first()
       .click()
-    await expect(
-      page.getByRole("region", { name: "再生中の番組" })
-    ).toBeVisible()
+    const bar = page.getByRole("region", { name: "再生中の番組" })
+    await expect(bar).toBeVisible()
 
-    await page.getByRole("button", { name: "再生の詳細" }).click()
+    // 開くのは題名。開くための専用ボタンは置いていない。
+    await bar.getByRole("button", { name: /今日の開発ニュース/ }).click()
     await expect(
       page.getByRole("link", { name: "原稿と出典を読む" })
     ).toBeVisible()
