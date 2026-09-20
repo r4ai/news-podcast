@@ -4,7 +4,7 @@
 - Date: 2026-09-20
 - Decision owners: Product owner / Web
 - Supersedes: 一部（再生バーの段構成・不透明な帯・`backdrop-filter`の扱い）は[ADR-0064](0064-persistent-playback-outside-the-router-outlet.md)
-- Superseded by: N/A
+- Superseded by: 常設操作の制限と広幅限定操作の却下は[ADR-0103](0103-keep-wide-player-shortcuts-with-focus-handoff.md)。それ以外の決定は維持。
 - Related: ADR-0060、ADR-0064、`docs/design.md` §7.1 / §7.2
 
 ## コンテキストと変更契機

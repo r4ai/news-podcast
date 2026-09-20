@@ -79,6 +79,167 @@ async function dragHandle(page: Page, distance: number) {
   await page.mouse.up()
 }
 
+/** 遷移の途中も含め、操作・alert・参照先idが重複しないことを測る。 */
+async function measureOverlap(page: Page) {
+  return page.evaluate(async () => {
+    const selectors = [
+      '[aria-label="再生位置"]',
+      '[role="combobox"][aria-label^="再生速度"]',
+      '[aria-label="音量"]',
+      '[data-slot="player-error"]',
+      '[id="now-playing-panel"]',
+    ]
+    const maxima = selectors.map(() => 0)
+    const start = performance.now()
+    while (performance.now() - start < 900) {
+      selectors.forEach((selector, index) => {
+        maxima[index] = Math.max(
+          maxima[index]!,
+          document.querySelectorAll(selector).length
+        )
+      })
+      await new Promise(requestAnimationFrame)
+    }
+    return Object.fromEntries(
+      selectors.map((selector, index) => [selector, maxima[index]])
+    )
+  })
+}
+
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  test(`幅変更を途中で折り返しても、操作が重複・消失しない: ${reducedMotion}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion })
+    await openDrawer(page)
+    await page.evaluate(() =>
+      document.querySelector("audio")?.dispatchEvent(new Event("error"))
+    )
+    const [maxima] = await Promise.all([
+      measureOverlap(page),
+      (async () => {
+        await page.setViewportSize({ width: 1440, height: 800 })
+        await page.waitForTimeout(80)
+        await page.setViewportSize({ width: 390, height: 800 })
+        await page.waitForTimeout(80)
+        await page.setViewportSize({ width: 1440, height: 800 })
+      })(),
+    ])
+    for (const [selector, count] of Object.entries(maxima))
+      expect(count, selector).toBeLessThanOrEqual(1)
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.getByRole("slider", { name: "音量" }).focus()
+    await page.keyboard.press("Escape")
+    await expect(page.locator('[data-slot="player-expanded"]')).toHaveCount(0)
+    await expect(page.getByRole("slider", { name: "再生位置" })).toHaveCount(1)
+    await expect(page.getByRole("combobox", { name: /再生速度/ })).toHaveCount(
+      1
+    )
+    await expect(page.getByRole("alert")).toHaveCount(1)
+    await expect(
+      page.locator('[aria-controls="now-playing-panel"]')
+    ).toBeFocused()
+  })
+}
+
+test("閉じる・開く・閉じるを連続しても、古い終了処理で目盛りが重複しない", async ({
+  page,
+}) => {
+  await openDrawer(page)
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  const panel = page.locator('[data-slot="player-expanded"]')
+  await panel.getByRole("slider", { name: "音量" }).hover()
+
+  const [maxima] = await Promise.all([
+    measureOverlap(page),
+    page.evaluate(async () => {
+      const title = document.querySelector<HTMLButtonElement>(
+        '[aria-controls="now-playing-panel"]'
+      )!
+      title.click()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      title.click()
+      await new Promise((resolve) => setTimeout(resolve, 160))
+      title.click()
+    }),
+  ])
+  for (const [selector, count] of Object.entries(maxima))
+    expect(count, selector).toBeLessThanOrEqual(1)
+  await expect(panel).toHaveCount(0)
+  await expect(page.getByRole("slider", { name: "再生位置" })).toHaveCount(1)
+})
+
+test("Drawerから広幅へ移る間も、操作と失敗通知とidは1つずつ", async ({
+  page,
+}) => {
+  await openDrawer(page)
+  await page.evaluate(() =>
+    document.querySelector("audio")?.dispatchEvent(new Event("error"))
+  )
+  const [maxima] = await Promise.all([
+    measureOverlap(page),
+    page.setViewportSize({ width: 1440, height: 800 }),
+  ])
+  for (const [selector, count] of Object.entries(maxima))
+    expect(count, selector).toBeLessThanOrEqual(1)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator('[data-slot="player-expanded"]')).toBeVisible()
+  await expect(
+    page.locator('[aria-controls="now-playing-panel"]')
+  ).toBeFocused()
+})
+
+test("ドラッグ中に幅を広げたら、離した指は移動先のパネルを閉じない", async ({
+  page,
+}) => {
+  await openDrawer(page)
+  const box = (await page
+    .getByRole("button", { name: "閉じる", exact: true })
+    .boundingBox())!
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x, y + 30, { steps: 3 })
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await page.mouse.move(x, y + 160, { steps: 3 })
+  await page.mouse.up()
+  await expect(
+    page.locator('[aria-controls="now-playing-panel"]')
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator('[data-slot="player-expanded"]')).toBeVisible()
+})
+
+for (const control of ["rate", "volume"] as const) {
+  for (const width of [900, 390]) {
+    test(`常設${control}のpopup内から幅${width}へ変えても、focusを失わない`, async ({
+      page,
+    }) => {
+      await openDrawer(page)
+      await page.keyboard.press("Escape")
+      await expect(page.getByRole("dialog")).toHaveCount(0)
+      await page.setViewportSize({ width: 1440, height: 800 })
+      const bar = page.getByRole("region", { name: "再生中の番組" })
+      if (control === "rate") {
+        await bar.getByRole("combobox", { name: /再生速度/ }).focus()
+        await page.keyboard.press("ArrowDown")
+        await expect(page.getByRole("option", { name: "1.5×" })).toBeVisible()
+      } else {
+        await bar.getByRole("button", { name: /音量/ }).click()
+        await page.getByRole("slider", { name: "音量" }).focus()
+      }
+      await page.setViewportSize({ width, height: 800 })
+      await expect(page.getByRole("option")).toHaveCount(0)
+      await expect(page.getByRole("slider", { name: "音量" })).toHaveCount(0)
+      await expect(
+        bar.locator('[aria-controls="now-playing-panel"]')
+      ).toBeFocused()
+    })
+  }
+}
+
 test("掴み代は指で掴める広さを持つ", async ({ page }) => {
   await openDrawer(page)
   const box = await page
@@ -107,6 +268,47 @@ test("掴み代を押しても閉じる", async ({ page }) => {
   await openDrawer(page)
   await page.getByRole("button", { name: "閉じる", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
+})
+
+test.describe("タッチでのDrawer操作", () => {
+  test.use({ hasTouch: true })
+
+  test("タップで閉じ、短いスワイプでは戻り、長いスワイプで閉じる", async ({
+    page,
+  }) => {
+    await openDrawer(page)
+    await page.getByRole("button", { name: "閉じる", exact: true }).tap()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.locator('[aria-controls="now-playing-panel"]').tap()
+    const handle = page.getByRole("button", { name: "閉じる", exact: true })
+    const session = await page.context().newCDPSession(page)
+    try {
+      for (const distance of [30, 160]) {
+        await handle.hover()
+        const box = (await handle.boundingBox())!
+        const x = box.x + box.width / 2
+        const y = box.y + box.height / 2
+        await session.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x, y, id: 1 }],
+        })
+        for (let step = 1; step <= 8; step += 1) {
+          await session.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x, y: y + (distance * step) / 8, id: 1 }],
+          })
+        }
+        await session.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: [],
+        })
+        if (distance < 96) await expect(page.getByRole("dialog")).toBeVisible()
+        else await expect(page.getByRole("dialog")).toHaveCount(0)
+      }
+    } finally {
+      await session.detach()
+    }
+  })
 })
 
 test("Escapeでも閉じる。音は止めない", async ({ page }) => {
@@ -276,12 +478,9 @@ test("原稿へ移って閉じたときは、題名へ引き戻さない", async
     .click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
 
-  const onTitle = await page.evaluate(
-    () =>
-      document.activeElement?.getAttribute("aria-controls") ===
-      "now-playing-panel"
-  )
-  expect(onTitle).toBe(false)
+  await expect(
+    page.getByRole("article", { name: /Durable Objects/ })
+  ).toBeFocused()
 })
 
 /*

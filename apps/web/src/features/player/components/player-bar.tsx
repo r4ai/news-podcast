@@ -1,6 +1,13 @@
 import { useAtomValue, useSetAtom } from "jotai"
 import { X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -42,11 +49,6 @@ const PANEL_ID = "now-playing-panel"
  * 板がその場で伸びるか、下端からDrawerが立ち上がるか。
  */
 const WIDE_QUERY = "(min-width: 40rem)"
-
-/**
- * 速度と音量を常設の行へ並べられる幅。ここもCSSでは選べない。`display`で
- * 隠すだけだと、開いたままのpopoverやselectがportalの側に取り残される。
- */
 const ROOMY_QUERY = "(min-width: 64rem)"
 
 /**
@@ -81,8 +83,7 @@ export function PlayerBar() {
   const setExpanded = useSetAtom(playerExpandedAtom)
   const wide = useMediaQuery(WIDE_QUERY)
   const roomy = useMediaQuery(ROOMY_QUERY)
-  // 畳むときのfocusの行き先。開いた中身は畳んだ瞬間に消えるので、
-  // 消えない場所へ先に移す必要がある。
+  // 畳むときは、消えない題名へ先にfocusを移す。
   const titleRef = useRef<HTMLButtonElement>(null)
   /*
     押し始めた指。**どの指が**押せないところから始めたかまで持つ。真偽だけ
@@ -95,38 +96,40 @@ export function PlayerBar() {
     題名へ引き戻すとその契約を破る。
   */
   const leaving = useRef(false)
-  /**
-   * Drawerが閉じ切ったか。
-   *
-   * 「開いているか」は`!wide && expanded`から判る。持つ必要があるのは
-   * **閉じ切ったかどうか**だけで、終了の動きが終わるまでは画面に在る。
-   * 開いた側を記録する作りにすると、幅が変わって開いた場合のように
-   * 「開く操作を通らずに開く」経路を取りこぼす。
-   */
-  const [drawerClosed, setDrawerClosed] = useState(true)
-  /**
-   * 板の中の段が、畳む動きの最中か。
-   *
-   * `Collapsible`は閉じ切りを教えてくれないので、高さの遷移の終わりを自分で
-   * 拾う。終わるまでは段が残っているので、常設の行は同じ操作を出さない。
-   */
-  const [panelClosing, setPanelClosing] = useState(false)
-  /*
-    Drawerが立ったことを記録する。
+  // 終了アニメーションを含む実際のDOMの寿命を使う。固定時間のタイマーや
+  // transitionendの推測では、連続開閉・幅変更・reduced motionを取りこぼす。
+  const [drawerMounted, setDrawerMounted] = useState(false)
+  const [panelMounted, setPanelMounted] = useState(false)
+  const drawerRef = useCallback((node: HTMLDivElement | null) => {
+    setDrawerMounted(node !== null)
+  }, [])
+  const panelRef = useCallback((node: HTMLDivElement | null) => {
+    setPanelMounted(node !== null)
+  }, [])
 
-    開く経路は押下だけではない。展開したまま幅を縮めると、`open`が真に
-    なってDrawerが立つが、開く処理はどこも通らない。外から来る開閉に
-    追従する必要があるので、ここだけは効果で拾う。
-  */
   useEffect(() => {
-    if (!wide && expanded) setDrawerClosed(false)
-  }, [wide, expanded])
+    const clear = (event: PointerEvent) => {
+      if (event.pointerId === pressedPointer.current)
+        pressedPointer.current = null
+    }
+    const cancel = () => {
+      pressedPointer.current = null
+    }
+    window.addEventListener("pointerup", clear)
+    window.addEventListener("pointercancel", clear)
+    window.addEventListener("blur", cancel)
+    return () => {
+      window.removeEventListener("pointerup", clear)
+      window.removeEventListener("pointercancel", clear)
+      window.removeEventListener("blur", cancel)
+    }
+  }, [])
   if (track === null) return null
 
   /** Drawerが画面に在る (立ち上がり中・表示中・終了の動きの最中を含む)。 */
-  const drawerPresent = (!wide && expanded) || !drawerClosed
+  const drawerPresent = (!wide && expanded) || drawerMounted
   /** 開いた中身が画面に在る。常設の行は、この間 同じ操作を出さない。 */
-  const panelPresent = expanded || panelClosing
+  const panelPresent = expanded || panelMounted || drawerPresent
 
   /**
    * 畳む。**畳む前にfocusを題名へ移す**。
@@ -141,16 +144,7 @@ export function PlayerBar() {
       幅では効かない(modalが背面をinertにしている)ので、行き先は
       `finalFocus`へ預けてある。
     */
-    if (wide) {
-      titleRef.current?.focus()
-      setPanelClosing(true)
-      /*
-        遷移の終わりが届かないことがある(動きを止める設定、途中で開き直した
-        場合)。届かないまま印が立ち続けると、常設の行の目盛りが戻らない。
-        動きより少し長い時間で必ず降ろす。
-      */
-      globalThis.setTimeout(() => setPanelClosing(false), 400)
-    }
+    if (wide && !drawerPresent) titleRef.current?.focus()
     setExpanded(false)
   }
 
@@ -182,7 +176,10 @@ export function PlayerBar() {
       data-slot="player-bar"
       role="region"
     >
-      <Collapsible onOpenChange={setExpanded} open={wide && expanded}>
+      <Collapsible
+        onOpenChange={setExpanded}
+        open={wide && expanded && !drawerPresent}
+      >
         <div
           className={cn(
             "group/bar glass-surface pointer-events-auto mx-auto w-full max-w-3xl rounded-3xl",
@@ -228,24 +225,6 @@ export function PlayerBar() {
               target.closest(INTERACTIVE) === null
             if (!onSurface) return
             pressedPointer.current = event.pointerId
-            /*
-              印は**指がどこで離れても降ろす**。板の上で離れなかった場合
-              (押したまま板の外へ出て離す) はこの要素の`pointerup`が呼ばれず、
-              印が立ちっぱなしになる。次に板の外で始まった操作が板の余白で
-              離れると、その印を食べて開いてしまう。
-
-              窓の`pointerup`はReactの`onPointerUp`より後に届くので、開くか
-              どうかの判断を先に済ませてから降ろせる。
-            */
-            const id = event.pointerId
-            const clear = (ended: PointerEvent) => {
-              if (ended.pointerId !== id) return
-              pressedPointer.current = null
-              globalThis.removeEventListener("pointerup", clear)
-              globalThis.removeEventListener("pointercancel", clear)
-            }
-            globalThis.addEventListener("pointerup", clear)
-            globalThis.addEventListener("pointercancel", clear)
           }}
           onPointerUp={(event) => {
             const started = pressedPointer.current === event.pointerId
@@ -263,32 +242,23 @@ export function PlayerBar() {
             `role="alert"`が画面に2つ在ることになる。向こうが引き受ける。
             閉じ切るまで待つので、終了の動きの最中も二重にならない。
           */}
-          {wide || !(expanded || drawerPresent) ? (
-            <PlaybackErrorBanner />
-          ) : null}
+          {!drawerPresent ? <PlaybackErrorBanner /> : null}
 
           {/* 広い幅では、板がその場で伸びる。 */}
           <CollapsibleContent
+            ref={panelRef}
             className={cn(
               "overflow-hidden",
               "h-[var(--collapsible-panel-height)] transition-[height] duration-300 ease-apple",
               "data-starting-style:h-0 data-ending-style:h-0 motion-reduce:transition-none"
             )}
-            /*
-              畳む動きの終わり。`Collapsible`は閉じ切りを教えてくれないので、
-              高さの遷移が終わったところで自分で降ろす。動きを止める設定では
-              遷移が起きないので、そのときは畳んだ次の描画で降りる。
-            */
-            onTransitionEnd={(event) => {
-              if (event.propertyName === "height") setPanelClosing(false)
-            }}
           >
             {/*
               `expanded`では切らない。畳んだ描画で中身が先に消えると、外側が
               300msかけて縮む間、空の枠だけが残る。出し入れは`Collapsible`が
-              終了の遷移まで面倒を見るので、ここは幅だけで決める。
+              終了の遷移まで面倒を見る。Drawerとの同時表示は避ける。
             */}
-            {wide ? (
+            {wide && !drawerPresent ? (
               <NowPlayingPanel
                 /*
                   高さに上限を置く。板の上へ伸びるこの段は、下端に浮く他の
@@ -329,24 +299,8 @@ export function PlayerBar() {
               track={track}
             />
             <TransportControls />
-            {/*
-              広い幅では、速度と音量を開かずに触れる。音量はアイコンだけを置き、
-              押すとその場へ帯が重なって開く。帯を常に並べると、常設の行で
-              最も長く取りたい題名から80px以上を奪う。
-
-              開いている間は出さない。開いた中身が同じものを帯として持つので、
-              残すと同じ名前の操作が画面に2つ並ぶ。**畳む動きが終わるまで**
-              待つのは、その間も中身が残っているため。
-
-              幅の判定はCSSではなくJSで行う。`display`で隠すだけだと、開いた
-              ままのpopoverやselectはportalで外に描かれているので、入口だけが
-              消えて面が取り残される。幅を跨いだら外して、面ごと閉じる。
-            */}
             {panelPresent || !roomy ? null : (
-              <div className="flex items-center gap-1">
-                <PlaybackRateSelect />
-                <VolumeControl variant="popover" />
-              </div>
+              <CompactSettings returnFocus={titleRef} />
             )}
             <CloseButton />
           </div>
@@ -359,21 +313,11 @@ export function PlayerBar() {
         来た面なのかも判らない。
       */}
       <Sheet
-        /*
-          降ろすのは**閉じ切った時だけ**。`expanded`は終了の動きが始まった
-          時点でfalseになるので、それだけで板側の失敗の行を戻すと、まだ
-          残っているDrawerの中の同じ`alert`と二重になり、読み上げも二度走る。
-        */
-        onOpenChangeComplete={(done) => setDrawerClosed(!done)}
         onOpenChange={(next) => (next ? setExpanded(true) : collapse())}
         open={!wide && expanded}
       >
         <SheetContent
-          /*
-            閉じた後のfocusの行き先。Drawerが立っている間、背面の板はmodalが
-            inertにしているので、こちらから`focus()`しても効かない。行き先を
-            預けて、**modalが閉じ切ってから**戻してもらう。
-          */
+          ref={drawerRef}
           /*
             閉じた後のfocusの行き先。Drawerが立っている間、背面の板はmodalが
             inertにしているので、こちらから`focus()`しても効かない。行き先を
@@ -431,6 +375,34 @@ export function PlayerBar() {
           />
         </SheetContent>
       </Sheet>
+    </div>
+  )
+}
+
+/** 幅変更でtriggerごと消えるときは、portal内のfocusも残る題名へ逃がす。 */
+function CompactSettings({
+  returnFocus,
+}: {
+  readonly returnFocus: RefObject<HTMLButtonElement | null>
+}) {
+  const focused = useRef<EventTarget | null>(null)
+  useLayoutEffect(
+    () => () => {
+      if (focused.current === document.activeElement)
+        returnFocus.current?.focus()
+    },
+    [returnFocus]
+  )
+
+  return (
+    <div
+      className="flex items-center gap-1"
+      onFocusCapture={(event) => {
+        focused.current = event.target
+      }}
+    >
+      <PlaybackRateSelect />
+      <VolumeControl variant="popover" />
     </div>
   )
 }

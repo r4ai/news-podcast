@@ -1,7 +1,13 @@
 "use client"
 
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
-import { useEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithRef,
+} from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -82,6 +88,46 @@ function SheetContent({
    */
   readonly onDismiss: () => void
 }) {
+  return (
+    <SheetPrimitive.Portal>
+      <SheetPrimitive.Backdrop
+        data-slot="sheet-overlay"
+        className="fixed inset-0 isolate z-50 bg-black/30 duration-300 ease-apple supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:duration-0"
+      />
+      <SheetPrimitive.Popup
+        {...props}
+        data-slot="sheet-content"
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[92svh] flex-col gap-4 overflow-y-auto overscroll-contain rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground outline-none",
+          "duration-350 ease-apple data-open:animate-in data-open:slide-in-from-bottom-[100%] data-closed:animate-out data-closed:slide-out-to-bottom-[100%] motion-reduce:duration-0",
+          className
+        )}
+        render={(popupProps, state) => (
+          <SheetSurface
+            {...popupProps}
+            open={state.open}
+            onDismiss={onDismiss}
+          />
+        )}
+      >
+        {children}
+      </SheetPrimitive.Popup>
+    </SheetPrimitive.Portal>
+  )
+}
+
+/** ジェスチャーの寿命をPopupに揃え、Escape・幅変更でも所有中の指を破棄する。 */
+function SheetSurface({
+  open,
+  onDismiss,
+  children,
+  className,
+  style,
+  ...props
+}: ComponentPropsWithRef<"div"> & {
+  readonly open: boolean
+  readonly onDismiss: () => void
+}) {
   /*
     掴んで引き下げて閉じる。
 
@@ -122,6 +168,18 @@ function SheetContent({
   /** 掴み代そのもの。指がこの上で離れたかどうかを見る。 */
   const handleRef = useRef<HTMLButtonElement>(null)
 
+  useLayoutEffect(() => {
+    pointer.current = null
+    moved.current = 0
+    travelled.current = 0
+    taps.current.clear()
+    setDragging(false)
+    if (open) {
+      setDismissing(false)
+      setOffset(0)
+    }
+  }, [open])
+
   /*
     動きと終わりは**窓で受ける**。掴み代の上だけで受けると、指が要素の外へ
     出た瞬間や、ブラウザが自前の引きずりを始めて`pointercancel`を投げた
@@ -133,7 +191,16 @@ function SheetContent({
     閉じてしまう。
   */
   useEffect(() => {
-    if (!dragging) return
+    if (!dragging || !open) return
+    // ウィンドウ外で離された指にはpointerupが届かないことがある。
+    const cancel = () => {
+      pointer.current = null
+      moved.current = 0
+      travelled.current = 0
+      taps.current.clear()
+      setDragging(false)
+      setOffset(0)
+    }
     const move = (event: PointerEvent) => {
       if (event.pointerId !== pointer.current) return
       const dx = event.clientX - startX.current
@@ -144,8 +211,11 @@ function SheetContent({
     }
     const end = (event: PointerEvent) => {
       if (event.pointerId !== pointer.current) return
+      if (event.type === "pointercancel") {
+        cancel()
+        return
+      }
       const distance = moved.current
-      const canceled = event.type === "pointercancel"
       pointer.current = null
       moved.current = 0
 
@@ -157,34 +227,16 @@ function SheetContent({
         離れた指には、そもそも`click`が来ない。
       */
       if (
-        !canceled &&
         travelled.current <= DRAG_SLOP_PX &&
         handleRef.current?.contains(event.target as Node) === true
       ) {
         taps.current.add(event.pointerId)
       }
-      if (!canceled && distance >= DISMISS_PX) {
+      if (distance >= DISMISS_PX) {
         // 離した位置から続けて下へ送り出す。0へ戻すと、一度跳ね上がる。
         setDismissing(true)
         onDismiss()
-        /*
-          送り出しが終わったら印を降ろす。この面は閉じても**component
-          としては残る**ので、降ろさないと次に開いたときも画面外へ寄った
-          まま立ち上がり、背面だけを塞ぐ見えない面になる
-          (実測: 開き直した中身のviewport比が0)。
-        */
-        globalThis.setTimeout(
-          () => {
-            setDismissing(false)
-            /*
-            引き代も戻す。残したままだと、開き直して掴み代を押した瞬間
-            (まだ指が動く前) に`dragging`が立ち、前回引いた分だけ面が
-            いきなり下へ飛ぶ。
-          */
-            setOffset(0)
-          },
-          prefersReducedMotion() ? 0 : DISMISS_MS + 50
-        )
+
         return
       }
       setOffset(0)
@@ -192,112 +244,95 @@ function SheetContent({
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", end)
     window.addEventListener("pointercancel", end)
+    window.addEventListener("blur", cancel)
     return () => {
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", end)
       window.removeEventListener("pointercancel", end)
+      window.removeEventListener("blur", cancel)
     }
-  }, [dragging, onDismiss])
+  }, [dragging, onDismiss, open])
 
   return (
-    <SheetPrimitive.Portal>
-      <SheetPrimitive.Backdrop
-        data-slot="sheet-overlay"
-        className="fixed inset-0 isolate z-50 bg-black/30 duration-300 ease-apple supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:duration-0"
-      />
-      <SheetPrimitive.Popup
-        data-slot="sheet-content"
-        style={
-          dragging
-            ? { transform: `translateY(${offset}px)`, transition: "none" }
-            : dismissing
-              ? {
-                  transform: "translateY(100%)",
-                  /*
-                    動きを止める設定では送り出しも止める。`class`側の
-                    `motion-reduce:duration-0`はこのinline styleに勝てない。
-                  */
-                  transition: prefersReducedMotion()
-                    ? "none"
-                    : `transform ${DISMISS_MS}ms var(--ease-apple)`,
-                }
-              : undefined
-        }
-        className={cn(
-          /*
-            高さは画面の9割まで。超える分は**この面の中でスクロールさせる**。
-            背面はmodalが固めているので、溢れた分は行き場が無くなる。字を
-            大きくした環境や、極端に低いviewportで起きる。
-          */
-          "fixed inset-x-0 bottom-0 z-50 flex max-h-[92svh] flex-col gap-4 overflow-y-auto overscroll-contain rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground outline-none",
-          // 来た方向が見えるよう、下端から丸ごと滑り込ませる。
-          "duration-350 ease-apple data-open:animate-in data-open:slide-in-from-bottom-[100%] data-closed:animate-out data-closed:slide-out-to-bottom-[100%] motion-reduce:duration-0",
-          // 引いて閉じるときは、上の出口の動きを止めて離した位置から続ける。
-          dismissing && "data-closed:animate-none",
-          className
-        )}
-        {...props}
-      >
-        {/*
+    <div
+      {...props}
+      className={cn(
+        className,
+        !open && dismissing && "data-closed:animate-none"
+      )}
+      style={{
+        ...style,
+        ...(open && dragging
+          ? { transform: `translateY(${offset}px)`, transition: "none" }
+          : !open && dismissing
+            ? {
+                transform: "translateY(100%)",
+                transition: prefersReducedMotion()
+                  ? "none"
+                  : `transform ${DISMISS_MS}ms var(--ease-apple)`,
+              }
+            : {}),
+      }}
+    >
+      {/*
           掴み代。引き下げても押しても閉じる。見た目の棒は9pxしかないので、
           指で掴める広さは外側のボタンが持つ。
         */}
-        <button
-          aria-label="閉じる"
-          /*
+      <button
+        aria-label="閉じる"
+        /*
             見えている棒は4pxだが、当たり判定は44px取る(docs/design.md §7.1の
             タップ対象の下限)。Drawerを閉じる・引く主な入口がここなので、
             狭いと指で外しやすい。上下の余白は負のmarginで吸わせ、中身との
             間隔は変えない。
           */
-          className="sticky top-0 z-10 mx-auto -mt-2 -mb-3 flex h-11 w-24 shrink-0 cursor-grab touch-none items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
-          onClick={(event) => {
-            /*
+        className="sticky top-0 z-10 mx-auto -mt-2 -mb-3 flex h-11 w-24 shrink-0 cursor-grab touch-none items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
+        onClick={(event) => {
+          /*
               指から来た`click`は、控えに在る指のものだけ通す。`detail`が0の
               ものはキーボードや支援技術からの起動なので、そのまま通す。
             */
-            if (event.detail > 0) {
-              const id = (event.nativeEvent as PointerEvent).pointerId
-              if (!taps.current.delete(id)) return
-            }
-            onDismiss()
-          }}
-          draggable={false}
-          ref={handleRef}
-          onPointerDown={(event) => {
-            /*
+          if (event.detail > 0) {
+            const id = (event.nativeEvent as PointerEvent).pointerId
+            if (!taps.current.delete(id)) return
+          }
+          onDismiss()
+        }}
+        draggable={false}
+        ref={handleRef}
+        onPointerDown={(event) => {
+          /*
               **所有者の検査を先に済ませる**。引いている最中に2本目が触れた
               とき、先に状態を戻してしまうと、面が1本目の指から離れて元の
               位置へ跳ね返る。しかも引いた距離は1本目のまま残るので、その後
               1本目を離すと、見た目は戻っているのに古い距離で閉じてしまう。
             */
-            // 既に1本が引いている最中の2本目は、控えへ入れない=閉じない。
-            if (pointer.current !== null) return
-            if (event.button !== 0) return
-            /*
+          // 既に1本が引いている最中の2本目は、控えへ入れない=閉じない。
+          if (!open || pointer.current !== null) return
+          if (event.button !== 0) return
+          /*
               印は**次に押し始めた時点で必ず消す**。同じ操作の`click`が来る
               前提で消していると、指が要素の外で離れた場合や打ち切られた
               場合に立ちっぱなしになり、その次の押下を食べて何も起きない。
             */
-            setDismissing(false)
-            setOffset(0)
-            pointer.current = event.pointerId
-            startX.current = event.clientX
-            startY.current = event.clientY
-            moved.current = 0
-            travelled.current = 0
-            setDragging(true)
-          }}
-          type="button"
-        >
-          <span
-            aria-hidden="true"
-            className="h-1 w-9 rounded-full bg-foreground/20"
-          />
-        </button>
-        {children}
-      </SheetPrimitive.Popup>
-    </SheetPrimitive.Portal>
+          setDismissing(false)
+          setOffset(0)
+          pointer.current = event.pointerId
+          startX.current = event.clientX
+          startY.current = event.clientY
+          moved.current = 0
+          travelled.current = 0
+          setDragging(true)
+        }}
+        type="button"
+      >
+        <span
+          aria-hidden="true"
+          className="h-1 w-9 rounded-full bg-foreground/20"
+        />
+      </button>
+      {children}
+    </div>
   )
 }
 
