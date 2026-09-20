@@ -139,6 +139,8 @@ export function PlayerBar() {
    * 利用者は、そこからページの先頭を辿り直すことになる。
    */
   const collapse = () => {
+    // 閉じる操作は、まだ離されていない余白の押下も打ち切る。
+    pressedPointer.current = null
     /*
       板がその場で伸びる幅では、消える中身からfocusを先に逃がす。Drawerの
       幅では効かない(modalが背面をinertにしている)ので、行き先は
@@ -217,7 +219,7 @@ export function PlayerBar() {
               1本目の後始末が印を降ろすので2本目も開かない。どちらの操作も
               押せないところから始まったのに、両方とも失われる。
             */
-            if (pressedPointer.current !== null) return
+            if (expanded || pressedPointer.current !== null) return
             const target = event.target as Element
             const onSurface =
               event.button === 0 &&

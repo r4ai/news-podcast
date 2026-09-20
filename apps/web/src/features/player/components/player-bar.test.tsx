@@ -462,6 +462,26 @@ describe("PlayerBar の開閉", () => {
     expect(document.activeElement).toBe(title)
   })
 
+  it.for([true, false])(
+    "余白を押したままEscapeで畳んでも、指を離したとき開き直さない: initiallyExpanded=%s",
+    async (initiallyExpanded) => {
+      const user = userEvent.setup()
+      const { container, store } = renderBar({ wide: true })
+      const title = screen.getByRole("button", { name: track.title })
+      title.focus()
+      if (initiallyExpanded) await user.keyboard("{Enter}")
+      const surface = container.querySelector(
+        '[aria-hidden="true"].rounded-xl'
+      )!
+      fireEvent.pointerDown(surface, { button: 0, pointerId: 1 })
+      if (!initiallyExpanded) await user.keyboard("{Enter}")
+      await user.keyboard("{Escape}")
+      expect(store.get(playerExpandedAtom)).toBe(false)
+      fireEvent.pointerUp(surface, { button: 0, pointerId: 1 })
+      expect(store.get(playerExpandedAtom)).toBe(false)
+    }
+  )
+
   it("Escapeは畳むだけ。音は止めない", async () => {
     const user = userEvent.setup()
     const { store } = renderBar({ playing: true, wide: true })
