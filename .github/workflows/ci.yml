@@ -177,7 +177,7 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: failure() || steps.perf_vitals.outcome == 'failure'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-e2e-results
           path: apps/web/test-results
@@ -220,7 +220,7 @@ jobs:
 
       - name: Upload visual diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: visual-results
           path: apps/web/test-results
@@ -255,7 +255,7 @@ jobs:
 
       - name: Upload functional stack diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: functional-e2e-results
           path: ${{ runner.temp }}/functional-e2e
@@ -354,7 +354,7 @@ jobs:
 
       - name: Upload observability diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: observability-results
           path: ${{ runner.temp }}/observability
