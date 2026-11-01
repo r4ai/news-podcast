@@ -13,13 +13,13 @@
   "dependencies": {
     "@news-podcast/persistence": "workspace:*",
     "effect": "4.0.0-rc.109",
-    "nodemailer": "9.1.1"
+    "nodemailer": "10.1.4"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
     "@types/nodemailer": "7.0.12",
     "tsx": "4.23.11",
     "typescript": "5.9.3",
-    "vitest": "4.1.10"
+    "vitest": "5.0.5"
   }
 }
