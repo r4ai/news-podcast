@@ -49,7 +49,7 @@
     "remark-gfm": "4.0.1",
     "remark-math": "6.0.0",
     "remark-stringify": "11.0.0",
-    "undici": "8.10.0",
+    "undici": "8.12.2",
     "unified": "11.0.5"
   },
   "devDependencies": {
@@ -61,6 +61,6 @@
     "drizzle-kit": "1.0.0-rc.4",
     "tsx": "4.23.11",
     "typescript": "5.9.3",
-    "vitest": "4.1.10"
+    "vitest": "5.0.5"
   }
 }
